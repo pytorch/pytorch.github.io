@@ -8,7 +8,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>torch.utils.ffi &mdash; PyTorch 0.1.6 documentation</title>
+  <title>torch.nn.parameter &mdash; PyTorch 0.1.6 documentation</title>
   
 
   
@@ -440,7 +440,7 @@
         
           <li><a href="../../torch.html">torch</a> &raquo;</li>
         
-      <li>torch.utils.ffi</li>
+      <li>torch.nn.parameter</li>
     
     
       <li class="wy-breadcrumbs-aside">
@@ -457,192 +457,41 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
             
-  <h1>Source code for torch.utils.ffi</h1><div class="highlight"><pre>
-<span></span><span class="kn">import</span> <span class="nn">os</span>
-<span class="kn">import</span> <span class="nn">glob</span>
-<span class="kn">import</span> <span class="nn">tempfile</span>
-<span class="kn">import</span> <span class="nn">shutil</span>
-<span class="kn">from</span> <span class="nn">functools</span> <span class="k">import</span> <span class="n">wraps</span><span class="p">,</span> <span class="n">reduce</span>
-<span class="kn">from</span> <span class="nn">string</span> <span class="k">import</span> <span class="n">Template</span>
-<span class="kn">import</span> <span class="nn">torch</span>
-<span class="kn">import</span> <span class="nn">torch.cuda</span>
-<span class="kn">from</span> <span class="nn">torch._utils</span> <span class="k">import</span> <span class="n">_accumulate</span>
-
-<span class="k">try</span><span class="p">:</span>
-    <span class="kn">import</span> <span class="nn">cffi</span>
-<span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
-    <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span><span class="s2">&quot;torch.utils.ffi requires the cffi package&quot;</span><span class="p">)</span>
+  <h1>Source code for torch.nn.parameter</h1><div class="highlight"><pre>
+<span></span><span class="kn">from</span> <span class="nn">torch.autograd</span> <span class="k">import</span> <span class="n">Variable</span>
 
 
-<span class="k">if</span> <span class="n">cffi</span><span class="o">.</span><span class="n">__version_info__</span> <span class="o">&lt;</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="mi">4</span><span class="p">,</span><span class="mi">0</span><span class="p">):</span>
-    <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span><span class="s2">&quot;torch.utils.ffi requires cffi version &gt;= 1.4, but &quot;</span>
-            <span class="s2">&quot;got &quot;</span> <span class="o">+</span> <span class="s1">&#39;.&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">map</span><span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="n">cffi</span><span class="o">.</span><span class="n">__version_info__</span><span class="p">)))</span>
+<div class="viewcode-block" id="Parameter"><a class="viewcode-back" href="../../../nn.html#torch.nn.Parameter">[docs]</a><span class="k">class</span> <span class="nc">Parameter</span><span class="p">(</span><span class="n">Variable</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;A kind of Variable that is to be considered a module parameter.</span>
 
+<span class="sd">    Parameters are :class:`~torch.autograd.Variable` subclasses, that have a</span>
+<span class="sd">    very special property when used with :class:`Module` s - when they&#39;re</span>
+<span class="sd">    assigned as Module attributes they are automatically added to the list of</span>
+<span class="sd">    its parameters, and will appear e.g. in :meth:`~Module.parameters` iterator.</span>
+<span class="sd">    Assigning a Variable doesn&#39;t have such effect. This is because one might</span>
+<span class="sd">    want to cache some temporary state, like last hidden state of the RNN, in</span>
+<span class="sd">    the model. If there was no such class as :class:`Parameter`, these</span>
+<span class="sd">    temporaries would get registered too.</span>
 
-<span class="k">def</span> <span class="nf">_generate_typedefs</span><span class="p">():</span>
-    <span class="n">typedefs</span> <span class="o">=</span> <span class="p">[]</span>
-    <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="p">[</span><span class="s1">&#39;Double&#39;</span><span class="p">,</span> <span class="s1">&#39;Float&#39;</span><span class="p">,</span> <span class="s1">&#39;Long&#39;</span><span class="p">,</span> <span class="s1">&#39;Int&#39;</span><span class="p">,</span> <span class="s1">&#39;Short&#39;</span><span class="p">,</span> <span class="s1">&#39;Char&#39;</span><span class="p">,</span> <span class="s1">&#39;Byte&#39;</span><span class="p">]:</span>
-        <span class="k">for</span> <span class="n">lib</span> <span class="ow">in</span> <span class="p">[</span><span class="s1">&#39;TH&#39;</span><span class="p">,</span> <span class="s1">&#39;THCuda&#39;</span><span class="p">]:</span>
-            <span class="k">for</span> <span class="n">kind</span> <span class="ow">in</span> <span class="p">[</span><span class="s1">&#39;Tensor&#39;</span><span class="p">,</span> <span class="s1">&#39;Storage&#39;</span><span class="p">]:</span>
-                <span class="n">python_name</span> <span class="o">=</span> <span class="n">t</span> <span class="o">+</span> <span class="n">kind</span>
-                <span class="k">if</span> <span class="n">t</span> <span class="o">==</span> <span class="s1">&#39;Float&#39;</span> <span class="ow">and</span> <span class="n">lib</span> <span class="o">==</span> <span class="s1">&#39;THCuda&#39;</span><span class="p">:</span>
-                    <span class="n">th_name</span> <span class="o">=</span> <span class="s1">&#39;THCuda&#39;</span> <span class="o">+</span> <span class="n">kind</span>
-                <span class="k">else</span><span class="p">:</span>
-                    <span class="n">th_name</span> <span class="o">=</span> <span class="n">lib</span> <span class="o">+</span> <span class="n">t</span> <span class="o">+</span> <span class="n">kind</span>
-                <span class="n">th_struct</span> <span class="o">=</span> <span class="s1">&#39;struct &#39;</span> <span class="o">+</span> <span class="n">th_name</span>
-
-                <span class="n">typedefs</span> <span class="o">+=</span> <span class="p">[</span><span class="s1">&#39;typedef </span><span class="si">{}</span><span class="s1"> </span><span class="si">{}</span><span class="s1">;&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">th_struct</span><span class="p">,</span> <span class="n">th_name</span><span class="p">)]</span>
-                <span class="n">module</span> <span class="o">=</span> <span class="n">torch</span> <span class="k">if</span> <span class="n">lib</span> <span class="o">==</span> <span class="s1">&#39;TH&#39;</span> <span class="k">else</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span>
-                <span class="n">python_class</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">python_name</span><span class="p">)</span>
-                <span class="n">_cffi_to_torch</span><span class="p">[</span><span class="n">th_struct</span><span class="p">]</span> <span class="o">=</span> <span class="n">python_class</span>
-                <span class="n">_torch_to_cffi</span><span class="p">[</span><span class="n">python_class</span><span class="p">]</span> <span class="o">=</span> <span class="n">th_struct</span>
-    <span class="k">return</span> <span class="s1">&#39;</span><span class="se">\n</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">typedefs</span><span class="p">)</span> <span class="o">+</span> <span class="s1">&#39;</span><span class="se">\n</span><span class="s1">&#39;</span>
-<span class="n">_cffi_to_torch</span> <span class="o">=</span> <span class="p">{}</span>
-<span class="n">_torch_to_cffi</span> <span class="o">=</span> <span class="p">{}</span>
-<span class="n">_typedefs</span> <span class="o">=</span> <span class="n">_generate_typedefs</span><span class="p">()</span>
-
-
-<span class="n">PY_MODULE_TEMPLATE</span> <span class="o">=</span> <span class="n">Template</span><span class="p">(</span><span class="s2">&quot;&quot;&quot;</span>
-<span class="s2">from torch.utils.ffi import _wrap_function</span>
-<span class="s2">from .$cffi_wrapper_name import lib as _lib, ffi as _ffi</span>
-
-<span class="s2">__all__ = []</span>
-<span class="s2">def _import_symbols(locals):</span>
-<span class="s2">    for symbol in dir(_lib):</span>
-<span class="s2">        fn = getattr(_lib, symbol)</span>
-<span class="s2">        locals[symbol] = _wrap_function(fn, _ffi)</span>
-<span class="s2">        __all__.append(symbol)</span>
-
-<span class="s2">_import_symbols(locals())</span>
-<span class="s2">&quot;&quot;&quot;</span><span class="p">)</span>
-
-
-<span class="k">def</span> <span class="nf">_setup_wrapper</span><span class="p">(</span><span class="n">with_cuda</span><span class="p">):</span>
-    <span class="n">here</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">abspath</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">dirname</span><span class="p">(</span><span class="n">__file__</span><span class="p">))</span>
-    <span class="n">lib_dir</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">here</span><span class="p">,</span> <span class="s1">&#39;..&#39;</span><span class="p">,</span> <span class="s1">&#39;..&#39;</span><span class="p">,</span> <span class="s1">&#39;lib&#39;</span><span class="p">)</span>
-    <span class="n">include_dirs</span> <span class="o">=</span> <span class="p">[</span>
-        <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">lib_dir</span><span class="p">,</span> <span class="s1">&#39;include&#39;</span><span class="p">),</span>
-        <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">lib_dir</span><span class="p">,</span> <span class="s1">&#39;include&#39;</span><span class="p">,</span> <span class="s1">&#39;TH&#39;</span><span class="p">),</span>
-    <span class="p">]</span>
-
-    <span class="n">wrapper_source</span> <span class="o">=</span> <span class="s1">&#39;#include &lt;TH/TH.h&gt;</span><span class="se">\n</span><span class="s1">&#39;</span>
-    <span class="k">if</span> <span class="n">with_cuda</span><span class="p">:</span>
-        <span class="kn">import</span> <span class="nn">torch.cuda</span>
-        <span class="n">wrapper_source</span> <span class="o">+=</span> <span class="s1">&#39;#include &lt;THC/THC.h&gt;</span><span class="se">\n</span><span class="s1">&#39;</span>
-        <span class="n">cuda_include_dirs</span> <span class="o">=</span> <span class="n">glob</span><span class="o">.</span><span class="n">glob</span><span class="p">(</span><span class="s1">&#39;/usr/local/cuda/include&#39;</span><span class="p">)</span>
-        <span class="n">cuda_include_dirs</span> <span class="o">+=</span> <span class="n">glob</span><span class="o">.</span><span class="n">glob</span><span class="p">(</span><span class="s1">&#39;/Developer/NVIDIA/CUDA-*/include&#39;</span><span class="p">)</span>
-        <span class="n">include_dirs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">lib_dir</span><span class="p">,</span> <span class="s1">&#39;include&#39;</span><span class="p">,</span> <span class="s1">&#39;THC&#39;</span><span class="p">))</span>
-        <span class="n">include_dirs</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">cuda_include_dirs</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">wrapper_source</span><span class="p">,</span> <span class="n">include_dirs</span>
-
-
-<span class="k">def</span> <span class="nf">_create_module_dir</span><span class="p">(</span><span class="n">base_path</span><span class="p">,</span> <span class="n">fullname</span><span class="p">):</span>
-    <span class="n">module</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">name</span> <span class="o">=</span> <span class="n">fullname</span><span class="o">.</span><span class="n">rpartition</span><span class="p">(</span><span class="s1">&#39;.&#39;</span><span class="p">)</span>
-    <span class="k">if</span> <span class="ow">not</span> <span class="n">module</span><span class="p">:</span>
-        <span class="n">target_dir</span> <span class="o">=</span> <span class="n">name</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="n">target_dir</span> <span class="o">=</span> <span class="n">reduce</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">,</span> <span class="n">fullname</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;.&#39;</span><span class="p">))</span>
-    <span class="n">target_dir</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">base_path</span><span class="p">,</span> <span class="n">target_dir</span><span class="p">)</span>
-    <span class="k">try</span><span class="p">:</span>
-        <span class="n">os</span><span class="o">.</span><span class="n">makedirs</span><span class="p">(</span><span class="n">target_dir</span><span class="p">)</span>
-    <span class="k">except</span> <span class="n">os</span><span class="o">.</span><span class="n">error</span><span class="p">:</span>
-        <span class="k">pass</span>
-    <span class="k">for</span> <span class="n">dirname</span> <span class="ow">in</span> <span class="n">_accumulate</span><span class="p">(</span><span class="n">fullname</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;.&#39;</span><span class="p">),</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">):</span>
-        <span class="n">init_file</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">base_path</span><span class="p">,</span> <span class="n">dirname</span><span class="p">,</span> <span class="s1">&#39;__init__.py&#39;</span><span class="p">)</span>
-        <span class="nb">open</span><span class="p">(</span><span class="n">init_file</span><span class="p">,</span> <span class="s1">&#39;a&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>  <span class="c1"># Create file if it doesn&#39;t exist yet</span>
-    <span class="k">return</span> <span class="n">name</span><span class="p">,</span> <span class="n">target_dir</span>
-
-
-<span class="k">def</span> <span class="nf">_build_extension</span><span class="p">(</span><span class="n">ffi</span><span class="p">,</span> <span class="n">cffi_wrapper_name</span><span class="p">,</span> <span class="n">target_dir</span><span class="p">,</span> <span class="n">verbose</span><span class="p">):</span>
-    <span class="k">try</span><span class="p">:</span>
-        <span class="n">tmpdir</span> <span class="o">=</span> <span class="n">tempfile</span><span class="o">.</span><span class="n">mkdtemp</span><span class="p">()</span>
-        <span class="n">libname</span> <span class="o">=</span> <span class="n">cffi_wrapper_name</span> <span class="o">+</span> <span class="s1">&#39;.so&#39;</span>
-        <span class="n">ffi</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="n">tmpdir</span><span class="o">=</span><span class="n">tmpdir</span><span class="p">,</span> <span class="n">verbose</span><span class="o">=</span><span class="n">verbose</span><span class="p">,</span> <span class="n">target</span><span class="o">=</span><span class="n">libname</span><span class="p">)</span>
-        <span class="n">shutil</span><span class="o">.</span><span class="n">copy</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">tmpdir</span><span class="p">,</span> <span class="n">libname</span><span class="p">),</span>
-                    <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">target_dir</span><span class="p">,</span> <span class="n">libname</span><span class="p">))</span>
-    <span class="k">finally</span><span class="p">:</span>
-        <span class="n">shutil</span><span class="o">.</span><span class="n">rmtree</span><span class="p">(</span><span class="n">tmpdir</span><span class="p">)</span>
-
-
-<span class="k">def</span> <span class="nf">_make_python_wrapper</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">cffi_wrapper_name</span><span class="p">,</span> <span class="n">target_dir</span><span class="p">):</span>
-    <span class="n">py_source</span> <span class="o">=</span> <span class="n">PY_MODULE_TEMPLATE</span><span class="o">.</span><span class="n">substitute</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span>
-            <span class="n">cffi_wrapper_name</span><span class="o">=</span><span class="n">cffi_wrapper_name</span><span class="p">)</span>
-    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">target_dir</span><span class="p">,</span> <span class="s1">&#39;__init__.py&#39;</span><span class="p">),</span> <span class="s1">&#39;w&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
-        <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">py_source</span><span class="p">)</span>
-
-
-<div class="viewcode-block" id="create_extension"><a class="viewcode-back" href="../../../ffi.html#torch.utils.ffi.create_extension">[docs]</a><span class="k">def</span> <span class="nf">create_extension</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">headers</span><span class="p">,</span> <span class="n">sources</span><span class="p">,</span> <span class="n">verbose</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">with_cuda</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-        <span class="n">package</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">relative_to</span><span class="o">=</span><span class="s1">&#39;.&#39;</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;Creates and configures a cffi.FFI object, that builds PyTorch extension.</span>
+<span class="sd">    Another difference is that parameters can&#39;t be volatile and that they</span>
+<span class="sd">    require gradient by default.</span>
 
 <span class="sd">    Arguments:</span>
-<span class="sd">        name (str): package name. Can be a nested module e.g. ``.ext.my_lib``.</span>
-<span class="sd">        headers (str or List[str]): list of headers, that contain only exported</span>
-<span class="sd">            functions</span>
-<span class="sd">        sources (List[str]): list of sources to compile.</span>
-<span class="sd">        verbose (bool, optional): if set to ``False``, no output will be printed</span>
-<span class="sd">            (default: True).</span>
-<span class="sd">        with_cuda (bool, optional): set to ``True`` to compile with CUDA headers</span>
-<span class="sd">            (default: False)</span>
-<span class="sd">        package (bool, optional): set to ``True`` to build in package mode (for modules</span>
-<span class="sd">            meant to be installed as pip packages) (default: False).</span>
-<span class="sd">        relative_to (str, optional): path of the build file. Required when</span>
-<span class="sd">            ``package is True``. It&#39;s best to use ``__file__`` for this argument.</span>
-<span class="sd">        kwargs: additional arguments that are passed to ffi to declar the</span>
-<span class="sd">            extension. See `Extension API reference`_ for details.</span>
-
-<span class="sd">    .. _`Extension API reference`: https://docs.python.org/3/distutils/apiref.html#distutils.core.Extension</span>
+<span class="sd">        data (Tensor): parameter tensor.</span>
+<span class="sd">        requires_grad (bool, optional): if the parameter requires gradient. See</span>
+<span class="sd">            :ref:`excluding-subgraphs` for more details.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">base_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">abspath</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">dirname</span><span class="p">(</span><span class="n">relative_to</span><span class="p">))</span>
-    <span class="n">name_suffix</span><span class="p">,</span> <span class="n">target_dir</span> <span class="o">=</span> <span class="n">_create_module_dir</span><span class="p">(</span><span class="n">base_path</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
-    <span class="k">if</span> <span class="ow">not</span> <span class="n">package</span><span class="p">:</span>
-        <span class="n">cffi_wrapper_name</span> <span class="o">=</span> <span class="s1">&#39;_&#39;</span> <span class="o">+</span> <span class="n">name_suffix</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="n">cffi_wrapper_name</span> <span class="o">=</span> <span class="n">name</span><span class="o">.</span><span class="n">rpartition</span><span class="p">(</span><span class="s1">&#39;.&#39;</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span> <span class="o">+</span> <span class="s1">&#39;._&#39;</span> <span class="o">+</span> <span class="n">name_suffix</span>
 
-    <span class="n">wrapper_source</span><span class="p">,</span> <span class="n">include_dirs</span> <span class="o">=</span> <span class="n">_setup_wrapper</span><span class="p">(</span><span class="n">with_cuda</span><span class="p">)</span>
-    <span class="n">include_dirs</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s1">&#39;include_dirs&#39;</span><span class="p">,</span> <span class="p">[]))</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">requires_grad</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">Parameter</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">__init__</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">requires_grad</span><span class="o">=</span><span class="n">requires_grad</span><span class="p">)</span>
 
-    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">headers</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
-        <span class="n">headers</span> <span class="o">=</span> <span class="p">[</span><span class="n">headers</span><span class="p">]</span>
-    <span class="n">all_headers_source</span> <span class="o">=</span> <span class="s1">&#39;&#39;</span>
-    <span class="k">for</span> <span class="n">header</span> <span class="ow">in</span> <span class="n">headers</span><span class="p">:</span>
-        <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">base_path</span><span class="p">,</span> <span class="n">header</span><span class="p">),</span> <span class="s1">&#39;r&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
-            <span class="n">all_headers_source</span> <span class="o">+=</span> <span class="n">f</span><span class="o">.</span><span class="n">read</span><span class="p">()</span> <span class="o">+</span> <span class="s1">&#39;</span><span class="se">\n\n</span><span class="s1">&#39;</span>
-
-    <span class="n">ffi</span> <span class="o">=</span> <span class="n">cffi</span><span class="o">.</span><span class="n">FFI</span><span class="p">()</span>
-    <span class="n">sources</span> <span class="o">=</span> <span class="p">[</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">base_path</span><span class="p">,</span> <span class="n">src</span><span class="p">)</span> <span class="k">for</span> <span class="n">src</span> <span class="ow">in</span> <span class="n">sources</span><span class="p">]</span>
-    <span class="n">ffi</span><span class="o">.</span><span class="n">set_source</span><span class="p">(</span><span class="n">cffi_wrapper_name</span><span class="p">,</span> <span class="n">wrapper_source</span> <span class="o">+</span> <span class="n">all_headers_source</span><span class="p">,</span>
-                   <span class="n">sources</span><span class="o">=</span><span class="n">sources</span><span class="p">,</span>
-                   <span class="n">include_dirs</span><span class="o">=</span><span class="n">include_dirs</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
-    <span class="n">ffi</span><span class="o">.</span><span class="n">cdef</span><span class="p">(</span><span class="n">_typedefs</span> <span class="o">+</span> <span class="n">all_headers_source</span><span class="p">);</span>
-
-    <span class="n">_make_python_wrapper</span><span class="p">(</span><span class="n">name_suffix</span><span class="p">,</span> <span class="s1">&#39;_&#39;</span> <span class="o">+</span> <span class="n">name_suffix</span><span class="p">,</span> <span class="n">target_dir</span><span class="p">)</span>
-    <span class="k">def</span> <span class="nf">build</span><span class="p">():</span>
-        <span class="n">_build_extension</span><span class="p">(</span><span class="n">ffi</span><span class="p">,</span> <span class="n">cffi_wrapper_name</span><span class="p">,</span> <span class="n">target_dir</span><span class="p">,</span> <span class="n">verbose</span><span class="p">)</span>
-    <span class="n">ffi</span><span class="o">.</span><span class="n">build</span> <span class="o">=</span> <span class="n">build</span>
-    <span class="k">return</span> <span class="n">ffi</span></div>
-
-
-<span class="k">def</span> <span class="nf">_wrap_function</span><span class="p">(</span><span class="n">function</span><span class="p">,</span> <span class="n">ffi</span><span class="p">):</span>
-    <span class="nd">@wraps</span><span class="p">(</span><span class="n">function</span><span class="p">)</span>
-    <span class="k">def</span> <span class="nf">safe_call</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
-        <span class="n">args</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">ffi</span><span class="o">.</span><span class="n">cast</span><span class="p">(</span><span class="n">_torch_to_cffi</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="nb">type</span><span class="p">(</span><span class="n">arg</span><span class="p">),</span> <span class="s1">&#39;void&#39;</span><span class="p">)</span> <span class="o">+</span> <span class="s1">&#39;*&#39;</span><span class="p">,</span> <span class="n">arg</span><span class="o">.</span><span class="n">_cdata</span><span class="p">)</span>
-                <span class="k">if</span> <span class="n">torch</span><span class="o">.</span><span class="n">is_tensor</span><span class="p">(</span><span class="n">arg</span><span class="p">)</span> <span class="ow">or</span> <span class="n">torch</span><span class="o">.</span><span class="n">is_storage</span><span class="p">(</span><span class="n">arg</span><span class="p">)</span>
-                <span class="k">else</span> <span class="n">arg</span>
-                <span class="k">for</span> <span class="n">arg</span> <span class="ow">in</span> <span class="n">args</span><span class="p">)</span>
-        <span class="n">args</span> <span class="o">=</span> <span class="p">(</span><span class="n">function</span><span class="p">,)</span> <span class="o">+</span> <span class="n">args</span>
-        <span class="n">result</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">_safe_call</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
-        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">result</span><span class="p">,</span> <span class="n">ffi</span><span class="o">.</span><span class="n">CData</span><span class="p">):</span>
-            <span class="n">typeof</span> <span class="o">=</span> <span class="n">ffi</span><span class="o">.</span><span class="n">typeof</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
-            <span class="k">if</span> <span class="n">typeof</span><span class="o">.</span><span class="n">kind</span> <span class="o">==</span> <span class="s1">&#39;pointer&#39;</span><span class="p">:</span>
-                <span class="n">cdata</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">ffi</span><span class="o">.</span><span class="n">cast</span><span class="p">(</span><span class="s1">&#39;uintptr_t&#39;</span><span class="p">,</span> <span class="n">result</span><span class="p">))</span>
-                <span class="n">cname</span> <span class="o">=</span> <span class="n">typeof</span><span class="o">.</span><span class="n">item</span><span class="o">.</span><span class="n">cname</span>
-                <span class="k">if</span> <span class="n">cname</span> <span class="ow">in</span> <span class="n">_cffi_to_torch</span><span class="p">:</span>
-                    <span class="k">return</span> <span class="n">_cffi_to_torch</span><span class="p">[</span><span class="n">cname</span><span class="p">](</span><span class="n">cdata</span><span class="o">=</span><span class="n">cdata</span><span class="p">)</span>
+    <span class="k">def</span> <span class="nf">__deepcopy__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">memo</span><span class="p">):</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)(</span><span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">clone</span><span class="p">(),</span> <span class="bp">self</span><span class="o">.</span><span class="n">requires_grad</span><span class="p">)</span>
+        <span class="n">memo</span><span class="p">[</span><span class="nb">id</span><span class="p">(</span><span class="bp">self</span><span class="p">)]</span> <span class="o">=</span> <span class="n">result</span>
         <span class="k">return</span> <span class="n">result</span>
-    <span class="k">return</span> <span class="n">safe_call</span>
 
+    <span class="k">def</span> <span class="nf">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="s1">&#39;Parameter containing:&#39;</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">__repr__</span><span class="p">()</span></div>
 </pre></div>
 
            </div>
