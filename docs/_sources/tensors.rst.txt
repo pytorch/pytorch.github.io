@@ -196,9 +196,10 @@ view of a storage and defines numeric operations on it.
    .. automethod:: lt
    .. automethod:: lt_
    .. automethod:: map_
-   .. automethod:: masked_copy_
+   .. automethod:: masked_scatter_
    .. automethod:: masked_fill_
    .. automethod:: masked_select
+   .. automethod:: matmul
    .. automethod:: max
    .. automethod:: mean
    .. automethod:: median
