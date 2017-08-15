@@ -8,7 +8,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>torch.nn.parallel.data_parallel &mdash; PyTorch master documentation</title>
+  <title>torch.nn.parallel.distributed &mdash; PyTorch master documentation</title>
   
 
   
@@ -563,7 +563,7 @@
         
           <li><a href="../../../torch.html">torch</a> &raquo;</li>
         
-      <li>torch.nn.parallel.data_parallel</li>
+      <li>torch.nn.parallel.distributed</li>
     
     
       <li class="wy-breadcrumbs-aside">
@@ -578,34 +578,74 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
             
-  <h1>Source code for torch.nn.parallel.data_parallel</h1><div class="highlight"><pre>
-<span></span><span class="kn">import</span> <span class="nn">torch</span>
+  <h1>Source code for torch.nn.parallel.distributed</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span> <span class="nn">sys</span>
+<span class="kn">import</span> <span class="nn">math</span>
+<span class="kn">import</span> <span class="nn">threading</span>
+
+<span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">from</span> <span class="nn">torch.autograd</span> <span class="k">import</span> <span class="n">Variable</span>
+<span class="kn">from</span> <span class="nn">torch._utils</span> <span class="k">import</span> <span class="n">_flatten_tensors</span><span class="p">,</span> <span class="n">_unflatten_tensors</span>
+<span class="kn">from</span> <span class="nn">torch.cuda.comm</span> <span class="k">import</span> <span class="n">broadcast_coalesced</span>
+<span class="kn">from</span> <span class="nn">torch.cuda</span> <span class="k">import</span> <span class="n">nccl</span>
+<span class="kn">import</span> <span class="nn">torch.distributed</span> <span class="k">as</span> <span class="nn">dist</span>
+
 <span class="kn">from</span> <span class="nn">..modules</span> <span class="k">import</span> <span class="n">Module</span>
-<span class="kn">from</span> <span class="nn">.scatter_gather</span> <span class="k">import</span> <span class="n">scatter_kwargs</span><span class="p">,</span> <span class="n">gather</span>
 <span class="kn">from</span> <span class="nn">.replicate</span> <span class="k">import</span> <span class="n">replicate</span>
+<span class="kn">from</span> <span class="nn">.scatter_gather</span> <span class="k">import</span> <span class="n">scatter_kwargs</span><span class="p">,</span> <span class="n">gather</span>
 <span class="kn">from</span> <span class="nn">.parallel_apply</span> <span class="k">import</span> <span class="n">parallel_apply</span>
 
+<span class="k">if</span> <span class="n">sys</span><span class="o">.</span><span class="n">version_info</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="mi">3</span><span class="p">:</span>
+    <span class="kn">import</span> <span class="nn">queue</span>
+<span class="k">else</span><span class="p">:</span>
+    <span class="kn">import</span> <span class="nn">Queue</span> <span class="k">as</span> <span class="nn">queue</span>
 
-<div class="viewcode-block" id="DataParallel"><a class="viewcode-back" href="../../../../nn.html#torch.nn.DataParallel">[docs]</a><span class="k">class</span> <span class="nc">DataParallel</span><span class="p">(</span><span class="n">Module</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;Implements data parallelism at the module level.</span>
+
+<div class="viewcode-block" id="DistributedDataParallel"><a class="viewcode-back" href="../../../../nn.html#torch.nn.parallel.DistributedDataParallel">[docs]</a><span class="k">class</span> <span class="nc">DistributedDataParallel</span><span class="p">(</span><span class="n">Module</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Implements distributed data parallelism at the module level.</span>
 
 <span class="sd">    This container parallelizes the application of the given module by</span>
 <span class="sd">    splitting the input across the specified devices by chunking in the batch</span>
-<span class="sd">    dimension. In the forward pass, the module is replicated on each device,</span>
-<span class="sd">    and each replica handles a portion of the input. During the backwards</span>
-<span class="sd">    pass, gradients from each replica are summed into the original module.</span>
+<span class="sd">    dimension. The module is replicated on each machine and each device, and</span>
+<span class="sd">    each such replica handles a portion of the input. During the backwards</span>
+<span class="sd">    pass, gradients from each node are averaged.</span>
 
-<span class="sd">    The batch size should be larger than the number of GPUs used. It should</span>
-<span class="sd">    also be an integer multiple of the number of GPUs so that each chunk is the</span>
-<span class="sd">    same size (so that each GPU processes the same number of samples).</span>
+<span class="sd">    The batch size should be larger than the number of GPUs used locally. It</span>
+<span class="sd">    should also be an integer multiple of the number of GPUs so that each chunk</span>
+<span class="sd">    is the same size (so that each GPU processes the same number of samples).</span>
 
-<span class="sd">    See also: :ref:`cuda-nn-dataparallel-instead`</span>
+<span class="sd">    See also: :ref:`cuda-nn-dataparallel-instead`. The same constraints on input</span>
+<span class="sd">    as in :class:`torch.nn.DataParallel` apply.</span>
 
-<span class="sd">    Arbitrary positional and keyword inputs are allowed to be passed into</span>
-<span class="sd">    DataParallel EXCEPT Tensors. All variables will be scattered on dim</span>
-<span class="sd">    specified (default 0). Primitive types will be broadcasted, but all</span>
-<span class="sd">    other types will be a shallow copy and can be corrupted if written to in</span>
-<span class="sd">    the model&#39;s forward pass.</span>
+<span class="sd">    Creation of this class requires the distributed package to be already</span>
+<span class="sd">    initialized in the process group mode</span>
+<span class="sd">    (see :func:`torch.distributed.init_process_group`).</span>
+
+<span class="sd">    .. warning::</span>
+<span class="sd">        This module works only with the ``gloo`` backend.</span>
+
+<span class="sd">    .. warning::</span>
+<span class="sd">        Constructor, forward method, and differentiation of the output (or a</span>
+<span class="sd">        function of the output of this module) is a distributed synchronization</span>
+<span class="sd">        point. Take that into account in case different processes might be</span>
+<span class="sd">        executing different code.</span>
+
+<span class="sd">    .. warning::</span>
+<span class="sd">        This module assumes all parameters are registered in the model by the</span>
+<span class="sd">        time it is created. No parameters should be added nor removed later.</span>
+<span class="sd">        Same applies to buffers.</span>
+
+<span class="sd">    .. warning::</span>
+<span class="sd">        This module doesn&#39;t work with :func:`torch.autograd.grad` (i.e. it will</span>
+<span class="sd">        only work if gradients are to be accumulated in ``.grad`` attributes of</span>
+<span class="sd">        parameters).</span>
+
+<span class="sd">    .. note::</span>
+<span class="sd">        Parameters are never broadcast between processes. The module performs</span>
+<span class="sd">        an all-reduce step on gradients and assumes that they will be modified</span>
+<span class="sd">        by the optimizer in all processes in the same way. Buffers</span>
+<span class="sd">        (e.g. BatchNorm stats) are broadcast form the module in process of rank</span>
+<span class="sd">        0, to all other replicas in the system in every iteration.</span>
 
 <span class="sd">    Args:</span>
 <span class="sd">        module: module to be parallelized</span>
@@ -614,14 +654,13 @@
 
 <span class="sd">    Example::</span>
 
-<span class="sd">        &gt;&gt;&gt; net = torch.nn.DataParallel(model, device_ids=[0, 1, 2])</span>
-<span class="sd">        &gt;&gt;&gt; output = net(input_var)</span>
+<span class="sd">        &gt;&gt;&gt; torch.distributed.init_process_group(world_size=4, init_method=&#39;...&#39;)</span>
+<span class="sd">        &gt;&gt;&gt; net = torch.nn.DistributedDataParallel(model)</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
-    <span class="c1"># TODO: update notes/cuda.rst when this class handles 8+ GPUs well</span>
-
     <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">module</span><span class="p">,</span> <span class="n">device_ids</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">output_device</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">):</span>
-        <span class="nb">super</span><span class="p">(</span><span class="n">DataParallel</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">__init__</span><span class="p">()</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">DistributedDataParallel</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">__init__</span><span class="p">()</span>
+
         <span class="k">if</span> <span class="n">device_ids</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">device_ids</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">device_count</span><span class="p">()))</span>
         <span class="k">if</span> <span class="n">output_device</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
@@ -630,19 +669,74 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">module</span> <span class="o">=</span> <span class="n">module</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">device_ids</span> <span class="o">=</span> <span class="n">device_ids</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">output_device</span> <span class="o">=</span> <span class="n">output_device</span>
-        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">device_ids</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="o">.</span><span class="n">cuda</span><span class="p">(</span><span class="n">device_ids</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+
+        <span class="c1"># Sync params and buffers</span>
+        <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+            <span class="n">dist</span><span class="o">.</span><span class="n">broadcast</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">device_ids</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="c1"># TODO: we don&#39;t need to replicate params in here. they&#39;re always going to</span>
+            <span class="c1"># be broadcasted using larger blocks in broadcast_coalesce, so it might be</span>
+            <span class="c1"># better to not pollute the caches with these small blocks</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_module_copies</span> <span class="o">=</span> <span class="n">replicate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">device_ids</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_module_copies</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">module</span>
+            <span class="k">for</span> <span class="n">module_copy</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_module_copies</span><span class="p">[</span><span class="mi">1</span><span class="p">:]:</span>
+                <span class="k">for</span> <span class="n">param</span><span class="p">,</span> <span class="n">copy_param</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="o">.</span><span class="n">parameters</span><span class="p">(),</span> <span class="n">module_copy</span><span class="o">.</span><span class="n">parameters</span><span class="p">()):</span>
+                    <span class="n">copy_param</span><span class="o">.</span><span class="n">detach_</span><span class="p">()</span>
+                    <span class="n">copy_param</span><span class="o">.</span><span class="n">requires_grad</span> <span class="o">=</span> <span class="n">param</span><span class="o">.</span><span class="n">requires_grad</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_module_copies</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="p">]</span>
+
+        <span class="c1"># Split parameters into buckets that will coalesce reductions</span>
+        <span class="c1"># TODO: different types need different buckets</span>
+        <span class="n">t</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="o">.</span><span class="n">parameters</span><span class="p">():</span>
+            <span class="n">tp</span> <span class="o">=</span> <span class="nb">type</span><span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">t</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">t</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">tp</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;DistributedDataParallel requires all parameters&#39; data to be of the same type&quot;</span><span class="p">)</span>
+            <span class="n">t</span> <span class="o">=</span> <span class="n">tp</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">bucket_sizes</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">bucket_map</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">MB</span> <span class="o">=</span> <span class="mi">1024</span> <span class="o">*</span> <span class="mi">1024</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">broadcast_bucket_size</span> <span class="o">=</span> <span class="mi">10</span> <span class="o">*</span> <span class="n">MB</span>  <span class="c1"># used for param sync before forward</span>
+        <span class="n">bucket_bytes_cap</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">*</span> <span class="n">MB</span>
+        <span class="n">bucket_bytes</span> <span class="o">=</span> <span class="n">bucket_bytes_cap</span>  <span class="c1"># to init the first bucket immediately</span>
+        <span class="k">for</span> <span class="n">param_tuple</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="o">*</span><span class="nb">map</span><span class="p">(</span><span class="k">lambda</span> <span class="n">m</span><span class="p">:</span> <span class="n">m</span><span class="o">.</span><span class="n">parameters</span><span class="p">(),</span> <span class="bp">self</span><span class="o">.</span><span class="n">_module_copies</span><span class="p">)):</span>
+            <span class="k">if</span> <span class="n">bucket_bytes</span> <span class="o">&gt;=</span> <span class="n">bucket_bytes_cap</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">bucket_sizes</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+                <span class="n">bucket_bytes</span> <span class="o">=</span> <span class="mi">0</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">bucket_sizes</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+=</span> <span class="mi">1</span>
+            <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">param_tuple</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">bucket_map</span><span class="p">[</span><span class="n">p</span><span class="p">]</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">bucket_sizes</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span>
+            <span class="n">bucket_bytes</span> <span class="o">+=</span> <span class="n">p</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span> <span class="o">*</span> <span class="n">p</span><span class="o">.</span><span class="n">element_size</span><span class="p">()</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">buckets</span> <span class="o">=</span> <span class="p">[[[]</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">device_ids</span><span class="p">))]</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">bucket_sizes</span><span class="p">))]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">bucket_events</span> <span class="o">=</span> <span class="p">[[</span><span class="kc">None</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">device_ids</span><span class="p">)</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">bucket_sizes</span><span class="p">))]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">reduced</span> <span class="o">=</span> <span class="p">[</span><span class="kc">False</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">bucket_sizes</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_register_grad_hooks</span><span class="p">()</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">dispatch_lock</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Lock</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_start_reduction_threads</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">__getstate__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">attrs</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">copy</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">__dict__</span><span class="p">)</span>
+        <span class="k">del</span> <span class="n">attrs</span><span class="p">[</span><span class="s1">&#39;_grad_accs&#39;</span><span class="p">],</span> <span class="n">attrs</span><span class="p">[</span><span class="s1">&#39;_reduction_queues&#39;</span><span class="p">],</span> <span class="n">attrs</span><span class="p">[</span><span class="s1">&#39;_reduction_streams&#39;</span><span class="p">],</span> \
+            <span class="n">attrs</span><span class="p">[</span><span class="s1">&#39;_reduction_threads&#39;</span><span class="p">],</span> <span class="n">attrs</span><span class="p">[</span><span class="s1">&#39;_nccl_streams&#39;</span><span class="p">],</span> <span class="n">attrs</span><span class="p">[</span><span class="s1">&#39;_default_streams&#39;</span><span class="p">]</span>
+
+    <span class="k">def</span> <span class="nf">__setstate__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">DistributedDataParallel</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">__setstate__</span><span class="p">(</span><span class="n">state</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_register_grad_hooks</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_start_reduction_threads</span><span class="p">()</span>
 
     <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">inputs</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
-        <span class="n">inputs</span><span class="p">,</span> <span class="n">kwargs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">scatter</span><span class="p">(</span><span class="n">inputs</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">device_ids</span><span class="p">)</span>
         <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">device_ids</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
-            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="p">(</span><span class="o">*</span><span class="n">inputs</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
-        <span class="n">replicas</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">replicate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">device_ids</span><span class="p">[:</span><span class="nb">len</span><span class="p">(</span><span class="n">inputs</span><span class="p">)])</span>
-        <span class="n">outputs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">parallel_apply</span><span class="p">(</span><span class="n">replicas</span><span class="p">,</span> <span class="n">inputs</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">)</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="p">(</span><span class="o">*</span><span class="n">inputs</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="n">inputs</span><span class="p">,</span> <span class="n">kwargs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">scatter</span><span class="p">(</span><span class="n">inputs</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">device_ids</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_sync_params</span><span class="p">()</span>
+        <span class="n">outputs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">parallel_apply</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_module_copies</span><span class="p">,</span> <span class="n">inputs</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">)</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">gather</span><span class="p">(</span><span class="n">outputs</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">output_device</span><span class="p">)</span>
-
-    <span class="k">def</span> <span class="nf">replicate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">module</span><span class="p">,</span> <span class="n">device_ids</span><span class="p">):</span>
-        <span class="k">return</span> <span class="n">replicate</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">device_ids</span><span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">scatter</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">inputs</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">,</span> <span class="n">device_ids</span><span class="p">):</span>
         <span class="k">return</span> <span class="n">scatter_kwargs</span><span class="p">(</span><span class="n">inputs</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">,</span> <span class="n">device_ids</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">dim</span><span class="p">)</span>
@@ -651,40 +745,155 @@
         <span class="k">return</span> <span class="n">parallel_apply</span><span class="p">(</span><span class="n">replicas</span><span class="p">,</span> <span class="n">inputs</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">device_ids</span><span class="p">[:</span><span class="nb">len</span><span class="p">(</span><span class="n">replicas</span><span class="p">)])</span>
 
     <span class="k">def</span> <span class="nf">gather</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">outputs</span><span class="p">,</span> <span class="n">output_device</span><span class="p">):</span>
-        <span class="k">return</span> <span class="n">gather</span><span class="p">(</span><span class="n">outputs</span><span class="p">,</span> <span class="n">output_device</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">dim</span><span class="p">)</span></div>
+        <span class="k">return</span> <span class="n">gather</span><span class="p">(</span><span class="n">outputs</span><span class="p">,</span> <span class="n">output_device</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">dim</span><span class="p">)</span>
 
+    <span class="k">def</span> <span class="nf">train</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">DistributedDataParallel</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">train</span><span class="p">(</span><span class="n">mode</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">module</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_module_copies</span><span class="p">[</span><span class="mi">1</span><span class="p">:]:</span>
+            <span class="n">module</span><span class="o">.</span><span class="n">train</span><span class="p">(</span><span class="n">mode</span><span class="p">)</span>
 
-<span class="k">def</span> <span class="nf">data_parallel</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">inputs</span><span class="p">,</span> <span class="n">device_ids</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">output_device</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">module_kwargs</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;Evaluates module(input) in parallel across the GPUs given in device_ids.</span>
+    <span class="k">def</span> <span class="nf">_sync_params</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">params</span> <span class="o">=</span> <span class="p">[</span><span class="n">p</span><span class="o">.</span><span class="n">data</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="o">.</span><span class="n">parameters</span><span class="p">()]</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="n">broadcast_coalesced</span><span class="p">(</span><span class="n">params</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">device_ids</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">broadcast_bucket_size</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">tensors</span><span class="p">,</span> <span class="n">module</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">result</span><span class="p">[</span><span class="mi">1</span><span class="p">:],</span> <span class="bp">self</span><span class="o">.</span><span class="n">_module_copies</span><span class="p">[</span><span class="mi">1</span><span class="p">:]):</span>
+            <span class="k">for</span> <span class="n">tensor</span><span class="p">,</span> <span class="n">param</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">tensors</span><span class="p">,</span> <span class="n">module</span><span class="o">.</span><span class="n">parameters</span><span class="p">()):</span>
+                <span class="n">param</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">set_</span><span class="p">(</span><span class="n">tensor</span><span class="p">)</span>
 
-<span class="sd">    This is the functional version of the DataParallel module.</span>
+        <span class="c1"># cross-node buffer sync</span>
+        <span class="n">buffers</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="o">.</span><span class="n">_all_buffers</span><span class="p">())</span>
+        <span class="n">flat_buffers</span> <span class="o">=</span> <span class="n">_flatten_tensors</span><span class="p">(</span><span class="n">buffers</span><span class="p">)</span>
+        <span class="n">dist</span><span class="o">.</span><span class="n">broadcast</span><span class="p">(</span><span class="n">flat_buffers</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">buf</span><span class="p">,</span> <span class="n">synced</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">buffers</span><span class="p">,</span> <span class="n">_unflatten_tensors</span><span class="p">(</span><span class="n">flat_buffers</span><span class="p">,</span> <span class="n">buffers</span><span class="p">)):</span>
+            <span class="n">buf</span><span class="o">.</span><span class="n">copy_</span><span class="p">(</span><span class="n">synced</span><span class="p">)</span>
 
-<span class="sd">    Args:</span>
-<span class="sd">        module: the module to evaluate in parallel</span>
-<span class="sd">        inputs: inputs to the module</span>
-<span class="sd">        device_ids: GPU ids on which to replicate module</span>
-<span class="sd">        output_device: GPU location of the output  Use -1 to indicate the CPU.</span>
-<span class="sd">            (default: device_ids[0])</span>
-<span class="sd">    Returns:</span>
-<span class="sd">        a Variable containing the result of module(input) located on</span>
-<span class="sd">        output_device</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">inputs</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">):</span>
-        <span class="n">inputs</span> <span class="o">=</span> <span class="p">(</span><span class="n">inputs</span><span class="p">,)</span>
+        <span class="c1"># intra-node buffer sync</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="n">broadcast_coalesced</span><span class="p">(</span><span class="n">buffers</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">device_ids</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">broadcast_bucket_size</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">tensors</span><span class="p">,</span> <span class="n">module</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">result</span><span class="p">[</span><span class="mi">1</span><span class="p">:],</span> <span class="bp">self</span><span class="o">.</span><span class="n">_module_copies</span><span class="p">[</span><span class="mi">1</span><span class="p">:]):</span>
+            <span class="k">for</span> <span class="n">tensor</span><span class="p">,</span> <span class="n">buf</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">tensors</span><span class="p">,</span> <span class="n">module</span><span class="o">.</span><span class="n">_all_buffers</span><span class="p">()):</span>
+                <span class="n">buf</span><span class="o">.</span><span class="n">set_</span><span class="p">(</span><span class="n">tensor</span><span class="p">)</span>
 
-    <span class="k">if</span> <span class="n">device_ids</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">device_ids</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">device_count</span><span class="p">()))</span>
+    <span class="k">def</span> <span class="nf">_register_grad_hooks</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_grad_accs</span> <span class="o">=</span> <span class="p">[]</span>  <span class="c1"># need to keep them in scope</span>
+        <span class="k">for</span> <span class="n">device_idx</span><span class="p">,</span> <span class="n">module</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_module_copies</span><span class="p">):</span>
+            <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">module</span><span class="o">.</span><span class="n">parameters</span><span class="p">():</span>
+                <span class="c1"># TODO: no-op for these that don&#39;t require grad</span>
+                <span class="n">p_tmp</span> <span class="o">=</span> <span class="n">p</span><span class="o">.</span><span class="n">expand_as</span><span class="p">(</span><span class="n">p</span><span class="p">)</span>
+                <span class="n">grad_acc</span> <span class="o">=</span> <span class="n">p_tmp</span><span class="o">.</span><span class="n">grad_fn</span><span class="o">.</span><span class="n">next_functions</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+                <span class="n">grad_acc</span><span class="o">.</span><span class="n">register_hook</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_make_param_hook</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="n">device_idx</span><span class="p">))</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_grad_accs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">grad_acc</span><span class="p">)</span>
 
-    <span class="k">if</span> <span class="n">output_device</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">output_device</span> <span class="o">=</span> <span class="n">device_ids</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="k">def</span> <span class="nf">_make_param_hook</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">param</span><span class="p">,</span> <span class="n">device_idx</span><span class="p">):</span>
+        <span class="n">bucket_idx</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">bucket_map</span><span class="p">[</span><span class="n">param</span><span class="p">]</span>
 
-    <span class="n">inputs</span><span class="p">,</span> <span class="n">module_kwargs</span> <span class="o">=</span> <span class="n">scatter_kwargs</span><span class="p">(</span><span class="n">inputs</span><span class="p">,</span> <span class="n">module_kwargs</span><span class="p">,</span> <span class="n">device_ids</span><span class="p">,</span> <span class="n">dim</span><span class="p">)</span>
-    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">device_ids</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">module</span><span class="p">(</span><span class="o">*</span><span class="n">inputs</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="o">**</span><span class="n">module_kwargs</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
-    <span class="n">used_device_ids</span> <span class="o">=</span> <span class="n">device_ids</span><span class="p">[:</span><span class="nb">len</span><span class="p">(</span><span class="n">inputs</span><span class="p">)]</span>
-    <span class="n">replicas</span> <span class="o">=</span> <span class="n">replicate</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">used_device_ids</span><span class="p">)</span>
-    <span class="n">outputs</span> <span class="o">=</span> <span class="n">parallel_apply</span><span class="p">(</span><span class="n">replicas</span><span class="p">,</span> <span class="n">inputs</span><span class="p">,</span> <span class="n">module_kwargs</span><span class="p">,</span> <span class="n">used_device_ids</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">gather</span><span class="p">(</span><span class="n">outputs</span><span class="p">,</span> <span class="n">output_device</span><span class="p">,</span> <span class="n">dim</span><span class="p">)</span>
+        <span class="k">def</span> <span class="nf">distributed_data_parallel_hook</span><span class="p">(</span><span class="o">*</span><span class="n">unused</span><span class="p">):</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">param</span><span class="o">.</span><span class="n">grad</span><span class="o">.</span><span class="n">volatile</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;DistributedDataParallel only works with volatile gradients&quot;</span><span class="p">)</span>
+            <span class="n">bucket</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">buckets</span><span class="p">[</span><span class="n">bucket_idx</span><span class="p">][</span><span class="n">device_idx</span><span class="p">]</span>
+            <span class="n">bucket</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">param</span><span class="o">.</span><span class="n">grad</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
+
+            <span class="c1"># We can flush these and save memory for replicas</span>
+            <span class="k">if</span> <span class="n">device_idx</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="n">param</span><span class="o">.</span><span class="n">grad</span> <span class="o">=</span> <span class="kc">None</span>
+                <span class="n">param</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">set_</span><span class="p">()</span>
+
+            <span class="c1"># Current device&#39;s bucket is full</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">bucket</span><span class="p">)</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">bucket_sizes</span><span class="p">[</span><span class="n">bucket_idx</span><span class="p">]:</span>
+                <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">device_ids</span><span class="p">[</span><span class="n">device_idx</span><span class="p">]):</span>
+                    <span class="n">event</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">Event</span><span class="p">()</span>
+                    <span class="n">event</span><span class="o">.</span><span class="n">record</span><span class="p">()</span>
+                <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">dispatch_lock</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">bucket_events</span><span class="p">[</span><span class="n">bucket_idx</span><span class="p">][</span><span class="n">device_idx</span><span class="p">]</span> <span class="o">=</span> <span class="n">event</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_queue_reduction</span><span class="p">(</span><span class="n">bucket_idx</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">distributed_data_parallel_hook</span>
+
+    <span class="k">def</span> <span class="nf">_queue_reduction</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">bucket_idx</span><span class="p">):</span>
+        <span class="n">dev_buckets</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">buckets</span><span class="p">[</span><span class="n">bucket_idx</span><span class="p">]</span>
+        <span class="n">dev_events</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">bucket_events</span><span class="p">[</span><span class="n">bucket_idx</span><span class="p">]</span>
+
+        <span class="c1"># Check if it&#39;s ready</span>
+        <span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="n">evt</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">for</span> <span class="n">evt</span> <span class="ow">in</span> <span class="n">dev_events</span><span class="p">):</span>
+            <span class="k">return</span>
+
+        <span class="c1"># Queue the reduction and make sure backward waits for it</span>
+        <span class="n">event</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Event</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_reduction_queues</span><span class="p">[</span><span class="n">bucket_idx</span><span class="p">]</span><span class="o">.</span><span class="n">put</span><span class="p">((</span><span class="n">dev_buckets</span><span class="p">,</span> <span class="n">dev_events</span><span class="p">,</span> <span class="n">event</span><span class="p">))</span>
+        <span class="n">Variable</span><span class="o">.</span><span class="n">_execution_engine</span><span class="o">.</span><span class="n">queue_callback</span><span class="p">(</span><span class="k">lambda</span><span class="p">:</span> <span class="n">event</span><span class="o">.</span><span class="n">wait</span><span class="p">())</span>
+
+        <span class="c1"># Reset bucket state</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">buckets</span><span class="p">[</span><span class="n">bucket_idx</span><span class="p">]</span> <span class="o">=</span> <span class="p">[[]</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">device_ids</span><span class="p">))]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">bucket_events</span><span class="p">[</span><span class="n">bucket_idx</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="kc">None</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">device_ids</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">reduced</span><span class="p">[</span><span class="n">bucket_idx</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="k">if</span> <span class="nb">all</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">reduced</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">reduced</span> <span class="o">=</span> <span class="p">[</span><span class="kc">False</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">bucket_sizes</span><span class="p">)</span>
+
+            <span class="k">def</span> <span class="nf">sync_reduction_streams</span><span class="p">():</span>
+                <span class="c1"># We only have to sync with the first one, but it&#39;s safer to do it this way</span>
+                <span class="c1"># in case we change the way in which we paralellize work</span>
+                <span class="n">r_streams</span> <span class="o">=</span> <span class="nb">zip</span><span class="p">(</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">_reduction_streams</span><span class="p">)</span>
+                <span class="k">for</span> <span class="n">dev_id</span><span class="p">,</span> <span class="n">default_stream</span><span class="p">,</span> <span class="n">dev_r_streams</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">device_ids</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_default_streams</span><span class="p">,</span> <span class="n">r_streams</span><span class="p">):</span>
+                    <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="n">dev_id</span><span class="p">):</span>
+                        <span class="k">for</span> <span class="n">reduction_stream</span> <span class="ow">in</span> <span class="n">dev_r_streams</span><span class="p">:</span>
+                            <span class="n">default_stream</span><span class="o">.</span><span class="n">wait_stream</span><span class="p">(</span><span class="n">reduction_stream</span><span class="p">)</span>
+            <span class="n">Variable</span><span class="o">.</span><span class="n">_execution_engine</span><span class="o">.</span><span class="n">queue_callback</span><span class="p">(</span><span class="n">sync_reduction_streams</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_start_reduction_threads</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">num_buckets</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">bucket_sizes</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_reduction_queues</span> <span class="o">=</span> <span class="p">[</span><span class="n">queue</span><span class="o">.</span><span class="n">Queue</span><span class="p">()</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_buckets</span><span class="p">)]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_reduction_threads</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_reduction_streams</span> <span class="o">=</span> <span class="p">[[]</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_buckets</span><span class="p">)]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_nccl_streams</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_default_streams</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">dev_id</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">device_ids</span><span class="p">:</span>
+            <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="n">dev_id</span><span class="p">):</span>
+                <span class="c1"># TODO: don&#39;t assume we&#39;re on a default stream</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_default_streams</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">current_stream</span><span class="p">())</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_nccl_streams</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">Stream</span><span class="p">())</span>
+        <span class="k">for</span> <span class="n">reduction_queue</span><span class="p">,</span> <span class="n">reduction_streams</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_reduction_queues</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_reduction_streams</span><span class="p">):</span>
+            <span class="k">for</span> <span class="n">dev_id</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">device_ids</span><span class="p">:</span>
+                <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="n">dev_id</span><span class="p">):</span>
+                    <span class="n">reduction_streams</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">Stream</span><span class="p">())</span>
+            <span class="c1"># We only use the first device for distributed reductions</span>
+            <span class="n">dist</span><span class="o">.</span><span class="n">_register_stream</span><span class="p">(</span><span class="n">reduction_streams</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+            <span class="n">group_id</span> <span class="o">=</span> <span class="n">dist</span><span class="o">.</span><span class="n">new_group</span><span class="p">()</span>
+
+            <span class="bp">self</span><span class="o">.</span><span class="n">_reduction_threads</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">threading</span><span class="o">.</span><span class="n">Thread</span><span class="p">(</span>
+                <span class="n">target</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_reduction_thread_fn</span><span class="p">,</span>
+                <span class="n">args</span><span class="o">=</span><span class="p">(</span><span class="n">reduction_queue</span><span class="p">,</span> <span class="n">group_id</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">device_ids</span><span class="p">,</span> <span class="n">reduction_streams</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_nccl_streams</span><span class="p">)))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_reduction_threads</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">_reduction_thread_fn</span><span class="p">(</span><span class="n">queue</span><span class="p">,</span> <span class="n">group_id</span><span class="p">,</span> <span class="n">device_ids</span><span class="p">,</span> <span class="n">reduction_streams</span><span class="p">,</span> <span class="n">nccl_streams</span><span class="p">):</span>
+
+        <span class="k">def</span> <span class="nf">_process_batch</span><span class="p">():</span>
+            <span class="n">dev_grad_batch</span><span class="p">,</span> <span class="n">dev_events</span><span class="p">,</span> <span class="n">job_event</span> <span class="o">=</span> <span class="n">queue</span><span class="o">.</span><span class="n">get</span><span class="p">()</span>
+            <span class="n">dev_coalesced</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="c1"># Coalesce the tensors on all devices and start a local reduction</span>
+            <span class="k">for</span> <span class="n">dev_id</span><span class="p">,</span> <span class="n">grad_batch</span><span class="p">,</span> <span class="n">event</span><span class="p">,</span> <span class="n">stream</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">device_ids</span><span class="p">,</span> <span class="n">dev_grad_batch</span><span class="p">,</span> <span class="n">dev_events</span><span class="p">,</span> <span class="n">reduction_streams</span><span class="p">):</span>
+                <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="n">dev_id</span><span class="p">),</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">stream</span><span class="p">(</span><span class="n">stream</span><span class="p">):</span>
+                    <span class="n">stream</span><span class="o">.</span><span class="n">wait_event</span><span class="p">(</span><span class="n">event</span><span class="p">)</span>
+                    <span class="n">coalesced</span> <span class="o">=</span> <span class="n">_flatten_tensors</span><span class="p">(</span><span class="n">grad_batch</span><span class="p">)</span>
+                    <span class="n">dev_coalesced</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">coalesced</span><span class="p">)</span>
+            <span class="c1"># Wait for all copies to complete before starting the NCCL kernel</span>
+            <span class="k">for</span> <span class="n">stream</span> <span class="ow">in</span> <span class="n">reduction_streams</span><span class="p">:</span>
+                <span class="n">stream</span><span class="o">.</span><span class="n">synchronize</span><span class="p">()</span>
+            <span class="n">nccl</span><span class="o">.</span><span class="n">reduce</span><span class="p">(</span><span class="n">dev_coalesced</span><span class="p">,</span> <span class="n">root</span><span class="o">=</span><span class="n">device_ids</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">streams</span><span class="o">=</span><span class="n">nccl_streams</span><span class="p">)</span>
+
+            <span class="c1"># From now on we&#39;re only going to work on the first device (from device_ids)</span>
+            <span class="n">grad_batch</span> <span class="o">=</span> <span class="n">dev_grad_batch</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="n">coalesced</span> <span class="o">=</span> <span class="n">dev_coalesced</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="n">reduce_stream</span> <span class="o">=</span> <span class="n">reduction_streams</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">stream</span><span class="p">(</span><span class="n">reduce_stream</span><span class="p">):</span>
+                <span class="n">reduce_stream</span><span class="o">.</span><span class="n">wait_stream</span><span class="p">(</span><span class="n">nccl_streams</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+                <span class="n">coalesced</span> <span class="o">/=</span> <span class="n">dist</span><span class="o">.</span><span class="n">get_world_size</span><span class="p">()</span>
+                <span class="n">dist</span><span class="o">.</span><span class="n">all_reduce</span><span class="p">(</span><span class="n">coalesced</span><span class="p">,</span> <span class="n">group</span><span class="o">=</span><span class="n">group_id</span><span class="p">)</span>
+                <span class="k">for</span> <span class="n">grad</span><span class="p">,</span> <span class="n">reduced</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">grad_batch</span><span class="p">,</span> <span class="n">_unflatten_tensors</span><span class="p">(</span><span class="n">coalesced</span><span class="p">,</span> <span class="n">grad_batch</span><span class="p">)):</span>
+                    <span class="n">grad</span><span class="o">.</span><span class="n">copy_</span><span class="p">(</span><span class="n">reduced</span><span class="p">)</span>
+            <span class="n">job_event</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
+
+        <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="n">device_ids</span><span class="p">[</span><span class="mi">0</span><span class="p">]):</span>
+            <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+                <span class="n">_process_batch</span><span class="p">()</span>  <span class="c1"># just to have a clear scope</span></div>
 </pre></div>
 
            </div>
