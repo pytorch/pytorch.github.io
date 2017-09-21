@@ -83,7 +83,7 @@
             
             
               <div class="version">
-                <a href="http://pytorch.org/docs/versions.html">master (0.2.0+2b9765a ) &#x25BC</a>
+                <a href="http://pytorch.org/docs/versions.html">master (0.2.0+8d19319 ) &#x25BC</a>
               </div>
             
           
@@ -618,10 +618,31 @@
 <span class="kn">import</span> <span class="nn">string</span>
 <span class="kn">import</span> <span class="nn">json</span>
 <span class="kn">import</span> <span class="nn">math</span>
+<span class="kn">import</span> <span class="nn">contextlib</span>
 <span class="kn">from</span> <span class="nn">._utils</span> <span class="k">import</span> <span class="n">_range</span>
 
 
-<div class="viewcode-block" id="export"><a class="viewcode-back" href="../../onnx.html#torch.onnx.export">[docs]</a><span class="k">def</span> <span class="nf">export</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">f</span><span class="p">,</span> <span class="n">export_params</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">kwargs</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">verbose</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+<span class="nd">@contextlib</span><span class="o">.</span><span class="n">contextmanager</span>
+<span class="k">def</span> <span class="nf">set_training</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">mode</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    A context manager to temporarily set the training mode of &#39;model&#39;</span>
+<span class="sd">    to &#39;mode&#39;, resetting it when we exit the with-block.  A no-op if</span>
+<span class="sd">    mode is None.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">mode</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">yield</span>
+        <span class="k">return</span>
+    <span class="n">old_mode</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">training</span>
+    <span class="k">if</span> <span class="n">old_mode</span> <span class="o">!=</span> <span class="n">mode</span><span class="p">:</span>
+        <span class="n">model</span><span class="o">.</span><span class="n">train</span><span class="p">(</span><span class="n">mode</span><span class="p">)</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">yield</span>
+    <span class="k">finally</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">old_mode</span> <span class="o">!=</span> <span class="n">mode</span><span class="p">:</span>
+            <span class="n">model</span><span class="o">.</span><span class="n">train</span><span class="p">(</span><span class="n">old_mode</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="export"><a class="viewcode-back" href="../../onnx.html#torch.onnx.export">[docs]</a><span class="k">def</span> <span class="nf">export</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">f</span><span class="p">,</span> <span class="n">export_params</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">verbose</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">training</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Export a model into ONNX format.  This exporter runs your model</span>
 <span class="sd">    once in order to get a trace of its execution to be exported; at the</span>
@@ -631,30 +652,57 @@
 
 <span class="sd">    Arguments:</span>
 <span class="sd">        model (torch.nn.Module): the model to be exported.</span>
-<span class="sd">        args (torch.autograd.Variable or tuple of variables): the inputs to</span>
-<span class="sd">            the model, e.g., such that ``model(*args, **kwargs)`` is a valid</span>
-<span class="sd">            invocation of the model (see kwargs below).</span>
+<span class="sd">        args (tuple of arguments): the inputs to</span>
+<span class="sd">            the model, e.g., such that ``model(*args)`` is a valid</span>
+<span class="sd">            invocation of the model.  Any non-Variable arguments will</span>
+<span class="sd">            be hard-coded into the exported model; any Variable arguments</span>
+<span class="sd">            will become inputs of the exported model, in the order they</span>
+<span class="sd">            occur in args.  If args is a Variable, this is equivalent</span>
+<span class="sd">            to having called it with a 1-ary tuple of that Variable.</span>
+<span class="sd">            (Note: passing keyword arguments to the model is not currently</span>
+<span class="sd">            supported.  Give us a shout if you need it.)</span>
 <span class="sd">        f: a file-like object (has to implement fileno that returns a file descriptor)</span>
 <span class="sd">            or a string containing a file name.  A binary Protobuf will be written</span>
 <span class="sd">            to this file.</span>
 <span class="sd">        export_params (bool, default True): if specified, all parameters will</span>
-<span class="sd">            be exported.  Set this to False if you are exporting an</span>
-<span class="sd">            untrained model.</span>
-<span class="sd">        kwargs (dict, optional): keyword inputs to the model.</span>
+<span class="sd">            be exported.  Set this to False if you want to export an untrained model.</span>
+<span class="sd">            In this case, the exported model will first take all of its parameters</span>
+<span class="sd">            as arguments, the ordering as specified by ``model.state_dict().values()``</span>
+<span class="sd">        verbose (bool, default False): if specified, we will print out a debug</span>
+<span class="sd">            description of the trace being exported.</span>
+<span class="sd">        training (bool, default False): export the model in training mode.  At</span>
+<span class="sd">            the moment, ONNX is oriented towards exporting models for inference</span>
+<span class="sd">            only, so you will generally not need to set this to True.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">_export</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">f</span><span class="p">,</span> <span class="n">export_params</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">,</span> <span class="n">verbose</span><span class="p">)</span></div>
+    <span class="n">_export</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">f</span><span class="p">,</span> <span class="n">export_params</span><span class="p">,</span> <span class="n">verbose</span><span class="p">,</span> <span class="n">training</span><span class="p">)</span></div>
 
 
-<span class="k">def</span> <span class="nf">_export</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">f</span><span class="p">,</span> <span class="n">export_params</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">kwargs</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">verbose</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+<span class="k">def</span> <span class="nf">_export</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">f</span><span class="p">,</span> <span class="n">export_params</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">verbose</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">training</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
     <span class="c1"># Special case for common case of passing a single Variable</span>
     <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">autograd</span><span class="o">.</span><span class="n">Variable</span><span class="p">):</span>
         <span class="n">args</span> <span class="o">=</span> <span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="p">)</span>
-    <span class="k">if</span> <span class="ow">not</span> <span class="n">kwargs</span><span class="p">:</span>
-        <span class="n">kwargs</span> <span class="o">=</span> <span class="p">{}</span>
-    <span class="n">trace</span><span class="p">,</span> <span class="n">torch_out</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">jit</span><span class="o">.</span><span class="n">record_trace</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+    <span class="c1"># A basic sanity check: make sure the state_dict keys are the same</span>
+    <span class="c1"># before and after running the model.  Fail fast!</span>
+    <span class="n">orig_state_dict_keys</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span>
+
+    <span class="c1"># By default, training=False, which is good because running a model in</span>
+    <span class="c1"># training mode could result in internal buffers getting updated, dropout</span>
+    <span class="c1"># getting applied, etc.  If you really know what you&#39;re doing, you</span>
+    <span class="c1"># can turn training=True (or None, to preserve whatever the original</span>
+    <span class="c1"># training mode was.)</span>
+    <span class="k">with</span> <span class="n">set_training</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">training</span><span class="p">):</span>
+        <span class="n">trace</span><span class="p">,</span> <span class="n">torch_out</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">jit</span><span class="o">.</span><span class="n">record_trace</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="n">num_derivatives</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">orig_state_dict_keys</span> <span class="o">!=</span> <span class="n">model</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;state_dict changed after running the tracer; &quot;</span>
+                           <span class="s2">&quot;something weird is happening in your model!&quot;</span><span class="p">)</span>
+
     <span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">_jit_pass_onnx</span><span class="p">(</span><span class="n">trace</span><span class="p">)</span>
+
     <span class="k">if</span> <span class="n">verbose</span><span class="p">:</span>
         <span class="nb">print</span><span class="p">(</span><span class="n">trace</span><span class="p">)</span>
+
     <span class="c1"># TODO: Don&#39;t allocate a in-memory string for the protobuf</span>
     <span class="k">if</span> <span class="n">export_params</span><span class="p">:</span>
         <span class="c1"># NB: OrderedDict values is not actually a list, but trace.export is</span>
@@ -662,11 +710,26 @@
         <span class="n">proto</span> <span class="o">=</span> <span class="n">trace</span><span class="o">.</span><span class="n">export</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()</span><span class="o">.</span><span class="n">values</span><span class="p">()))</span>
     <span class="k">else</span><span class="p">:</span>
         <span class="n">proto</span> <span class="o">=</span> <span class="n">trace</span><span class="o">.</span><span class="n">export</span><span class="p">()</span>
+
     <span class="n">torch</span><span class="o">.</span><span class="n">serialization</span><span class="o">.</span><span class="n">_with_file_like</span><span class="p">(</span><span class="n">f</span><span class="p">,</span> <span class="s2">&quot;wb&quot;</span><span class="p">,</span> <span class="k">lambda</span> <span class="n">f</span><span class="p">:</span> <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">proto</span><span class="p">))</span>
     <span class="k">return</span> <span class="n">torch_out</span>
 
 
 <span class="n">attr_pattern</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="s2">&quot;^(.+)_([ifstg])$&quot;</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">run_symbolic</span><span class="p">(</span><span class="n">op_name</span><span class="p">,</span> <span class="n">symbolic_fn</span><span class="p">,</span> <span class="n">args</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    This trampoline function gets invoked for every symbolic call.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">symbolic_fn</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">TypeError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="c1"># Handle the specific case where we didn&#39;t successfully dispatch</span>
+        <span class="c1"># to symbolic_fn.  Otherwise, the backtrace will have the clues</span>
+        <span class="c1"># you need.</span>
+        <span class="n">e</span><span class="o">.</span><span class="n">args</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;</span><span class="si">{}</span><span class="s2"> (occurred when translating </span><span class="si">{}</span><span class="s2">)&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">e</span><span class="o">.</span><span class="n">args</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">op_name</span><span class="p">),</span> <span class="p">)</span>
+        <span class="k">raise</span>
 
 
 <span class="k">def</span> <span class="nf">_add_attribute</span><span class="p">(</span><span class="n">node</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
