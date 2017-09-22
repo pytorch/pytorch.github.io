@@ -83,7 +83,7 @@
             
             
               <div class="version">
-                <a href="http://pytorch.org/docs/versions.html">master (0.2.0+805ad16 ) &#x25BC</a>
+                <a href="http://pytorch.org/docs/versions.html">master (0.2.0+e4d6ee1 ) &#x25BC</a>
               </div>
             
           
@@ -619,9 +619,12 @@
 <span class="kn">import</span> <span class="nn">ctypes</span>
 <span class="kn">import</span> <span class="nn">os</span>
 <span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">import</span> <span class="nn">traceback</span>
+<span class="kn">from</span> <span class="nn">torch._six</span> <span class="k">import</span> <span class="n">raise_from</span>
 <span class="kn">from</span> <span class="nn">multiprocessing.util</span> <span class="k">import</span> <span class="n">register_after_fork</span> <span class="k">as</span> <span class="n">_register_after_fork</span>
 
 <span class="n">_initialized</span> <span class="o">=</span> <span class="kc">False</span>
+<span class="n">_queued_calls</span> <span class="o">=</span> <span class="p">[]</span>  <span class="c1"># don&#39;t invoke these until initialization occurs</span>
 <span class="n">_in_bad_fork</span> <span class="o">=</span> <span class="kc">False</span>  <span class="c1"># this global is also used in torch.manual_seed</span>
 <span class="n">_original_pid</span> <span class="o">=</span> <span class="kc">False</span>
 <span class="n">_cudart</span> <span class="o">=</span> <span class="kc">None</span>
@@ -673,8 +676,20 @@
 <span class="s2">of the CUDA driver.&quot;&quot;&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">_cuda_getDriverVersion</span><span class="p">())))</span>
 
 
+<span class="k">def</span> <span class="nf">_lazy_call</span><span class="p">(</span><span class="n">callable</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">_initialized</span><span class="p">:</span>
+        <span class="n">callable</span><span class="p">()</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="c1"># Don&#39;t store the actual traceback to avoid memory cycle</span>
+        <span class="n">_queued_calls</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">callable</span><span class="p">,</span> <span class="n">traceback</span><span class="o">.</span><span class="n">format_stack</span><span class="p">()))</span>
+
+
+<span class="k">class</span> <span class="nc">DeferredCudaCallError</span><span class="p">(</span><span class="ne">Exception</span><span class="p">):</span>
+    <span class="k">pass</span>
+
+
 <span class="k">def</span> <span class="nf">_lazy_init</span><span class="p">():</span>
-    <span class="k">global</span> <span class="n">_initialized</span><span class="p">,</span> <span class="n">_cudart</span><span class="p">,</span> <span class="n">_original_pid</span>
+    <span class="k">global</span> <span class="n">_initialized</span><span class="p">,</span> <span class="n">_cudart</span><span class="p">,</span> <span class="n">_original_pid</span><span class="p">,</span> <span class="n">_queued_calls</span>
     <span class="k">if</span> <span class="n">_initialized</span><span class="p">:</span>
         <span class="k">return</span>
     <span class="k">if</span> <span class="n">_in_bad_fork</span><span class="p">:</span>
@@ -695,6 +710,13 @@
     <span class="n">_cudart</span><span class="o">.</span><span class="n">cudaGetErrorString</span><span class="o">.</span><span class="n">restype</span> <span class="o">=</span> <span class="n">ctypes</span><span class="o">.</span><span class="n">c_char_p</span>
     <span class="n">_original_pid</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">getpid</span><span class="p">()</span>
     <span class="n">_initialized</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="k">for</span> <span class="n">queued_call</span><span class="p">,</span> <span class="n">orig_traceback</span> <span class="ow">in</span> <span class="n">_queued_calls</span><span class="p">:</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">queued_call</span><span class="p">()</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="n">msg</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;CUDA call failed lazily at initialization with error: </span><span class="si">{}</span><span class="se">\n\n</span><span class="s2">&quot;</span>
+                   <span class="s2">&quot;CUDA call was originally invoked at:</span><span class="se">\n\n</span><span class="si">{}</span><span class="s2">&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">),</span> <span class="n">orig_traceback</span><span class="p">)</span>
+            <span class="n">raise_from</span><span class="p">(</span><span class="n">DeferredCudaCallError</span><span class="p">(</span><span class="n">msg</span><span class="p">),</span> <span class="n">e</span><span class="p">)</span>
 
 
 <span class="k">def</span> <span class="nf">_after_fork</span><span class="p">(</span><span class="n">arg</span><span class="p">):</span>
