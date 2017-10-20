@@ -72,7 +72,7 @@
             
             
               <div class="version">
-                <a href="http://pytorch.org/docs/versions.html">master (0.2.0+5a0ded4 ) &#x25BC</a>
+                <a href="http://pytorch.org/docs/versions.html">master (0.2.0+53fe804 ) &#x25BC</a>
               </div>
             
           
@@ -633,7 +633,8 @@
 <span class="kn">import</span> <span class="nn">math</span>
 <span class="kn">import</span> <span class="nn">contextlib</span>
 <span class="kn">import</span> <span class="nn">numbers</span>
-<span class="kn">from</span> <span class="nn">._utils</span> <span class="k">import</span> <span class="n">_range</span>
+<span class="kn">import</span> <span class="nn">warnings</span>
+<span class="kn">from</span> <span class="nn">torch._utils</span> <span class="k">import</span> <span class="n">_range</span>
 <span class="kn">from</span> <span class="nn">torch._six</span> <span class="k">import</span> <span class="n">string_classes</span>
 
 
@@ -733,9 +734,10 @@
 <span class="n">attr_pattern</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="s2">&quot;^(.+)_([ifstgz])$&quot;</span><span class="p">)</span>
 
 
-<span class="k">def</span> <span class="nf">run_symbolic</span><span class="p">(</span><span class="n">op_name</span><span class="p">,</span> <span class="n">symbolic_fn</span><span class="p">,</span> <span class="n">args</span><span class="p">):</span>
+<span class="k">def</span> <span class="nf">_run_symbolic_method</span><span class="p">(</span><span class="n">op_name</span><span class="p">,</span> <span class="n">symbolic_fn</span><span class="p">,</span> <span class="n">args</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    This trampoline function gets invoked for every symbolic call.</span>
+<span class="sd">    This trampoline function gets invoked for every symbolic method</span>
+<span class="sd">    call from C++.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="k">try</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">symbolic_fn</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">)</span>
@@ -760,26 +762,23 @@
     <span class="k">return</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">node</span><span class="p">,</span> <span class="n">kind</span> <span class="o">+</span> <span class="s1">&#39;_&#39;</span><span class="p">)(</span><span class="n">name</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
 
 
-<span class="k">def</span> <span class="nf">_newNode</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">opname</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
-    <span class="n">n</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">create</span><span class="p">(</span><span class="n">opname</span><span class="p">,</span> <span class="n">args</span><span class="p">)</span>
+<span class="k">def</span> <span class="nf">_newNode</span><span class="p">(</span><span class="n">g</span><span class="p">,</span> <span class="n">opname</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="n">n</span> <span class="o">=</span> <span class="n">g</span><span class="o">.</span><span class="n">create</span><span class="p">(</span><span class="n">opname</span><span class="p">,</span> <span class="n">args</span><span class="p">)</span>
     <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">kwargs</span><span class="o">.</span><span class="n">items</span><span class="p">()):</span>
         <span class="n">_add_attribute</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">n</span>
 
 
-<span class="k">def</span> <span class="nf">_op</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">opname</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="k">def</span> <span class="nf">_graph_op</span><span class="p">(</span><span class="n">g</span><span class="p">,</span> <span class="n">opname</span><span class="p">,</span> <span class="o">*</span><span class="n">raw_args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Create an ONNX operator &#39;opname&#39;, taking &#39;args&#39; as inputs</span>
-<span class="sd">    and attributes &#39;kwargs&#39; and add it to the current graph,</span>
-<span class="sd">    returning the node representing the single output of this</span>
-<span class="sd">    operator (see the `outputs` keyword argument for multi-return</span>
-<span class="sd">    nodes).</span>
+<span class="sd">    Create an ONNX operator &#39;opname&#39;, taking &#39;args&#39; as inputs and attributes</span>
+<span class="sd">    &#39;kwargs&#39;; returning the node representing the single output of this operator</span>
+<span class="sd">    (see the `outputs` keyword argument for multi-return nodes).</span>
 
 <span class="sd">    The set of operators and the inputs/attributes they take</span>
 <span class="sd">    is documented at https://github.com/onnx/onnx/blob/master/docs/Operators.md</span>
 
-<span class="sd">    This op is monkey-patched to be available on the &#39;Graph&#39; object</span>
-<span class="sd">    passed in as the first argument.</span>
+<span class="sd">    This function is monkey-patched onto Graph.</span>
 
 <span class="sd">    Arguments:</span>
 <span class="sd">        opname (string): The ONNX operator name, e.g., `Abs` or `Add`.</span>
@@ -799,19 +798,68 @@
 <span class="sd">            in positional.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">outputs</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s1">&#39;outputs&#39;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
-    <span class="n">n</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">appendNode</span><span class="p">(</span><span class="n">_newNode</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">opname</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">))</span>
+    <span class="c1"># Filter out None attributes, this can be convenient client side</span>
+    <span class="n">kwargs</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">((</span><span class="n">k</span><span class="p">,</span> <span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">iteritems</span><span class="p">()</span> <span class="k">if</span> <span class="n">v</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">const_if_tensor</span><span class="p">(</span><span class="n">arg</span><span class="p">):</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">arg</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">Node</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">arg</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">g</span><span class="o">.</span><span class="n">op</span><span class="p">(</span><span class="s2">&quot;Constant&quot;</span><span class="p">,</span> <span class="n">value_z</span><span class="o">=</span><span class="n">arg</span><span class="p">)</span>
+
+    <span class="n">args</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">const_if_tensor</span><span class="p">(</span><span class="n">arg</span><span class="p">)</span> <span class="k">for</span> <span class="n">arg</span> <span class="ow">in</span> <span class="n">raw_args</span><span class="p">)</span>
+    <span class="n">n</span> <span class="o">=</span> <span class="n">g</span><span class="o">.</span><span class="n">appendNode</span><span class="p">(</span><span class="n">_newNode</span><span class="p">(</span><span class="n">g</span><span class="p">,</span> <span class="n">opname</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">))</span>
     <span class="k">if</span> <span class="n">outputs</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">n</span>
-    <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">appendNode</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">createSelect</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">i</span><span class="p">))</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">_range</span><span class="p">(</span><span class="n">outputs</span><span class="p">))</span>
+    <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">g</span><span class="o">.</span><span class="n">appendNode</span><span class="p">(</span><span class="n">g</span><span class="o">.</span><span class="n">createSelect</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">i</span><span class="p">))</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">_range</span><span class="p">(</span><span class="n">outputs</span><span class="p">))</span>
 
 
-<span class="k">def</span> <span class="nf">_at</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">opname</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
-    <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">op</span><span class="p">(</span><span class="s2">&quot;ATen&quot;</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="n">operator_s</span><span class="o">=</span><span class="n">opname</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+<span class="c1"># Note [Export inplace]</span>
+<span class="c1"># ~~~~~~~~~~~~~~~~~~~~~</span>
+<span class="c1"># In abstract, it would be better for us to export inplace annotations,</span>
+<span class="c1"># than to not export them, since it is useful information that can</span>
+<span class="c1"># help the target of an ONNX export export more efficiently.  However,</span>
+<span class="c1"># ONNX doesn&#39;t currently formalize inplace.  Fortunately, it&#39;s sound to drop</span>
+<span class="c1"># inplace annotations, but we are losing information this way.</span>
+
+
+<span class="k">def</span> <span class="nf">_run_symbolic_function</span><span class="p">(</span><span class="n">g</span><span class="p">,</span> <span class="n">n</span><span class="p">,</span> <span class="n">inputs</span><span class="p">):</span>
+    <span class="kn">import</span> <span class="nn">torch.onnx.symbolic</span>
+
+    <span class="k">try</span><span class="p">:</span>
+        <span class="c1"># See Note [Export inplace]</span>
+        <span class="k">if</span> <span class="n">n</span><span class="o">.</span><span class="n">kind</span><span class="p">()</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s1">&#39;_&#39;</span><span class="p">):</span>
+            <span class="n">op_name</span> <span class="o">=</span> <span class="n">n</span><span class="o">.</span><span class="n">kind</span><span class="p">()[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">op_name</span> <span class="o">=</span> <span class="n">n</span><span class="o">.</span><span class="n">kind</span><span class="p">()</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">onnx</span><span class="o">.</span><span class="n">symbolic</span><span class="p">,</span> <span class="n">op_name</span><span class="p">):</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="s2">&quot;ONNX conversion of </span><span class="si">{}</span><span class="s2"> not supported&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">op_name</span><span class="p">))</span>
+            <span class="k">return</span> <span class="kc">None</span>
+        <span class="n">fn</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">onnx</span><span class="o">.</span><span class="n">symbolic</span><span class="p">,</span> <span class="n">op_name</span><span class="p">)</span>
+        <span class="n">attrs</span> <span class="o">=</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">n</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">n</span><span class="o">.</span><span class="n">attributeNames</span><span class="p">()}</span>
+        <span class="n">r</span> <span class="o">=</span> <span class="n">fn</span><span class="p">(</span><span class="n">g</span><span class="p">,</span> <span class="o">*</span><span class="n">inputs</span><span class="p">,</span> <span class="o">**</span><span class="n">attrs</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">r</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="s2">&quot;torch.onnx.symbolic.</span><span class="si">{}</span><span class="s2"> returned None, &quot;</span>
+                                      <span class="s2">&quot;indicating ONNX translation not supported&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">op_name</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">r</span>
+
+    <span class="k">except</span> <span class="ne">TypeError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="c1"># Handle the specific case where we didn&#39;t successfully dispatch.</span>
+        <span class="c1"># Otherwise, the backtrace will have the clues you need.</span>
+        <span class="n">e</span><span class="o">.</span><span class="n">args</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;</span><span class="si">{}</span><span class="s2"> (occurred when translating </span><span class="si">{}</span><span class="s2">)&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">e</span><span class="o">.</span><span class="n">args</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">op_name</span><span class="p">),</span> <span class="p">)</span>
+        <span class="k">raise</span>
+
+
+<span class="k">def</span> <span class="nf">_graph_at</span><span class="p">(</span><span class="n">g</span><span class="p">,</span> <span class="n">opname</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">g</span><span class="o">.</span><span class="n">op</span><span class="p">(</span><span class="s2">&quot;ATen&quot;</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="n">operator_s</span><span class="o">=</span><span class="n">opname</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 
 
 <span class="c1"># This helper function can create either constant tensor or constant scalar.</span>
 <span class="c1"># If dims is None or 0 or [0], generate a 0-d tensor (scalar).</span>
-<span class="k">def</span> <span class="nf">_constant</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">,</span> <span class="n">dims</span><span class="p">,</span> <span class="nb">type</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="c1">#</span>
+<span class="c1"># TODO: We might not need this anymore, since most scalars now show up</span>
+<span class="c1"># as tensors</span>
+<span class="k">def</span> <span class="nf">_graph_constant</span><span class="p">(</span><span class="n">g</span><span class="p">,</span> <span class="n">value</span><span class="p">,</span> <span class="n">dims</span><span class="p">,</span> <span class="nb">type</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
     <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">numbers</span><span class="o">.</span><span class="n">Number</span><span class="p">)</span>
     <span class="k">assert</span> <span class="nb">type</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
     <span class="n">isscalar</span> <span class="o">=</span> <span class="kc">False</span>
@@ -838,12 +886,25 @@
                          <span class="s2">&quot;char, short, int, long, half, float, double&quot;</span><span class="p">)</span>
     <span class="n">tensor</span><span class="o">.</span><span class="n">fill_</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">isscalar</span><span class="p">:</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">op</span><span class="p">(</span><span class="s2">&quot;Constant&quot;</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="n">value_z</span><span class="o">=</span><span class="n">tensor</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
-    <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">op</span><span class="p">(</span><span class="s2">&quot;Constant&quot;</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="n">value_t</span><span class="o">=</span><span class="n">tensor</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">g</span><span class="o">.</span><span class="n">op</span><span class="p">(</span><span class="s2">&quot;Constant&quot;</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="n">value_z</span><span class="o">=</span><span class="n">tensor</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">g</span><span class="o">.</span><span class="n">op</span><span class="p">(</span><span class="s2">&quot;Constant&quot;</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="n">value_t</span><span class="o">=</span><span class="n">tensor</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 
-<span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">Graph</span><span class="o">.</span><span class="n">op</span> <span class="o">=</span> <span class="n">_op</span>
-<span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">Graph</span><span class="o">.</span><span class="n">at</span> <span class="o">=</span> <span class="n">_at</span>
-<span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">Graph</span><span class="o">.</span><span class="n">constant</span> <span class="o">=</span> <span class="n">_constant</span>
+
+<span class="k">def</span> <span class="nf">_node_getitem</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">k</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Accessor for attributes of a node which is polymorphic over</span>
+<span class="sd">    return type.</span>
+
+<span class="sd">    NB: This is monkey-patched onto Node.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">sel</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">kindOf</span><span class="p">(</span><span class="n">k</span><span class="p">)</span>
+    <span class="k">return</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">sel</span><span class="p">)(</span><span class="n">k</span><span class="p">)</span>
+
+
+<span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">Graph</span><span class="o">.</span><span class="n">op</span> <span class="o">=</span> <span class="n">_graph_op</span>
+<span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">Graph</span><span class="o">.</span><span class="n">at</span> <span class="o">=</span> <span class="n">_graph_at</span>
+<span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">Graph</span><span class="o">.</span><span class="n">constant</span> <span class="o">=</span> <span class="n">_graph_constant</span>
+<span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">Node</span><span class="o">.</span><span class="fm">__getitem__</span> <span class="o">=</span> <span class="n">_node_getitem</span>
 </pre></div>
 
            </div>
