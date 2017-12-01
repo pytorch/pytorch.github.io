@@ -72,7 +72,7 @@
             
             
               <div class="version">
-                <a href="http://pytorch.org/docs/versions.html">master (0.4.0a0+b96976f ) &#x25BC</a>
+                master (0.4.0a0+80c8635 )
               </div>
             
           
@@ -470,7 +470,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../../../../distributions.html">torch.distributions</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="../../../../distributions.html#distribution"><span class="hidden-section">Distribution</span></a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../../distributions.html#bernoulli"><span class="hidden-section">Bernoulli</span></a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../../distributions.html#multinomial"><span class="hidden-section">Multinomial</span></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../distributions.html#categorical"><span class="hidden-section">Categorical</span></a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../../distributions.html#normal"><span class="hidden-section">Normal</span></a></li>
 </ul>
 </li>
@@ -622,7 +622,10 @@
   <h1>Source code for torch.utils.data.dataloader</h1><div class="highlight"><pre>
 <span></span><span class="kn">import</span> <span class="nn">torch</span>
 <span class="kn">import</span> <span class="nn">torch.multiprocessing</span> <span class="k">as</span> <span class="nn">multiprocessing</span>
+<span class="kn">from</span> <span class="nn">torch._C</span> <span class="k">import</span> <span class="n">_set_worker_signal_handlers</span><span class="p">,</span> <span class="n">_update_worker_pids</span><span class="p">,</span> \
+    <span class="n">_remove_worker_pids</span><span class="p">,</span> <span class="n">_error_if_any_worker_fails</span>
 <span class="kn">from</span> <span class="nn">.sampler</span> <span class="k">import</span> <span class="n">SequentialSampler</span><span class="p">,</span> <span class="n">RandomSampler</span><span class="p">,</span> <span class="n">BatchSampler</span>
+<span class="kn">import</span> <span class="nn">signal</span>
 <span class="kn">import</span> <span class="nn">collections</span>
 <span class="kn">import</span> <span class="nn">re</span>
 <span class="kn">import</span> <span class="nn">sys</span>
@@ -653,11 +656,16 @@
     <span class="k">global</span> <span class="n">_use_shared_memory</span>
     <span class="n">_use_shared_memory</span> <span class="o">=</span> <span class="kc">True</span>
 
+    <span class="c1"># Intialize C side signal handlers for SIGBUS and SIGSEGV. Python signal</span>
+    <span class="c1"># module&#39;s handlers are executed after Python returns from C low-level</span>
+    <span class="c1"># handlers, likely when the same fatal signal happened again already.</span>
+    <span class="c1"># https://docs.python.org/3/library/signal.html Sec. 18.8.1.1</span>
+    <span class="n">_set_worker_signal_handlers</span><span class="p">()</span>
+
     <span class="n">torch</span><span class="o">.</span><span class="n">set_num_threads</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
     <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
         <span class="n">r</span> <span class="o">=</span> <span class="n">index_queue</span><span class="o">.</span><span class="n">get</span><span class="p">()</span>
         <span class="k">if</span> <span class="n">r</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">data_queue</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
             <span class="k">break</span>
         <span class="n">idx</span><span class="p">,</span> <span class="n">batch_indices</span> <span class="o">=</span> <span class="n">r</span>
         <span class="k">try</span><span class="p">:</span>
@@ -668,7 +676,7 @@
             <span class="n">data_queue</span><span class="o">.</span><span class="n">put</span><span class="p">((</span><span class="n">idx</span><span class="p">,</span> <span class="n">samples</span><span class="p">))</span>
 
 
-<span class="k">def</span> <span class="nf">_pin_memory_loop</span><span class="p">(</span><span class="n">in_queue</span><span class="p">,</span> <span class="n">out_queue</span><span class="p">,</span> <span class="n">done_event</span><span class="p">):</span>
+<span class="k">def</span> <span class="nf">_worker_manager_loop</span><span class="p">(</span><span class="n">in_queue</span><span class="p">,</span> <span class="n">out_queue</span><span class="p">,</span> <span class="n">done_event</span><span class="p">,</span> <span class="n">pin_memory</span><span class="p">):</span>
     <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
         <span class="k">try</span><span class="p">:</span>
             <span class="n">r</span> <span class="o">=</span> <span class="n">in_queue</span><span class="o">.</span><span class="n">get</span><span class="p">()</span>
@@ -683,12 +691,12 @@
             <span class="k">continue</span>
         <span class="n">idx</span><span class="p">,</span> <span class="n">batch</span> <span class="o">=</span> <span class="n">r</span>
         <span class="k">try</span><span class="p">:</span>
-            <span class="n">batch</span> <span class="o">=</span> <span class="n">pin_memory_batch</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">pin_memory</span><span class="p">:</span>
+                <span class="n">batch</span> <span class="o">=</span> <span class="n">pin_memory_batch</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
         <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
             <span class="n">out_queue</span><span class="o">.</span><span class="n">put</span><span class="p">((</span><span class="n">idx</span><span class="p">,</span> <span class="n">ExceptionWrapper</span><span class="p">(</span><span class="n">sys</span><span class="o">.</span><span class="n">exc_info</span><span class="p">())))</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="n">out_queue</span><span class="o">.</span><span class="n">put</span><span class="p">((</span><span class="n">idx</span><span class="p">,</span> <span class="n">batch</span><span class="p">))</span>
-
 
 <span class="n">numpy_type_map</span> <span class="o">=</span> <span class="p">{</span>
     <span class="s1">&#39;float64&#39;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">DoubleTensor</span><span class="p">,</span>
@@ -756,6 +764,32 @@
         <span class="k">return</span> <span class="n">batch</span>
 
 
+<span class="n">_SIGCHLD_handler_set</span> <span class="o">=</span> <span class="kc">False</span>
+<span class="sd">&quot;&quot;&quot;Whether SIGCHLD handler is set for DataLoader worker failures. Only one</span>
+<span class="sd">handler needs to be set for all DataLoaders in a process.&quot;&quot;&quot;</span>
+
+
+<span class="k">def</span> <span class="nf">_set_SIGCHLD_handler</span><span class="p">():</span>
+    <span class="k">if</span> <span class="n">sys</span><span class="o">.</span><span class="n">platform</span> <span class="o">==</span> <span class="s1">&#39;win32&#39;</span><span class="p">:</span>  <span class="c1"># Windows doesn&#39;t support SIGCHLD handler</span>
+        <span class="k">return</span>
+    <span class="k">global</span> <span class="n">_SIGCHLD_handler_set</span>
+    <span class="k">if</span> <span class="n">_SIGCHLD_handler_set</span><span class="p">:</span>
+        <span class="k">return</span>
+    <span class="n">previous_handler</span> <span class="o">=</span> <span class="n">signal</span><span class="o">.</span><span class="n">getsignal</span><span class="p">(</span><span class="n">signal</span><span class="o">.</span><span class="n">SIGCHLD</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">callable</span><span class="p">(</span><span class="n">previous_handler</span><span class="p">):</span>
+        <span class="n">previous_handler</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="k">def</span> <span class="nf">handler</span><span class="p">(</span><span class="n">signum</span><span class="p">,</span> <span class="n">frame</span><span class="p">):</span>
+        <span class="c1"># This following call uses `waitid` with WNOHANG from C side. Therefore,</span>
+        <span class="c1"># Python can still get and update the process status successfully.</span>
+        <span class="n">_error_if_any_worker_fails</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">previous_handler</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">previous_handler</span><span class="p">(</span><span class="n">signum</span><span class="p">,</span> <span class="n">frame</span><span class="p">)</span>
+
+    <span class="n">signal</span><span class="o">.</span><span class="n">signal</span><span class="p">(</span><span class="n">signal</span><span class="o">.</span><span class="n">SIGCHLD</span><span class="p">,</span> <span class="n">handler</span><span class="p">)</span>
+    <span class="n">_SIGCHLD_handler_set</span> <span class="o">=</span> <span class="kc">True</span>
+
+
 <span class="k">class</span> <span class="nc">DataLoaderIter</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
     <span class="s2">&quot;Iterates once over the DataLoader&#39;s dataset, as specified by the sampler&quot;</span>
 
@@ -765,14 +799,16 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">batch_sampler</span> <span class="o">=</span> <span class="n">loader</span><span class="o">.</span><span class="n">batch_sampler</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span> <span class="o">=</span> <span class="n">loader</span><span class="o">.</span><span class="n">num_workers</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">pin_memory</span> <span class="o">=</span> <span class="n">loader</span><span class="o">.</span><span class="n">pin_memory</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">timeout</span> <span class="o">=</span> <span class="n">loader</span><span class="o">.</span><span class="n">timeout</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">done_event</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Event</span><span class="p">()</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">sample_iter</span> <span class="o">=</span> <span class="nb">iter</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_sampler</span><span class="p">)</span>
 
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">index_queue</span> <span class="o">=</span> <span class="n">multiprocessing</span><span class="o">.</span><span class="n">SimpleQueue</span><span class="p">()</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">data_queue</span> <span class="o">=</span> <span class="n">multiprocessing</span><span class="o">.</span><span class="n">SimpleQueue</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">worker_result_queue</span> <span class="o">=</span> <span class="n">multiprocessing</span><span class="o">.</span><span class="n">SimpleQueue</span><span class="p">()</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">batches_outstanding</span> <span class="o">=</span> <span class="mi">0</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">worker_pids_set</span> <span class="o">=</span> <span class="kc">False</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">shutdown</span> <span class="o">=</span> <span class="kc">False</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">send_idx</span> <span class="o">=</span> <span class="mi">0</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">rcvd_idx</span> <span class="o">=</span> <span class="mi">0</span>
@@ -781,21 +817,26 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">workers</span> <span class="o">=</span> <span class="p">[</span>
                 <span class="n">multiprocessing</span><span class="o">.</span><span class="n">Process</span><span class="p">(</span>
                     <span class="n">target</span><span class="o">=</span><span class="n">_worker_loop</span><span class="p">,</span>
-                    <span class="n">args</span><span class="o">=</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dataset</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">index_queue</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_queue</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">collate_fn</span><span class="p">))</span>
+                    <span class="n">args</span><span class="o">=</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dataset</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">index_queue</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">worker_result_queue</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">collate_fn</span><span class="p">))</span>
                 <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span><span class="p">)]</span>
 
             <span class="k">for</span> <span class="n">w</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">workers</span><span class="p">:</span>
                 <span class="n">w</span><span class="o">.</span><span class="n">daemon</span> <span class="o">=</span> <span class="kc">True</span>  <span class="c1"># ensure that the worker exits on process exit</span>
                 <span class="n">w</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
 
-            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">pin_memory</span><span class="p">:</span>
-                <span class="n">in_data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_queue</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">pin_memory</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">timeout</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">data_queue</span> <span class="o">=</span> <span class="n">queue</span><span class="o">.</span><span class="n">Queue</span><span class="p">()</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">pin_thread</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Thread</span><span class="p">(</span>
-                    <span class="n">target</span><span class="o">=</span><span class="n">_pin_memory_loop</span><span class="p">,</span>
-                    <span class="n">args</span><span class="o">=</span><span class="p">(</span><span class="n">in_data</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_queue</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">done_event</span><span class="p">))</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">pin_thread</span><span class="o">.</span><span class="n">daemon</span> <span class="o">=</span> <span class="kc">True</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">pin_thread</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">worker_manager_thread</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Thread</span><span class="p">(</span>
+                    <span class="n">target</span><span class="o">=</span><span class="n">_worker_manager_loop</span><span class="p">,</span>
+                    <span class="n">args</span><span class="o">=</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">worker_result_queue</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_queue</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">done_event</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">pin_memory</span><span class="p">))</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">worker_manager_thread</span><span class="o">.</span><span class="n">daemon</span> <span class="o">=</span> <span class="kc">True</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">worker_manager_thread</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">data_queue</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">worker_result_queue</span>
+
+            <span class="n">_update_worker_pids</span><span class="p">(</span><span class="nb">id</span><span class="p">(</span><span class="bp">self</span><span class="p">),</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">w</span><span class="o">.</span><span class="n">pid</span> <span class="k">for</span> <span class="n">w</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">workers</span><span class="p">))</span>
+            <span class="n">_set_SIGCHLD_handler</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">worker_pids_set</span> <span class="o">=</span> <span class="kc">True</span>
 
             <span class="c1"># prime the prefetch loop</span>
             <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span><span class="p">):</span>
@@ -803,6 +844,15 @@
 
     <span class="k">def</span> <span class="nf">__len__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_sampler</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_get_batch</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">timeout</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_queue</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">timeout</span><span class="p">)</span>
+            <span class="k">except</span> <span class="n">queue</span><span class="o">.</span><span class="n">Empty</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s1">&#39;DataLoader timed out after </span><span class="si">{}</span><span class="s1"> seconds&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">timeout</span><span class="p">))</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_queue</span><span class="o">.</span><span class="n">get</span><span class="p">()</span>
 
     <span class="k">def</span> <span class="nf">__next__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>  <span class="c1"># same-process loading</span>
@@ -823,7 +873,7 @@
 
         <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
             <span class="k">assert</span> <span class="p">(</span><span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">shutdown</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">batches_outstanding</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span>
-            <span class="n">idx</span><span class="p">,</span> <span class="n">batch</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_queue</span><span class="o">.</span><span class="n">get</span><span class="p">()</span>
+            <span class="n">idx</span><span class="p">,</span> <span class="n">batch</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_batch</span><span class="p">()</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">batches_outstanding</span> <span class="o">-=</span> <span class="mi">1</span>
             <span class="k">if</span> <span class="n">idx</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">rcvd_idx</span><span class="p">:</span>
                 <span class="c1"># store out-of-order samples</span>
@@ -864,8 +914,17 @@
         <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">shutdown</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">shutdown</span> <span class="o">=</span> <span class="kc">True</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">done_event</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
+            <span class="c1"># if worker_manager_thread is waiting to put</span>
+            <span class="k">while</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_queue</span><span class="o">.</span><span class="n">empty</span><span class="p">():</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">data_queue</span><span class="o">.</span><span class="n">get</span><span class="p">()</span>
             <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">workers</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">index_queue</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
+            <span class="c1"># done_event should be sufficient to exit worker_manager_thread, but</span>
+            <span class="c1"># be safe here and put another None</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">worker_result_queue</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">worker_pids_set</span><span class="p">:</span>
+            <span class="n">_remove_worker_pids</span><span class="p">(</span><span class="nb">id</span><span class="p">(</span><span class="bp">self</span><span class="p">))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">worker_pids_set</span> <span class="o">=</span> <span class="kc">False</span>
 
     <span class="k">def</span> <span class="nf">__del__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
@@ -898,16 +957,23 @@
 <span class="sd">            if the dataset size is not divisible by the batch size. If ``False`` and</span>
 <span class="sd">            the size of dataset is not divisible by the batch size, then the last batch</span>
 <span class="sd">            will be smaller. (default: False)</span>
+<span class="sd">        timeout (numeric, optional): if positive, the timeout value for collecting a batch</span>
+<span class="sd">            from workers. Should always be non-negative. (default: 0)</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dataset</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">shuffle</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">sampler</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">batch_sampler</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-                 <span class="n">num_workers</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">collate_fn</span><span class="o">=</span><span class="n">default_collate</span><span class="p">,</span> <span class="n">pin_memory</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">drop_last</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+                 <span class="n">num_workers</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">collate_fn</span><span class="o">=</span><span class="n">default_collate</span><span class="p">,</span> <span class="n">pin_memory</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">drop_last</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                 <span class="n">timeout</span><span class="o">=</span><span class="mi">0</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">dataset</span> <span class="o">=</span> <span class="n">dataset</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span> <span class="o">=</span> <span class="n">batch_size</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span> <span class="o">=</span> <span class="n">num_workers</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">collate_fn</span> <span class="o">=</span> <span class="n">collate_fn</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">pin_memory</span> <span class="o">=</span> <span class="n">pin_memory</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">drop_last</span> <span class="o">=</span> <span class="n">drop_last</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">timeout</span> <span class="o">=</span> <span class="n">timeout</span>
+
+        <span class="k">if</span> <span class="n">timeout</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;timeout option should be non-negative&#39;</span><span class="p">)</span>
 
         <span class="k">if</span> <span class="n">batch_sampler</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">if</span> <span class="n">batch_size</span> <span class="o">&gt;</span> <span class="mi">1</span> <span class="ow">or</span> <span class="n">shuffle</span> <span class="ow">or</span> <span class="n">sampler</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">drop_last</span><span class="p">:</span>
