@@ -75,7 +75,7 @@
             
             
               <div class="version">
-                <a href="http://pytorch.org/docs/versions.html">master (0.4.0a0+5a264b4 ) &#x25BC</a>
+                <a href="http://pytorch.org/docs/versions.html">master (0.4.0a0+7874f61 ) &#x25BC</a>
               </div>
             
           
@@ -776,6 +776,16 @@ and to also document these differences.</li>
 <li>log_softmax</li>
 <li>unfold (experimental support with ATen-Caffe2 integration)</li>
 <li>elu</li>
+<li>concat</li>
+<li>abs</li>
+<li>index_select</li>
+<li>pow</li>
+<li>clamp</li>
+<li>max</li>
+<li>min</li>
+<li>eq</li>
+<li>exp</li>
+<li>permute</li>
 <li>Conv</li>
 <li>BatchNorm</li>
 <li>MaxPool1d (ceil_mode not supported)</li>
@@ -787,7 +797,6 @@ and to also document these differences.</li>
 <li>Dropout</li>
 <li>FeatureDropout (training mode not supported)</li>
 <li>Index (constant integer and tuple indices supported)</li>
-<li>Negate</li>
 </ul>
 <p>The operator set above is sufficient to export the following models:</p>
 <ul class="simple">
@@ -801,8 +810,126 @@ implementation)</li>
 <li>VGG</li>
 <li><a class="reference external" href="https://github.com/pytorch/examples/tree/master/word_language_model">word_language_model</a></li>
 </ul>
-<p>The interface for specifying operator definitions is highly experimental
-and undocumented; adventurous users should note that the APIs will probably
+<p>Adding export support for operators is an <em>advance usage</em>.
+To achieve this, developers need to touch the source code of PyTorch.
+Please follow the <a class="reference external" href="https://github.com/pytorch/pytorch#from-source">instructions</a>
+for installing PyTorch from source.
+If the wanted operator is standardized in ONNX, it should be easy to add
+support for exporting such operator (adding a symbolic function for the operator).
+To confirm whether the operator is standardized or not, please check the
+<a class="reference external" href="http://https://github.com/onnx/onnx/blob/master/docs/Operators.md">ONNX operator list</a>.</p>
+<p>If the operator is an ATen operator, which means you can find the declaration
+of the function in <code class="docutils literal"><span class="pre">torch/csrc/autograd/generated/VariableType.h</span></code>
+(available in generated code in PyTorch install dir), you should add the symbolic
+function in <code class="docutils literal"><span class="pre">torch/onnx/symbolic.py</span></code> and follow the instructions listed as below:</p>
+<ul class="simple">
+<li>Define the symbolic function in
+<a class="reference external" href="https://github.com/pytorch/pytorch/blob/master/torch/onnx/symbolic.py">torch/onnx/symbolic.py</a>.
+Make sure the function has the same name as the ATen operator/function
+defined in <code class="docutils literal"><span class="pre">VariableType.h</span></code>.</li>
+<li>The first parameter is always the exported ONNX graph.
+Parameter names must EXACTLY match the names in <code class="docutils literal"><span class="pre">VariableType.h</span></code>,
+because dispatch is done with keyword arguments.</li>
+<li>Parameter ordering does NOT necessarily match what is in <code class="docutils literal"><span class="pre">VariableType.h</span></code>,
+tensors (inputs) are always first, then non-tensor arguments.</li>
+<li>In the symbolic function, if the operator is already standardized in ONNX,
+we only need to create a node to represent the ONNX operator in the graph.</li>
+<li>If the input argument is a tensor, but ONNX asks for a scalar, we have to
+explicitly do the conversion. The helper function <code class="docutils literal"><span class="pre">_scalar</span></code> can convert a
+scalar tensor into a python scalar, and <code class="docutils literal"><span class="pre">_if_scalar_type_as</span></code> can turn a
+Python scalar into a PyTorch tensor.</li>
+</ul>
+<p>If the operator is a non-ATen operator, the symbolic function has to be
+added in the corresponding PyTorch Function class. Please read the following
+instructions:</p>
+<ul class="simple">
+<li>Create a symbolic function named <code class="docutils literal"><span class="pre">symbolic</span></code> in the corresponding Function class.</li>
+<li>The first parameter is always the exported ONNX graph.</li>
+<li>Parameter names except the first must EXACTLY match the names in <code class="docutils literal"><span class="pre">forward</span></code>.</li>
+<li>The output tuple size must match the outputs of <code class="docutils literal"><span class="pre">forward</span></code>.</li>
+<li>In the symbolic function, if the operator is already standardized in ONNX,
+we just need to create a node to represent the ONNX operator in the graph.</li>
+</ul>
+<p>Symbolic functions should be implemented in Python. All of these functions interact
+with Python methods which are implemented via C++-Python bindings,
+but intuitively the interface they provide looks like this:</p>
+<div class="highlight-default"><div class="highlight"><pre><span></span><span class="k">def</span> <span class="nf">operator</span><span class="o">/</span><span class="n">symbolic</span><span class="p">(</span><span class="n">g</span><span class="p">,</span> <span class="o">*</span><span class="n">inputs</span><span class="p">):</span>
+  <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">  Modifies Graph (e.g., using &quot;op&quot;), adding the ONNX operations representing</span>
+<span class="sd">  this PyTorch function, and returning a Value or tuple of Values specifying the</span>
+<span class="sd">  ONNX outputs whose values correspond to the original PyTorch return values</span>
+<span class="sd">  of the autograd Function (or None if an output is not supported by ONNX).</span>
+
+<span class="sd">  Arguments:</span>
+<span class="sd">    g (Graph): graph to write the ONNX representation into</span>
+<span class="sd">    inputs (Value...): list of values representing the variables which contain</span>
+<span class="sd">        the inputs for this function</span>
+<span class="sd">  &quot;&quot;&quot;</span>
+
+<span class="k">class</span> <span class="nc">Value</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+  <span class="sd">&quot;&quot;&quot;Represents an intermediate tensor value computed in ONNX.&quot;&quot;&quot;</span>
+  <span class="k">def</span> <span class="nf">type</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Returns the Type of the value.&quot;&quot;&quot;</span>
+
+<span class="k">class</span> <span class="nc">Type</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+  <span class="k">def</span> <span class="nf">sizes</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Returns a tuple of ints representing the shape of a tensor this describes.&quot;&quot;&quot;</span>
+
+<span class="k">class</span> <span class="nc">Graph</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+  <span class="k">def</span> <span class="nf">op</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">opname</span><span class="p">,</span> <span class="o">*</span><span class="n">inputs</span><span class="p">,</span> <span class="o">**</span><span class="n">attrs</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Create an ONNX operator &#39;opname&#39;, taking &#39;args&#39; as inputs</span>
+<span class="sd">    and attributes &#39;kwargs&#39; and add it as a node to the current graph,</span>
+<span class="sd">    returning the value representing the single output of this</span>
+<span class="sd">    operator (see the `outputs` keyword argument for multi-return</span>
+<span class="sd">    nodes).</span>
+
+<span class="sd">    The set of operators and the inputs/attributes they take</span>
+<span class="sd">    is documented at https://github.com/onnx/onnx/blob/master/docs/Operators.md</span>
+
+<span class="sd">    Arguments:</span>
+<span class="sd">        opname (string): The ONNX operator name, e.g., `Abs` or `Add`.</span>
+<span class="sd">        args (Value...): The inputs to the operator; usually provided</span>
+<span class="sd">            as arguments to the `symbolic` definition.</span>
+<span class="sd">        kwargs: The attributes of the ONNX operator, with keys named</span>
+<span class="sd">            according to the following convention: `alpha_f` indicates</span>
+<span class="sd">            the `alpha` attribute with type `f`.  The valid type specifiers are</span>
+<span class="sd">            `f` (float), `i` (int), `s` (string) or `t` (Tensor).  An attribute</span>
+<span class="sd">            specified with type float accepts either a single float, or a</span>
+<span class="sd">            list of floats (e.g., you would say `dims_i` for a `dims` attribute</span>
+<span class="sd">            that takes a list of integers).</span>
+<span class="sd">        outputs (int, optional):  The number of outputs this operator returns;</span>
+<span class="sd">            by default an operator is assumed to return a single output.</span>
+<span class="sd">            If `outputs` is greater than one, this functions returns a tuple</span>
+<span class="sd">            of output `Value`, representing each output of the ONNX operator</span>
+<span class="sd">            in positional.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+</pre></div>
+</div>
+<p>The ONNX graph C++ definition is in <code class="docutils literal"><span class="pre">torch/csrc/jit/ir.h</span></code>.</p>
+<p>Here is an example of handling missing symbolic function for <code class="docutils literal"><span class="pre">elu</span></code> operator.
+We try to export the model and see the error message as below:</p>
+<div class="highlight-default"><div class="highlight"><pre><span></span><span class="ne">UserWarning</span><span class="p">:</span> <span class="n">ONNX</span> <span class="n">export</span> <span class="n">failed</span> <span class="n">on</span> <span class="n">elu</span> <span class="n">because</span> <span class="n">torch</span><span class="o">.</span><span class="n">onnx</span><span class="o">.</span><span class="n">symbolic</span><span class="o">.</span><span class="n">elu</span> <span class="n">does</span> <span class="ow">not</span> <span class="n">exist</span>
+<span class="ne">RuntimeError</span><span class="p">:</span> <span class="n">ONNX</span> <span class="n">export</span> <span class="n">failed</span><span class="p">:</span> <span class="n">Couldn</span><span class="s1">&#39;t export operator elu</span>
+</pre></div>
+</div>
+<p>The export fails because PyTorch does not support exporting <code class="docutils literal"><span class="pre">elu</span></code> operator.
+We find <code class="docutils literal"><span class="pre">virtual</span> <span class="pre">Tensor</span> <span class="pre">elu(const</span> <span class="pre">Tensor</span> <span class="pre">&amp;</span> <span class="pre">input,</span> <span class="pre">Scalar</span> <span class="pre">alpha,</span> <span class="pre">bool</span> <span class="pre">inplace)</span> <span class="pre">const</span> <span class="pre">override;</span></code>
+in <code class="docutils literal"><span class="pre">VariableType.h</span></code>. This means <code class="docutils literal"><span class="pre">elu</span></code> is an ATen operator.
+We check the <a class="reference external" href="http://https://github.com/onnx/onnx/blob/master/docs/Operators.md">ONNX operator list</a>,
+and confirm that <code class="docutils literal"><span class="pre">Elu</span></code> is standardized in ONNX.
+We add the following lines to <code class="docutils literal"><span class="pre">symbolic.py</span></code>:</p>
+<div class="highlight-default"><div class="highlight"><pre><span></span><span class="k">def</span> <span class="nf">elu</span><span class="p">(</span><span class="n">g</span><span class="p">,</span> <span class="nb">input</span><span class="p">,</span> <span class="n">alpha</span><span class="p">,</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">g</span><span class="o">.</span><span class="n">op</span><span class="p">(</span><span class="s2">&quot;Elu&quot;</span><span class="p">,</span> <span class="nb">input</span><span class="p">,</span> <span class="n">alpha_f</span><span class="o">=</span><span class="n">_scalar</span><span class="p">(</span><span class="n">alpha</span><span class="p">))</span>
+</pre></div>
+</div>
+<p>Now PyTorch is able to export <code class="docutils literal"><span class="pre">elu</span></code> operator.</p>
+<p>There are more examples in
+<a class="reference external" href="https://github.com/pytorch/pytorch/blob/master/torch/onnx/symbolic.py">symbolic.py</a>,
+<a class="reference external" href="https://github.com/pytorch/pytorch/blob/99037d627da68cdf53d3d0315deceddfadf03bba/torch/autograd/_functions/tensor.py#L24">tensor.py</a>,
+<a class="reference external" href="https://github.com/pytorch/pytorch/blob/99037d627da68cdf53d3d0315deceddfadf03bba/torch/nn/_functions/padding.py#L8">padding.py</a>.</p>
+<p>The interface for specifying operator definitions is experimental;
+adventurous users should note that the APIs will probably
 change in a future interface.</p>
 </div>
 <div class="section" id="functions">
