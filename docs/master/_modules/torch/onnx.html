@@ -74,7 +74,7 @@
             
             
               <div class="version">
-                <a href="http://pytorch.org/docs/versions.html">master (0.4.0a0+2e08885 ) &#x25BC</a>
+                <a href="http://pytorch.org/docs/versions.html">master (0.4.0a0+cab5921 ) &#x25BC</a>
               </div>
             
           
@@ -637,14 +637,13 @@
 <span class="kn">import</span> <span class="nn">torch.serialization</span>
 <span class="kn">import</span> <span class="nn">re</span>
 <span class="kn">import</span> <span class="nn">collections</span>
-<span class="kn">import</span> <span class="nn">string</span>
-<span class="kn">import</span> <span class="nn">json</span>
-<span class="kn">import</span> <span class="nn">math</span>
 <span class="kn">import</span> <span class="nn">contextlib</span>
 <span class="kn">import</span> <span class="nn">numbers</span>
 <span class="kn">import</span> <span class="nn">warnings</span>
-<span class="kn">from</span> <span class="nn">torch._utils</span> <span class="k">import</span> <span class="n">_range</span>
+<span class="kn">import</span> <span class="nn">functools</span>
+<span class="kn">import</span> <span class="nn">types</span>
 <span class="kn">from</span> <span class="nn">torch._six</span> <span class="k">import</span> <span class="n">string_classes</span>
+<span class="kn">from</span> <span class="nn">torch.autograd</span> <span class="k">import</span> <span class="n">Function</span><span class="p">,</span> <span class="n">function</span>
 
 
 <span class="nd">@contextlib</span><span class="o">.</span><span class="n">contextmanager</span>
@@ -711,6 +710,11 @@
 
 
 <span class="k">def</span> <span class="nf">_optimize_trace</span><span class="p">(</span><span class="n">trace</span><span class="p">,</span> <span class="n">aten</span><span class="p">):</span>
+    <span class="c1"># run dce first to eliminate dead parts of the graph that might have been</span>
+    <span class="c1"># left behind by things like symbolic_override</span>
+    <span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">_jit_pass_dce</span><span class="p">(</span><span class="n">trace</span><span class="p">)</span>
+    <span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">_jit_pass_lint</span><span class="p">(</span><span class="n">trace</span><span class="p">)</span>
+
     <span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">_jit_pass_peephole</span><span class="p">(</span><span class="n">trace</span><span class="p">)</span>
     <span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">_jit_pass_lint</span><span class="p">(</span><span class="n">trace</span><span class="p">)</span>
     <span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">_jit_pass_onnx</span><span class="p">(</span><span class="n">trace</span><span class="p">,</span> <span class="n">aten</span><span class="p">)</span>
@@ -992,6 +996,73 @@
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">sel</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">kindOf</span><span class="p">(</span><span class="n">k</span><span class="p">)</span>
     <span class="k">return</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">sel</span><span class="p">)(</span><span class="n">k</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">symbolic_override</span><span class="p">(</span><span class="n">symbolic_fn</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Decorator to override ONNX export of the a function with specified subgraph.</span>
+
+<span class="sd">    Effectively allows to attach symbolic() implementation to an arbitrary</span>
+<span class="sd">    python function or autograd.Function. Requirements for the decorated</span>
+<span class="sd">    function:</span>
+<span class="sd">     - being non-member function or autograd.Function</span>
+<span class="sd">     - positional inputs are Variables/Tensors or (nested) lists or tuples of</span>
+<span class="sd">       them (similar requirement to NestedIOFunction)</span>
+<span class="sd">     - outputs are similarly Variables/Tensors or (nested) lists or tuples of</span>
+<span class="sd">       them</span>
+<span class="sd">     - keyword arguments are of non-tensor type</span>
+
+<span class="sd">    Example usage:</span>
+
+<span class="sd">    ```</span>
+<span class="sd">    def symb(g, x, y):</span>
+<span class="sd">        return g.op(&#39;Sum&#39;, x, y[0], y[1])</span>
+
+<span class="sd">    @symbolic_override(symb)</span>
+<span class="sd">    def foo(x, y):</span>
+<span class="sd">        return x + y[0] + y[1]</span>
+<span class="sd">    ```</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">wrapper_maker</span><span class="p">(</span><span class="n">fn</span><span class="p">):</span>
+
+        <span class="k">def</span> <span class="nf">wrapper</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+            <span class="n">output</span> <span class="o">=</span> <span class="n">fn</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+            <span class="n">flat_args</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">function</span><span class="o">.</span><span class="n">_iter_variables</span><span class="p">(</span><span class="n">args</span><span class="p">))</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">any</span><span class="p">(</span><span class="nb">map</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">_jit_is_tracing</span><span class="p">,</span> <span class="n">flat_args</span><span class="p">)):</span>
+                <span class="k">return</span> <span class="n">output</span>
+            <span class="n">flat_output_tensors</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span>
+                <span class="n">v</span><span class="o">.</span><span class="n">data</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">function</span><span class="o">.</span><span class="n">_iter_variables</span><span class="p">(</span><span class="n">output</span><span class="p">))</span>
+            <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">function</span><span class="o">.</span><span class="n">_iter_variables_permissive</span><span class="p">(</span>
+                <span class="nb">list</span><span class="p">(</span><span class="n">kwargs</span><span class="o">.</span><span class="n">values</span><span class="p">()))))</span> <span class="o">==</span> <span class="mi">0</span><span class="p">,</span> \
+                <span class="s2">&quot;Passing Variable through kwargs is not supported&quot;</span>
+
+            <span class="k">class</span> <span class="nc">ExportProxy</span><span class="p">(</span><span class="n">Function</span><span class="p">):</span>
+                <span class="nd">@staticmethod</span>
+                <span class="k">def</span> <span class="nf">symbolic</span><span class="p">(</span><span class="n">g</span><span class="p">,</span> <span class="o">*</span><span class="n">flat_args</span><span class="p">):</span>
+                    <span class="n">symbolic_args</span> <span class="o">=</span> <span class="n">function</span><span class="o">.</span><span class="n">_unflatten</span><span class="p">(</span><span class="n">flat_args</span><span class="p">,</span> <span class="n">args</span><span class="p">)</span>
+                    <span class="n">symbolic_output</span> <span class="o">=</span> <span class="n">symbolic_fn</span><span class="p">(</span><span class="n">g</span><span class="p">,</span> <span class="o">*</span><span class="n">symbolic_args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+                    <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">function</span><span class="o">.</span><span class="n">_iter_jit_values</span><span class="p">(</span><span class="n">symbolic_output</span><span class="p">))</span>
+
+                <span class="nd">@staticmethod</span>
+                <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="o">*</span><span class="n">unused_args</span><span class="p">):</span>
+                    <span class="k">return</span> <span class="n">flat_output_tensors</span>
+
+                <span class="nd">@staticmethod</span>
+                <span class="k">def</span> <span class="nf">backward</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="o">*</span><span class="n">unused_args</span><span class="p">,</span> <span class="o">**</span><span class="n">unused_kwargs</span><span class="p">):</span>
+                    <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                        <span class="s2">&quot;symbolic_override is meant for inference export only&quot;</span><span class="p">)</span>
+
+            <span class="n">flat_proxy_output</span> <span class="o">=</span> <span class="n">ExportProxy</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="o">*</span><span class="n">flat_args</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">function</span><span class="o">.</span><span class="n">_unflatten</span><span class="p">(</span><span class="n">flat_proxy_output</span><span class="p">,</span> <span class="n">output</span><span class="p">)</span>
+
+        <span class="c1"># fn might be autograd.Function too, in this case wrapping doesn&#39;t work</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">fn</span><span class="p">,</span> <span class="n">types</span><span class="o">.</span><span class="n">FunctionType</span><span class="p">):</span>
+            <span class="n">wrapper</span> <span class="o">=</span> <span class="n">functools</span><span class="o">.</span><span class="n">wraps</span><span class="p">(</span><span class="n">fn</span><span class="p">)(</span><span class="n">wrapper</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">wrapper</span>
+
+    <span class="k">return</span> <span class="n">wrapper_maker</span>
 
 
 <span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">Graph</span><span class="o">.</span><span class="n">op</span> <span class="o">=</span> <span class="n">_graph_op</span>
