@@ -74,7 +74,7 @@
             
             
               <div class="version">
-                <a href="http://pytorch.org/docs/versions.html">master (0.4.0a0+30e6898 ) &#x25BC</a>
+                <a href="http://pytorch.org/docs/versions.html">master (0.4.0a0+5cc26c0 ) &#x25BC</a>
               </div>
             
           
@@ -631,6 +631,7 @@
     <span class="n">_remove_worker_pids</span><span class="p">,</span> <span class="n">_error_if_any_worker_fails</span>
 <span class="kn">from</span> <span class="nn">.sampler</span> <span class="k">import</span> <span class="n">SequentialSampler</span><span class="p">,</span> <span class="n">RandomSampler</span><span class="p">,</span> <span class="n">BatchSampler</span>
 <span class="kn">import</span> <span class="nn">signal</span>
+<span class="kn">import</span> <span class="nn">functools</span>
 <span class="kn">import</span> <span class="nn">collections</span>
 <span class="kn">import</span> <span class="nn">re</span>
 <span class="kn">import</span> <span class="nn">sys</span>
@@ -657,7 +658,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">exc_msg</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">traceback</span><span class="o">.</span><span class="n">format_exception</span><span class="p">(</span><span class="o">*</span><span class="n">exc_info</span><span class="p">))</span>
 
 
-<span class="k">def</span> <span class="nf">_worker_loop</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="n">index_queue</span><span class="p">,</span> <span class="n">data_queue</span><span class="p">,</span> <span class="n">collate_fn</span><span class="p">):</span>
+<span class="k">def</span> <span class="nf">_worker_loop</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="n">index_queue</span><span class="p">,</span> <span class="n">data_queue</span><span class="p">,</span> <span class="n">collate_fn</span><span class="p">,</span> <span class="n">seed</span><span class="p">,</span> <span class="n">init_fn</span><span class="p">,</span> <span class="n">worker_id</span><span class="p">):</span>
     <span class="k">global</span> <span class="n">_use_shared_memory</span>
     <span class="n">_use_shared_memory</span> <span class="o">=</span> <span class="kc">True</span>
 
@@ -668,6 +669,11 @@
     <span class="n">_set_worker_signal_handlers</span><span class="p">()</span>
 
     <span class="n">torch</span><span class="o">.</span><span class="n">set_num_threads</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+    <span class="n">torch</span><span class="o">.</span><span class="n">manual_seed</span><span class="p">(</span><span class="n">seed</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">init_fn</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">init_fn</span><span class="p">(</span><span class="n">worker_id</span><span class="p">)</span>
+
     <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
         <span class="n">r</span> <span class="o">=</span> <span class="n">index_queue</span><span class="o">.</span><span class="n">get</span><span class="p">()</span>
         <span class="k">if</span> <span class="n">r</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
@@ -810,6 +816,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">sample_iter</span> <span class="o">=</span> <span class="nb">iter</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_sampler</span><span class="p">)</span>
 
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">worker_init_fn</span> <span class="o">=</span> <span class="n">loader</span><span class="o">.</span><span class="n">worker_init_fn</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">index_queue</span> <span class="o">=</span> <span class="n">multiprocessing</span><span class="o">.</span><span class="n">SimpleQueue</span><span class="p">()</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">worker_result_queue</span> <span class="o">=</span> <span class="n">multiprocessing</span><span class="o">.</span><span class="n">SimpleQueue</span><span class="p">()</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">batches_outstanding</span> <span class="o">=</span> <span class="mi">0</span>
@@ -819,15 +826,13 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">rcvd_idx</span> <span class="o">=</span> <span class="mi">0</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">reorder_dict</span> <span class="o">=</span> <span class="p">{}</span>
 
+            <span class="n">base_seed</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">LongTensor</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">random_</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">workers</span> <span class="o">=</span> <span class="p">[</span>
                 <span class="n">multiprocessing</span><span class="o">.</span><span class="n">Process</span><span class="p">(</span>
                     <span class="n">target</span><span class="o">=</span><span class="n">_worker_loop</span><span class="p">,</span>
-                    <span class="n">args</span><span class="o">=</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dataset</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">index_queue</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">worker_result_queue</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">collate_fn</span><span class="p">))</span>
-                <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span><span class="p">)]</span>
-
-            <span class="k">for</span> <span class="n">w</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">workers</span><span class="p">:</span>
-                <span class="n">w</span><span class="o">.</span><span class="n">daemon</span> <span class="o">=</span> <span class="kc">True</span>  <span class="c1"># ensure that the worker exits on process exit</span>
-                <span class="n">w</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+                    <span class="n">args</span><span class="o">=</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dataset</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">index_queue</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">worker_result_queue</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">collate_fn</span><span class="p">,</span>
+                          <span class="n">base_seed</span> <span class="o">+</span> <span class="n">i</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">worker_init_fn</span><span class="p">,</span> <span class="n">i</span><span class="p">))</span>
+                <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span><span class="p">)]</span>
 
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">pin_memory</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">timeout</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">data_queue</span> <span class="o">=</span> <span class="n">queue</span><span class="o">.</span><span class="n">Queue</span><span class="p">()</span>
@@ -838,6 +843,10 @@
                 <span class="bp">self</span><span class="o">.</span><span class="n">worker_manager_thread</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">data_queue</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">worker_result_queue</span>
+
+            <span class="k">for</span> <span class="n">w</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">workers</span><span class="p">:</span>
+                <span class="n">w</span><span class="o">.</span><span class="n">daemon</span> <span class="o">=</span> <span class="kc">True</span>  <span class="c1"># ensure that the worker exits on process exit</span>
+                <span class="n">w</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
 
             <span class="n">_update_worker_pids</span><span class="p">(</span><span class="nb">id</span><span class="p">(</span><span class="bp">self</span><span class="p">),</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">w</span><span class="o">.</span><span class="n">pid</span> <span class="k">for</span> <span class="n">w</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">workers</span><span class="p">))</span>
             <span class="n">_set_SIGCHLD_handler</span><span class="p">()</span>
@@ -953,7 +962,7 @@
 <span class="sd">            indices at a time. Mutually exclusive with batch_size, shuffle,</span>
 <span class="sd">            sampler, and drop_last.</span>
 <span class="sd">        num_workers (int, optional): how many subprocesses to use for data</span>
-<span class="sd">            loading. 0 means that the data will be loaded in the main process</span>
+<span class="sd">            loading. 0 means that the data will be loaded in the main process.</span>
 <span class="sd">            (default: 0)</span>
 <span class="sd">        collate_fn (callable, optional): merges a list of samples to form a mini-batch.</span>
 <span class="sd">        pin_memory (bool, optional): If ``True``, the data loader will copy tensors</span>
@@ -964,11 +973,23 @@
 <span class="sd">            will be smaller. (default: False)</span>
 <span class="sd">        timeout (numeric, optional): if positive, the timeout value for collecting a batch</span>
 <span class="sd">            from workers. Should always be non-negative. (default: 0)</span>
+<span class="sd">        worker_init_fn (callable, optional): If not None, this will be called on each</span>
+<span class="sd">            worker subprocess with the worker id as input, after seeding and before data</span>
+<span class="sd">            loading. (default: None)</span>
+
+<span class="sd">    .. note:: By default, each worker will have its PyTorch seed set to</span>
+<span class="sd">              ``base_seed + worker_id``, where ``base_seed`` is a long generated</span>
+<span class="sd">              by main process using its RNG. You may use ``torch.initial_seed()`` to access</span>
+<span class="sd">              this value in :attr:`worker_init_fn`, which can be used to set other seeds</span>
+<span class="sd">              (e.g. NumPy) before data loading.</span>
+
+<span class="sd">    .. warning:: If ``spawn&#39;&#39; start method is used, :attr:`worker_init_fn` cannot be an</span>
+<span class="sd">                 unpicklable object, e.g., a lambda function.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dataset</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">shuffle</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">sampler</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">batch_sampler</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
                  <span class="n">num_workers</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">collate_fn</span><span class="o">=</span><span class="n">default_collate</span><span class="p">,</span> <span class="n">pin_memory</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">drop_last</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-                 <span class="n">timeout</span><span class="o">=</span><span class="mi">0</span><span class="p">):</span>
+                 <span class="n">timeout</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">worker_init_fn</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">dataset</span> <span class="o">=</span> <span class="n">dataset</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span> <span class="o">=</span> <span class="n">batch_size</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span> <span class="o">=</span> <span class="n">num_workers</span>
@@ -976,6 +997,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">pin_memory</span> <span class="o">=</span> <span class="n">pin_memory</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">drop_last</span> <span class="o">=</span> <span class="n">drop_last</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">timeout</span> <span class="o">=</span> <span class="n">timeout</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">worker_init_fn</span> <span class="o">=</span> <span class="n">worker_init_fn</span>
 
         <span class="k">if</span> <span class="n">timeout</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;timeout option should be non-negative&#39;</span><span class="p">)</span>
