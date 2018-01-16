@@ -8,7 +8,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>torch.cuda.streams &mdash; PyTorch master documentation</title>
+  <title>torch.distributions.binomial &mdash; PyTorch master documentation</title>
   
 
   
@@ -42,7 +42,7 @@
               href="../../../genindex.html"/>
         <link rel="search" title="Search" href="../../../search.html"/>
     <link rel="top" title="PyTorch master documentation" href="../../../index.html"/>
-        <link rel="up" title="torch.cuda" href="../cuda.html"/> 
+        <link rel="up" title="torch" href="../../torch.html"/> 
 
   
   <script src="../../../_static/js/modernizr.min.js"></script>
@@ -627,9 +627,7 @@
         
           <li><a href="../../torch.html">torch</a> &raquo;</li>
         
-          <li><a href="../cuda.html">torch.cuda</a> &raquo;</li>
-        
-      <li>torch.cuda.streams</li>
+      <li>torch.distributions.binomial</li>
     
     
       <li class="wy-breadcrumbs-aside">
@@ -644,193 +642,95 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
             
-  <h1>Source code for torch.cuda.streams</h1><div class="highlight"><pre>
-<span></span><span class="kn">import</span> <span class="nn">ctypes</span>
+  <h1>Source code for torch.distributions.binomial</h1><div class="highlight"><pre>
+<span></span><span class="kn">from</span> <span class="nn">numbers</span> <span class="k">import</span> <span class="n">Number</span>
 <span class="kn">import</span> <span class="nn">torch</span>
-<span class="kn">from</span> <span class="nn">.</span> <span class="k">import</span> <span class="n">cudart</span><span class="p">,</span> <span class="n">check_error</span><span class="p">,</span> <span class="n">cudaStatus</span>
+<span class="kn">import</span> <span class="nn">math</span>
+<span class="kn">from</span> <span class="nn">torch.distributions</span> <span class="k">import</span> <span class="n">constraints</span>
+<span class="kn">from</span> <span class="nn">torch.distributions.distribution</span> <span class="k">import</span> <span class="n">Distribution</span>
+<span class="kn">from</span> <span class="nn">torch.distributions.utils</span> <span class="k">import</span> <span class="n">broadcast_all</span><span class="p">,</span> <span class="n">probs_to_logits</span><span class="p">,</span> <span class="n">lazy_property</span><span class="p">,</span> <span class="n">logits_to_probs</span>
+<span class="kn">from</span> <span class="nn">torch.distributions.utils</span> <span class="k">import</span> <span class="n">clamp_probs</span>
+<span class="kn">from</span> <span class="nn">torch.autograd</span> <span class="k">import</span> <span class="n">Variable</span>
 
 
-<div class="viewcode-block" id="Stream"><a class="viewcode-back" href="../../../cuda.html#torch.cuda.Stream">[docs]</a><span class="k">class</span> <span class="nc">Stream</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">_CudaStreamBase</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;Wrapper around a CUDA stream.</span>
+<div class="viewcode-block" id="Binomial"><a class="viewcode-back" href="../../../distributions.html#torch.distributions.Binomial">[docs]</a><span class="k">class</span> <span class="nc">Binomial</span><span class="p">(</span><span class="n">Distribution</span><span class="p">):</span>
+    <span class="sa">r</span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Creates a Binomial distribution parameterized by `total_count` and</span>
+<span class="sd">    either `probs` or `logits` (but not both).</span>
 
-<span class="sd">    Arguments:</span>
-<span class="sd">        device(int, optional): a device on which to allocate the Stream.</span>
-<span class="sd">        priority(int, optional): priority of the stream. Lower numbers</span>
-<span class="sd">                                 represent higher priorities.</span>
+<span class="sd">    -   Requires a single shared `total_count` for all</span>
+<span class="sd">        parameters and samples.</span>
+
+<span class="sd">    Example::</span>
+
+<span class="sd">        &gt;&gt;&gt; m = Binomial(100, torch.Tensor([0 , .2, .8, 1]))</span>
+<span class="sd">        &gt;&gt;&gt; x = m.sample()</span>
+<span class="sd">         0</span>
+<span class="sd">         22</span>
+<span class="sd">         71</span>
+<span class="sd">         100</span>
+<span class="sd">        [torch.FloatTensor of size 4]]</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        total_count (int): number of Bernoulli trials</span>
+<span class="sd">        probs (Tensor or Variable): Event probabilities</span>
+<span class="sd">        logits (Tensor or Variable): Event log-odds</span>
 <span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">params</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;probs&#39;</span><span class="p">:</span> <span class="n">constraints</span><span class="o">.</span><span class="n">unit_interval</span><span class="p">}</span>
+    <span class="n">has_enumerate_support</span> <span class="o">=</span> <span class="kc">True</span>
 
-    <span class="k">def</span> <span class="nf">__new__</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">device</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">priority</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
-        <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="n">device</span><span class="p">):</span>
-            <span class="k">return</span> <span class="nb">super</span><span class="p">(</span><span class="n">Stream</span><span class="p">,</span> <span class="bp">cls</span><span class="p">)</span><span class="o">.</span><span class="fm">__new__</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">priority</span><span class="o">=</span><span class="n">priority</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
-
-<div class="viewcode-block" id="Stream.wait_event"><a class="viewcode-back" href="../../../cuda.html#torch.cuda.Stream.wait_event">[docs]</a>    <span class="k">def</span> <span class="nf">wait_event</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">event</span><span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;Makes all future work submitted to the stream wait for an event.</span>
-
-<span class="sd">        Arguments:</span>
-<span class="sd">            event (Event): an event to wait for.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">check_error</span><span class="p">(</span><span class="n">cudart</span><span class="p">()</span><span class="o">.</span><span class="n">cudaStreamWaitEvent</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">event</span><span class="p">,</span> <span class="n">ctypes</span><span class="o">.</span><span class="n">c_int</span><span class="p">(</span><span class="mi">0</span><span class="p">)))</span></div>
-
-<div class="viewcode-block" id="Stream.wait_stream"><a class="viewcode-back" href="../../../cuda.html#torch.cuda.Stream.wait_stream">[docs]</a>    <span class="k">def</span> <span class="nf">wait_stream</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">stream</span><span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;Synchronizes with another stream.</span>
-
-<span class="sd">        All future work submitted to this stream will wait until all kernels</span>
-<span class="sd">        submitted to a given stream at the time of call complete.</span>
-
-<span class="sd">        Arguments:</span>
-<span class="sd">            stream (Stream): a stream to synchronize.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">wait_event</span><span class="p">(</span><span class="n">stream</span><span class="o">.</span><span class="n">record_event</span><span class="p">())</span></div>
-
-<div class="viewcode-block" id="Stream.record_event"><a class="viewcode-back" href="../../../cuda.html#torch.cuda.Stream.record_event">[docs]</a>    <span class="k">def</span> <span class="nf">record_event</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">event</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;Records an event.</span>
-
-<span class="sd">        Arguments:</span>
-<span class="sd">            event (Event, optional): event to record. If not given, a new one</span>
-<span class="sd">                will be allocated.</span>
-
-<span class="sd">        Returns:</span>
-<span class="sd">            Recorded event.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">if</span> <span class="n">event</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">event</span> <span class="o">=</span> <span class="n">Event</span><span class="p">()</span>
-        <span class="n">check_error</span><span class="p">(</span><span class="n">cudart</span><span class="p">()</span><span class="o">.</span><span class="n">cudaEventRecord</span><span class="p">(</span><span class="n">event</span><span class="p">,</span> <span class="bp">self</span><span class="p">))</span>
-        <span class="k">return</span> <span class="n">event</span></div>
-
-<div class="viewcode-block" id="Stream.query"><a class="viewcode-back" href="../../../cuda.html#torch.cuda.Stream.query">[docs]</a>    <span class="k">def</span> <span class="nf">query</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;Checks if all the work submitted has been completed.</span>
-
-<span class="sd">        Returns:</span>
-<span class="sd">            A boolean indicating if all kernels in this stream are completed.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">res</span> <span class="o">=</span> <span class="n">cudart</span><span class="p">()</span><span class="o">.</span><span class="n">cudaStreamQuery</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">res</span> <span class="o">==</span> <span class="n">cudaStatus</span><span class="o">.</span><span class="n">ERROR_NOT_READY</span><span class="p">:</span>
-            <span class="k">return</span> <span class="kc">False</span>
-        <span class="n">check_error</span><span class="p">(</span><span class="n">res</span><span class="p">)</span>
-        <span class="k">return</span> <span class="kc">True</span></div>
-
-<div class="viewcode-block" id="Stream.synchronize"><a class="viewcode-back" href="../../../cuda.html#torch.cuda.Stream.synchronize">[docs]</a>    <span class="k">def</span> <span class="nf">synchronize</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;Wait for all the kernels in this stream to complete.&quot;&quot;&quot;</span>
-        <span class="n">check_error</span><span class="p">(</span><span class="n">cudart</span><span class="p">()</span><span class="o">.</span><span class="n">cudaStreamSynchronize</span><span class="p">(</span><span class="bp">self</span><span class="p">))</span></div>
-
-    <span class="nd">@staticmethod</span>
-    <span class="k">def</span> <span class="nf">priority_range</span><span class="p">():</span>
-        <span class="n">least_priority</span> <span class="o">=</span> <span class="n">ctypes</span><span class="o">.</span><span class="n">c_int</span><span class="p">()</span>
-        <span class="n">greatest_priority</span> <span class="o">=</span> <span class="n">ctypes</span><span class="o">.</span><span class="n">c_int</span><span class="p">()</span>
-        <span class="n">check_error</span><span class="p">(</span><span class="n">cudart</span><span class="p">()</span><span class="o">.</span><span class="n">cudaDeviceGetStreamPriorityRange</span><span class="p">(</span>
-            <span class="n">ctypes</span><span class="o">.</span><span class="n">byref</span><span class="p">(</span><span class="n">least_priority</span><span class="p">),</span> <span class="n">ctypes</span><span class="o">.</span><span class="n">byref</span><span class="p">(</span><span class="n">greatest_priority</span><span class="p">)))</span>
-        <span class="k">return</span> <span class="p">(</span><span class="n">least_priority</span><span class="o">.</span><span class="n">value</span><span class="p">,</span> <span class="n">greatest_priority</span><span class="o">.</span><span class="n">value</span><span class="p">)</span>
-
-    <span class="nd">@property</span>
-    <span class="k">def</span> <span class="nf">priority</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="n">priority</span> <span class="o">=</span> <span class="n">ctypes</span><span class="o">.</span><span class="n">c_int</span><span class="p">()</span>
-        <span class="n">check_error</span><span class="p">(</span><span class="n">cudart</span><span class="p">()</span><span class="o">.</span><span class="n">cudaStreamGetPriority</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ctypes</span><span class="o">.</span><span class="n">byref</span><span class="p">(</span><span class="n">priority</span><span class="p">)))</span>
-        <span class="k">return</span> <span class="n">priority</span><span class="o">.</span><span class="n">value</span>
-
-    <span class="nd">@property</span>
-    <span class="k">def</span> <span class="nf">_as_parameter_</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">return</span> <span class="n">ctypes</span><span class="o">.</span><span class="n">c_void_p</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cuda_stream</span><span class="p">)</span>
-
-    <span class="k">def</span> <span class="nf">__eq__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">o</span><span class="p">):</span>
-        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">o</span><span class="p">,</span> <span class="n">Stream</span><span class="p">):</span>
-            <span class="k">return</span> <span class="n">o</span><span class="o">.</span><span class="n">device</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span> <span class="ow">and</span> <span class="n">o</span><span class="o">.</span><span class="n">cuda_stream</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">cuda_stream</span>
-        <span class="k">return</span> <span class="kc">False</span>
-
-    <span class="k">def</span> <span class="nf">__hash__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">return</span> <span class="nb">hash</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">cuda_stream</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">))</span>
-
-    <span class="k">def</span> <span class="nf">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">return</span> <span class="p">(</span><span class="s1">&#39;&lt;torch.cuda.Stream device=</span><span class="si">{0}</span><span class="s1"> cuda_stream=</span><span class="si">{1:#x}</span><span class="s1">&gt;&#39;</span>
-                <span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">cuda_stream</span><span class="p">))</span></div>
-
-
-<span class="k">class</span> <span class="nc">EventHandle</span><span class="p">(</span><span class="n">ctypes</span><span class="o">.</span><span class="n">Structure</span><span class="p">):</span>
-    <span class="n">IPC_HANDLE_SIZE</span> <span class="o">=</span> <span class="mi">64</span>
-    <span class="n">_fields_</span> <span class="o">=</span> <span class="p">[(</span><span class="s1">&#39;reserved&#39;</span><span class="p">,</span> <span class="n">ctypes</span><span class="o">.</span><span class="n">c_char</span> <span class="o">*</span> <span class="n">IPC_HANDLE_SIZE</span><span class="p">)]</span>
-
-
-<div class="viewcode-block" id="Event"><a class="viewcode-back" href="../../../cuda.html#torch.cuda.Event">[docs]</a><span class="k">class</span> <span class="nc">Event</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;Wrapper around CUDA event.</span>
-
-<span class="sd">    Arguments:</span>
-<span class="sd">        enable_timing (bool): indicates if the event should measure time</span>
-<span class="sd">            (default: ``False``)</span>
-<span class="sd">        blocking (bool): if ``True``, :meth:`wait` will be blocking (default: ``False``)</span>
-<span class="sd">        interprocess (bool): if ``True``, the event can be shared between processes</span>
-<span class="sd">            (default: ``False``)</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-
-    <span class="n">DEFAULT</span> <span class="o">=</span> <span class="mh">0x0</span>
-    <span class="n">BLOCKING_SYNC</span> <span class="o">=</span> <span class="mh">0x1</span>
-    <span class="n">DISABLE_TIMING</span> <span class="o">=</span> <span class="mh">0x2</span>
-    <span class="n">INTERPROCESS</span> <span class="o">=</span> <span class="mh">0x4</span>
-
-    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">enable_timing</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">blocking</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">interprocess</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-                 <span class="n">_handle</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
-        <span class="n">flags</span> <span class="o">=</span> <span class="n">Event</span><span class="o">.</span><span class="n">DEFAULT</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="n">enable_timing</span><span class="p">:</span>
-            <span class="n">flags</span> <span class="o">|=</span> <span class="n">Event</span><span class="o">.</span><span class="n">DISABLE_TIMING</span>
-        <span class="k">if</span> <span class="n">blocking</span><span class="p">:</span>
-            <span class="n">flags</span> <span class="o">|=</span> <span class="n">Event</span><span class="o">.</span><span class="n">BLOCKING_SYNC</span>
-        <span class="k">if</span> <span class="n">interprocess</span><span class="p">:</span>
-            <span class="n">flags</span> <span class="o">|=</span> <span class="n">Event</span><span class="o">.</span><span class="n">INTERPROCESS</span>
-
-        <span class="n">ptr</span> <span class="o">=</span> <span class="n">ctypes</span><span class="o">.</span><span class="n">c_void_p</span><span class="p">()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_cudart</span> <span class="o">=</span> <span class="n">cudart</span><span class="p">()</span>
-        <span class="k">if</span> <span class="n">_handle</span><span class="p">:</span>
-            <span class="n">check_error</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_cudart</span><span class="o">.</span><span class="n">cudaIpcOpenEventHandle</span><span class="p">(</span><span class="n">ctypes</span><span class="o">.</span><span class="n">byref</span><span class="p">(</span><span class="n">ptr</span><span class="p">),</span> <span class="n">_handle</span><span class="p">))</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">total_count</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">probs</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">logits</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">total_count</span><span class="p">,</span> <span class="n">Number</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="s1">&#39;inhomogeneous total_count is not supported&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">total_count</span> <span class="o">=</span> <span class="n">total_count</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">probs</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">)</span> <span class="o">==</span> <span class="p">(</span><span class="n">logits</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Either `probs` or `logits` must be specified, but not both.&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">probs</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">probs</span><span class="p">,</span> <span class="o">=</span> <span class="n">broadcast_all</span><span class="p">(</span><span class="n">probs</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="n">check_error</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_cudart</span><span class="o">.</span><span class="n">cudaEventCreateWithFlags</span><span class="p">(</span><span class="n">ctypes</span><span class="o">.</span><span class="n">byref</span><span class="p">(</span><span class="n">ptr</span><span class="p">),</span> <span class="n">ctypes</span><span class="o">.</span><span class="n">c_uint</span><span class="p">(</span><span class="n">flags</span><span class="p">)))</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_as_parameter_</span> <span class="o">=</span> <span class="n">ptr</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logits</span><span class="p">,</span> <span class="o">=</span> <span class="n">broadcast_all</span><span class="p">(</span><span class="n">logits</span><span class="p">)</span>
 
-    <span class="k">def</span> <span class="nf">__del__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s1">&#39;_as_parameter_&#39;</span><span class="p">):</span>
-            <span class="n">check_error</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_cudart</span><span class="o">.</span><span class="n">cudaEventDestroy</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_as_parameter_</span><span class="p">))</span>
-            <span class="k">del</span> <span class="bp">self</span><span class="o">.</span><span class="n">_as_parameter_</span>
+        <span class="n">probs_or_logits</span> <span class="o">=</span> <span class="n">probs</span> <span class="k">if</span> <span class="n">probs</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">logits</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">probs_or_logits</span><span class="p">,</span> <span class="n">Number</span><span class="p">):</span>
+            <span class="n">batch_shape</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">batch_shape</span> <span class="o">=</span> <span class="n">probs_or_logits</span><span class="o">.</span><span class="n">size</span><span class="p">()</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">Binomial</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">batch_shape</span><span class="p">)</span>
 
-<div class="viewcode-block" id="Event.record"><a class="viewcode-back" href="../../../cuda.html#torch.cuda.Event.record">[docs]</a>    <span class="k">def</span> <span class="nf">record</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">stream</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;Records the event in a given stream.&quot;&quot;&quot;</span>
-        <span class="k">if</span> <span class="n">stream</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">stream</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">current_stream</span><span class="p">()</span>
-        <span class="n">stream</span><span class="o">.</span><span class="n">record_event</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span></div>
+    <span class="nd">@constraints</span><span class="o">.</span><span class="n">dependent_property</span>
+    <span class="k">def</span> <span class="nf">support</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">constraints</span><span class="o">.</span><span class="n">integer_interval</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">total_count</span><span class="p">)</span>
 
-<div class="viewcode-block" id="Event.wait"><a class="viewcode-back" href="../../../cuda.html#torch.cuda.Event.wait">[docs]</a>    <span class="k">def</span> <span class="nf">wait</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">stream</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;Makes a given stream wait for the event.&quot;&quot;&quot;</span>
-        <span class="k">if</span> <span class="n">stream</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">stream</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">current_stream</span><span class="p">()</span>
-        <span class="n">stream</span><span class="o">.</span><span class="n">wait_event</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span></div>
+    <span class="nd">@lazy_property</span>
+    <span class="k">def</span> <span class="nf">logits</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">probs_to_logits</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">probs</span><span class="p">,</span> <span class="n">is_binary</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 
-<div class="viewcode-block" id="Event.query"><a class="viewcode-back" href="../../../cuda.html#torch.cuda.Event.query">[docs]</a>    <span class="k">def</span> <span class="nf">query</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;Checks if the event has been recorded.</span>
+    <span class="nd">@lazy_property</span>
+    <span class="k">def</span> <span class="nf">probs</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">logits_to_probs</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">logits</span><span class="p">,</span> <span class="n">is_binary</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 
-<span class="sd">        Returns:</span>
-<span class="sd">            A boolean indicating if the event has been recorded.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">res</span> <span class="o">=</span> <span class="n">cudart</span><span class="p">()</span><span class="o">.</span><span class="n">cudaEventQuery</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">res</span> <span class="o">==</span> <span class="n">cudaStatus</span><span class="o">.</span><span class="n">ERROR_NOT_READY</span><span class="p">:</span>
-            <span class="k">return</span> <span class="kc">False</span>
-        <span class="n">check_error</span><span class="p">(</span><span class="n">res</span><span class="p">)</span>
-        <span class="k">return</span> <span class="kc">True</span></div>
+    <span class="k">def</span> <span class="nf">sample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">sample_shape</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">()):</span>
+        <span class="n">shape</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_extended_shape</span><span class="p">(</span><span class="n">sample_shape</span><span class="p">)</span> <span class="o">+</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">total_count</span><span class="p">,)</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">bernoulli</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">probs</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="n">shape</span><span class="p">))</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
 
-<div class="viewcode-block" id="Event.elapsed_time"><a class="viewcode-back" href="../../../cuda.html#torch.cuda.Event.elapsed_time">[docs]</a>    <span class="k">def</span> <span class="nf">elapsed_time</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">end_event</span><span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;Returns the time elapsed before the event was recorded.&quot;&quot;&quot;</span>
-        <span class="n">time_ms</span> <span class="o">=</span> <span class="n">ctypes</span><span class="o">.</span><span class="n">c_float</span><span class="p">()</span>
-        <span class="n">check_error</span><span class="p">(</span><span class="n">cudart</span><span class="p">()</span><span class="o">.</span><span class="n">cudaEventElapsedTime</span><span class="p">(</span>
-            <span class="n">ctypes</span><span class="o">.</span><span class="n">byref</span><span class="p">(</span><span class="n">time_ms</span><span class="p">),</span> <span class="bp">self</span><span class="p">,</span> <span class="n">end_event</span><span class="p">))</span>
-        <span class="k">return</span> <span class="n">time_ms</span><span class="o">.</span><span class="n">value</span></div>
+    <span class="k">def</span> <span class="nf">log_prob</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_validate_log_prob_arg</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+        <span class="n">probs</span> <span class="o">=</span> <span class="n">clamp_probs</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">probs</span><span class="p">)</span>
+        <span class="n">log_factorial_n</span> <span class="o">=</span> <span class="n">math</span><span class="o">.</span><span class="n">lgamma</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">total_count</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">log_factorial_k</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">lgamma</span><span class="p">(</span><span class="n">value</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">log_factorial_nmk</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">lgamma</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">total_count</span> <span class="o">-</span> <span class="n">value</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="k">return</span> <span class="p">(</span><span class="n">log_factorial_n</span> <span class="o">-</span> <span class="n">log_factorial_k</span> <span class="o">-</span> <span class="n">log_factorial_nmk</span> <span class="o">+</span>
+                <span class="n">value</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">logits</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">total_count</span> <span class="o">*</span> <span class="n">torch</span><span class="o">.</span><span class="n">log1p</span><span class="p">(</span><span class="o">-</span><span class="n">probs</span><span class="p">))</span>
 
-<div class="viewcode-block" id="Event.synchronize"><a class="viewcode-back" href="../../../cuda.html#torch.cuda.Event.synchronize">[docs]</a>    <span class="k">def</span> <span class="nf">synchronize</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;Synchronizes with the event.&quot;&quot;&quot;</span>
-        <span class="n">check_error</span><span class="p">(</span><span class="n">cudart</span><span class="p">()</span><span class="o">.</span><span class="n">cudaEventSynchronize</span><span class="p">(</span><span class="bp">self</span><span class="p">))</span></div>
-
-<div class="viewcode-block" id="Event.ipc_handle"><a class="viewcode-back" href="../../../cuda.html#torch.cuda.Event.ipc_handle">[docs]</a>    <span class="k">def</span> <span class="nf">ipc_handle</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;Returns an IPC handle of this event.&quot;&quot;&quot;</span>
-        <span class="n">handle</span> <span class="o">=</span> <span class="n">EventHandle</span><span class="p">()</span>
-        <span class="n">check_error</span><span class="p">(</span><span class="n">cudart</span><span class="p">()</span><span class="o">.</span><span class="n">cudaIpcGetEventHandle</span><span class="p">(</span><span class="n">ctypes</span><span class="o">.</span><span class="n">byref</span><span class="p">(</span><span class="n">handle</span><span class="p">),</span> <span class="bp">self</span><span class="p">))</span>
-        <span class="k">return</span> <span class="n">handle</span></div>
-
-    <span class="k">def</span> <span class="nf">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">return</span> <span class="s1">&#39;&lt;torch.cuda.Event </span><span class="si">{0:#x}</span><span class="s1">&gt;&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_as_parameter_</span><span class="o">.</span><span class="n">value</span><span class="p">)</span></div>
+    <span class="k">def</span> <span class="nf">enumerate_support</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">values</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">total_count</span><span class="p">)</span>
+        <span class="n">values</span> <span class="o">=</span> <span class="n">values</span><span class="o">.</span><span class="n">view</span><span class="p">((</span><span class="o">-</span><span class="mi">1</span><span class="p">,)</span> <span class="o">+</span> <span class="p">(</span><span class="mi">1</span><span class="p">,)</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_batch_shape</span><span class="p">))</span>
+        <span class="n">values</span> <span class="o">=</span> <span class="n">values</span><span class="o">.</span><span class="n">expand</span><span class="p">((</span><span class="o">-</span><span class="mi">1</span><span class="p">,)</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">_batch_shape</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">probs</span><span class="o">.</span><span class="n">is_cuda</span><span class="p">:</span>
+            <span class="n">values</span> <span class="o">=</span> <span class="n">values</span><span class="o">.</span><span class="n">cuda</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">probs</span><span class="o">.</span><span class="n">get_device</span><span class="p">())</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">probs</span><span class="p">,</span> <span class="n">Variable</span><span class="p">):</span>
+            <span class="n">values</span> <span class="o">=</span> <span class="n">Variable</span><span class="p">(</span><span class="n">values</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">values</span></div>
 </pre></div>
 
            </div>
