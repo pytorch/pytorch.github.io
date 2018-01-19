@@ -8,7 +8,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>torch.optim.adam &mdash; PyTorch master documentation</title>
+  <title>torch.distributions.geometric &mdash; PyTorch master documentation</title>
   
 
   
@@ -616,7 +616,7 @@
         
           <li><a href="../../torch.html">torch</a> &raquo;</li>
         
-      <li>torch.optim.adam</li>
+      <li>torch.distributions.geometric</li>
     
     
       <li class="wy-breadcrumbs-aside">
@@ -631,102 +631,79 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
             
-  <h1>Source code for torch.optim.adam</h1><div class="highlight"><pre>
-<span></span><span class="kn">import</span> <span class="nn">math</span>
+  <h1>Source code for torch.distributions.geometric</h1><div class="highlight"><pre>
+<span></span><span class="kn">from</span> <span class="nn">numbers</span> <span class="k">import</span> <span class="n">Number</span>
+
 <span class="kn">import</span> <span class="nn">torch</span>
-<span class="kn">from</span> <span class="nn">.optimizer</span> <span class="k">import</span> <span class="n">Optimizer</span>
+<span class="kn">from</span> <span class="nn">torch.distributions</span> <span class="k">import</span> <span class="n">constraints</span>
+<span class="kn">from</span> <span class="nn">torch.distributions.distribution</span> <span class="k">import</span> <span class="n">Distribution</span>
+<span class="kn">from</span> <span class="nn">torch.distributions.utils</span> <span class="k">import</span> <span class="n">broadcast_all</span><span class="p">,</span> <span class="n">probs_to_logits</span><span class="p">,</span> <span class="n">logits_to_probs</span><span class="p">,</span> <span class="n">lazy_property</span><span class="p">,</span> <span class="n">_finfo</span>
+<span class="kn">from</span> <span class="nn">torch.nn.functional</span> <span class="k">import</span> <span class="n">binary_cross_entropy_with_logits</span>
 
 
-<div class="viewcode-block" id="Adam"><a class="viewcode-back" href="../../../optim.html#torch.optim.Adam">[docs]</a><span class="k">class</span> <span class="nc">Adam</span><span class="p">(</span><span class="n">Optimizer</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;Implements Adam algorithm.</span>
+<div class="viewcode-block" id="Geometric"><a class="viewcode-back" href="../../../distributions.html#torch.distributions.Geometric">[docs]</a><span class="k">class</span> <span class="nc">Geometric</span><span class="p">(</span><span class="n">Distribution</span><span class="p">):</span>
+    <span class="sa">r</span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Creates a Geometric distribution parameterized by `probs`, where `probs` is the probability of success of Bernoulli</span>
+<span class="sd">    trials. It represents the probability that in k + 1 Bernoulli trials, the first k trials failed, before</span>
+<span class="sd">    seeing a success.</span>
 
-<span class="sd">    It has been proposed in `Adam: A Method for Stochastic Optimization`_.</span>
+<span class="sd">    Samples are non-negative integers [0, inf).</span>
 
-<span class="sd">    Arguments:</span>
-<span class="sd">        params (iterable): iterable of parameters to optimize or dicts defining</span>
-<span class="sd">            parameter groups</span>
-<span class="sd">        lr (float, optional): learning rate (default: 1e-3)</span>
-<span class="sd">        betas (Tuple[float, float], optional): coefficients used for computing</span>
-<span class="sd">            running averages of gradient and its square (default: (0.9, 0.999))</span>
-<span class="sd">        eps (float, optional): term added to the denominator to improve</span>
-<span class="sd">            numerical stability (default: 1e-8)</span>
-<span class="sd">        weight_decay (float, optional): weight decay (L2 penalty) (default: 0)</span>
-<span class="sd">        amsgrad (boolean, optional): whether to use the AMSGrad variant of this</span>
-<span class="sd">            algorithm from the paper `On the Convergence of Adam and Beyond`_</span>
+<span class="sd">    Example::</span>
 
-<span class="sd">    .. _Adam\: A Method for Stochastic Optimization:</span>
-<span class="sd">        https://arxiv.org/abs/1412.6980</span>
-<span class="sd">    .. _On the Convergence of Adam and Beyond:</span>
-<span class="sd">        https://openreview.net/forum?id=ryQu7f-RZ</span>
+<span class="sd">        &gt;&gt;&gt; m = Geometric(torch.Tensor([0.3]))</span>
+<span class="sd">        &gt;&gt;&gt; m.sample()  # underlying Bernoulli has 30% chance 1; 70% chance 0</span>
+<span class="sd">         2</span>
+<span class="sd">        [torch.FloatTensor of size 1]</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        probs (Number, Tensor or Variable): the probabilty of sampling `1`. Must be in range (0, 1]</span>
+<span class="sd">        logits (Number, Tensor or Variable): the log-odds of sampling `1`.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">params</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;probs&#39;</span><span class="p">:</span> <span class="n">constraints</span><span class="o">.</span><span class="n">unit_interval</span><span class="p">}</span>
+    <span class="n">support</span> <span class="o">=</span> <span class="n">constraints</span><span class="o">.</span><span class="n">nonnegative_integer</span>
 
-    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">params</span><span class="p">,</span> <span class="n">lr</span><span class="o">=</span><span class="mf">1e-3</span><span class="p">,</span> <span class="n">betas</span><span class="o">=</span><span class="p">(</span><span class="mf">0.9</span><span class="p">,</span> <span class="mf">0.999</span><span class="p">),</span> <span class="n">eps</span><span class="o">=</span><span class="mf">1e-8</span><span class="p">,</span>
-                 <span class="n">weight_decay</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">amsgrad</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
-        <span class="n">defaults</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">lr</span><span class="o">=</span><span class="n">lr</span><span class="p">,</span> <span class="n">betas</span><span class="o">=</span><span class="n">betas</span><span class="p">,</span> <span class="n">eps</span><span class="o">=</span><span class="n">eps</span><span class="p">,</span>
-                        <span class="n">weight_decay</span><span class="o">=</span><span class="n">weight_decay</span><span class="p">,</span> <span class="n">amsgrad</span><span class="o">=</span><span class="n">amsgrad</span><span class="p">)</span>
-        <span class="nb">super</span><span class="p">(</span><span class="n">Adam</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">params</span><span class="p">,</span> <span class="n">defaults</span><span class="p">)</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">probs</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">logits</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">probs</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">)</span> <span class="o">==</span> <span class="p">(</span><span class="n">logits</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Either `probs` or `logits` must be specified, but not both.&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">probs</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">probs</span><span class="p">,</span> <span class="o">=</span> <span class="n">broadcast_all</span><span class="p">(</span><span class="n">probs</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">probs</span><span class="o">.</span><span class="n">gt</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">():</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;All elements of probs must be greater than 0&#39;</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logits</span><span class="p">,</span> <span class="o">=</span> <span class="n">broadcast_all</span><span class="p">(</span><span class="n">logits</span><span class="p">)</span>
+        <span class="n">probs_or_logits</span> <span class="o">=</span> <span class="n">probs</span> <span class="k">if</span> <span class="n">probs</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">logits</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">probs_or_logits</span><span class="p">,</span> <span class="n">Number</span><span class="p">):</span>
+            <span class="n">batch_shape</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">batch_shape</span> <span class="o">=</span> <span class="n">probs_or_logits</span><span class="o">.</span><span class="n">size</span><span class="p">()</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">Geometric</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">batch_shape</span><span class="p">)</span>
 
-<div class="viewcode-block" id="Adam.step"><a class="viewcode-back" href="../../../optim.html#torch.optim.Adam.step">[docs]</a>    <span class="k">def</span> <span class="nf">step</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">closure</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;Performs a single optimization step.</span>
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">mean</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="mf">1.</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">probs</span> <span class="o">-</span> <span class="mf">1.</span>
 
-<span class="sd">        Arguments:</span>
-<span class="sd">            closure (callable, optional): A closure that reevaluates the model</span>
-<span class="sd">                and returns the loss.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">loss</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="k">if</span> <span class="n">closure</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">loss</span> <span class="o">=</span> <span class="n">closure</span><span class="p">()</span>
+    <span class="nd">@lazy_property</span>
+    <span class="k">def</span> <span class="nf">logits</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">probs_to_logits</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">probs</span><span class="p">,</span> <span class="n">is_binary</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 
-        <span class="k">for</span> <span class="n">group</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">param_groups</span><span class="p">:</span>
-            <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">group</span><span class="p">[</span><span class="s1">&#39;params&#39;</span><span class="p">]:</span>
-                <span class="k">if</span> <span class="n">p</span><span class="o">.</span><span class="n">grad</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                    <span class="k">continue</span>
-                <span class="n">grad</span> <span class="o">=</span> <span class="n">p</span><span class="o">.</span><span class="n">grad</span><span class="o">.</span><span class="n">data</span>
-                <span class="k">if</span> <span class="n">grad</span><span class="o">.</span><span class="n">is_sparse</span><span class="p">:</span>
-                    <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s1">&#39;Adam does not support sparse gradients, please consider SparseAdam instead&#39;</span><span class="p">)</span>
-                <span class="n">amsgrad</span> <span class="o">=</span> <span class="n">group</span><span class="p">[</span><span class="s1">&#39;amsgrad&#39;</span><span class="p">]</span>
+    <span class="nd">@lazy_property</span>
+    <span class="k">def</span> <span class="nf">probs</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">logits_to_probs</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">logits</span><span class="p">,</span> <span class="n">is_binary</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 
-                <span class="n">state</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">state</span><span class="p">[</span><span class="n">p</span><span class="p">]</span>
+    <span class="k">def</span> <span class="nf">sample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">sample_shape</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">()):</span>
+        <span class="n">shape</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_extended_shape</span><span class="p">(</span><span class="n">sample_shape</span><span class="p">)</span>
+        <span class="n">u</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">probs</span><span class="o">.</span><span class="n">new</span><span class="p">(</span><span class="n">shape</span><span class="p">)</span><span class="o">.</span><span class="n">uniform_</span><span class="p">(</span><span class="n">_finfo</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">probs</span><span class="p">)</span><span class="o">.</span><span class="n">tiny</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="k">return</span> <span class="p">(</span><span class="n">u</span><span class="o">.</span><span class="n">log</span><span class="p">()</span> <span class="o">/</span> <span class="p">(</span><span class="o">-</span><span class="bp">self</span><span class="o">.</span><span class="n">probs</span><span class="p">)</span><span class="o">.</span><span class="n">log1p</span><span class="p">())</span><span class="o">.</span><span class="n">floor</span><span class="p">()</span>
 
-                <span class="c1"># State initialization</span>
-                <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">state</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
-                    <span class="n">state</span><span class="p">[</span><span class="s1">&#39;step&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span>
-                    <span class="c1"># Exponential moving average of gradient values</span>
-                    <span class="n">state</span><span class="p">[</span><span class="s1">&#39;exp_avg&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
-                    <span class="c1"># Exponential moving average of squared gradient values</span>
-                    <span class="n">state</span><span class="p">[</span><span class="s1">&#39;exp_avg_sq&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
-                    <span class="k">if</span> <span class="n">amsgrad</span><span class="p">:</span>
-                        <span class="c1"># Maintains max of all exp. moving avg. of sq. grad. values</span>
-                        <span class="n">state</span><span class="p">[</span><span class="s1">&#39;max_exp_avg_sq&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
+    <span class="k">def</span> <span class="nf">log_prob</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_validate_log_prob_arg</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+        <span class="n">value</span><span class="p">,</span> <span class="n">probs</span> <span class="o">=</span> <span class="n">broadcast_all</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">probs</span><span class="o">.</span><span class="n">clone</span><span class="p">())</span>
+        <span class="n">probs</span><span class="p">[(</span><span class="n">probs</span> <span class="o">==</span> <span class="mi">1</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">value</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)]</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">return</span> <span class="n">value</span> <span class="o">*</span> <span class="p">(</span><span class="o">-</span><span class="n">probs</span><span class="p">)</span><span class="o">.</span><span class="n">log1p</span><span class="p">()</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">probs</span><span class="o">.</span><span class="n">log</span><span class="p">()</span>
 
-                <span class="n">exp_avg</span><span class="p">,</span> <span class="n">exp_avg_sq</span> <span class="o">=</span> <span class="n">state</span><span class="p">[</span><span class="s1">&#39;exp_avg&#39;</span><span class="p">],</span> <span class="n">state</span><span class="p">[</span><span class="s1">&#39;exp_avg_sq&#39;</span><span class="p">]</span>
-                <span class="k">if</span> <span class="n">amsgrad</span><span class="p">:</span>
-                    <span class="n">max_exp_avg_sq</span> <span class="o">=</span> <span class="n">state</span><span class="p">[</span><span class="s1">&#39;max_exp_avg_sq&#39;</span><span class="p">]</span>
-                <span class="n">beta1</span><span class="p">,</span> <span class="n">beta2</span> <span class="o">=</span> <span class="n">group</span><span class="p">[</span><span class="s1">&#39;betas&#39;</span><span class="p">]</span>
-
-                <span class="n">state</span><span class="p">[</span><span class="s1">&#39;step&#39;</span><span class="p">]</span> <span class="o">+=</span> <span class="mi">1</span>
-
-                <span class="k">if</span> <span class="n">group</span><span class="p">[</span><span class="s1">&#39;weight_decay&#39;</span><span class="p">]</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">:</span>
-                    <span class="n">grad</span> <span class="o">=</span> <span class="n">grad</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">group</span><span class="p">[</span><span class="s1">&#39;weight_decay&#39;</span><span class="p">],</span> <span class="n">p</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
-
-                <span class="c1"># Decay the first and second moment running average coefficient</span>
-                <span class="n">exp_avg</span><span class="o">.</span><span class="n">mul_</span><span class="p">(</span><span class="n">beta1</span><span class="p">)</span><span class="o">.</span><span class="n">add_</span><span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="n">beta1</span><span class="p">,</span> <span class="n">grad</span><span class="p">)</span>
-                <span class="n">exp_avg_sq</span><span class="o">.</span><span class="n">mul_</span><span class="p">(</span><span class="n">beta2</span><span class="p">)</span><span class="o">.</span><span class="n">addcmul_</span><span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="n">beta2</span><span class="p">,</span> <span class="n">grad</span><span class="p">,</span> <span class="n">grad</span><span class="p">)</span>
-                <span class="k">if</span> <span class="n">amsgrad</span><span class="p">:</span>
-                    <span class="c1"># Maintains the maximum of all 2nd moment running avg. till now</span>
-                    <span class="n">torch</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">max_exp_avg_sq</span><span class="p">,</span> <span class="n">exp_avg_sq</span><span class="p">,</span> <span class="n">out</span><span class="o">=</span><span class="n">max_exp_avg_sq</span><span class="p">)</span>
-                    <span class="c1"># Use the max. for normalizing running avg. of gradient</span>
-                    <span class="n">denom</span> <span class="o">=</span> <span class="n">max_exp_avg_sq</span><span class="o">.</span><span class="n">sqrt</span><span class="p">()</span><span class="o">.</span><span class="n">add_</span><span class="p">(</span><span class="n">group</span><span class="p">[</span><span class="s1">&#39;eps&#39;</span><span class="p">])</span>
-                <span class="k">else</span><span class="p">:</span>
-                    <span class="n">denom</span> <span class="o">=</span> <span class="n">exp_avg_sq</span><span class="o">.</span><span class="n">sqrt</span><span class="p">()</span><span class="o">.</span><span class="n">add_</span><span class="p">(</span><span class="n">group</span><span class="p">[</span><span class="s1">&#39;eps&#39;</span><span class="p">])</span>
-
-                <span class="n">bias_correction1</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">-</span> <span class="n">beta1</span> <span class="o">**</span> <span class="n">state</span><span class="p">[</span><span class="s1">&#39;step&#39;</span><span class="p">]</span>
-                <span class="n">bias_correction2</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">-</span> <span class="n">beta2</span> <span class="o">**</span> <span class="n">state</span><span class="p">[</span><span class="s1">&#39;step&#39;</span><span class="p">]</span>
-                <span class="n">step_size</span> <span class="o">=</span> <span class="n">group</span><span class="p">[</span><span class="s1">&#39;lr&#39;</span><span class="p">]</span> <span class="o">*</span> <span class="n">math</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">bias_correction2</span><span class="p">)</span> <span class="o">/</span> <span class="n">bias_correction1</span>
-
-                <span class="n">p</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">addcdiv_</span><span class="p">(</span><span class="o">-</span><span class="n">step_size</span><span class="p">,</span> <span class="n">exp_avg</span><span class="p">,</span> <span class="n">denom</span><span class="p">)</span>
-
-        <span class="k">return</span> <span class="n">loss</span></div></div>
+    <span class="k">def</span> <span class="nf">entropy</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">binary_cross_entropy_with_logits</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">logits</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">probs</span><span class="p">,</span> <span class="n">reduce</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">probs</span></div>
 </pre></div>
 
            </div>
