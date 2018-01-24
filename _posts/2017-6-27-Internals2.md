@@ -21,7 +21,7 @@ The first part of this document will explain the build process from and end-user
 
 Python uses [Setuptools](https://setuptools.readthedocs.io/en/latest/index.html) to build the library. Setuptools is an extension to the original distutils system from the core Python library. The core component of Setuptools is the `setup.py` file which contains all the information needed to build the project. The most important function is the `setup()` function which serves as the main entry point. Let's take a look at the one in PyTorch:
 
-```
+```python
 setup(name="torch", version=version,
       description="Tensors and Dynamic neural networks in Python with strong GPU acceleration",
       ext_modules=extensions,
@@ -65,17 +65,18 @@ We will consider these components in more detail, but for now it is instructive 
 
 Third party packages are by default installed into the `lib/<version>/site_packages`  directory associated with your Python binary. For example, because I am using an [Miniconda](https://conda.io/miniconda.html) environment, my Python binary is found at:
 
-```
+```bash
 (p3) killeent@devgpu047:pytorch (master)$ which python
 ~/local/miniconda2/envs/p3/bin/python
 ```
 And thus packages are installed into:
 
-```
+```bash
 /home/killeent/local/miniconda2/envs/p3/lib/python3.6/site-packages
 ```
 I installed PyTorch, and let's take a look into torch folder in site-packages:
-```
+
+```bash
 (p3) killeent@devgpu047:site-packages$ cd torch
 (p3) killeent@devgpu047:torch$ ls
 autograd  backends  _C.cpython-36m-x86_64-linux-gnu.so  cuda  distributed  _dl.cpython-36m-x86_64-linux-gnu.so  functional.py  __init__.py  legacy  lib  multiprocessing  nn  optim  __pycache__  serialization.py  _six.py  sparse  storage.py  _tensor_docs.py  tensor.py  _tensor_str.py  _thnn  _torch_docs.py  utils  _utils.py  version.py
@@ -86,7 +87,7 @@ Note that everything we would expect to be here is here:
  - The extension libraries are here - the ._C* and ._dl* shared libraries
  - The package_data is here: the contents of lib/ match exactly what we described in the setup function:
 
-```
+```bash
 (p3) killeent@devgpu047:torch$ ls lib/
 include     libnccl.so.1  libTHC.so.1   libTHCUNN.so.1  libTHNN.so.1  libTH.so.1   THCUNN.h  torch_shm_manager libnccl.so  libshm.so     libTHCS.so.1  libTHD.so.1     libTHPP.so.1  libTHS.so.1  THNN.h
 ```
@@ -103,7 +104,7 @@ Next, we will look at the various individual components of the build from start 
 
 Let's take a look at the `install` cmd override in PyTorch's `setup.py`:
 
-```
+```python
 class install(setuptools.command.install.install):
 
     def run(self):
@@ -114,7 +115,7 @@ class install(setuptools.command.install.install):
 
 We note the first thing it does is run a command called "build_deps" - let's take a look at it's `run()` method:
 
-```
+```python
 def run(self):
         from tools.nnwrap import generate_wrappers as generate_nn_wrappers
         build_all_cmd = ['bash', 'torch/lib/build_all.sh']
@@ -133,7 +134,7 @@ Here we note that that we have a shell script `build_all.sh` in the `torch/lib/`
 
 Let's take a look in `torch/lib`:
 
-```
+```bash
 (p3) killeent@devgpu047:lib (master)$ ls
 build_all.sh  libshm  nccl  README.md  TH  THC  THCS  THCUNN  THD  THNN  THPP  THS
 ```
@@ -142,7 +143,7 @@ Here we see the directories for all the backend libraries. `TH`, `THC`, `THNN`, 
 
 The `build_all.sh` is essentially a script that runs the CMake configure step on all of these libraries, and then `make install`. Let's run `./build_all.sh` and see what we are left with:
 
-```
+```bash
 (p3) killeent@devgpu047:lib (master)$ ./build_all.sh --with-cuda --with-nccl --with-distributed
 [various CMake output logs]
 (p3) killeent@devgpu047:lib (master)$ ls
@@ -158,7 +159,7 @@ Now there are a number of extra things in the directory:
 
 Let's explore further. In the shell script, we create the `build` directory and a subdir for each library to build:
 
-```
+```bash
 # We create a build directory for the library, which will
 # contain the cmake output. $1 is the library to be built
   mkdir -p build/$1
@@ -169,7 +170,7 @@ Thus e.g. `build/TH` contains the CMake configuration output including the `Make
 
 Let's also look at `tmp_install`:
 
-```
+```bash
 (p3) killeent@devgpu047:lib (master)$ ls tmp_install/
 bin  include  lib  share
 ```
@@ -178,7 +179,7 @@ bin  include  lib  share
 
 So why have this directory? It is used to compile the libraries that depend on each other. For example, the `THC` library depends on the `TH` library and its headers. This is referenced in the build shell script as arguments to the `cmake` command:
 
-```
+```bash
 # install_dir is tmp_install
 cmake ...
 	-DTH_INCLUDE_PATH="$INSTALL_DIR/include" \
@@ -187,7 +188,7 @@ cmake ...
 
 And indeed if we look at the `THC` library we built:
 
-```
+```bash
 (p3) killeent@devgpu047:lib (master)$ ldd libTHC.so.1
 	...
 	libTH.so.1 => /home/killeent/github/pytorch/torch/lib/tmp_install/lib/./libTH.so.1 (0x00007f84478b7000)
@@ -195,7 +196,7 @@ And indeed if we look at the `THC` library we built:
 
 The way the `build_all.sh` specifies the include and library paths is a little messy but this is representative of the overall idea. Finally, at the end of the script:
 
-```
+```bash
 # If all the builds succeed we copy the libraries, headers,
 # binaries to torch/lib
 cp $INSTALL_DIR/lib/* .
@@ -220,7 +221,7 @@ The reason we copy the `THNN.h` and `THCUNN.h` header files into `torch/lib` is 
 
 If we take a look into `torch/csrc/nn` after running `generate_nn_wrappers()` we can see the output:
 
-```
+```bash
 (p3) killeent@devgpu047:nn (master)$ ls
 THCUNN.cpp  THCUNN.cwrap  THNN.cpp  THNN.cwrap  THNN_generic.cpp  THNN_generic.cwrap  THNN_generic.h  THNN_generic.inc.h
 ```
@@ -254,7 +255,7 @@ For example, the code generates cwrap like:
 
 with corresponding `.cpp`:
 
-```
+```cpp
 extern "C" void THNN_FloatBatchNormalization_updateOutput(void*, THFloatTensor*, THFloatTensor*, THFloatTensor*, THFloatTensor*, THFloatTensor*, THFloatTensor*, THFloatTensor*, THFloatTensor*, bool, double, double);
 
 PyObject * FloatBatchNormalization_updateOutput(PyObject *_unused, PyObject *args) {
@@ -278,7 +279,7 @@ PyObject * FloatBatchNormalization_updateOutput(PyObject *_unused, PyObject *arg
 
 In the `THPP` generated code, the function looks like this:
 
-```
+```cpp
 void BatchNormalization_updateOutput(thpp::Tensor* input, thpp::Tensor* output, thpp::Tensor* weight, thpp::Tensor* bias, thpp::Tensor* running_mean, thpp::Tensor* running_var, thpp::Tensor* save_mean, thpp::Tensor* save_std, bool train, double momentum, double eps) {
 	// Call appropriate THNN function based on tensor type, whether its on CUDA, etc.
 }
@@ -293,7 +294,7 @@ Now that we have built the backend libraries (the "dependencies") we can move fo
 
 The packages are found using the Setuptools' utility function `find_packages()`:
 
-```
+```python
 packages = find_packages(exclude=('tools.*',))
 ['torch', 'torch._thnn', 'torch.autograd', 'torch.backends', 'torch.cuda', 'torch.distributed', 'torch.legacy', 'torch.multiprocessing', 'torch.nn', 'torch.optim', 'torch.sparse', 'torch.utils', 'torch.autograd._functions', 'torch.backends.cudnn', 'torch.legacy.nn', 'torch.legacy.optim', 'torch.nn._functions', 'torch.nn.backends', 'torch.nn.modules', 'torch.nn.parallel', 'torch.nn.utils', 'torch.nn._functions.thnn', 'torch.utils.data', 'torch.utils.ffi', 'torch.utils.serialization', 'torch.utils.trainer', 'torch.utils.backcompat', 'torch.utils.trainer.plugins']
 ```
@@ -302,7 +303,7 @@ As we can see, `find_package` has recursively traversed the `torch` directory, f
 
 When building with Setuptools, the tool creates a `build` directory in the distribution root, i.e. the same location as the `setup.py` file. Because PyTorch is composed of both "Pure" python modules and Extension Modules, we need to preserve information about the Operating System and Python version used when performing the build. So if we look in my `build` directory, we see:
 
-```
+```bash
 (p3) killeent@devgpu047:pytorch (master)$ ls build
 lib.linux-x86_64-3.6  temp.linux-x86_64-3.6
 ```
@@ -311,13 +312,13 @@ This indicates that I've built the project on `linux-x86-64` using Python 3.6. T
 
 Because "Pure" python modules are just Python code, and don't need to be "compiled", the `build_py` process simply copies files from their locations as found by `find_packages` to the equivalent location in `build/`. So our build output is littered with lines like:
 
-```
+```bash
 copying torch/autograd/_functions/blas.py -> build/lib.linux-x86_64-3.6/torch/autograd/_functions
 ```
 
 We also noted earlier that we could pass files and directories to the `package_data` keyword argument to the main `setup()` function, and that Setuptools would handle copying those files to the installation location. During `build_py`, these files are copied to the `build/` directory, so we also see lines like:
 
-```
+```bash
 copying torch/lib/libTH.so.1 -> build/lib.linux-x86_64-3.6/torch/lib
 ...
 copying torch/lib/include/THC/generic/THCTensor.h -> build/lib.linux-x86_64-3.6/torch/lib/include/THC/generic
@@ -329,7 +330,7 @@ copying torch/lib/include/THC/generic/THCTensor.h -> build/lib.linux-x86_64-3.6/
 
 Finally, we need to build the Extension Modules, i.e. the PyTorch modules written in C++ using the CPython backend. This also constitutes the majority of the code logic in `setup.py`. Our overridden `build_ext` Command has some special logic before the extensions themselves are actually built:
 
-```
+```python
 from tools.cwrap import cwrap
 from tools.cwrap.plugins.THPPlugin import THPPlugin
 from tools.cwrap.plugins.ArgcountSortPlugin import ArgcountSortPlugin
@@ -367,7 +368,7 @@ Recall above that I documented that we auto-generated C++ code for calling into 
 
 Generates code like:
 
-```
+```cpp
  PyObject * THPTensor_(zero_)(PyObject *self, PyObject *args, PyObject *kwargs) {
 	...
 	THTensor_(zero)(LIBRARY_STATE arg_self);
@@ -384,7 +385,7 @@ Unlike pure modules, it’s not enough just to list modules or packages and expe
 
 The bulk (200~ LOC at the time of this writing) of the `setup.py` goes into specifying how to build these Extensions. Here, some of the choices we make in `build_all.sh` begin to make sense. For example, we saw that our build script specified a `tmp_install` directory where we installed our backend libraries. In our `setup.py` code, we reference this directory when adding to the list of directories containing header files to include:
 
-```
+```python
 # tmp_install_path is torch/lib/tmp_install
 include_dirs += [
     cwd,
@@ -397,7 +398,7 @@ include_dirs += [
 
 Similarly, we copied the shared object libraries to `torch/csrc` at the end of the `build_all.sh` script. We reference these locations directly in our `setup.py` code when identifying libraries that we may link against:
 
-```
+```python
 # lib_path is torch/lib
 TH_LIB = os.path.join(lib_path, 'libTH.so.1')
 THS_LIB = os.path.join(lib_path, 'libTHS.so.1')
@@ -409,7 +410,7 @@ THNN_LIB = os.path.join(lib_path, 'libTHNN.so.1')
 
 Let's consider how we build the main `torch._C` Extension Module:
 
-```
+```python
 C = Extension("torch._C",
               libraries=main_libraries,
               sources=main_sources,
@@ -428,7 +429,7 @@ C = Extension("torch._C",
  - The library dirs are directories to search for shared libraries at link time. For example, we include `torch/lib` - the location we copied our `.so` files to at the end of `build_all.sh`, but also the paths to the CUDA and CuDNN directories
  -  The link arguments are used when linking object files together to create the extension. In PyTorch, this includes more *normal* options like decided to link `libstdc++` statically. However, there is one key component: **this is where we link the backend TH libraries**. Note that we have lines like:
 
-```
+```python
 # The explicit paths to .so files we described above
 main_link_args = [TH_LIB, THS_LIB, THPP_LIB, THNN_LIB]
 ```
@@ -444,7 +445,7 @@ There are other extensions needed to power PyTorch and they are built in a simil
 
 After building has finished, installation is quite simple. We simply have to copy everything from our `build/lib.linux-x86_64-3.6` directory to the appropriate installation directory. Recall that we noted above that this directory is the `site_packages` directory associated with our Python binary. As a result, we see lines like:
 
-```
+```bash
 running install_lib
 creating /home/killeent/local/miniconda2/envs/p3/lib/python3.6/site-packages/torch
 copying build/lib.linux-x86_64-3.6/torch/_C.cpython-36m-x86_64-linux-gnu.so -> /home/killeent/local/miniconda2/envs/p3/lib/python3.6/site-packages/torch
@@ -456,7 +457,7 @@ copying build/lib.linux-x86_64-3.6/torch/_thnn/_THCUNN.cpython-36m-x86_64-linux-
 
 Finally lets power up the Python interpreter. When the Python interpreter executes an import statement, it searches for Python code and extension modules along a search path. A default value for the path is configured into the Python binary when the interpreter is built.
 
-```
+```bash
 # note we are now in my home directory
 (p3) killeent@devgpu047:~$ python
 Python 3.6.1 |Continuum Analytics, Inc.| (default, Mar 22 2017, 19:54:23)
@@ -469,7 +470,7 @@ Type "help", "copyright", "credits" or "license" for more information.
 
 As we can see, the `site-packages` directory we copied our PyTorch installation to is part of search path. Now let's load the `torch` module and see its location:
 
-```
+```python
 >>> import torch
 >>> import inspect
 >>> inspect.getfile(torch)
@@ -494,21 +495,21 @@ The main tool that supports this is Setuptools `develop` command. The documentat
 
 But how does it work? Suppose we run `python setup.py build develop` in the PyTorch directory. The `build` command is run, building our dependencies (`TH`, `THPP`, etc.) and the extension libraries. However, if we look inside `site-packages`:
 
-```
+```bash
 (p3) killeent@devgpu047:site-packages$ ls -la torch*
 -rw-r--r--. 1 killeent users 31 Jun 27 08:02 torch.egg-link
 ```
 
 Looking at the contents of the `torch.egg-link` file, it simply references the PyTorch directory:
 
-```
+```bash
 (p3) killeent@devgpu047:site-packages$ cat torch.egg-link
 /home/killeent/github/pytorch
 ```
 
 If we navigate back to the PyTorch directory, we see there is a new directory `torch.egg-info`:
 
-```
+```bash
 (p3) killeent@devgpu047:pytorch (master)$ ls -la torch.egg-info/
 total 28
 drwxr-xr-x.  2 killeent users  4096 Jun 27 08:09 .
@@ -522,14 +523,14 @@ drwxr-xr-x. 10 killeent users  4096 Jun 27 08:01 ..
 
 This file contains metadata about the PyTorch project. For example, `requirements.txt` lists all of the dependencies for setting up PyTorch:
 
-```
+```bash
 (p3) killeent@devgpu047:pytorch (master)$ cat torch.egg-info/requires.txt
 pyyaml
 ```
 
 Without going into too much detail, `develop` allows us to essentially treat the PyTorch repo itself as if it were in `site-packages`, so we can import the module and it just works:
 
-```
+```bash
 (p3) killeent@devgpu047:~$ python
 Python 3.6.1 |Continuum Analytics, Inc.| (default, Mar 22 2017, 19:54:23)
 [GCC 4.4.7 20120313 (Red Hat 4.4.7-1)] on linux
@@ -550,7 +551,7 @@ Thus we can develop the PyTorch codebases seamlessly, and test our changes in an
 
 If we are working on the dependencies (e.g. `TH`, `THPP`, etc.) we can re-build our changes more quickly by simply running the `build_deps` command directly. This will automatically call into `build_all.sh` to re-build our libraries, and copy the generated libraries appropriately. If we are using Setuptools `develop` mode, we will be using the local extension library built in the PyTorch directory. Because we have specified the paths to the shared libraries when compiling our Extension Libraries, the changes will be picked up:
 
-```
+```bash
 # we are using the local extension
 (p3) killeent@devgpu047:~$ python
 Python 3.6.1 |Continuum Analytics, Inc.| (default, Mar 22 2017, 19:54:23)
@@ -573,14 +574,14 @@ As such, we can test any changes here without having to do a full rebuild.
 
 PyTorch has dependencies on some 3rd party libraries. The usual mechanism for using these libraries is to install them via Anaconda, and then link against them. For example, we can use the `mkl` library with PyTorch by doing:
 
-```
+```bash
 # installed to miniconda2/envs/p3/lib/libmkl_intel_lp64.so
 conda install mkl
 ```
 
 And then as long as we have the path to this `lib` directory on our `$CMAKE_PREFIX_PATH`, it will successfully find this library when compiling:
 
-```
+```bash
 # in the site-packages dir
 (p3) killeent@devgpu047:torch$ ldd _C.cpython-36m-x86_64-linux-gnu.so
 # ...
