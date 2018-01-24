@@ -104,7 +104,7 @@ PyTypeObject THPTensorType = {
   THPTensor_(pynew), /* tp_new */
 };
 ```
-The `tp_new` function enables object creation. It is responsible for creating (as opposed to initializing) objects of that type and is equivalent to the `__new()__` method at the Python level. The C implementation is a static method that is passed the type being instantiated and any arguments, and returns a newly created object.
+The `tp_new` function enables object creation. It is responsible for creating (as opposed to initializing) objects of that type and is equivalent to the `__new__()` method at the Python level. The C implementation is a static method that is passed the type being instantiated and any arguments, and returns a newly created object.
 
 ```
 static PyObject * THPTensor_(pynew)(PyTypeObject *type, PyObject *args, PyObject *kwargs)
@@ -117,7 +117,7 @@ static PyObject * THPTensor_(pynew)(PyTypeObject *type, PyObject *args, PyObject
 ```
 The first thing our new function does is allocate the `THPTensor`. It then runs through a series of initializations based off of the args passed to the function. For example, when creating a `THPTensor` *x* from another `THPTensor` *y*, we set the newly created `THPTensor`'s `cdata` field to be the result of calling `THTensor_(newWithTensor)` with the *y*'s underlying `TH` Tensor as an argument. Similar constructors exist for sizes, storages, NumPy arrays, and sequences.
 
-** Note that we solely use `tp_new`, and not a combination of `tp_new` and `tp_init` (which corresponds to the `__init()__` function).
+** Note that we solely use `tp_new`, and not a combination of `tp_new` and `tp_init` (which corresponds to the `__init__()` function).
 
 The other important thing defined in Tensor.cpp is how indexing works. PyTorch Tensors support Python's **Mapping Protocol**. This allows us to do things like:
 ```python
@@ -196,7 +196,7 @@ What this is doing is bringing in the code from the generic `Tensor.cpp` file an
 
 These output files are returned from `split_types` and added to the list of source files, so we can see how the `.cpp` code for different types is created.
 
-There are a few things to note here: First, the `split_types` function is not strictly necessary. We could wrap the code in `Tensor.cpp` in a single file, repeating it for each type. The reason we split the code into separate files is to speed up compilation. Second, what we mean when we talk about the type replacement (e.g. replace real with a float) is that the C preprocessor will perform these subsitutions during compilaiton. Merely surrounding the source code with these macros has no side effects until preprocessing. 
+There are a few things to note here: First, the `split_types` function is not strictly necessary. We could wrap the code in `Tensor.cpp` in a single file, repeating it for each type. The reason we split the code into separate files is to speed up compilation. Second, what we mean when we talk about the type replacement (e.g. replace real with a float) is that the C preprocessor will perform these substitutions during compilation. Merely surrounding the source code with these macros has no side effects until preprocessing. 
 
 ### Generic Builds (Part Two)
 ---
@@ -220,7 +220,9 @@ Lastly, we need to consider how we "convert" or "substitute" the function types.
 #define THPTensor_(NAME)            TH_CONCAT_4(THP,Real,Tensor_,NAME)
 ```
 This macro says that any string in the source code matching the format `THPTensor_(NAME)` should be replaced with `THPRealTensor_NAME`, where Real is derived from whatever the symbol Real is `#define`'d to be at the time. Because our header code and source code is surrounded by macro definitions for all the types as seen above, after the preprocessor has run, the resulting code is what we would expect. The code in the `TH` library defines the same macro for `THTensor_(NAME)`, supporting the translation of those functions as well. In this way, we end up with header and source files with specialized code.
-####Module Objects and Type Methods
+
+#### Module Objects and Type Methods
+
 Now we have seen how we have wrapped `TH`'s Tensor definition in `THP`, and generated THP methods such as `THPFloatTensor_init(...)`. Now we can explore what the above code actually does in terms of the module we are creating. The key line in `THPTensor_(init)` is:
 ```
 # THPTensorBaseStr, THPTensorType are also macros that are specific 
@@ -247,7 +249,7 @@ static PyObject * replace(PyFloatObject *self, PyObject *args) {
 This is equivalent to the Python method:
 ```
 def replace(self, val):
-	self.ob_fval = fal
+	self.ob_fval = val
 ```
 It is instructive to read more about how defining methods works in CPython. In general, methods take as the first parameter the instance of the object, and optionally parameters for the positional arguments and keyword arguments. This static function is registered as a method on our float:
 ```
@@ -261,9 +263,10 @@ static PyMethodDef float_methods[] = {
 This registers a method called replace, which is implemented by the C function of the same name. The `METH_VARARGS` flag indicates that the method takes a tuple of arguments representing all the arguments to the function. This array is set to the `tp_methods` field of the type object, and then we can use the `replace` method on objects of that type.
 
 We would like to be able to call all of the methods for `TH` tensors on our `THP` tensor equivalents. However, writing wrappers for all of the `TH` methods would be time-consuming and error prone. We need a better way to do this.
+
 ### PyTorch cwrap
 ---
-PyTorch implements its own cwrap tool to wrap the `TH` Tensor methods for use in the Python backend. We define a `.cwrap` file containing a series of C method declarations in our custom YAML format (http://yaml.org). The cwrap tool takes this file and outputs `.cpp` source files containing the wrapped methods in a format that is compatible with our `THPTensor` Python object and the Python C extension method calling format. This tool is used to generate code to wrap not only `TH`, but also `CuDNN`. It is defined to be extensible.
+PyTorch implements its own cwrap tool to wrap the `TH` Tensor methods for use in the Python backend. We define a `.cwrap` file containing a series of C method declarations in our custom [YAML format](http://yaml.org). The cwrap tool takes this file and outputs `.cpp` source files containing the wrapped methods in a format that is compatible with our `THPTensor` Python object and the Python C extension method calling format. This tool is used to generate code to wrap not only `TH`, but also `CuDNN`. It is defined to be extensible.
 
 An example YAML "declaration" for the in-place `addmv_` function is as follows:
 ```
@@ -284,7 +287,7 @@ An example YAML "declaration" for the in-place `addmv_` function is as follows:
 ```
 The architecture of the cwrap tool is very simple. It reads in a file, and then processes it with a series of **plugins.** See `tools/cwrap/plugins/__init__.py` for documentation on all the ways a plugin can alter the code.
 
-The source code generation occurs in a series of passes. First, the YAML "declaration" is parsed and processed. Then the source code is generated piece-by-piece - adding things like argument checks and extractions, defining the method header, and the actual call to the underlying library such as `TH`. Finally, the cwrap tool allows for processing the entire file at a time. The resulting output for `addmv_` can be explored here: https://gist.github.com/killeent/c00de46c2a896335a52552604cc4d74b.
+The source code generation occurs in a series of passes. First, the YAML "declaration" is parsed and processed. Then the source code is generated piece-by-piece - adding things like argument checks and extractions, defining the method header, and the actual call to the underlying library such as `TH`. Finally, the cwrap tool allows for processing the entire file at a time. The resulting output for `addmv_` can be [explored here](https://gist.github.com/killeent/c00de46c2a896335a52552604cc4d74b).
 
 In order to interface with the CPython backend, the tool generates an array of `PyMethodDef`s that can be stored or appended to the `THPTensor`'s `tp_methods` field.
 
@@ -322,4 +325,4 @@ This is just a snapshot of parts of the build system for PyTorch. There is more 
 ### Resources:
 ---
 
- - https://docs.python.org/3.7/extending/index.html is invaluable for understanding how to write C/C++ Extension to Python
+ - <https://docs.python.org/3.7/extending/index.html> is invaluable for understanding how to write C/C++ Extension to Python

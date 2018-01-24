@@ -83,7 +83,7 @@ autograd  backends  _C.cpython-36m-x86_64-linux-gnu.so  cuda  distributed  _dl.c
 Note that everything we would expect to be here is here:
 
  - All the "pure" packages are here [todo print packages from setup.py to explain]
- - The extension libaries are here - the ._C* and ._dl* shared libraries
+ - The extension libraries are here - the ._C* and ._dl* shared libraries
  - The package_data is here: the contents of lib/ match exactly what we described in the setup function:
 
 ```
@@ -138,7 +138,7 @@ Let's take a look in `torch/lib`:
 build_all.sh  libshm  nccl  README.md  TH  THC  THCS  THCUNN  THD  THNN  THPP  THS
 ```
 
-Here we see the directories for all the backend libraries. `TH`, `THC`, `THNN`,  `THCUNN`, and `nccl` are git subtrees (see e.g. https://developer.atlassian.com/blog/2015/05/the-power-of-git-subtree/) that are in sync with the libraries in e.g. https://github.com/torch/torch7/tree/master/lib/TH. `THS`, `THCS`, `THD`, `THPP` and `libshm` are libraries specific to PyTorch. All of the libraries contain `CMakeLists.txt` - indicating they are built with CMake.
+Here we see the directories for all the backend libraries. `TH`, `THC`, `THNN`,  `THCUNN`, and `nccl` are [git subtrees](https://developer.atlassian.com/blog/2015/05/the-power-of-git-subtree/) that are in sync with the libraries in e.g. [github.com/torch](https://github.com/torch/torch7/tree/master/lib/TH). `THS`, `THCS`, `THD`, `THPP` and `libshm` are libraries specific to PyTorch. All of the libraries contain `CMakeLists.txt` - indicating they are built with CMake.
 
 The `build_all.sh` is essentially a script that runs the CMake configure step on all of these libraries, and then `make install`. Let's run `./build_all.sh` and see what we are left with:
 
@@ -214,9 +214,9 @@ Briefly, let's touch on the last part of the `build_deps` command: `generate_nn_
 
 The reason we copy the `THNN.h` and `THCUNN.h` header files into `torch/lib` is that this is where the `generate_nn_wrappers()` code expects these files to be located. `generate_nn_wrappers()` does a few things:
 
- 1. Parses the header files, generating cwrap YAML declarations and writing them to output `.cwrap` files
- 2. Calls `cwrap` with the appropriate plugins on these `.cwrap` files to generate source code for each
- 3. Parses the headers *a second time* to generate `THNN_generic.h` - a library that takes `THPP` Tensors, PyTorch's "generic" C++ Tensor Library, and calls into the appropriate `THNN`/`THCUNN` library function based on the dynamic type of the Tensor
+1. Parses the header files, generating cwrap YAML declarations and writing them to output `.cwrap` files
+2. Calls `cwrap` with the appropriate plugins on these `.cwrap` files to generate source code for each
+3. Parses the headers *a second time* to generate `THNN_generic.h` - a library that takes `THPP` Tensors, PyTorch's "generic" C++ Tensor Library, and calls into the appropriate `THNN`/`THCUNN` library function based on the dynamic type of the Tensor
 
 If we take a look into `torch/csrc/nn` after running `generate_nn_wrappers()` we can see the output:
 
@@ -353,7 +353,7 @@ from tools.cwrap.plugins.ProcessorSpecificPlugin import ProcessorSpecificPlugin
         ])
 ```
 
-Recall above that I documented that we auto-generated C++ code for calling into the `THNN` etc. libraries. Here is where we bind `TH`, `THC` and `CuDNN`. We take the YAML declarations in `TensorMethods.cwrap`, and use them to generate output C++ source files that contain implementations that work within PyTorch's C++ Ecosytem. For example, a simple declaration like zero_:
+Recall above that I documented that we auto-generated C++ code for calling into the `THNN` etc. libraries. Here is where we bind `TH`, `THC` and `CuDNN`. We take the YAML declarations in `TensorMethods.cwrap`, and use them to generate output C++ source files that contain implementations that work within PyTorch's C++ Ecosystem. For example, a simple declaration like zero_:
 
 ```
 [[
@@ -433,7 +433,7 @@ C = Extension("torch._C",
 main_link_args = [TH_LIB, THS_LIB, THPP_LIB, THNN_LIB]
 ```
 
-You might be wondering why we do this as opposed to adding these libraries to the list we pass to the `main_libraries` keyword argument. After all, that is a list of libraries to link against. The issue is that Lua Torch installs often set the `LD_LIBRARY_PATH` variable, and thus we could mistakenly link against a `TH` library built for Lua Torch, instead of the library we have built locally. This would be problematic because the code could be out of date, and also there are various configuration options for Lua Torch's `TH` that would not play nicely with PyTorch.
+You might be wondering why we do this as opposed to adding these libraries to the list we pass to the `libraries` keyword argument. After all, that is a list of libraries to link against. The issue is that Lua Torch installs often set the `LD_LIBRARY_PATH` variable, and thus we could mistakenly link against a `TH` library built for Lua Torch, instead of the library we have built locally. This would be problematic because the code could be out of date, and also there are various configuration options for Lua Torch's `TH` that would not play nicely with PyTorch.
 
 As such, we manually specify the paths to the shared libraries we generated directly to the linker.
 
@@ -442,7 +442,7 @@ There are other extensions needed to power PyTorch and they are built in a simil
 ### Installation
 ---
 
-After building has finished, installation is quite simple. We simply have to copy everything in our `build/lib.linux-x86_64-3.6` directory to the appropriate installation directory. Recall that we noted above that this directory is the `site_packages` directory associated with our Python binary. As a result, we see lines like:
+After building has finished, installation is quite simple. We simply have to copy everything from our `build/lib.linux-x86_64-3.6` directory to the appropriate installation directory. Recall that we noted above that this directory is the `site_packages` directory associated with our Python binary. As a result, we see lines like:
 
 ```
 running install_lib
@@ -490,7 +490,7 @@ The entire installation loop for PyTorch can be quite time-consuming. On my devs
 
 The main tool that supports this is Setuptools `develop` command. The documentation states that:
 
-"This command allows you to deploy your project’s source for use in one or more “staging areas” where it will be available for importing. This deployment is done in such a way that changes to the project source are immediately available in the staging area(s), without needing to run a build or install step after each change."
+>This command allows you to deploy your project’s source for use in one or more “staging areas” where it will be available for importing. This deployment is done in such a way that changes to the project source are immediately available in the staging area(s), without needing to run a build or install step after each change.
 
 But how does it work? Suppose we run `python setup.py build develop` in the PyTorch directory. The `build` command is run, building our dependencies (`TH`, `THPP`, etc.) and the extension libraries. However, if we look inside `site-packages`:
 
