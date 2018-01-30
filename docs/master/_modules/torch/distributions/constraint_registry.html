@@ -8,7 +8,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>torch.distributions.transformed_distribution &mdash; PyTorch master documentation</title>
+  <title>torch.distributions.constraint_registry &mdash; PyTorch master documentation</title>
   
 
   
@@ -627,7 +627,7 @@
         
           <li><a href="../../torch.html">torch</a> &raquo;</li>
         
-      <li>torch.distributions.transformed_distribution</li>
+      <li>torch.distributions.constraint_registry</li>
     
     
       <li class="wy-breadcrumbs-aside">
@@ -642,87 +642,210 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
             
-  <h1>Source code for torch.distributions.transformed_distribution</h1><div class="highlight"><pre>
-<span></span><span class="kn">import</span> <span class="nn">torch</span>
-<span class="kn">from</span> <span class="nn">torch.distributions</span> <span class="k">import</span> <span class="n">constraints</span>
-<span class="kn">from</span> <span class="nn">torch.distributions.transforms</span> <span class="k">import</span> <span class="n">Transform</span>
-<span class="kn">from</span> <span class="nn">torch.distributions.distribution</span> <span class="k">import</span> <span class="n">Distribution</span>
+  <h1>Source code for torch.distributions.constraint_registry</h1><div class="highlight"><pre>
+<span></span><span class="sa">r</span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">PyTorch provides two global :class:`ConstraintRegistry` objects that link</span>
+<span class="sd">:class:`~torch.distributions.constraints.Constraint` objects to</span>
+<span class="sd">:class:`~torch.distributions.transforms.Transform` objects. These objects both</span>
+<span class="sd">input constraints and return transforms, but they have different guarantees on</span>
+<span class="sd">bijectivity.</span>
+
+<span class="sd">1. ``biject_to(constraint)`` looks up a bijective</span>
+<span class="sd">   :class:`~torch.distributions.transforms.Transform` from ``constraints.real``</span>
+<span class="sd">   to the given ``constraint``. The returned transform is guaranteed to have</span>
+<span class="sd">   ``.bijective = True`` and should implement ``.log_abs_det_jacobian()``.</span>
+<span class="sd">2. ``transform_to(constraint)`` looks up a not-necessarily bijective</span>
+<span class="sd">   :class:`~torch.distributions.transforms.Transform` from ``constraints.real``</span>
+<span class="sd">   to the given ``constraint``. The returned transform is not guaranteed to</span>
+<span class="sd">   implement ``.log_abs_det_jacobian()``.</span>
+
+<span class="sd">The ``transform_to()`` registry is useful for performing unconstrained</span>
+<span class="sd">optimization on constrained parameters of probability distributions, which are</span>
+<span class="sd">indicated by each distribution&#39;s ``.params`` dict. These transforms often</span>
+<span class="sd">overparameterize a space in order to avoid rotation; they are thus more</span>
+<span class="sd">suitable for coordinate-wise optimization algorithms like Adam::</span>
+
+<span class="sd">    loc = Variable(torch.zeros(100), requires_grad=True)</span>
+<span class="sd">    unconstrained = Variable(torch.zeros(100), requires_grad=True)</span>
+<span class="sd">    scale = transform_to(Normal.params[&#39;scale&#39;])(unconstrained)</span>
+<span class="sd">    loss = -Normal(loc, scale).log_prob(data).sum()</span>
+
+<span class="sd">The ``biject_to()`` registry is useful for Hamiltonian Monte Carlo, where</span>
+<span class="sd">samples from a probability distribution with constrained ``.support`` are</span>
+<span class="sd">propagated in an unconstrained space, and algorithms are typically rotation</span>
+<span class="sd">invariant.::</span>
+
+<span class="sd">    dist = Exponential(rate)</span>
+<span class="sd">    unconstrained = Variable(torch.zeros(100), requires_grad=True)</span>
+<span class="sd">    sample = biject_to(dist.support)(unconstrained)</span>
+<span class="sd">    potential_energy = -dist.log_prob(sample).sum()</span>
+
+<span class="sd">.. note::</span>
+
+<span class="sd">    An example where ``transform_to`` and ``biject_to`` differ is</span>
+<span class="sd">    ``constraints.simplex``: ``transform_to(constraints.simplex)`` returns a</span>
+<span class="sd">    :class:`~torch.distributions.transforms.BoltzmannTransform` that simply</span>
+<span class="sd">    exponentiates and normalizes its inputs; this is a cheap and mostly</span>
+<span class="sd">    coordinate-wise operation appropriate for algorithms like SVI. In</span>
+<span class="sd">    contrast, ``biject_to(constraints.simplex)`` returns a</span>
+<span class="sd">    :class:`~torch.distributions.transforms.StickBreakingTransform` that</span>
+<span class="sd">    bijects its input down to a one-fewer-dimensional space; this a more</span>
+<span class="sd">    expensive less numerically stable transform but is needed for algorithms</span>
+<span class="sd">    like HMC.</span>
+
+<span class="sd">The ``biject_to`` and ``transform_to`` objects can be extended by user-defined</span>
+<span class="sd">constraints and transforms using their ``.register()`` method either as a</span>
+<span class="sd">function on singleton constraints::</span>
+
+<span class="sd">    transform_to.register(my_constraint, my_transform)</span>
+
+<span class="sd">or as a decorator on parameterized constraints::</span>
+
+<span class="sd">    @transform_to.register(MyConstraintClass)</span>
+<span class="sd">    def my_factory(constraint):</span>
+<span class="sd">        assert isinstance(constraint, MyConstraintClass)</span>
+<span class="sd">        return MyTransform(constraint.param1, constraint.param2)</span>
+
+<span class="sd">You can create your own registry by creating a new :class:`ConstraintRegistry`</span>
+<span class="sd">object.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">from</span> <span class="nn">torch.distributions</span> <span class="k">import</span> <span class="n">constraints</span><span class="p">,</span> <span class="n">transforms</span>
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s1">&#39;ConstraintRegistry&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;biject_to&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;transform_to&#39;</span><span class="p">,</span>
+<span class="p">]</span>
 
 
-<div class="viewcode-block" id="TransformedDistribution"><a class="viewcode-back" href="../../../distributions.html#torch.distributions.TransformedDistribution">[docs]</a><span class="k">class</span> <span class="nc">TransformedDistribution</span><span class="p">(</span><span class="n">Distribution</span><span class="p">):</span>
-    <span class="sa">r</span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Extension of the Distribution class, which applies a sequence of Transforms to a base distribution.</span>
-<span class="sd">    Let f be the composition of transforms applied,</span>
-<span class="sd">    X ~ BaseDistribution</span>
-<span class="sd">    Y = f(X) ~ TransformedDistribution(BaseDistribution, f)</span>
-<span class="sd">    log p(Y) = log p(X) + log det (dX/dY)</span>
+<div class="viewcode-block" id="ConstraintRegistry"><a class="viewcode-back" href="../../../distributions.html#torch.distributions.constraint_registry.ConstraintRegistry">[docs]</a><span class="k">class</span> <span class="nc">ConstraintRegistry</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Registry to link constraints to transforms.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">base_distribution</span><span class="p">,</span> <span class="n">transforms</span><span class="o">=</span><span class="p">[],</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
-        <span class="nb">super</span><span class="p">(</span><span class="n">TransformedDistribution</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">base_dist</span> <span class="o">=</span> <span class="n">base_distribution</span>
-        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">transforms</span><span class="p">,</span> <span class="n">Transform</span><span class="p">):</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">transforms</span> <span class="o">=</span> <span class="p">[</span><span class="n">transforms</span><span class="p">,</span> <span class="p">]</span>
-        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">transforms</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
-            <span class="k">if</span> <span class="ow">not</span> <span class="nb">all</span><span class="p">(</span><span class="nb">isinstance</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="n">Transform</span><span class="p">)</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">transforms</span><span class="p">):</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;transforms must be a Transform or a list of Transforms&quot;</span><span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">transforms</span> <span class="o">=</span> <span class="n">transforms</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_registry</span> <span class="o">=</span> <span class="p">{}</span>
 
-    <span class="nd">@constraints</span><span class="o">.</span><span class="n">dependent_property</span>
-    <span class="k">def</span> <span class="nf">params</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">base_dist</span><span class="o">.</span><span class="n">params</span>  <span class="c1"># TODO add params of transforms?</span>
-
-    <span class="nd">@constraints</span><span class="o">.</span><span class="n">dependent_property</span>
-    <span class="k">def</span> <span class="nf">support</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">transforms</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">codomain</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">transforms</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">base_dist</span><span class="o">.</span><span class="n">support</span>
-
-    <span class="nd">@property</span>
-    <span class="k">def</span> <span class="nf">has_rsample</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">base_dist</span><span class="o">.</span><span class="n">has_rsample</span>
-
-    <span class="nd">@property</span>
-    <span class="k">def</span> <span class="nf">batch_shape</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">base_dist</span><span class="o">.</span><span class="n">batch_shape</span>
-
-    <span class="nd">@property</span>
-    <span class="k">def</span> <span class="nf">event_shape</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">base_dist</span><span class="o">.</span><span class="n">event_shape</span>
-
-<div class="viewcode-block" id="TransformedDistribution.sample"><a class="viewcode-back" href="../../../distributions.html#torch.distributions.TransformedDistribution.sample">[docs]</a>    <span class="k">def</span> <span class="nf">sample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">sample_shape</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">()):</span>
+<div class="viewcode-block" id="ConstraintRegistry.register"><a class="viewcode-back" href="../../../distributions.html#torch.distributions.constraint_registry.ConstraintRegistry.register">[docs]</a>    <span class="k">def</span> <span class="nf">register</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">constraint</span><span class="p">,</span> <span class="n">transform</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Generates a sample_shape shaped sample or sample_shape shaped batch of</span>
-<span class="sd">        samples if the distribution parameters are batched. Samples first from base distribution</span>
-<span class="sd">        and applies `transform()` for every transform in the list.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">x</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">base_dist</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">sample_shape</span><span class="p">)</span>
-        <span class="k">for</span> <span class="n">transform</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">transforms</span><span class="p">:</span>
-            <span class="n">x</span> <span class="o">=</span> <span class="n">transform</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">x</span></div>
+<span class="sd">        Registers a :class:`~torch.distributions.constraints.Constraint`</span>
+<span class="sd">        subclass or singleton object in this registry. Usage as decorator::</span>
 
-<div class="viewcode-block" id="TransformedDistribution.rsample"><a class="viewcode-back" href="../../../distributions.html#torch.distributions.TransformedDistribution.rsample">[docs]</a>    <span class="k">def</span> <span class="nf">rsample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">sample_shape</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">()):</span>
-        <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Generates a sample_shape shaped reparameterized sample or sample_shape</span>
-<span class="sd">        shaped batch of reparameterized samples if the distribution parameters</span>
-<span class="sd">        are batched. Samples first from base distribution and applies `transform()`</span>
-<span class="sd">        for every transform in the list.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">x</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">base_dist</span><span class="o">.</span><span class="n">rsample</span><span class="p">(</span><span class="n">sample_shape</span><span class="p">)</span>
-        <span class="k">for</span> <span class="n">transform</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">transforms</span><span class="p">:</span>
-            <span class="n">x</span> <span class="o">=</span> <span class="n">transform</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">x</span></div>
+<span class="sd">            @my_registry.register(MyConstraintClass)</span>
+<span class="sd">            def construct_transform(constraint):</span>
+<span class="sd">                assert isinstance(constraint, MyConstraint)</span>
+<span class="sd">                return MyTransform(constraint.params)</span>
 
-<div class="viewcode-block" id="TransformedDistribution.log_prob"><a class="viewcode-back" href="../../../distributions.html#torch.distributions.TransformedDistribution.log_prob">[docs]</a>    <span class="k">def</span> <span class="nf">log_prob</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Scores the sample by inverting the transform(s) and computing the score using the score</span>
-<span class="sd">        of the base distribution and the log abs det jacobian</span>
+<span class="sd">        Usage on singleton instances::</span>
+
+<span class="sd">            my_registry.register(my_constraint_singleton, MyTransform())</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            constraint (:class:`~torch.distributions.constraints.Constraint`):</span>
+<span class="sd">                Either a specific constraint instance or a subclass of</span>
+<span class="sd">                constraints.</span>
+<span class="sd">            transform (:class:`~torch.distributions.transforms.Transform`):</span>
+<span class="sd">                Either a transform object or a callable that inputs a</span>
+<span class="sd">                constraint object and returns a transform object.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">log_prob</span> <span class="o">=</span> <span class="mf">0.0</span>
-        <span class="n">y</span> <span class="o">=</span> <span class="n">value</span>
-        <span class="k">for</span> <span class="n">transform</span> <span class="ow">in</span> <span class="nb">reversed</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">transforms</span><span class="p">):</span>
-            <span class="n">x</span> <span class="o">=</span> <span class="n">transform</span><span class="o">.</span><span class="n">inv</span><span class="p">(</span><span class="n">y</span><span class="p">)</span>
-            <span class="n">log_prob</span> <span class="o">-=</span> <span class="n">transform</span><span class="o">.</span><span class="n">log_abs_det_jacobian</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">)</span>
-            <span class="n">y</span> <span class="o">=</span> <span class="n">x</span>
-        <span class="n">log_prob</span> <span class="o">+=</span> <span class="bp">self</span><span class="o">.</span><span class="n">base_dist</span><span class="o">.</span><span class="n">log_prob</span><span class="p">(</span><span class="n">y</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">log_prob</span></div></div>
+        <span class="c1"># Support use as decorator.</span>
+        <span class="k">if</span> <span class="n">transform</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="k">lambda</span> <span class="n">transform</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="n">constraint</span><span class="p">,</span> <span class="n">transform</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">constraint</span><span class="p">,</span> <span class="n">constraints</span><span class="o">.</span><span class="n">Constraint</span><span class="p">):</span>
+            <span class="c1"># Register singleton instances.</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_registry</span><span class="p">[</span><span class="n">constraint</span><span class="p">]</span> <span class="o">=</span> <span class="n">transform</span>
+        <span class="k">elif</span> <span class="nb">issubclass</span><span class="p">(</span><span class="n">constraint</span><span class="p">,</span> <span class="n">constraints</span><span class="o">.</span><span class="n">Constraint</span><span class="p">):</span>
+            <span class="c1"># Register Constraint subclass.</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_registry</span><span class="p">[</span><span class="n">constraint</span><span class="p">]</span> <span class="o">=</span> <span class="n">transform</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s1">&#39;Expected constraint to be either a Constraint subclass or instance, &#39;</span>
+                            <span class="s1">&#39;but got </span><span class="si">{}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">constraint</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">transform</span></div>
+
+    <span class="k">def</span> <span class="nf">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">constraint</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Looks up a transform to constrained space, given a constraint object.</span>
+<span class="sd">        Usage::</span>
+
+<span class="sd">            constraint = Normal.params[&#39;scale&#39;]</span>
+<span class="sd">            scale = transform_to(constraint)(torch.zeros(1))  # constrained</span>
+<span class="sd">            u = transform_to(constraint).inv(scale)           # unconstrained</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            constraint (:class:`~torch.distributions.constraints.Constraint`):</span>
+<span class="sd">                A constraint object.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            A :class:`~torch.distributions.transforms.Transform` object.</span>
+
+<span class="sd">        Raises:</span>
+<span class="sd">            `NotImplementedError` if no transform has been registered.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Look up by singleton instance.</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_registry</span><span class="p">[</span><span class="n">constraint</span><span class="p">]</span>
+        <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
+            <span class="k">pass</span>
+        <span class="c1"># Look up by Constraint subclass.</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">factory</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_registry</span><span class="p">[</span><span class="nb">type</span><span class="p">(</span><span class="n">constraint</span><span class="p">)]</span>
+        <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
+                <span class="s1">&#39;Cannot transform </span><span class="si">{}</span><span class="s1"> constraints&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="nb">type</span><span class="p">(</span><span class="n">constraint</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">factory</span><span class="p">(</span><span class="n">constraint</span><span class="p">)</span></div>
+
+
+<span class="n">biject_to</span> <span class="o">=</span> <span class="n">ConstraintRegistry</span><span class="p">()</span>
+<span class="n">transform_to</span> <span class="o">=</span> <span class="n">ConstraintRegistry</span><span class="p">()</span>
+
+<span class="c1">################################################################################</span>
+<span class="c1"># Registration Table</span>
+<span class="c1">################################################################################</span>
+
+<span class="n">biject_to</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="n">constraints</span><span class="o">.</span><span class="n">real</span><span class="p">,</span> <span class="n">transforms</span><span class="o">.</span><span class="n">identity_transform</span><span class="p">)</span>
+<span class="n">transform_to</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="n">constraints</span><span class="o">.</span><span class="n">real</span><span class="p">,</span> <span class="n">transforms</span><span class="o">.</span><span class="n">identity_transform</span><span class="p">)</span>
+
+<span class="n">biject_to</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="n">constraints</span><span class="o">.</span><span class="n">positive</span><span class="p">,</span> <span class="n">transforms</span><span class="o">.</span><span class="n">ExpTransform</span><span class="p">())</span>
+<span class="n">transform_to</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="n">constraints</span><span class="o">.</span><span class="n">positive</span><span class="p">,</span> <span class="n">transforms</span><span class="o">.</span><span class="n">ExpTransform</span><span class="p">())</span>
+
+
+<span class="nd">@biject_to</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="n">constraints</span><span class="o">.</span><span class="n">greater_than</span><span class="p">)</span>
+<span class="nd">@transform_to</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="n">constraints</span><span class="o">.</span><span class="n">greater_than</span><span class="p">)</span>
+<span class="k">def</span> <span class="nf">_transform_to_greater_than</span><span class="p">(</span><span class="n">constraint</span><span class="p">):</span>
+    <span class="n">loc</span> <span class="o">=</span> <span class="n">constraint</span><span class="o">.</span><span class="n">lower_bound</span>
+    <span class="n">scale</span> <span class="o">=</span> <span class="n">loc</span><span class="o">.</span><span class="n">new</span><span class="p">([</span><span class="mi">1</span><span class="p">])</span><span class="o">.</span><span class="n">expand_as</span><span class="p">(</span><span class="n">loc</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">transforms</span><span class="o">.</span><span class="n">ComposeTransform</span><span class="p">([</span><span class="n">transforms</span><span class="o">.</span><span class="n">ExpTransform</span><span class="p">(),</span>
+                                        <span class="n">transforms</span><span class="o">.</span><span class="n">AffineTransform</span><span class="p">(</span><span class="n">loc</span><span class="p">,</span> <span class="n">scale</span><span class="p">)])</span>
+
+
+<span class="nd">@biject_to</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="n">constraints</span><span class="o">.</span><span class="n">less_than</span><span class="p">)</span>
+<span class="nd">@transform_to</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="n">constraints</span><span class="o">.</span><span class="n">less_than</span><span class="p">)</span>
+<span class="k">def</span> <span class="nf">_transform_to_less_than</span><span class="p">(</span><span class="n">constraint</span><span class="p">):</span>
+    <span class="n">loc</span> <span class="o">=</span> <span class="n">constraint</span><span class="o">.</span><span class="n">upper_bound</span>
+    <span class="n">scale</span> <span class="o">=</span> <span class="n">loc</span><span class="o">.</span><span class="n">new</span><span class="p">([</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span><span class="o">.</span><span class="n">expand_as</span><span class="p">(</span><span class="n">loc</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">transforms</span><span class="o">.</span><span class="n">ComposeTransform</span><span class="p">([</span><span class="n">transforms</span><span class="o">.</span><span class="n">ExpTransform</span><span class="p">(),</span>
+                                        <span class="n">transforms</span><span class="o">.</span><span class="n">AffineTransform</span><span class="p">(</span><span class="n">loc</span><span class="p">,</span> <span class="n">scale</span><span class="p">)])</span>
+
+
+<span class="n">biject_to</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="n">constraints</span><span class="o">.</span><span class="n">unit_interval</span><span class="p">,</span> <span class="n">transforms</span><span class="o">.</span><span class="n">SigmoidTransform</span><span class="p">())</span>
+<span class="n">transform_to</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="n">constraints</span><span class="o">.</span><span class="n">unit_interval</span><span class="p">,</span> <span class="n">transforms</span><span class="o">.</span><span class="n">SigmoidTransform</span><span class="p">())</span>
+
+
+<span class="nd">@biject_to</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="n">constraints</span><span class="o">.</span><span class="n">interval</span><span class="p">)</span>
+<span class="nd">@transform_to</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="n">constraints</span><span class="o">.</span><span class="n">interval</span><span class="p">)</span>
+<span class="k">def</span> <span class="nf">_transform_to_interval</span><span class="p">(</span><span class="n">constraint</span><span class="p">):</span>
+    <span class="n">loc</span> <span class="o">=</span> <span class="n">constraint</span><span class="o">.</span><span class="n">lower_bound</span>
+    <span class="n">scale</span> <span class="o">=</span> <span class="n">constraint</span><span class="o">.</span><span class="n">upper_bound</span> <span class="o">-</span> <span class="n">constraint</span><span class="o">.</span><span class="n">lower_bound</span>
+    <span class="k">return</span> <span class="n">transforms</span><span class="o">.</span><span class="n">ComposeTransform</span><span class="p">([</span><span class="n">transforms</span><span class="o">.</span><span class="n">SigmoidTransform</span><span class="p">(),</span>
+                                        <span class="n">transforms</span><span class="o">.</span><span class="n">AffineTransform</span><span class="p">(</span><span class="n">loc</span><span class="p">,</span> <span class="n">scale</span><span class="p">)])</span>
+
+
+<span class="n">biject_to</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="n">constraints</span><span class="o">.</span><span class="n">simplex</span><span class="p">,</span> <span class="n">transforms</span><span class="o">.</span><span class="n">StickBreakingTransform</span><span class="p">())</span>
+<span class="n">transform_to</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="n">constraints</span><span class="o">.</span><span class="n">simplex</span><span class="p">,</span> <span class="n">transforms</span><span class="o">.</span><span class="n">BoltzmannTransform</span><span class="p">())</span>
+
+<span class="c1"># TODO define a bijection for LowerCholeskyTransform</span>
+<span class="n">transform_to</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="n">constraints</span><span class="o">.</span><span class="n">lower_cholesky</span><span class="p">,</span> <span class="n">transforms</span><span class="o">.</span><span class="n">LowerCholeskyTransform</span><span class="p">())</span>
 </pre></div>
 
            </div>
