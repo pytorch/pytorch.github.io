@@ -62,7 +62,7 @@
             
             
               <div class="version">
-                <a href="http://pytorch.org/docs/versions.html">master (0.4.0a0+c4d3f69 ) &#x25BC</a>
+                <a href="http://pytorch.org/docs/versions.html">master (0.4.0a0+895aeba ) &#x25BC</a>
               </div>
             
           
@@ -650,6 +650,7 @@
 <span class="kn">import</span> <span class="nn">torch.utils.hooks</span> <span class="k">as</span> <span class="nn">hooks</span>
 <span class="kn">from</span> <span class="nn">torch._six</span> <span class="k">import</span> <span class="n">with_metaclass</span>
 <span class="kn">import</span> <span class="nn">functools</span>
+<span class="kn">import</span> <span class="nn">warnings</span>
 <span class="kn">from</span> <span class="nn">collections</span> <span class="k">import</span> <span class="n">OrderedDict</span>
 
 
@@ -685,24 +686,10 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">dirty_tensors</span> <span class="o">=</span> <span class="n">args</span>
 
     <span class="k">def</span> <span class="nf">mark_shared_storage</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">pairs</span><span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;Marks that given pairs of distinct tensors are sharing storage.</span>
-
-<span class="sd">        **This should be called at most once, only from inside the**</span>
-<span class="sd">        :func:`forward` **method, and all arguments should be pairs of</span>
-<span class="sd">        (input, output).**</span>
-
-<span class="sd">        If some of the outputs are going to be tensors sharing storage with</span>
-<span class="sd">        some of the inputs, all pairs of (input_arg, output_arg) should be</span>
-<span class="sd">        given to this function, to ensure correctness checking of in-place</span>
-<span class="sd">        modification. The only exception is when an output is exactly the same</span>
-<span class="sd">        tensor as input (e.g. in-place ops). In such case it&#39;s easy to conclude</span>
-<span class="sd">        that they&#39;re sharing data, so we don&#39;t require specifying such</span>
-<span class="sd">        dependencies.</span>
-
-<span class="sd">        This function is not needed in most functions. It&#39;s primarily used in</span>
-<span class="sd">        indexing and transpose ops.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">shared_pairs</span> <span class="o">=</span> <span class="n">pairs</span>
+        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+            <span class="s1">&#39;mark_shared_storage is deprecated. &#39;</span>
+            <span class="s1">&#39;Tensors with shared storages are automatically tracked. Note &#39;</span>
+            <span class="s1">&#39;that calls to `set_()` are not tracked&#39;</span><span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">mark_non_differentiable</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Marks outputs as non-differentiable.</span>
@@ -847,30 +834,43 @@
 
     <span class="nd">@functools</span><span class="o">.</span><span class="n">wraps</span><span class="p">(</span><span class="n">fn</span><span class="p">)</span>
     <span class="k">def</span> <span class="nf">wrapper</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">):</span>
-        <span class="n">tensor_args</span> <span class="o">=</span> <span class="p">[</span><span class="n">arg</span><span class="o">.</span><span class="n">data</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">arg</span><span class="p">,</span> <span class="n">Variable</span><span class="p">)</span> <span class="k">else</span> <span class="n">arg</span>
-                       <span class="k">for</span> <span class="n">arg</span> <span class="ow">in</span> <span class="n">args</span><span class="p">]</span>
-        <span class="n">outputs</span> <span class="o">=</span> <span class="n">fn</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="o">*</span><span class="n">tensor_args</span><span class="p">)</span>
-        <span class="c1"># XXX: this is only an approximation of these flags - there&#39;s no way</span>
+        <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>
+            <span class="n">outputs</span> <span class="o">=</span> <span class="n">fn</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">torch</span><span class="o">.</span><span class="n">is_grad_enabled</span><span class="p">():</span>
+            <span class="k">return</span> <span class="n">outputs</span>
+
+        <span class="c1"># If any of the inputs have requires_grad=True, we force the outputs</span>
+        <span class="c1"># to have requires_grad=True but point to a grad_fn which throws an</span>
+        <span class="c1"># error message during (double) back-propagation.</span>
+        <span class="c1"># XXX: this is only an approximation of requires_grad - there&#39;s no way</span>
         <span class="c1"># to figure out if fn didn&#39;t use ctx.saved_variables and as a result</span>
         <span class="c1"># some Variables might require grad, even if no args do.</span>
         <span class="c1"># Unfortunately, this leads to unexpected error messages (&quot;no nodes</span>
         <span class="c1"># require computing gradients&quot;), but I don&#39;t have a better idea.</span>
         <span class="c1"># These functions would raise an error in backward anyway.</span>
-        <span class="n">requires_grad</span> <span class="o">=</span> <span class="nb">any</span><span class="p">(</span><span class="n">arg</span><span class="o">.</span><span class="n">requires_grad</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">arg</span><span class="p">,</span> <span class="n">Variable</span><span class="p">)</span> <span class="k">else</span> <span class="kc">False</span>
+        <span class="n">requires_grad</span> <span class="o">=</span> <span class="nb">any</span><span class="p">(</span><span class="nb">isinstance</span><span class="p">(</span><span class="n">arg</span><span class="p">,</span> <span class="n">Variable</span><span class="p">)</span> <span class="ow">and</span> <span class="n">arg</span><span class="o">.</span><span class="n">requires_grad</span>
                             <span class="k">for</span> <span class="n">arg</span> <span class="ow">in</span> <span class="n">args</span><span class="p">)</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="n">torch</span><span class="o">.</span><span class="n">is_grad_enabled</span><span class="p">():</span>
-            <span class="k">def</span> <span class="nf">err_fn</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">):</span>
-                <span class="k">return</span> <span class="n">args</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">err_fn</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">_functions</span><span class="o">.</span><span class="n">DelayedError</span><span class="p">(</span>
-                <span class="sa">b</span><span class="s2">&quot;trying to differentiate twice a function that was marked&quot;</span>
-                <span class="sa">b</span><span class="s2">&quot;with @once_differentiable&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">requires_grad</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">outputs</span>
+
+        <span class="n">err_fn</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">_functions</span><span class="o">.</span><span class="n">DelayedError</span><span class="p">(</span>
+            <span class="sa">b</span><span class="s2">&quot;trying to differentiate twice a function that was marked&quot;</span>
+            <span class="sa">b</span><span class="s2">&quot;with @once_differentiable&quot;</span><span class="p">)</span>
+
         <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">outputs</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">):</span>
-            <span class="n">var</span> <span class="o">=</span> <span class="p">(</span><span class="n">Variable</span><span class="p">(</span><span class="n">outputs</span><span class="p">,</span> <span class="n">requires_grad</span><span class="o">=</span><span class="n">requires_grad</span><span class="p">)</span>
-                   <span class="k">if</span> <span class="n">outputs</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span><span class="p">)</span>
-            <span class="k">return</span> <span class="n">err_fn</span><span class="p">(</span><span class="n">var</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">err_fn</span><span class="p">(</span><span class="o">*</span><span class="p">[</span><span class="n">Variable</span><span class="p">(</span><span class="n">o</span><span class="p">,</span> <span class="n">requires_grad</span><span class="o">=</span><span class="n">requires_grad</span><span class="p">)</span> <span class="k">if</span> <span class="n">o</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span>
-                      <span class="k">for</span> <span class="n">o</span> <span class="ow">in</span> <span class="n">outputs</span><span class="p">])</span>
+            <span class="n">outputs</span> <span class="o">=</span> <span class="p">(</span><span class="n">outputs</span><span class="p">,)</span>
+
+        <span class="c1"># Create aliases of each output that has requires_grad=True. We need</span>
+        <span class="c1"># at least one of the inputs to err_fn to require grad so that the</span>
+        <span class="c1"># output will have a grad_fn.</span>
+        <span class="k">def</span> <span class="nf">fake_requires_grad</span><span class="p">(</span><span class="n">var</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">var</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">var</span> <span class="o">=</span> <span class="n">var</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span>
+                <span class="n">var</span><span class="o">.</span><span class="n">requires_grad</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="k">return</span> <span class="n">var</span>
+
+        <span class="k">return</span> <span class="n">err_fn</span><span class="p">(</span><span class="o">*</span><span class="p">[</span><span class="n">fake_requires_grad</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">outputs</span><span class="p">])</span>
     <span class="k">return</span> <span class="n">wrapper</span>
 
 
@@ -954,7 +954,9 @@
 <span class="n">_iter_jit_values</span> <span class="o">=</span> <span class="n">_iter_filter</span><span class="p">(</span><span class="k">lambda</span> <span class="n">o</span><span class="p">:</span> <span class="n">o</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">o</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">Value</span><span class="p">),</span>
                                 <span class="n">condition_msg</span><span class="o">=</span><span class="s2">&quot;jit&#39;s Values or None&quot;</span><span class="p">)</span>
 <span class="n">_iter_tensors</span> <span class="o">=</span> <span class="n">_iter_filter</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">is_tensor</span><span class="p">,</span> <span class="n">condition_msg</span><span class="o">=</span><span class="s2">&quot;Tensors&quot;</span><span class="p">)</span>
-<span class="n">_iter_None_tensors</span> <span class="o">=</span> <span class="n">_iter_filter</span><span class="p">(</span><span class="k">lambda</span> <span class="n">o</span><span class="p">:</span> <span class="n">o</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">torch</span><span class="o">.</span><span class="n">is_tensor</span><span class="p">(</span><span class="n">o</span><span class="p">),</span> <span class="n">condition_msg</span><span class="o">=</span><span class="s2">&quot;Tensors or None&quot;</span><span class="p">)</span>
+<span class="n">_iter_None_tensors</span> <span class="o">=</span> <span class="n">_iter_filter</span><span class="p">(</span>
+    <span class="k">lambda</span> <span class="n">o</span><span class="p">:</span> <span class="n">o</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">torch</span><span class="o">.</span><span class="n">is_tensor</span><span class="p">(</span><span class="n">o</span><span class="p">)</span> <span class="ow">or</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">o</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">autograd</span><span class="o">.</span><span class="n">Variable</span><span class="p">),</span>
+    <span class="n">condition_msg</span><span class="o">=</span><span class="s2">&quot;Tensors or None&quot;</span><span class="p">)</span>
 <span class="n">_map_variable_tensor</span> <span class="o">=</span> <span class="n">_nested_map</span><span class="p">(</span><span class="k">lambda</span> <span class="n">o</span><span class="p">:</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">o</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">autograd</span><span class="o">.</span><span class="n">Variable</span><span class="p">),</span>
                                    <span class="k">lambda</span> <span class="n">o</span><span class="p">:</span> <span class="n">o</span><span class="o">.</span><span class="n">data</span><span class="p">,</span> <span class="n">condition_msg</span><span class="o">=</span><span class="s2">&quot;Variables&quot;</span><span class="p">)</span>
 
