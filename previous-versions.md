@@ -171,6 +171,9 @@ Linux binaries with CUDA 7.5 support, and Mac OSX & miscellaneous other binaries
 ### Mac and misc. binaries
 - [torchvision-0.1.6-py3-none-any.whl](http://download.pytorch.org/whl/torchvision-0.1.6-py3-none-any.whl)
 - [torchvision-0.1.6-py2-none-any.whl](http://download.pytorch.org/whl/torchvision-0.1.6-py2-none-any.whl)
+- [torch-0.3.0.post4-cp36-cp36m-macosx_10_7_x86_64.whl](http://download.pytorch.org/whl/torch-0.3.0.post4-cp36-cp36m-macosx_10_7_x86_64.whl)
+- [torch-0.3.0.post4-cp35-cp35m-macosx_10_7_x86_64.whl](http://download.pytorch.org/whl/torch-0.3.0.post4-cp35-cp35m-macosx_10_7_x86_64.whl)
+- [torch-0.3.0.post4-cp27-none-macosx_10_7_x86_64.whl](http://download.pytorch.org/whl/torch-0.3.0.post4-cp27-none-macosx_10_7_x86_64.whl)
 - [torch-0.2.0.post3-cp36-cp36m-macosx_10_7_x86_64.whl](http://download.pytorch.org/whl/torch-0.2.0.post3-cp36-cp36m-macosx_10_7_x86_64.whl)
 - [torch-0.2.0.post3-cp35-cp35m-macosx_10_7_x86_64.whl](http://download.pytorch.org/whl/torch-0.2.0.post3-cp35-cp35m-macosx_10_7_x86_64.whl)
 - [torch-0.2.0.post3-cp27-none-macosx_10_7_x86_64.whl](http://download.pytorch.org/whl/torch-0.2.0.post3-cp27-none-macosx_10_7_x86_64.whl)
