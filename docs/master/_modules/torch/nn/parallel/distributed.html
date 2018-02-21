@@ -62,7 +62,7 @@
             
             
               <div class="version">
-                <a href="http://pytorch.org/docs/versions.html">master (0.4.0a0+069f66e ) &#x25BC</a>
+                <a href="http://pytorch.org/docs/versions.html">master (0.4.0a0+853dba8 ) &#x25BC</a>
               </div>
             
           
@@ -763,9 +763,14 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">output_device</span> <span class="o">=</span> <span class="n">output_device</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">broadcast_buffers</span> <span class="o">=</span> <span class="n">broadcast_buffers</span>
 
+        <span class="c1"># Flag used by the NCCL backend to make sure we only reduce gradients</span>
+        <span class="c1"># one time in the execution engine</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">need_reduction</span> <span class="o">=</span> <span class="kc">False</span>
+
         <span class="n">MB</span> <span class="o">=</span> <span class="mi">1024</span> <span class="o">*</span> <span class="mi">1024</span>
         <span class="c1"># used for intra-node param sync and inter-node sync as well</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">broadcast_bucket_size</span> <span class="o">=</span> <span class="mi">10</span> <span class="o">*</span> <span class="n">MB</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">nccl_reduce_bucket_size</span> <span class="o">=</span> <span class="mi">256</span> <span class="o">*</span> <span class="n">MB</span>
 
         <span class="c1"># Sync params and buffers</span>
         <span class="n">module_states</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()</span><span class="o">.</span><span class="n">values</span><span class="p">())</span>
@@ -786,11 +791,15 @@
         <span class="k">else</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_module_copies</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="p">]</span>
 
-        <span class="c1"># Currently NCCL backend only supports single reduction thread/bucket</span>
+        <span class="c1"># For NCCL backend, since every single NCCL call is asynchoronous, we</span>
+        <span class="c1"># therefore directly enqueue all the NCCL reduction calls to the</span>
+        <span class="c1"># default CUDA stream without spawning up other reduction threads.</span>
+        <span class="c1"># This achieves the best performance.</span>
         <span class="k">if</span> <span class="n">dist</span><span class="o">.</span><span class="n">_backend</span> <span class="o">==</span> <span class="n">dist</span><span class="o">.</span><span class="n">dist_backend</span><span class="o">.</span><span class="n">NCCL</span><span class="p">:</span>
-            <span class="n">bucket_bytes_cap</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="s1">&#39;inf&#39;</span><span class="p">)</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">bucket_bytes_cap</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">*</span> <span class="n">MB</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_register_nccl_grad_hook</span><span class="p">()</span>
+            <span class="k">return</span>
+
+        <span class="n">bucket_bytes_cap</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">*</span> <span class="n">MB</span>
 
         <span class="c1"># This is a triply-nested list where the &quot;dimensions&quot; are: devices, buckets, bucket_elems</span>
         <span class="n">param_buckets</span> <span class="o">=</span> <span class="p">[]</span>
@@ -800,7 +809,6 @@
 
         <span class="bp">self</span><span class="o">.</span><span class="n">bucket_sizes</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">bucket_map</span> <span class="o">=</span> <span class="p">{}</span>
-        <span class="n">param_types</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
 
         <span class="c1"># We transpose param_buckets, so the loop is over buckets.</span>
         <span class="c1"># param_buckets_tuple is a doubly-nested list with &quot;dims&quot;: devices, bucket_elems</span>
@@ -812,10 +820,8 @@
                 <span class="k">if</span> <span class="n">idx</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
                     <span class="c1"># Bucket parameter type tracking</span>
                     <span class="n">bucket_param_type</span> <span class="o">=</span> <span class="n">param_tuple</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">type</span><span class="p">()</span>
-                    <span class="n">param_types</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">bucket_param_type</span><span class="p">)</span>
                     <span class="c1"># Only gloo and nccl support half-precision</span>
                     <span class="k">if</span> <span class="n">bucket_param_type</span> <span class="o">==</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">HalfTensor</span> <span class="ow">and</span> \
-                            <span class="n">dist</span><span class="o">.</span><span class="n">_backend</span> <span class="o">!=</span> <span class="n">dist</span><span class="o">.</span><span class="n">dist_backend</span><span class="o">.</span><span class="n">NCCL</span> <span class="ow">and</span> \
                             <span class="n">dist</span><span class="o">.</span><span class="n">_backend</span> <span class="o">!=</span> <span class="n">dist</span><span class="o">.</span><span class="n">dist_backend</span><span class="o">.</span><span class="n">GLOO</span><span class="p">:</span>
                         <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;DistributedDataParallel currently only &quot;</span>
                                            <span class="s2">&quot;supports half precision parameters &quot;</span>
@@ -825,13 +831,6 @@
                 <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">param_tuple</span><span class="p">:</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">bucket_map</span><span class="p">[</span><span class="n">p</span><span class="p">]</span> <span class="o">=</span> <span class="n">bucket_idx</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">bucket_sizes</span><span class="p">[</span><span class="n">bucket_idx</span><span class="p">]</span> <span class="o">+=</span> <span class="mi">1</span>
-
-        <span class="c1"># TODO, adding mixed precision support in NCCL reduction code path</span>
-        <span class="c1"># This is because NCCL backend doesn&#39;t support multiple reduction</span>
-        <span class="c1"># bucket.</span>
-        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">param_types</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span> <span class="ow">and</span> <span class="n">dist</span><span class="o">.</span><span class="n">_backend</span> <span class="o">==</span> <span class="n">dist</span><span class="o">.</span><span class="n">dist_backend</span><span class="o">.</span><span class="n">NCCL</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;DistributedDataParallel currently doesn&#39;t &quot;</span>
-                               <span class="s2">&quot;support mixed precision type for NCCL backend&quot;</span><span class="p">)</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">buckets</span> <span class="o">=</span> <span class="p">[[[]</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">device_ids</span><span class="p">))]</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">bucket_sizes</span><span class="p">))]</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">bucket_events</span> <span class="o">=</span> <span class="p">[[</span><span class="kc">None</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">device_ids</span><span class="p">)</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">bucket_sizes</span><span class="p">))]</span>
@@ -844,16 +843,22 @@
 
     <span class="k">def</span> <span class="nf">__getstate__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="n">attrs</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">copy</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">)</span>
-        <span class="k">del</span> <span class="n">attrs</span><span class="p">[</span><span class="s1">&#39;_grad_accs&#39;</span><span class="p">],</span> <span class="n">attrs</span><span class="p">[</span><span class="s1">&#39;_reduction_queues&#39;</span><span class="p">],</span> <span class="n">attrs</span><span class="p">[</span><span class="s1">&#39;_reduction_streams&#39;</span><span class="p">],</span> \
-            <span class="n">attrs</span><span class="p">[</span><span class="s1">&#39;_reduction_threads&#39;</span><span class="p">],</span> <span class="n">attrs</span><span class="p">[</span><span class="s1">&#39;_nccl_streams&#39;</span><span class="p">],</span> <span class="n">attrs</span><span class="p">[</span><span class="s1">&#39;_default_streams&#39;</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">dist</span><span class="o">.</span><span class="n">_backend</span> <span class="o">!=</span> <span class="n">dist</span><span class="o">.</span><span class="n">dist_backend</span><span class="o">.</span><span class="n">NCCL</span><span class="p">:</span>
+            <span class="k">del</span> <span class="n">attrs</span><span class="p">[</span><span class="s1">&#39;_grad_accs&#39;</span><span class="p">],</span> <span class="n">attrs</span><span class="p">[</span><span class="s1">&#39;_reduction_queues&#39;</span><span class="p">],</span> \
+                <span class="n">attrs</span><span class="p">[</span><span class="s1">&#39;_reduction_streams&#39;</span><span class="p">],</span> <span class="n">attrs</span><span class="p">[</span><span class="s1">&#39;_reduction_threads&#39;</span><span class="p">],</span> \
+                <span class="n">attrs</span><span class="p">[</span><span class="s1">&#39;_nccl_streams&#39;</span><span class="p">],</span> <span class="n">attrs</span><span class="p">[</span><span class="s1">&#39;_default_streams&#39;</span><span class="p">]</span>
         <span class="k">return</span> <span class="n">attrs</span>
 
     <span class="k">def</span> <span class="nf">__setstate__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">):</span>
         <span class="nb">super</span><span class="p">(</span><span class="n">DistributedDataParallel</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">__setstate__</span><span class="p">(</span><span class="n">state</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_register_grad_hooks</span><span class="p">()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_start_reduction_threads</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">dist</span><span class="o">.</span><span class="n">_backend</span> <span class="o">==</span> <span class="n">dist</span><span class="o">.</span><span class="n">dist_backend</span><span class="o">.</span><span class="n">NCCL</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_register_nccl_grad_hook</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_register_grad_hooks</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_start_reduction_threads</span><span class="p">()</span>
 
 <div class="viewcode-block" id="DistributedDataParallel.forward"><a class="viewcode-back" href="../../../../nn.html#torch.nn.parallel.DistributedDataParallel.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">inputs</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">need_reduction</span> <span class="o">=</span> <span class="kc">True</span>
         <span class="n">inputs</span><span class="p">,</span> <span class="n">kwargs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">scatter</span><span class="p">(</span><span class="n">inputs</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">device_ids</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_sync_params</span><span class="p">()</span>
         <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">device_ids</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
@@ -925,7 +930,86 @@
                     <span class="n">grad_acc</span><span class="o">.</span><span class="n">register_hook</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_make_param_hook</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="n">device_idx</span><span class="p">))</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">_grad_accs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">grad_acc</span><span class="p">)</span>
 
+    <span class="k">def</span> <span class="nf">_register_nccl_grad_hook</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        This function registers the callback all-reduction function for the</span>
+<span class="sd">        NCCL backend. All gradients will be all reduced in one single step.</span>
+<span class="sd">        The NCCL reduction will directly be enqueued into the</span>
+<span class="sd">        default CUDA stream. Therefore, no synchronization is needed.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Creating a new group</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">nccl_reduction_group_id</span> <span class="o">=</span> <span class="n">dist</span><span class="o">.</span><span class="n">new_group</span><span class="p">()</span>
+
+        <span class="k">def</span> <span class="nf">reduction_fn_nccl</span><span class="p">():</span>
+            <span class="c1"># This function only needs to be called once</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">need_reduction</span><span class="p">:</span>
+                <span class="k">return</span>
+
+            <span class="bp">self</span><span class="o">.</span><span class="n">need_reduction</span> <span class="o">=</span> <span class="kc">False</span>
+            <span class="n">all_grads</span> <span class="o">=</span> <span class="p">[[]</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_module_copies</span><span class="p">))]</span>
+            <span class="n">all_grads_buckets_iters</span> <span class="o">=</span> <span class="p">[]</span>
+
+            <span class="c1"># Bucketing all the gradients</span>
+            <span class="k">for</span> <span class="n">dev_idx</span><span class="p">,</span> <span class="n">module</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_module_copies</span><span class="p">):</span>
+                <span class="k">for</span> <span class="n">param</span> <span class="ow">in</span> <span class="n">module</span><span class="o">.</span><span class="n">parameters</span><span class="p">():</span>
+                    <span class="k">if</span> <span class="ow">not</span> <span class="n">param</span><span class="o">.</span><span class="n">requires_grad</span> <span class="ow">or</span> <span class="n">param</span><span class="o">.</span><span class="n">grad</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                        <span class="k">continue</span>
+                    <span class="k">if</span> <span class="n">param</span><span class="o">.</span><span class="n">grad</span><span class="o">.</span><span class="n">requires_grad</span><span class="p">:</span>
+                        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;DistributedDataParallel only works &quot;</span>
+                                           <span class="s2">&quot;with gradients that don&#39;t require &quot;</span>
+                                           <span class="s2">&quot;grad&quot;</span><span class="p">)</span>
+                    <span class="c1"># Adding the gradients for reduction</span>
+                    <span class="n">all_grads</span><span class="p">[</span><span class="n">dev_idx</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">param</span><span class="o">.</span><span class="n">grad</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
+
+                <span class="c1"># Now bucketing the parameters</span>
+                <span class="n">dev_grads_buckets</span> <span class="o">=</span> <span class="n">_take_tensors</span><span class="p">(</span><span class="n">all_grads</span><span class="p">[</span><span class="n">dev_idx</span><span class="p">],</span>
+                                                  <span class="bp">self</span><span class="o">.</span><span class="n">nccl_reduce_bucket_size</span><span class="p">)</span>
+
+                <span class="n">all_grads_buckets_iters</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">dev_grads_buckets</span><span class="p">)</span>
+
+            <span class="c1"># Now reduce each bucket one after another</span>
+            <span class="k">for</span> <span class="n">grads_batch</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="o">*</span><span class="n">all_grads_buckets_iters</span><span class="p">):</span>
+                <span class="n">grads_batch_coalesced</span> <span class="o">=</span> <span class="p">[]</span>
+                <span class="c1"># Coalesce each bucket</span>
+                <span class="k">for</span> <span class="n">dev_idx</span><span class="p">,</span> <span class="n">dev_grads_batch</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">grads_batch</span><span class="p">):</span>
+                    <span class="n">dev_id</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">device_ids</span><span class="p">[</span><span class="n">dev_idx</span><span class="p">]</span>
+                    <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="n">dev_id</span><span class="p">):</span>
+                        <span class="n">dev_grads_batch_coalesced</span> <span class="o">=</span> <span class="n">_flatten_dense_tensors</span><span class="p">(</span><span class="n">dev_grads_batch</span><span class="p">)</span>
+                        <span class="n">grads_batch_coalesced</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">dev_grads_batch_coalesced</span><span class="p">)</span>
+
+                <span class="c1"># We will only use device 0&#39;s results, but this single op should be</span>
+                <span class="c1"># faster than doing the following two operation sequentially:</span>
+                <span class="c1"># (1) intra-node reduce to lead GPU, followed by</span>
+                <span class="c1"># (2) inter-node allreduce for all the first lead GPUs in all nodes</span>
+                <span class="n">dist</span><span class="o">.</span><span class="n">all_reduce_multigpu</span><span class="p">(</span><span class="n">grads_batch_coalesced</span><span class="p">,</span>
+                                         <span class="n">group</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">nccl_reduction_group_id</span><span class="p">)</span>
+
+                <span class="c1"># Now only work on the first device of self.device_ids, uncoalesce</span>
+                <span class="c1"># the gradients for each bucket</span>
+                <span class="n">grads_batch_coalesced</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">/=</span> <span class="n">dist</span><span class="o">.</span><span class="n">get_world_size</span><span class="p">()</span>
+                <span class="n">grads_batch_reduced</span> <span class="o">=</span> <span class="n">_unflatten_dense_tensors</span><span class="p">(</span><span class="n">grads_batch_coalesced</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">grads_batch</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+                <span class="k">for</span> <span class="n">grad</span><span class="p">,</span> <span class="n">reduced</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">grads_batch</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">grads_batch_reduced</span><span class="p">):</span>
+                    <span class="n">grad</span><span class="o">.</span><span class="n">copy_</span><span class="p">(</span><span class="n">reduced</span><span class="p">)</span>
+
+            <span class="c1"># clear the gradients and save memory for replicas</span>
+            <span class="k">for</span> <span class="n">module</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_module_copies</span><span class="p">[</span><span class="mi">1</span><span class="p">:]:</span>
+                <span class="k">for</span> <span class="n">param</span> <span class="ow">in</span> <span class="n">module</span><span class="o">.</span><span class="n">parameters</span><span class="p">():</span>
+                    <span class="k">if</span> <span class="n">param</span><span class="o">.</span><span class="n">requires_grad</span><span class="p">:</span>
+                        <span class="n">param</span><span class="o">.</span><span class="n">grad</span> <span class="o">=</span> <span class="kc">None</span>
+                        <span class="n">param</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">set_</span><span class="p">()</span>
+
+        <span class="c1"># Now register the reduction hook on the parameters</span>
+        <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="o">.</span><span class="n">parameters</span><span class="p">():</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">p</span><span class="o">.</span><span class="n">requires_grad</span><span class="p">:</span>
+                <span class="k">continue</span>
+
+            <span class="k">def</span> <span class="nf">allreduce_hook</span><span class="p">(</span><span class="o">*</span><span class="n">unused</span><span class="p">):</span>
+                <span class="n">Variable</span><span class="o">.</span><span class="n">_execution_engine</span><span class="o">.</span><span class="n">queue_callback</span><span class="p">(</span><span class="n">reduction_fn_nccl</span><span class="p">)</span>
+
+            <span class="n">p</span><span class="o">.</span><span class="n">register_hook</span><span class="p">(</span><span class="n">allreduce_hook</span><span class="p">)</span>
+
     <span class="k">def</span> <span class="nf">_make_param_hook</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">param</span><span class="p">,</span> <span class="n">device_idx</span><span class="p">):</span>
+
         <span class="n">bucket_idx</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">bucket_map</span><span class="p">[</span><span class="n">param</span><span class="p">]</span>
 
         <span class="k">def</span> <span class="nf">distributed_data_parallel_hook</span><span class="p">(</span><span class="o">*</span><span class="n">unused</span><span class="p">):</span>
@@ -1000,10 +1084,7 @@
             <span class="c1"># We only use the first device for distributed reductions</span>
             <span class="n">dist</span><span class="o">.</span><span class="n">_register_stream</span><span class="p">(</span><span class="n">reduction_streams</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
 
-            <span class="k">if</span> <span class="n">dist</span><span class="o">.</span><span class="n">_backend</span> <span class="o">==</span> <span class="n">dist</span><span class="o">.</span><span class="n">dist_backend</span><span class="o">.</span><span class="n">NCCL</span><span class="p">:</span>
-                <span class="n">group_id</span> <span class="o">=</span> <span class="n">dist</span><span class="o">.</span><span class="n">group</span><span class="o">.</span><span class="n">WORLD</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="n">group_id</span> <span class="o">=</span> <span class="n">dist</span><span class="o">.</span><span class="n">new_group</span><span class="p">()</span>
+            <span class="n">group_id</span> <span class="o">=</span> <span class="n">dist</span><span class="o">.</span><span class="n">new_group</span><span class="p">()</span>
 
             <span class="bp">self</span><span class="o">.</span><span class="n">_reduction_threads</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">threading</span><span class="o">.</span><span class="n">Thread</span><span class="p">(</span>
                 <span class="n">target</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_reduction_thread_fn</span><span class="p">,</span>
