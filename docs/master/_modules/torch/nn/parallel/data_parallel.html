@@ -62,7 +62,7 @@
             
             
               <div class="version">
-                <a href="http://pytorch.org/docs/versions.html">master (0.4.0a0+bc4c919 ) &#x25BC</a>
+                <a href="http://pytorch.org/docs/versions.html">master (0.4.0a0+6b95ca4 ) &#x25BC</a>
               </div>
             
           
@@ -129,6 +129,8 @@
 </li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../notes/faq.html">Frequently Asked Questions</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="../../../../notes/faq.html#my-model-reports-cuda-runtime-error-2-out-of-memory">My model reports “cuda runtime error(2): out of memory”</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../notes/faq.html#my-gpu-memory-isn-t-freed-properly">My GPU memory isn’t freed properly</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../notes/faq.html#my-data-loader-workers-return-identical-random-numbers">My data loader workers return identical random numbers</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../notes/multiprocessing.html">Multiprocessing best practices</a><ul>
@@ -605,7 +607,6 @@
       </nav>
 
 
-      
       <div class="wy-nav-content">
         
         <div class="rst-content">
@@ -652,11 +653,37 @@
            <div itemprop="articleBody">
             
   <h1>Source code for torch.nn.parallel.data_parallel</h1><div class="highlight"><pre>
-<span></span><span class="kn">import</span> <span class="nn">torch</span>
+<span></span><span class="kn">import</span> <span class="nn">operator</span>
+<span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">import</span> <span class="nn">warnings</span>
 <span class="kn">from</span> <span class="nn">..modules</span> <span class="k">import</span> <span class="n">Module</span>
 <span class="kn">from</span> <span class="nn">.scatter_gather</span> <span class="k">import</span> <span class="n">scatter_kwargs</span><span class="p">,</span> <span class="n">gather</span>
 <span class="kn">from</span> <span class="nn">.replicate</span> <span class="k">import</span> <span class="n">replicate</span>
 <span class="kn">from</span> <span class="nn">.parallel_apply</span> <span class="k">import</span> <span class="n">parallel_apply</span>
+
+
+<span class="k">def</span> <span class="nf">_check_balance</span><span class="p">(</span><span class="n">device_ids</span><span class="p">):</span>
+    <span class="n">imbalance_warn</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;</span>
+<span class="s2">    There is an imbalance between your GPUs. You may want to exclude GPU </span><span class="si">{}</span><span class="s2"> which</span>
+<span class="s2">    has less than 75</span><span class="si">% o</span><span class="s2">f the memory or cores of GPU </span><span class="si">{}</span><span class="s2">. You can do so by setting</span>
+<span class="s2">    the device_ids argument to DataParallel, or by setting the CUDA_VISIBLE_DEVICES</span>
+<span class="s2">    environment variable.&quot;&quot;&quot;</span>
+
+    <span class="n">dev_props</span> <span class="o">=</span> <span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">get_device_properties</span><span class="p">(</span><span class="n">i</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">device_ids</span><span class="p">]</span>
+
+    <span class="k">def</span> <span class="nf">warn_imbalance</span><span class="p">(</span><span class="n">get_prop</span><span class="p">):</span>
+        <span class="n">values</span> <span class="o">=</span> <span class="p">[</span><span class="n">get_prop</span><span class="p">(</span><span class="n">props</span><span class="p">)</span> <span class="k">for</span> <span class="n">props</span> <span class="ow">in</span> <span class="n">dev_props</span><span class="p">]</span>
+        <span class="n">min_pos</span><span class="p">,</span> <span class="n">min_val</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="nb">enumerate</span><span class="p">(</span><span class="n">values</span><span class="p">),</span> <span class="n">key</span><span class="o">=</span><span class="n">operator</span><span class="o">.</span><span class="n">itemgetter</span><span class="p">(</span><span class="mi">1</span><span class="p">))</span>
+        <span class="n">max_pos</span><span class="p">,</span> <span class="n">max_val</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="nb">enumerate</span><span class="p">(</span><span class="n">values</span><span class="p">),</span> <span class="n">key</span><span class="o">=</span><span class="n">operator</span><span class="o">.</span><span class="n">itemgetter</span><span class="p">(</span><span class="mi">1</span><span class="p">))</span>
+        <span class="k">if</span> <span class="n">min_val</span> <span class="o">/</span> <span class="n">max_val</span> <span class="o">&lt;</span> <span class="mf">0.75</span><span class="p">:</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="n">imbalance_warn</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">device_ids</span><span class="p">[</span><span class="n">min_pos</span><span class="p">],</span> <span class="n">device_ids</span><span class="p">[</span><span class="n">max_pos</span><span class="p">]))</span>
+            <span class="k">return</span> <span class="kc">True</span>
+        <span class="k">return</span> <span class="kc">False</span>
+
+    <span class="k">if</span> <span class="n">warn_imbalance</span><span class="p">(</span><span class="k">lambda</span> <span class="n">props</span><span class="p">:</span> <span class="n">props</span><span class="o">.</span><span class="n">total_memory</span><span class="p">):</span>
+        <span class="k">return</span>
+    <span class="k">if</span> <span class="n">warn_imbalance</span><span class="p">(</span><span class="k">lambda</span> <span class="n">props</span><span class="p">:</span> <span class="n">props</span><span class="o">.</span><span class="n">multi_processor_count</span><span class="p">):</span>
+        <span class="k">return</span>
 
 
 <div class="viewcode-block" id="DataParallel"><a class="viewcode-back" href="../../../../nn.html#torch.nn.DataParallel">[docs]</a><span class="k">class</span> <span class="nc">DataParallel</span><span class="p">(</span><span class="n">Module</span><span class="p">):</span>
@@ -712,6 +739,9 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">module</span> <span class="o">=</span> <span class="n">module</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">device_ids</span> <span class="o">=</span> <span class="n">device_ids</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">output_device</span> <span class="o">=</span> <span class="n">output_device</span>
+
+        <span class="n">_check_balance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">device_ids</span><span class="p">)</span>
+
         <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">device_ids</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="o">.</span><span class="n">cuda</span><span class="p">(</span><span class="n">device_ids</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
 
