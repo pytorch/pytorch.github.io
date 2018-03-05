@@ -70,6 +70,8 @@ The autotuner is your biggest friend. You generally do not want to use a `tc` fu
 
 When the autotuning is running, the current best performance is displayed. If you are satisfied with the current result or you are out of time, stop the tuning procedure by pressing `Ctrl+C`.
 
+<div style="text-align:center"><img src="{{ site.url }}/static/img/tc_autotuner.gif"></div>
+
 `cache` saves the results of the autotuned kernel search and saves it to the file `fcrelu_100_128_100.tc`. The next time you call the same line of code, it loads the results of the autotuning without recomputing it.
 
 The autotuner has a few hyperparameters (just like your ConvNet has learning rate, number of layers, etc.). We pick reasonable defaults, but you can read about using advanced options [here](https://facebookresearch.github.io/TensorComprehensions/framework/pytorch_integration/writing_layers.html#specifying-mapping-options).
