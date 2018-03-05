@@ -31,7 +31,7 @@ conda install -c pytorch -c tensorcomp tensor_comprehensions
 
 At this time we only provide Linux-64 binaries which have been tested on Ubuntu 16.04 and CentOS7
 
-TC depends on heavyweight C++ projects such as [Halide](http://halide-lang.org/), [LLVM (custom build)](https://github.com/wsmoses/Tapir-LLVM) and [ISL](http://isl.gforge.inria.fr/). Hence, we rely on Anaconda to distribute these dependencies reliably. For the same reason, TC is not available via PyPI.
+TC depends on heavyweight C++ projects such as [Halide](http://halide-lang.org/), [Tapir-LLVM](https://github.com/wsmoses/Tapir-LLVM) and [ISL](http://isl.gforge.inria.fr/). Hence, we rely on Anaconda to distribute these dependencies reliably. For the same reason, TC is not available via PyPI.
 
 **2. Import the python package**
 
