@@ -8,7 +8,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>torch.distributions.geometric &mdash; PyTorch master documentation</title>
+  <title>torch.distributions.relaxed_categorical &mdash; PyTorch master documentation</title>
   
 
   
@@ -645,7 +645,7 @@
         
           <li><a href="../../torch.html">torch</a> &raquo;</li>
         
-      <li>torch.distributions.geometric</li>
+      <li>torch.distributions.relaxed_categorical</li>
     
     
       <li class="wy-breadcrumbs-aside">
@@ -660,84 +660,122 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
             
-  <h1>Source code for torch.distributions.geometric</h1><div class="highlight"><pre>
-<span></span><span class="kn">from</span> <span class="nn">numbers</span> <span class="k">import</span> <span class="n">Number</span>
-
-<span class="kn">import</span> <span class="nn">torch</span>
+  <h1>Source code for torch.distributions.relaxed_categorical</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">from</span> <span class="nn">torch.autograd</span> <span class="k">import</span> <span class="n">Variable</span>
 <span class="kn">from</span> <span class="nn">torch.distributions</span> <span class="k">import</span> <span class="n">constraints</span>
+<span class="kn">from</span> <span class="nn">torch.distributions.categorical</span> <span class="k">import</span> <span class="n">Categorical</span>
+<span class="kn">from</span> <span class="nn">torch.distributions.utils</span> <span class="k">import</span> <span class="n">clamp_probs</span><span class="p">,</span> <span class="n">broadcast_all</span><span class="p">,</span> <span class="n">log_sum_exp</span>
 <span class="kn">from</span> <span class="nn">torch.distributions.distribution</span> <span class="k">import</span> <span class="n">Distribution</span>
-<span class="kn">from</span> <span class="nn">torch.distributions.utils</span> <span class="k">import</span> <span class="n">broadcast_all</span><span class="p">,</span> <span class="n">probs_to_logits</span><span class="p">,</span> <span class="n">logits_to_probs</span><span class="p">,</span> <span class="n">lazy_property</span><span class="p">,</span> <span class="n">_finfo</span>
-<span class="kn">from</span> <span class="nn">torch.nn.functional</span> <span class="k">import</span> <span class="n">binary_cross_entropy_with_logits</span>
+<span class="kn">from</span> <span class="nn">torch.distributions.transformed_distribution</span> <span class="k">import</span> <span class="n">TransformedDistribution</span>
+<span class="kn">from</span> <span class="nn">torch.distributions.transforms</span> <span class="k">import</span> <span class="n">ExpTransform</span>
 
 
-<div class="viewcode-block" id="Geometric"><a class="viewcode-back" href="../../../distributions.html#torch.distributions.geometric.Geometric">[docs]</a><span class="k">class</span> <span class="nc">Geometric</span><span class="p">(</span><span class="n">Distribution</span><span class="p">):</span>
+<span class="k">class</span> <span class="nc">ExpRelaxedCategorical</span><span class="p">(</span><span class="n">Distribution</span><span class="p">):</span>
     <span class="sa">r</span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Creates a Geometric distribution parameterized by `probs`, where `probs` is the probability of success of Bernoulli</span>
-<span class="sd">    trials. It represents the probability that in k + 1 Bernoulli trials, the first k trials failed, before</span>
-<span class="sd">    seeing a success.</span>
+<span class="sd">    Creates a ExpRelaxedCategorical parameterized by `probs` and `temperature`.</span>
+<span class="sd">    Returns the log of a point in the simplex. Based on the interface to OneHotCategorical.</span>
 
-<span class="sd">    Samples are non-negative integers [0, inf).</span>
+<span class="sd">    Implementation based on [1].</span>
+
+<span class="sd">    See also: :func:`torch.distributions.OneHotCategorical`</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        temperature (Tensor): relaxation temperature</span>
+<span class="sd">        probs (Tensor): event probabilities</span>
+<span class="sd">        logits (Tensor): the log probability of each event.</span>
+
+<span class="sd">    [1] The Concrete Distribution: A Continuous Relaxation of Discrete Random Variables</span>
+<span class="sd">    (Maddison et al, 2017)</span>
+
+<span class="sd">    [2] Categorical Reparametrization with Gumbel-Softmax</span>
+<span class="sd">    (Jang et al, 2017)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">params</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;probs&#39;</span><span class="p">:</span> <span class="n">constraints</span><span class="o">.</span><span class="n">simplex</span><span class="p">}</span>
+    <span class="n">support</span> <span class="o">=</span> <span class="n">constraints</span><span class="o">.</span><span class="n">real</span>
+    <span class="n">has_rsample</span> <span class="o">=</span> <span class="kc">True</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">temperature</span><span class="p">,</span> <span class="n">probs</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">logits</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_categorical</span> <span class="o">=</span> <span class="n">Categorical</span><span class="p">(</span><span class="n">probs</span><span class="p">,</span> <span class="n">logits</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">temperature</span> <span class="o">=</span> <span class="n">temperature</span>
+        <span class="n">batch_shape</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_categorical</span><span class="o">.</span><span class="n">batch_shape</span>
+        <span class="n">event_shape</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_categorical</span><span class="o">.</span><span class="n">param_shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">:]</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">ExpRelaxedCategorical</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">batch_shape</span><span class="p">,</span> <span class="n">event_shape</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_new</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_categorical</span><span class="o">.</span><span class="n">_new</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">param_shape</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_categorical</span><span class="o">.</span><span class="n">param_shape</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">logits</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_categorical</span><span class="o">.</span><span class="n">logits</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">probs</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_categorical</span><span class="o">.</span><span class="n">probs</span>
+
+    <span class="k">def</span> <span class="nf">rsample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">sample_shape</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">()):</span>
+        <span class="n">sample_shape</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">(</span><span class="n">sample_shape</span><span class="p">)</span>
+        <span class="n">uniforms</span> <span class="o">=</span> <span class="n">clamp_probs</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">logits</span><span class="o">.</span><span class="n">new</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_extended_shape</span><span class="p">(</span><span class="n">sample_shape</span><span class="p">))</span><span class="o">.</span><span class="n">uniform_</span><span class="p">())</span>
+        <span class="n">gumbels</span> <span class="o">=</span> <span class="o">-</span><span class="p">((</span><span class="o">-</span><span class="p">(</span><span class="n">uniforms</span><span class="o">.</span><span class="n">log</span><span class="p">()))</span><span class="o">.</span><span class="n">log</span><span class="p">())</span>
+        <span class="n">scores</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">logits</span> <span class="o">+</span> <span class="n">gumbels</span><span class="p">)</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">temperature</span>
+        <span class="k">return</span> <span class="n">scores</span> <span class="o">-</span> <span class="n">log_sum_exp</span><span class="p">(</span><span class="n">scores</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">log_prob</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+        <span class="n">K</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_categorical</span><span class="o">.</span><span class="n">_num_events</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_validate_log_prob_arg</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+        <span class="n">logits</span><span class="p">,</span> <span class="n">value</span> <span class="o">=</span> <span class="n">broadcast_all</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">logits</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
+        <span class="n">log_scale</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">temperature</span><span class="o">.</span><span class="n">new</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">temperature</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span><span class="o">.</span><span class="n">fill_</span><span class="p">(</span><span class="n">K</span><span class="p">)</span><span class="o">.</span><span class="n">lgamma</span><span class="p">()</span> <span class="o">-</span>
+                     <span class="bp">self</span><span class="o">.</span><span class="n">temperature</span><span class="o">.</span><span class="n">log</span><span class="p">()</span><span class="o">.</span><span class="n">mul</span><span class="p">(</span><span class="o">-</span><span class="p">(</span><span class="n">K</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)))</span>
+        <span class="n">score</span> <span class="o">=</span> <span class="n">logits</span> <span class="o">-</span> <span class="n">value</span><span class="o">.</span><span class="n">mul</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">temperature</span><span class="p">)</span>
+        <span class="n">score</span> <span class="o">=</span> <span class="p">(</span><span class="n">score</span> <span class="o">-</span> <span class="n">log_sum_exp</span><span class="p">(</span><span class="n">score</span><span class="p">))</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">score</span> <span class="o">+</span> <span class="n">log_scale</span>
+
+
+<div class="viewcode-block" id="RelaxedOneHotCategorical"><a class="viewcode-back" href="../../../distributions.html#torch.distributions.relaxed_categorical.RelaxedOneHotCategorical">[docs]</a><span class="k">class</span> <span class="nc">RelaxedOneHotCategorical</span><span class="p">(</span><span class="n">TransformedDistribution</span><span class="p">):</span>
+    <span class="sa">r</span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Creates a RelaxedOneHotCategorical distribution parametrized by `temperature` and either `probs` or `logits`.</span>
+<span class="sd">    This is a relaxed version of the `OneHotCategorical` distribution, so its</span>
+<span class="sd">    values are on simplex, and has reparametrizable samples.</span>
 
 <span class="sd">    Example::</span>
 
-<span class="sd">        &gt;&gt;&gt; m = Geometric(torch.Tensor([0.3]))</span>
-<span class="sd">        &gt;&gt;&gt; m.sample()  # underlying Bernoulli has 30% chance 1; 70% chance 0</span>
-<span class="sd">         2</span>
-<span class="sd">        [torch.FloatTensor of size 1]</span>
+<span class="sd">        &gt;&gt;&gt; m = RelaxedOneHotCategorical(torch.Tensor([2.2]),</span>
+<span class="sd">                                         torch.Tensor([0.1, 0.2, 0.3, 0.4]))</span>
+<span class="sd">        &gt;&gt;&gt; m.sample()  # equal probability of 1, 1, 2, 3</span>
+<span class="sd">         0.1294</span>
+<span class="sd">         0.2324</span>
+<span class="sd">         0.3859</span>
+<span class="sd">         0.2523</span>
+<span class="sd">        [torch.FloatTensor of size 4]</span>
 
 <span class="sd">    Args:</span>
-<span class="sd">        probs (Number, Tensor): the probabilty of sampling `1`. Must be in range (0, 1]</span>
-<span class="sd">        logits (Number, Tensor): the log-odds of sampling `1`.</span>
+<span class="sd">        temperature (Tensor): relaxation temperature</span>
+<span class="sd">        probs (Tensor): event probabilities</span>
+<span class="sd">        logits (Tensor): the log probability of each event.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">params</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;probs&#39;</span><span class="p">:</span> <span class="n">constraints</span><span class="o">.</span><span class="n">unit_interval</span><span class="p">}</span>
-    <span class="n">support</span> <span class="o">=</span> <span class="n">constraints</span><span class="o">.</span><span class="n">nonnegative_integer</span>
+    <span class="n">params</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;probs&#39;</span><span class="p">:</span> <span class="n">constraints</span><span class="o">.</span><span class="n">simplex</span><span class="p">}</span>
+    <span class="n">support</span> <span class="o">=</span> <span class="n">constraints</span><span class="o">.</span><span class="n">simplex</span>
+    <span class="n">has_rsample</span> <span class="o">=</span> <span class="kc">True</span>
 
-    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">probs</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">logits</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
-        <span class="k">if</span> <span class="p">(</span><span class="n">probs</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">)</span> <span class="o">==</span> <span class="p">(</span><span class="n">logits</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">):</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Either `probs` or `logits` must be specified, but not both.&quot;</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">probs</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">probs</span><span class="p">,</span> <span class="o">=</span> <span class="n">broadcast_all</span><span class="p">(</span><span class="n">probs</span><span class="p">)</span>
-            <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">probs</span><span class="o">.</span><span class="n">gt</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">():</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;All elements of probs must be greater than 0&#39;</span><span class="p">)</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">logits</span><span class="p">,</span> <span class="o">=</span> <span class="n">broadcast_all</span><span class="p">(</span><span class="n">logits</span><span class="p">)</span>
-        <span class="n">probs_or_logits</span> <span class="o">=</span> <span class="n">probs</span> <span class="k">if</span> <span class="n">probs</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">logits</span>
-        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">probs_or_logits</span><span class="p">,</span> <span class="n">Number</span><span class="p">):</span>
-            <span class="n">batch_shape</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">()</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">batch_shape</span> <span class="o">=</span> <span class="n">probs_or_logits</span><span class="o">.</span><span class="n">size</span><span class="p">()</span>
-        <span class="nb">super</span><span class="p">(</span><span class="n">Geometric</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">batch_shape</span><span class="p">)</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">temperature</span><span class="p">,</span> <span class="n">probs</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">logits</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">RelaxedOneHotCategorical</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">ExpRelaxedCategorical</span><span class="p">(</span><span class="n">temperature</span><span class="p">,</span> <span class="n">probs</span><span class="p">,</span> <span class="n">logits</span><span class="p">),</span>
+                                                       <span class="n">ExpTransform</span><span class="p">())</span>
 
     <span class="nd">@property</span>
-    <span class="k">def</span> <span class="nf">mean</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">return</span> <span class="mf">1.</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">probs</span> <span class="o">-</span> <span class="mf">1.</span>
+    <span class="k">def</span> <span class="nf">temperature</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">base_dist</span><span class="o">.</span><span class="n">temperature</span>
 
     <span class="nd">@property</span>
-    <span class="k">def</span> <span class="nf">variance</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">return</span> <span class="p">(</span><span class="mf">1.</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">probs</span> <span class="o">-</span> <span class="mf">1.</span><span class="p">)</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">probs</span>
+    <span class="k">def</span> <span class="nf">logits</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">base_dist</span><span class="o">.</span><span class="n">logits</span>
 
-<div class="viewcode-block" id="Geometric.logits"><a class="viewcode-back" href="../../../distributions.html#torch.distributions.geometric.Geometric.logits">[docs]</a>    <span class="nd">@lazy_property</span>
-    <span class="k">def</span> <span class="nf">logits</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span></div>
-        <span class="k">return</span> <span class="n">probs_to_logits</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">probs</span><span class="p">,</span> <span class="n">is_binary</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-
-<div class="viewcode-block" id="Geometric.probs"><a class="viewcode-back" href="../../../distributions.html#torch.distributions.geometric.Geometric.probs">[docs]</a>    <span class="nd">@lazy_property</span>
+    <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">probs</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span></div>
-        <span class="k">return</span> <span class="n">logits_to_probs</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">logits</span><span class="p">,</span> <span class="n">is_binary</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-
-<div class="viewcode-block" id="Geometric.sample"><a class="viewcode-back" href="../../../distributions.html#torch.distributions.geometric.Geometric.sample">[docs]</a>    <span class="k">def</span> <span class="nf">sample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">sample_shape</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">()):</span>
-        <span class="n">shape</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_extended_shape</span><span class="p">(</span><span class="n">sample_shape</span><span class="p">)</span>
-        <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>
-            <span class="n">u</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">probs</span><span class="o">.</span><span class="n">new</span><span class="p">(</span><span class="n">shape</span><span class="p">)</span><span class="o">.</span><span class="n">uniform_</span><span class="p">(</span><span class="n">_finfo</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">probs</span><span class="p">)</span><span class="o">.</span><span class="n">tiny</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span></div>
-            <span class="k">return</span> <span class="p">(</span><span class="n">u</span><span class="o">.</span><span class="n">log</span><span class="p">()</span> <span class="o">/</span> <span class="p">(</span><span class="o">-</span><span class="bp">self</span><span class="o">.</span><span class="n">probs</span><span class="p">)</span><span class="o">.</span><span class="n">log1p</span><span class="p">())</span><span class="o">.</span><span class="n">floor</span><span class="p">()</span>
-
-<div class="viewcode-block" id="Geometric.log_prob"><a class="viewcode-back" href="../../../distributions.html#torch.distributions.geometric.Geometric.log_prob">[docs]</a>    <span class="k">def</span> <span class="nf">log_prob</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_validate_log_prob_arg</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
-        <span class="n">value</span><span class="p">,</span> <span class="n">probs</span> <span class="o">=</span> <span class="n">broadcast_all</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">probs</span><span class="o">.</span><span class="n">clone</span><span class="p">())</span>
-        <span class="n">probs</span><span class="p">[(</span><span class="n">probs</span> <span class="o">==</span> <span class="mi">1</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">value</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)]</span> <span class="o">=</span> <span class="mi">0</span></div>
-        <span class="k">return</span> <span class="n">value</span> <span class="o">*</span> <span class="p">(</span><span class="o">-</span><span class="n">probs</span><span class="p">)</span><span class="o">.</span><span class="n">log1p</span><span class="p">()</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">probs</span><span class="o">.</span><span class="n">log</span><span class="p">()</span>
-
-<div class="viewcode-block" id="Geometric.entropy"><a class="viewcode-back" href="../../../distributions.html#torch.distributions.geometric.Geometric.entropy">[docs]</a>    <span class="k">def</span> <span class="nf">entropy</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span></div></div>
-        <span class="k">return</span> <span class="n">binary_cross_entropy_with_logits</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">logits</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">probs</span><span class="p">,</span> <span class="n">reduce</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">probs</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">base_dist</span><span class="o">.</span><span class="n">probs</span>
 </pre></div>
 
            </div>
