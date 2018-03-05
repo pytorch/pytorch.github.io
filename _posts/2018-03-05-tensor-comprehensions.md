@@ -142,9 +142,13 @@ here the `where` keyword can take ranges of values to operate on. `0:{kH}` is eq
 
 Note: the syntax for passing in scalars is subject to change in the next release
 
+<br />
+
 ## torch.nn layers
 
 We added some sugar-coating around the basic PyTorch integration of TC to make it easy to integrate TC into larger `torch.nn` models by defining the forward and backward TC expressions and taking `Variable` inputs / outputs. Here is an [example](https://github.com/facebookresearch/TensorComprehensions/blob/master/test_python/layers/test_convolution_train.py) of defining a convolution layer with TC.
+
+<br />
 
 ## Some essentials that you will miss (we're working on them)
 
@@ -177,6 +181,8 @@ The TC backend does not support non-contiguous Tensors yet. If the inputs you gi
 ### Reshaping Tensors within a TC expression
 
 You cannot write this operation in TC: `torch.matmul(...).view(...).mean(...)`. Whenever there is need for a `view` to change the shape of an input, you have to get the output, `view` it at the PyTorch level.
+
+<br />
 
 ## Getting started
 
