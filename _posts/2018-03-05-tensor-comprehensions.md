@@ -5,7 +5,7 @@ author: "Priya Goyal (FAIR), Nicolas Vasilache (FAIR), Oleksandr Zinenko (Inria 
 date: 2018-03-05 12:00:00 -0500
 ---
 
-
+<br />
 
 Tensor Comprehensions (TC) is a tool that lowers the barrier for writing high-performance code. It generates GPU code from a simple high-level language and autotunes the code for specific input sizes.
 
@@ -23,7 +23,7 @@ Tensor Comprehensions are seamless to use in PyTorch, interoperating with PyTorc
 
 Let us run through using TC with PyTorch.
 
-**Install the package**
+**1. Install the package**
 
 ```bash
 conda install -c pytorch -c tensorcomp tensor_comprehensions
@@ -33,13 +33,13 @@ At this time we only provide Linux-64 binaries which have been tested on Ubuntu 
 
 TC depends on heavyweight C++ projects such as [Halide](http://halide-lang.org/), [LLVM (custom build)](https://github.com/wsmoses/Tapir-LLVM) and [ISL](http://isl.gforge.inria.fr/). Hence, we rely on Anaconda to distribute these dependencies reliably. For the same reason, TC is not available via PyPI.
 
-**Import the python package**
+**2. Import the python package**
 
 ```python
 import tensor_comprehensions as tc
 ```
 
-**Define the Tensor Comprehensions expression and create a python function of that expression**
+**3. Define the TC expression and create a python function**
 
 ```python
 lang = """
@@ -51,16 +51,18 @@ def fcrelu(float(B,M) I, float(N,M) W1, float(N) B1) -> (O1) {
 """
 fcrelu = tc.define(lang, name="fcrelu")
 ```
+
 This `fcrelu` function takes PyTorch Tensors as input and returns a PyTorch Tensor.
 It takes input `I`, weight `W1`, bias `B1` and returns output `O1`.
 
-**Let's create some dummy input tensors**
+**4. Let's create some dummy input tensors**
+
 ```python
 B, M, N = 100, 128, 100
 I, W1, B1 = torch.randn(B, M).cuda(), torch.randn(N, M).cuda(), torch.randn(N).cuda()
 ```
 
-**Now autotune the function for your input sizes**
+**5. Now autotune the function for your input sizes**
 
 ```python
 fcrelu.autotune(I, W1, B1, cache="fcrelu_100_128_100.tc")
@@ -71,13 +73,14 @@ The autotuner is your biggest friend. You generally do not want to use a `tc` fu
 When the autotuning is running, the current best performance is displayed. If you are satisfied with the current result or you are out of time, stop the tuning procedure by pressing `Ctrl+C`.
 
 <div style="text-align:center"><img src="{{ site.url }}/static/img/tc_autotuner.gif"></div>
+<br />
 
 `cache` saves the results of the autotuned kernel search and saves it to the file `fcrelu_100_128_100.tc`. The next time you call the same line of code, it loads the results of the autotuning without recomputing it.
 
 The autotuner has a few hyperparameters (just like your ConvNet has learning rate, number of layers, etc.). We pick reasonable defaults, but you can read about using advanced options [here](https://facebookresearch.github.io/TensorComprehensions/framework/pytorch_integration/writing_layers.html#specifying-mapping-options).
 
 
-**Call the function with the inputs, to get your result**
+**6. Call the function with the inputs, to get your result**
 
 ```python
 out = fcrelu(I, W1, B1)
@@ -85,7 +88,7 @@ out = fcrelu(I, W1, B1)
 
 Now, let's look at how to write TC expressions.
 
-### A quick primer on the TC language
+## A quick primer on the TC language
 
 The TC notation focuses on the mathematical nature of the layer, leaving performance considerations to it's backend code that uses Halide and polyhedral compilation techniques which accumulate decades of cutting edge Loop Nest Optimization (LNO) research.
 
@@ -139,13 +142,13 @@ here the `where` keyword can take ranges of values to operate on. `0:{kH}` is eq
 
 Note: the syntax for passing in scalars is subject to change in the next release
 
-### `torch.nn` layers
+## torch.nn layers
 
 We added some sugar-coating around the basic PyTorch integration of TC to make it easy to integrate TC into larger `torch.nn` models by defining the forward and backward TC expressions and taking `Variable` inputs / outputs. Here is an [example](https://github.com/facebookresearch/TensorComprehensions/blob/master/test_python/layers/test_convolution_train.py) of defining a convolution layer with TC.
 
-### Some essentials that you will miss (we're working on them)
+## Some essentials that you will miss (we're working on them)
 
-#### Autotuning for variable-length sequences
+### Autotuning for variable-length sequences
 
 The TC auto-tuner requires all input sizes to be specified before-hand. For example, if you have input `I1` which is an image batch, the autotuner wants to know the exact shape of `I1` to generate an optimized kernel. You cannot specify: `image with height between 200 and 300`. This is more essential in sequence data such as NLP, where each sentence can have a different length.
 
@@ -163,30 +166,30 @@ tc.autotune((batch, channels, 64, 64)) # image of size 64 x 64
 
 Now the autotuner is tuned for these three specific image sizes `32x32`, `48x48` and `64x64`.
 
-#### Lack of loops
+### Lack of loops
 If you want to write an RNN, it's easy to see it as a `for` loop over time.
 However, the TC language does not have loops yet. If you reallly want to write RNNs, you can write unrolled loops.
 
-#### Strided-Tensors
+### Strided-Tensors
 
 The TC backend does not support non-contiguous Tensors yet. If the inputs you give are not contiguous, they are made contiguous before passing to the TC backend.
 
-#### Reshaping Tensors within a TC expression
+### Reshaping Tensors within a TC expression
 
 You cannot write this operation in TC: `torch.matmul(...).view(...).mean(...)`. Whenever there is need for a `view` to change the shape of an input, you have to get the output, `view` it at the PyTorch level.
 
-### Getting started
+## Getting started
 
 * [Walk through Tutorial](https://facebookresearch.github.io/TensorComprehensions/tutorials/tutorial_tensordot_with_tc.html) to quickly get started with understanding and using Tensor Comprehensions PyTorch package.
 * [Over 20 examples](https://github.com/facebookresearch/TensorComprehensions/tree/master/test_python/layers) of various ML layers with TC, including `avgpool`, `maxpool`, `matmul`, matmul - give output buffers and `batch-matmul`, `convolution`, `strided-convolution`, `batchnorm`, `copy`, `cosine similarity`, `Linear`, `Linear + ReLU`, `group-convolutions`, strided `group-convolutions`, `indexing`, `Embedding` (lookup table), small-mobilenet, `softmax`, `tensordot`, `transpose`
 * [Detailed docs](https://facebookresearch.github.io/TensorComprehensions/framework/pytorch_integration/getting_started.html) on Tensor Comprehensions and integration with PyTorch.
 
-### Communication
+## Communication
 
 * [Slack](https://tensorcomprehensions.herokuapp.com/): For discussion around framework integration, build support, collaboration, etc. join our slack channel.
 * Email: tensorcomp@fb.com
 * [GitHub](https://github.com/facebookresearch/TensorComprehensions): bug reports, feature requests, install issues, RFCs, thoughts, etc.
 
-### Acknowledgements
+## Acknowledgements
 
 We would like to thank Soumith Chintala, [Edward Yang](https://github.com/ezyang) and [Sam Gross](https://github.com/colesbury) for their immense guidance and help in making the integration API nice and smooth. We would also like to thank rest of the PyTorch team and our pre-release users for their helpful feedback that guided us in making the integration better.
