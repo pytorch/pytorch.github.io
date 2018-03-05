@@ -188,7 +188,7 @@ You cannot write this operation in TC: `torch.matmul(...).view(...).mean(...)`. 
 
 ## Getting started
 
-* [Walk through Tutorial](https://facebookresearch.github.io/TensorComprehensions/tutorials/tutorial_tensordot_with_tc.html) to quickly get started with understanding and using Tensor Comprehensions PyTorch package.
+* [Walk through Tutorial](https://facebookresearch.github.io/TensorComprehensions/framework/pytorch_integration/writing_layers.html) to quickly get started with understanding and using Tensor Comprehensions PyTorch package.
 * [Over 20 examples](https://github.com/facebookresearch/TensorComprehensions/tree/master/test_python/layers) of various ML layers with TC, including `avgpool`, `maxpool`, `matmul`, matmul - give output buffers and `batch-matmul`, `convolution`, `strided-convolution`, `batchnorm`, `copy`, `cosine similarity`, `Linear`, `Linear + ReLU`, `group-convolutions`, strided `group-convolutions`, `indexing`, `Embedding` (lookup table), small-mobilenet, `softmax`, `tensordot`, `transpose`
 * [Detailed docs](https://facebookresearch.github.io/TensorComprehensions/framework/pytorch_integration/getting_started.html) on Tensor Comprehensions and integration with PyTorch.
 
