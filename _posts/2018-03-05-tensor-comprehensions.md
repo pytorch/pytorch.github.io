@@ -124,7 +124,7 @@ output(i, j) = 0
 output(i, j) += A(i, kk) * B(kk, j)
 ```
 
-** Scalar inputs and range constraints: implement AvgPool2d**
+**Scalar inputs and range constraints: implement AvgPool2d**
 
 ```python
 """
