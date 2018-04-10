@@ -1,5 +1,5 @@
 ---
 layout: redirect
 title: PyTorch | Redirect
-redirect_url: "stable/autograd.html"
+redirect_url: "/docs/stable/autograd.html"
 ---

@@ -1,5 +1,5 @@
 ---
 layout: redirect
 title: PyTorch | Redirect
-redirect_url: "stable/model_zoo.html"
+redirect_url: "/docs/stable/model_zoo.html"
 ---

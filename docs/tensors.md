@@ -1,5 +1,5 @@
 ---
 layout: redirect
 title: PyTorch | Redirect
-redirect_url: "stable/tensors.html"
+redirect_url: "/docs/stable/tensors.html"
 ---

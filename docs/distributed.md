@@ -1,5 +1,5 @@
 ---
 layout: redirect
 title: PyTorch | Redirect
-redirect_url: "stable/distributed.html"
+redirect_url: "/docs/stable/distributed.html"
 ---

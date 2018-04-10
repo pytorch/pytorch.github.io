@@ -1,5 +1,5 @@
 ---
 layout: redirect
 title: PyTorch | Redirect
-redirect_url: "stable/legacy.html"
+redirect_url: "/docs/stable/legacy.html"
 ---

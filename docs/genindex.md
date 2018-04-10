@@ -1,5 +1,5 @@
 ---
 layout: redirect
 title: PyTorch | Redirect
-redirect_url: "stable/genindex.html"
+redirect_url: "/docs/stable/genindex.html"
 ---

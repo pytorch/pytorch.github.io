@@ -1,5 +1,5 @@
 ---
 layout: redirect
 title: PyTorch | Redirect
-redirect_url: "stable/ffi.html"
+redirect_url: "/docs/stable/ffi.html"
 ---
