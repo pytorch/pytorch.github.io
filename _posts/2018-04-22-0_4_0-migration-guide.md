@@ -1,0 +1,343 @@
+---
+layout: post
+title: "PyTorch 0.4.0 Migration Guide"
+author: <a href="https://ssnl.github.io/">Tongzhou Wang</a>
+date: 2018-04-22 12:00:00 -0500
+---
+
+Welcome to the migration guide for PyTorch 0.4.0. In this release we introduced many exciting new features and critical bug fixes, with the goal of providing users a better and cleaner interface. In this guide, we will cover the three most important changes in migrating existing code from previous versions.
+
+Let's first see a quick example on our recommended changes for a common code pattern:
+
++ 0.3.1 (old):
+
+    ```python
+    model = MyRNN()
+    if use_cuda:
+        model = model.cuda()
+
+    # train
+    total_loss = 0
+    for input, target in train_loader:
+        input, target = Variable(input), Variable(target)
+        hidden = Variable(torch.zeros(*h_shape))  # init hidden
+        if use_cuda:
+            input, target, hidden = input.cuda(), target.cuda(), hidden.cuda()
+        ...  # get loss and optimize
+        total_loss += loss.data[0]
+
+    # evaluate
+    for input, target in test_loader:
+        input = Variable(input, volatile=True)
+        if use_cuda:
+            ...
+        ...
+    ```  
+
++ 0.4.0 (new):
+
+    ```python
+    # torch.device object used throughout this script
+    device = torch.device("cuda" if use_cuda else "cpu")  
+
+    model = MyRNN().to(device)
+
+    # train
+    total_loss = 0
+    for input, target in train_loader:
+        input, target = input.to(device), target.to(device)
+        hidden = input.new_zeros(*h_shape)  # init wth same device & dtype as input
+        ...  # get loss and optimize
+        total_loss += loss.item()           # get Python number in a 1-element Tensor
+
+    # evaluate
+    with torch.no_grad():                   # operations inside don't track history
+        for input, target in test_loader:
+            ...
+
+    ```
+
+I'm sure you noticed many interesting changes! In sections below, we will now cover them (and more) in this order:
+
+1. No more ``Variable`` wrappers! What is ``torch.no_grad()``?
+2. ``torch.device``, new tensor creation methods (e.g., `new_zeros`), and the magical `.to()`.
+3. `.data[0]` becomes `.item()`?
+
+## Merging ``Variable`` and ``Tensor`` classes
+
+``torch.autograd.Variable`` and [``torch.Tensor``](http://pytorch.org/docs/v0.4.0/tensors.html) are now the same class! This means that you don't need the ``Variable`` wrapper everywhere in your code anymore.
+
+``requires_grad``, the central flag for ``autograd``, is now an attribute on ``Tensor``s. Let's see how this change manifests in code!
+
+### When does [``autograd``](http://pytorch.org/docs/v0.4.0/autograd.html) start tracking history now?
+
+[``autograd``](http://pytorch.org/docs/v0.4.0/autograd.html) uses the same rules previously used for ``Variable``s. It starts tracking history when any input ``Tensor`` of an operation has ``requires_grad=True``. For example,
+
+```python
+>>> x = torch.ones(1)  # create a tensor with requires_grad=False (default)
+>>> x.requires_grad
+False
+>>> y = torch.ones(1)  # another tensor with requires_grad=False
+>>> z = x + y          
+>>> # both inputs have requires_grad=False. so does the output
+>>> z.requires_grad
+False
+>>> # then autograd won't track this computation. let's verify!
+>>> z.backward()
+RuntimeError: element 0 of tensors does not require grad and does not have a grad_fn
+>>>
+>>> # now create a tensor with requires_grad=True
+>>> w = torch.ones(1, requires_grad=True)
+>>> w.requires_grad
+True
+>>> # add to the previous result that has require_grad=False
+>>> total = w + z
+>>> # the total sum now requires grad!
+>>> total.requires_grad
+True
+>>> # autograd can compute the gradients as well
+>>> total.backward()
+>>> w.grad
+tensor([ 1.0000])
+>>> # and no computation is wasted to compute gradients for x, y and z, which don't require grad
+>>> z.grad == x.grad == y.grad == None
+True
+```
+
+#### Manipulating ``requires_grad`` flag
+
+Other than directly setting the attribute, you can change this flag **in-place** using [``my_tensor.requires_grad_(flag=True)``](http://pytorch.org/docs/master/tensors.html#torch.Tensor.requires_grad_), or, as in the above example, at creation time by passing it in as an argument (default is ``False``), e.g.,
+
+```python
+>>> existing_tensor.requires_grad_()
+>>> existing_tensor.requires_grad
+True
+>>> my_tensor = torch.zeros(3, 4, requires_grad=True)
+>>> my_tensor.requires_grad
+True
+```
+
+#### Deprecation of ``volatile`` flag
+
+The ``volatile`` flag is now deprecated and has no effect. Previously, any computation that involves a ``Variable`` with ``volatile=True`` won't be tracked by ``autograd``. This has now been replaced by [a set of more flexible context managers](http://pytorch.org/docs/v0.4.0/torch.html#locally-disabling-gradient-computation) including ``torch.no_grad()``, ``torch.set_grad_enabled(grad_mode)``, and others.
+
+```python
+>>> x = torch.zeros(1, requires_grad=True)
+>>> with torch.no_grad():
+...     y = x * 2
+>>> y.requires_grad
+False
+>>>
+>>> is_train = False
+>>> with torch.set_grad_enabled(is_train):
+...     y = x * 2
+>>> y.requires_grad
+False
+>>> torch.set_grad_enabled(True)  # this can also be used as a function
+>>> y = x * 2
+>>> y.requires_grad
+True
+>>> torch.set_grad_enabled(False)
+>>> y = x * 2
+>>> y.requires_grad
+False
+```
+
+### What about ``.data``?
+
+``.data`` was the primary way to get the underlying ``Tensor`` from a ``Variable``. After this merge, calling ``y = x.data`` still has the same semantics. So ``y`` will be a ``Tensor`` that shares the same data with ``x``, is unrelated with the computation history of ``x``, and has ``requires_grad=False``.
+
+However, ``.data`` can be unsafe in some cases. Any changes on ``x.data`` won't be tracked by ``autograd``, and the computed gradients will be incorrect if ``x`` is needed in a backward pass. A safer alternative is to use [``x.detach()``](http://pytorch.org/docs/master/autograd.html#torch.Tensor.detach), which also returns a ``Tensor`` that shares data with ``requires_grad=False``, but will have its in-place changes reported by ``autograd`` if ``x`` is needed in backward.
+
+:::warning
+This also means that assigning to ``x.data`` doesn't change the ``x`` content now, although such assignment has always been not recommended.
+:::
+
+## Introducing ``torch.dtype``, ``torch.device`` and ``torch.layout``
+
+In PyTorch, we used to specify data type, device (sort of) and layout together as a "tensor type". For example, ``torch.cuda.sparse.DoubleTensor`` is for ``Tensor``s with ``double`` data type, living on CUDA devices, and with [COO sparse tensor layout](https://en.wikipedia.org/wiki/Sparse_matrix#Coordinate_list_(COO)).
+
+In this release, we introduce [``torch.dtype``](http://pytorch.org/docs/v0.4.0/tensor_attributes.html#torch.torch.dtype), [``torch.device``](http://pytorch.org/docs/v0.4.0/tensor_attributes.html#torch.torch.device) and [``torch.layout``](http://pytorch.org/docs/v0.4.0/tensor_attributes.html#torch.torch.layout) classes to allow better management of these properties.
+
+### ``torch.dtype``
+
+Below is a complete list of available [``torch.dtype``](http://pytorch.org/docs/v0.4.0/tensor_attributes.html#torch.torch.dtype)s and their corresponding tensor types.
+
+| Data type                 | ``torch.dtype``                        | Tensor types              |
+|:------------------------- |:-------------------------------------- | :------------------------ |
+| 32-bit floating point     | ``torch.float32`` or ``torch.float``   | ``torch.*.FloatTensor``   |
+| 64-bit floating point     | ``torch.float64`` or ``torch.double``  | ``torch.*.DoubleTensor``  |
+| 16-bit floating point     | ``torch.float16`` or ``torch.half``    | ``torch.*.HalfTensor``    |
+| 8-bit integer (unsigned)  | ``torch.uint8``                        | ``torch.*.ByteTensor``    |
+| 8-bit integer (signed)    | ``torch.int8``                         | ``torch.*.CharTensor``    |
+| 16-bit integer (signed)   | ``torch.int16``   or ``torch.short``   | ``torch.*.ShortTensor``   |
+| 32-bit integer (signed)   | ``torch.int32``   or ``torch.int``     | ``torch.*.IntTensor``     |
+| 64-bit integer (signed)   | ``torch.int64``   or ``torch.long``    | ``torch.*.LongTensor``    |
+
+
+### ``torch.device``
+
+A [``torch.device``](http://pytorch.org/docs/v0.4.0/tensor_attributes.html#torch.torch.device) contains a device type (``'cpu'`` or ``'cuda'``) and optional device ordinal (id) for the device type. It can be initilized with ``torch.device('{device_type}')`` or ``torch.device('{device_type}:{device_ordinal}')``.
+
+If the device ordinal is not present, this represents the current device for the device type; e.g., ``torch.device('cuda')`` is equivalent to ``torch.device('cuda:X')`` where ``X`` is the result of ``torch.cuda.current_device()``.
+
+### ``torch.layout``
+
+[``torch.layout``](http://pytorch.org/docs/v0.4.0/tensor_attributes.html#torch.torch.layout) is created to support more ``Tensor`` formats in future. Currently only ``torch.strided`` (dense tensors) and ``torch.sparse_coo`` (sparse tensors with COO format) are available.
+
+### Creating ``Tensor``s
+
+[Methods that create a ``Tensor``](http://pytorch.org/docs/v0.4.0/torch.html#creation-ops) now also take in ``dtype``, ``device``, ``layout``, and ``requires_grad`` options to specify the desired attributes on the returned ``Tensor``. For example,
+
+```python
+>>> device = torch.device("cuda:1")
+>>> x = torch.randn(3, 3, dtype=torch.float64, device=device)
+tensor([[-0.6344,  0.8562, -1.2758],
+        [ 0.8414,  1.7962,  1.0589],
+        [-0.1369, -1.0462, -0.4373]], dtype=torch.float64, device='cuda:1')
+>>> x.requires_grad  # default is False
+False
+>>> x = torch.zeros(3, requires_grad=True)
+>>> x.requires_grad
+True
+```
+
+#### ``torch.tensor``
+[``torch.tensor``](http://pytorch.org/docs/v0.4.0/torch.html#torch.tensor) is one of the newly added [tensor creation methods](http://pytorch.org/docs/v0.4.0/torch.html#creation-ops). It takes in array like data of all kinds and copies the contained values into a new ``Tensor``. Unlike the ``torch.*Tensor`` methods, you can also create zero-dimensional ``Tensor``s (aka scalars) this way. Moreover, if a ``dtype`` argument isn't given, it will infer the suitable ``dtype`` given the data. It is the recommended way to create a tensor from existing data like a Python list. For example,
+
+```python
+>>> cuda = torch.device("cuda")
+>>> torch.tensor([[1], [2], [3]], dtype=torch.half, device=cuda)
+tensor([[ 1],
+        [ 2],
+        [ 3]], device='cuda:0')
+>>> torch.tensor(1)               # scalar
+tensor(1)
+>>> torch.tensor([1, 2.3]).dtype  # type inferece
+torch.float32
+>>> torch.tensor([1, 2]).dtype    # type inferece
+torch.int64
+```
+
+We've also added more tensor creation methods. Some of them have ``torch.*_like`` and/or ``tensor.new_*`` variants.
+
+1. ``torch.*_like`` takes in an input ``Tensor`` instead of a shape. It returns a ``Tensor`` with same shape and attributes as the input ``Tensor`` unless otherwise specified:
+
+    ```python
+    >>> x = torch.randn(3, dtype=torch.float64)
+    >>> torch.zeros_like(x)
+    tensor([ 0.,  0.,  0.], dtype=torch.float64)
+    >>> torch.zeros_like(x, dtype=torch.int)  # override dtype
+    tensor([ 0,  0,  0], dtype=torch.int32)
+    ```
+
+2. ``existing_tensor.new_*`` can also create ``Tensor``s with same attributes as ``existing_tensor``, but it always takes in a shape argument:
+
+    ```python
+    >>> x = torch.randn(3, dtype=torch.float64)
+    >>> x.new_ones(2)
+    tensor([ 1.,  1.], dtype=torch.float64)
+    >>> x.new_ones(4, dtype=torch.int)
+    tensor([ 1,  1,  1,  1], dtype=torch.int32)
+    ```
+
+| Name                                                       | Returned ``Tensor``                                       | ``torch.*_like`` variant | ``tensor.new_*`` variant |
+|:-----------------------------------------------------------|-----------------------------------------------------------|--------------------------|--------------------------|
+| [``torch.empty``](http://pytorch.org/docs/v0.4.0/torch.html#torch.empty)                                            | unintialized memory                                       | ✔                        | ✔                        |
+| [``torch.zeros``](http://pytorch.org/docs/v0.4.0/torch.html#torch.zeros)                                            | all zeros                                                 | ✔                        | ✔                        |
+| [``torch.ones``](http://pytorch.org/docs/v0.4.0/torch.html#torch.ones)                                             | all ones                                                  | ✔                        | ✔                        |
+| [``torch.full``](http://pytorch.org/docs/v0.4.0/torch.html#torch.full)                                             | filled with a given value                                 | ✔                        | ✔                        |
+| [``torch.rand``](http://pytorch.org/docs/v0.4.0/torch.html#torch.rand)                                             | i.i.d. continuous ``Uniform[0, 1)``                       | ✔                        |                          |
+| [``torch.randn``](http://pytorch.org/docs/v0.4.0/torch.html#torch.randn)                                            | i.i.d. ``Normal(0, 1)``                                   | ✔                        |                          |
+| [``torch.randint``](http://pytorch.org/docs/v0.4.0/torch.html#torch.randint)                                          | i.i.d. discrete Uniform in given range                    | ✔                        |                          |
+| [``torch.randperm``](http://pytorch.org/docs/v0.4.0/torch.html#torch.randperm)                                         | random permutation of ``{0, 1, ..., n - 1}``              |                          |                          |
+| [``torch.tensor``](http://pytorch.org/docs/v0.4.0/torch.html#torch.tensor)                                           | copied from existing data (`list`, NumPy `ndarray`, etc.) |                          | ✔                        |
+| [``torch.from_numpy``](http://pytorch.org/docs/v0.4.0/torch.html#torch.from_numpy)*                                      | from NumPy ``ndarray`` (sharing storage without copying)  |                          |                          |
+| [``torch.arange``](http://pytorch.org/docs/v0.4.0/torch.html#torch.arange), <br>[``torch.range``](http://pytorch.org/docs/v0.4.0/torch.html#torch.range), and <br>[``torch.linspace``](http://pytorch.org/docs/v0.4.0/torch.html#torch.linspace)  | uniformly spaced values in a given range                  |                          |                          |
+| [``torch.logspace``](http://pytorch.org/docs/v0.4.0/torch.html#torch.logspace)                                         | logarithmically spaced values in a given range            |                          |                          |
+| [``torch.eye``](http://pytorch.org/docs/v0.4.0/torch.html#torch.eye)                                              | identity matrix                                           |                          |                          |
+
+<span class='note'>*: [``torch.from_numpy``](http://pytorch.org/docs/v0.4.0/torch.html#torch.from_numpy) only takes in a NumPy ``ndarray`` as its input argument.</span>
+
+<!---
+we need some special formatting to make the above table and note look nicer
+-->
+<style>
+  .content table code { font-size: inherit; }
+  .content table td { white-space: nowrap; }
+  .content .note { font-size: 85%; }
+  .content .note code { font-size: 13px; }
+</style>
+
+### Moving and casting ``Tensor``s and ``Module``s
+
+``.to(..)`` method is added on both ``Tensor``s and ``Module``s to support easily moving them to different devices and casting them to different types. For example,
+
+```python
+>>> cpu = torch.device("cpu")
+>>> cuda = torch.device("cuda")
+>>> x = torch.randn(3, dtype=torch.double)             # a double tensor on CPU
+>>> x
+tensor([-0.1061,  0.5796, -1.0124], dtype=torch.float64)
+>>> y = torch.zeros(2, dtype=torch.half, device=cuda)  # a half tensor on GPU
+>>> y
+tensor([ 0.,  0.], dtype=torch.float16, device='cuda:0')
+>>> x.to(cuda)                                         # move to a different device
+tensor([-0.1061,  0.5796, -1.0124], dtype=torch.float64, device='cuda:0')
+>>> y.to(torch.double)                                 # cast to a different type
+tensor([ 0.,  0.], dtype=torch.float64, device='cuda:0')
+>>> x.to(cuda, torch.half)                             # move and cast at the same time
+tensor([-0.1061,  0.5796, -1.0127], dtype=torch.float16, device='cuda:0')
+>>> y.to(x)                                            # move and cast to the same device and dtype as a tensor
+tensor([ 0.,  0.], dtype=torch.float64)
+```
+
+``module.to()`` works similarly but is in-place and does not support taking in a ``Tensor``.
+
+### Writing device-agnostic code
+
+With the addition of [``torch.device``](http://pytorch.org/docs/v0.4.0/tensor_attributes.html#torch.torch.device), it's much easier to write device-agnostic code. We suggest the following pattern:
+
+```python
+# at beginning of the script
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
+...
+
+# then whenever you get a new Tensor or Module
+# this won't copy if they are already on the desired device
+input = data.to(device)
+model = MyModule(...).to(device)
+```
+
+## Zero-dimensional ``Tensor``s (aka scalars)
+
+Previously, indexing into a ``Tensor`` vector (1-dimensional tensor) gave a Python number but indexing into a ``Variable`` vector gave (unexpectedly!) a vector of size ``(1,)``! This behavior was inconsistent: it was necessary because ``autograd`` can't track history on Python numbers but indexing into a 1-dimensional tensor should give a 0-dimensional tensor (i.e., a scalar).
+
+Fortunately, this release introduces proper scalar support in PyTorch! Now you can do things like:
+
+```python
+>>> torch.tensor(3.1416)         # create a scalar directly
+tensor(3.1416)
+>>> torch.tensor(3.1416).size()  # scalar is 0-dimensional
+torch.Size([])
+>>> torch.tensor([3]).size()     # compare to a vector of size 1
+torch.Size([1])
+>>>
+>>> vector = torch.arange(2, 6)  # this is a vector
+>>> vector
+tensor([ 2.,  3.,  4.,  5.])
+>>> vector.size()
+torch.Size([4])
+>>> vector[3]                    # indexing into a vector gives a scalar
+tensor(5.)
+>>> vector[3].item()             # .item() gives the Python number in a scalar
+5.0
+```
+
+Consider the widely used pattern ``loss.data[0]`` before 0.4.0. ``loss`` was a ``Variable`` wrapping a tensor of size ``(1,)``, but in 0.4.0 ``loss`` is now a scalar and has ``0`` dimensions. Indexing into a scalar doesn't make sense (and will be a hard error in 0.5.0): use ``loss.item()`` to get the Python number from a scalar.
+
+
+Thank you for reading! Please refer to our [documentation](http://pytorch.org/docs/0.4.0/index.html) and [release notes](https://github.com/pytorch/pytorch/releases/tag/v0.4.0) for more details.
+
+Happy PyTorch-ing!
