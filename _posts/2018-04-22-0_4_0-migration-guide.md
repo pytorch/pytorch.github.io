@@ -46,9 +46,9 @@ Let's first see a quick example on our recommended changes for a common code pat
     total_loss = 0
     for input, target in train_loader:
         input, target = input.to(device), target.to(device)
-        hidden = input.new_zeros(*h_shape)  # init wth same device & dtype as input
+        hidden = input.new_zeros(*h_shape)  # has the same device & dtype as `input`
         ...  # get loss and optimize
-        total_loss += loss.item()           # get Python number in a 1-element Tensor
+        total_loss += loss.item()           # get Python number from 1-element Tensor
 
     # evaluate
     with torch.no_grad():                   # operations inside don't track history
@@ -276,19 +276,19 @@ we need some special formatting to make the above table and note look nicer
 ```python
 >>> cpu = torch.device("cpu")
 >>> cuda = torch.device("cuda")
->>> x = torch.randn(3, dtype=torch.double)             # a double tensor on CPU
+>>> x = torch.randn(3, dtype=torch.double)            # a double tensor on CPU
 >>> x
 tensor([-0.1061,  0.5796, -1.0124], dtype=torch.float64)
->>> y = torch.zeros(2, dtype=torch.half, device=cuda)  # a half tensor on GPU
+>>> y = torch.zeros(2, dtype=torch.half, device=cuda) # a half tensor on GPU
 >>> y
 tensor([ 0.,  0.], dtype=torch.float16, device='cuda:0')
->>> x.to(cuda)                                         # move to a different device
+>>> x.to(cuda)                                        # move to a different device
 tensor([-0.1061,  0.5796, -1.0124], dtype=torch.float64, device='cuda:0')
->>> y.to(torch.double)                                 # cast to a different type
+>>> y.to(torch.double)                                # cast to a different type
 tensor([ 0.,  0.], dtype=torch.float64, device='cuda:0')
->>> x.to(cuda, torch.half)                             # move and cast at the same time
+>>> x.to(cuda, torch.half)                            # move and cast at the same time
 tensor([-0.1061,  0.5796, -1.0127], dtype=torch.float16, device='cuda:0')
->>> y.to(x)                                            # move and cast to the same device and dtype as a tensor
+>>> y.to(x)                                           # move and cast to the same device and dtype as a given tensor
 tensor([ 0.,  0.], dtype=torch.float64)
 ```
 
