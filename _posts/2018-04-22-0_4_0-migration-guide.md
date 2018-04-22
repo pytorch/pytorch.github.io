@@ -271,7 +271,7 @@ we need some special formatting to make the above table and note look nicer
 
 ### Moving and casting ``Tensor``s and ``Module``s
 
-``.to(..)`` method is added on both ``Tensor``s and ``Module``s to support easily moving them to different devices and casting them to different types. For example,
+``.to(..)`` method is added on both ``Tensor`` and ``Module`` objects to support easily moving them to different devices and casting them to different types. For example, with [``tensor.to(..)``](http://pytorch.org/docs/v0.4.0/tensors.html#torch.Tensor.to),
 
 ```python
 >>> cpu = torch.device("cpu")
@@ -292,7 +292,7 @@ tensor([-0.1061,  0.5796, -1.0127], dtype=torch.float16, device='cuda:0')
 tensor([ 0.,  0.], dtype=torch.float64)
 ```
 
-``module.to()`` works similarly but is in-place and does not support taking in a ``Tensor``.
+[``module.to(...)``](http://pytorch.org/docs/v0.4.0/nn.html#torch.nn.Module.to) works similarly but is in-place and does not support taking in a ``Tensor``.
 
 ### Writing device-agnostic code
 
