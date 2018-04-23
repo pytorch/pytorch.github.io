@@ -149,10 +149,6 @@ False
 
 However, ``.data`` can be unsafe in some cases. Any changes on ``x.data`` won't be tracked by ``autograd``, and the computed gradients will be incorrect if ``x`` is needed in a backward pass. A safer alternative is to use [``x.detach()``](http://pytorch.org/docs/master/autograd.html#torch.Tensor.detach), which also returns a ``Tensor`` that shares data with ``requires_grad=False``, but will have its in-place changes reported by ``autograd`` if ``x`` is needed in backward.
 
-:::warning
-This also means that assigning to ``x.data`` doesn't change the ``x`` content now, although such assignment has always been not recommended.
-:::
-
 ## Introducing ``torch.dtype``, ``torch.device`` and ``torch.layout``
 
 In PyTorch, we used to specify data type, device (sort of) and layout together as a "tensor type". For example, ``torch.cuda.sparse.DoubleTensor`` is for ``Tensor``s with ``double`` data type, living on CUDA devices, and with [COO sparse tensor layout](https://en.wikipedia.org/wiki/Sparse_matrix#Coordinate_list_(COO)).
