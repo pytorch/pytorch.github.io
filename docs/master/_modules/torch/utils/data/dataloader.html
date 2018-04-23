@@ -62,7 +62,7 @@
             
             
               <div class="version">
-                <a href="http://pytorch.org/docs/versions.html">master (0.5.0a0+7a3c38a ) &#x25BC</a>
+                <a href="http://pytorch.org/docs/versions.html">master (0.5.0a0+e8bdbda ) &#x25BC</a>
               </div>
             
           
@@ -737,7 +737,14 @@
 <span class="kn">import</span> <span class="nn">sys</span>
 <span class="kn">import</span> <span class="nn">threading</span>
 <span class="kn">import</span> <span class="nn">traceback</span>
+<span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">import</span> <span class="nn">time</span>
 <span class="kn">from</span> <span class="nn">torch._six</span> <span class="k">import</span> <span class="n">string_classes</span><span class="p">,</span> <span class="n">int_classes</span>
+
+<span class="n">IS_WINDOWS</span> <span class="o">=</span> <span class="n">sys</span><span class="o">.</span><span class="n">platform</span> <span class="o">==</span> <span class="s2">&quot;win32&quot;</span>
+<span class="k">if</span> <span class="n">IS_WINDOWS</span><span class="p">:</span>
+    <span class="kn">import</span> <span class="nn">ctypes</span>
+    <span class="kn">from</span> <span class="nn">ctypes.wintypes</span> <span class="k">import</span> <span class="n">DWORD</span><span class="p">,</span> <span class="n">BOOL</span><span class="p">,</span> <span class="n">HANDLE</span>
 
 <span class="k">if</span> <span class="n">sys</span><span class="o">.</span><span class="n">version_info</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
     <span class="kn">import</span> <span class="nn">Queue</span> <span class="k">as</span> <span class="nn">queue</span>
@@ -755,6 +762,40 @@
 
 <span class="n">_use_shared_memory</span> <span class="o">=</span> <span class="kc">False</span>
 <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Whether to use shared memory in default_collate&quot;&quot;&quot;</span>
+
+<span class="n">MANAGER_STATUS_CHECK_INTERVAL</span> <span class="o">=</span> <span class="mf">5.0</span>
+
+<span class="k">if</span> <span class="n">IS_WINDOWS</span><span class="p">:</span>
+    <span class="c1"># On Windows, the parent ID of the worker process remains unchanged when the manager process</span>
+    <span class="c1"># is gone, and the only way to check it through OS is to let the worker have a process handle</span>
+    <span class="c1"># of the manager and ask if the process status has changed.</span>
+    <span class="k">class</span> <span class="nc">ManagerWatchdog</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+        <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">manager_pid</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">getppid</span><span class="p">()</span>
+
+            <span class="bp">self</span><span class="o">.</span><span class="n">kernel32</span> <span class="o">=</span> <span class="n">ctypes</span><span class="o">.</span><span class="n">WinDLL</span><span class="p">(</span><span class="s1">&#39;kernel32&#39;</span><span class="p">,</span> <span class="n">use_last_error</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">kernel32</span><span class="o">.</span><span class="n">OpenProcess</span><span class="o">.</span><span class="n">argtypes</span> <span class="o">=</span> <span class="p">(</span><span class="n">DWORD</span><span class="p">,</span> <span class="n">BOOL</span><span class="p">,</span> <span class="n">DWORD</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">kernel32</span><span class="o">.</span><span class="n">OpenProcess</span><span class="o">.</span><span class="n">restype</span> <span class="o">=</span> <span class="n">HANDLE</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">kernel32</span><span class="o">.</span><span class="n">WaitForSingleObject</span><span class="o">.</span><span class="n">argtypes</span> <span class="o">=</span> <span class="p">(</span><span class="n">HANDLE</span><span class="p">,</span> <span class="n">DWORD</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">kernel32</span><span class="o">.</span><span class="n">WaitForSingleObject</span><span class="o">.</span><span class="n">restype</span> <span class="o">=</span> <span class="n">DWORD</span>
+
+            <span class="c1"># Value obtained from https://msdn.microsoft.com/en-us/library/ms684880.aspx</span>
+            <span class="n">SYNCHRONIZE</span> <span class="o">=</span> <span class="mh">0x00100000</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">manager_handle</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">kernel32</span><span class="o">.</span><span class="n">OpenProcess</span><span class="p">(</span><span class="n">SYNCHRONIZE</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">manager_pid</span><span class="p">)</span>
+
+            <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">manager_handle</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="n">ctypes</span><span class="o">.</span><span class="n">WinError</span><span class="p">(</span><span class="n">ctypes</span><span class="o">.</span><span class="n">get_last_error</span><span class="p">())</span>
+
+        <span class="k">def</span> <span class="nf">is_alive</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+            <span class="c1"># Value obtained from https://msdn.microsoft.com/en-us/library/windows/desktop/ms687032.aspx</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">kernel32</span><span class="o">.</span><span class="n">WaitForSingleObject</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">manager_handle</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">0</span>
+<span class="k">else</span><span class="p">:</span>
+    <span class="k">class</span> <span class="nc">ManagerWatchdog</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+        <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">manager_pid</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">getppid</span><span class="p">()</span>
+
+        <span class="k">def</span> <span class="nf">is_alive</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">os</span><span class="o">.</span><span class="n">getppid</span><span class="p">()</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">manager_pid</span>
 
 
 <span class="k">def</span> <span class="nf">_worker_loop</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="n">index_queue</span><span class="p">,</span> <span class="n">data_queue</span><span class="p">,</span> <span class="n">collate_fn</span><span class="p">,</span> <span class="n">seed</span><span class="p">,</span> <span class="n">init_fn</span><span class="p">,</span> <span class="n">worker_id</span><span class="p">):</span>
@@ -774,8 +815,16 @@
     <span class="k">if</span> <span class="n">init_fn</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">init_fn</span><span class="p">(</span><span class="n">worker_id</span><span class="p">)</span>
 
+    <span class="n">watchdog</span> <span class="o">=</span> <span class="n">ManagerWatchdog</span><span class="p">()</span>
+
     <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
-        <span class="n">r</span> <span class="o">=</span> <span class="n">index_queue</span><span class="o">.</span><span class="n">get</span><span class="p">()</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">r</span> <span class="o">=</span> <span class="n">index_queue</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="n">MANAGER_STATUS_CHECK_INTERVAL</span><span class="p">)</span>
+        <span class="k">except</span> <span class="n">queue</span><span class="o">.</span><span class="n">Empty</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">watchdog</span><span class="o">.</span><span class="n">is_alive</span><span class="p">():</span>
+                <span class="k">continue</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">break</span>
         <span class="k">if</span> <span class="n">r</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">break</span>
         <span class="n">idx</span><span class="p">,</span> <span class="n">batch_indices</span> <span class="o">=</span> <span class="n">r</span>
@@ -925,7 +974,7 @@
 
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">worker_init_fn</span> <span class="o">=</span> <span class="n">loader</span><span class="o">.</span><span class="n">worker_init_fn</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">index_queues</span> <span class="o">=</span> <span class="p">[</span><span class="n">multiprocessing</span><span class="o">.</span><span class="n">SimpleQueue</span><span class="p">()</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span><span class="p">)]</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">index_queues</span> <span class="o">=</span> <span class="p">[</span><span class="n">multiprocessing</span><span class="o">.</span><span class="n">Queue</span><span class="p">()</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span><span class="p">)]</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">worker_queue_idx</span> <span class="o">=</span> <span class="mi">0</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">worker_result_queue</span> <span class="o">=</span> <span class="n">multiprocessing</span><span class="o">.</span><span class="n">SimpleQueue</span><span class="p">()</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">batches_outstanding</span> <span class="o">=</span> <span class="mi">0</span>
