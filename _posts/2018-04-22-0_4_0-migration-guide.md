@@ -5,7 +5,7 @@ author: <a href="https://ssnl.github.io/">Tongzhou Wang</a>
 date: 2018-04-22 12:00:00 -0500
 ---
 
-Welcome to the migration guide for PyTorch 0.4.0. In this release we introduced many exciting new features and critical bug fixes, with the goal of providing users a better and cleaner interface. In this guide, we will cover the three most important changes in migrating existing code from previous versions.
+Welcome to the migration guide for PyTorch 0.4.0. In this release we introduced [many exciting new features and critical bug fixes](https://github.com/pytorch/pytorch/releases/tag/v0.4.0), with the goal of providing users a better and cleaner interface. In this guide, we will cover the three most important changes in migrating existing code from previous versions.
 
 Let's first see a quick example on our recommended changes for a common code pattern:
 
