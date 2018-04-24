@@ -1,7 +1,7 @@
 ---
 layout: post
 title: "PyTorch 0.4.0 Migration Guide"
-author: PyTorch Team
+author: The PyTorch Team
 date: 2018-04-22 12:00:00 -0500
 ---
 
