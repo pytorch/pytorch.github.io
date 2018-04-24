@@ -200,7 +200,7 @@ True
 ```
 
 #### [``torch.tensor(data, ...)``](http://pytorch.org/docs/v0.4.0/torch.html#torch.tensor)
-[``torch.tensor``](http://pytorch.org/docs/v0.4.0/torch.html#torch.tensor) is one of the newly added [tensor creation methods](http://pytorch.org/docs/v0.4.0/torch.html#creation-ops). It takes in array like data of all kinds and copies the contained values into a new ``Tensor``. Unlike the ``torch.*Tensor`` methods, you can also create zero-dimensional ``Tensor``s (aka scalars) this way. Moreover, if a ``dtype`` argument isn't given, it will infer the suitable ``dtype`` given the data. It is the recommended way to create a tensor from existing data like a Python list. For example,
+[``torch.tensor``](http://pytorch.org/docs/v0.4.0/torch.html#torch.tensor) is one of the newly added [tensor creation methods](http://pytorch.org/docs/v0.4.0/torch.html#creation-ops). It takes in array like data of all kinds and **copies** the contained values into a new ``Tensor``. Unlike the ``torch.*Tensor`` methods, you can also create zero-dimensional ``Tensor``s (aka scalars) this way. Moreover, if a ``dtype`` argument isn't given, it will infer the suitable ``dtype`` given the data. It is the recommended way to create a tensor from existing data like a Python list. For example,
 
 ```python
 >>> cuda = torch.device("cuda")
