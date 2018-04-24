@@ -63,7 +63,7 @@ I'm sure you noticed many interesting changes! In sections below, we will now co
 2. ``torch.device``, new tensor creation methods (e.g., `new_zeros`), and the magical `.to()`.
 3. `.data[0]` becomes `.item()`?
 
-## Merging ``Variable`` and ``Tensor`` classes
+## Merging ``Variable`` and [``Tensor``](http://pytorch.org/docs/v0.4.0/tensors.html) classes
 
 ``torch.autograd.Variable`` and [``torch.Tensor``](http://pytorch.org/docs/v0.4.0/tensors.html) are now the same class! This means that you don't need the ``Variable`` wrapper everywhere in your code anymore.
 
@@ -149,13 +149,13 @@ False
 
 However, ``.data`` can be unsafe in some cases. Any changes on ``x.data`` won't be tracked by ``autograd``, and the computed gradients will be incorrect if ``x`` is needed in a backward pass. A safer alternative is to use [``x.detach()``](http://pytorch.org/docs/v0.4.0/autograd.html#torch.Tensor.detach), which also returns a ``Tensor`` that shares data with ``requires_grad=False``, but will have its in-place changes reported by ``autograd`` if ``x`` is needed in backward.
 
-## Introducing ``torch.dtype``, ``torch.device`` and ``torch.layout``
+## Introducing [``torch.dtype``](http://pytorch.org/docs/v0.4.0/tensor_attributes.html#torch.torch.dtype), [``torch.device``](http://pytorch.org/docs/v0.4.0/tensor_attributes.html#torch.torch.device) and [``torch.layout``](http://pytorch.org/docs/v0.4.0/tensor_attributes.html#torch.torch.layout)
 
 In PyTorch, we used to specify data type, device (sort of) and layout together as a "tensor type". For example, ``torch.cuda.sparse.DoubleTensor`` is for ``Tensor``s with ``double`` data type, living on CUDA devices, and with [COO sparse tensor layout](https://en.wikipedia.org/wiki/Sparse_matrix#Coordinate_list_(COO)).
 
 In this release, we introduce [``torch.dtype``](http://pytorch.org/docs/v0.4.0/tensor_attributes.html#torch.torch.dtype), [``torch.device``](http://pytorch.org/docs/v0.4.0/tensor_attributes.html#torch.torch.device) and [``torch.layout``](http://pytorch.org/docs/v0.4.0/tensor_attributes.html#torch.torch.layout) classes to allow better management of these properties.
 
-### ``torch.dtype``
+### [``torch.dtype``](http://pytorch.org/docs/v0.4.0/tensor_attributes.html#torch.torch.dtype)
 
 Below is a complete list of available [``torch.dtype``](http://pytorch.org/docs/v0.4.0/tensor_attributes.html#torch.torch.dtype)s and their corresponding tensor types.
 
@@ -172,13 +172,13 @@ Below is a complete list of available [``torch.dtype``](http://pytorch.org/docs/
 
 Use [``torch.set_default_dtype``](http://pytorch.org/docs/v0.4.0/torch.html#torch.set_default_dtype) and [``torch.get_default_dtype``](http://pytorch.org/docs/v0.4.0/torch.html#torch.get_default_dtype) to manipulate default ``dtype`` for floating point tensors.
 
-### ``torch.device``
+### [``torch.device``](http://pytorch.org/docs/v0.4.0/tensor_attributes.html#torch.torch.device)
 
 A [``torch.device``](http://pytorch.org/docs/v0.4.0/tensor_attributes.html#torch.torch.device) contains a device type (``'cpu'`` or ``'cuda'``) and optional device ordinal (id) for the device type. It can be initilized with ``torch.device('{device_type}')`` or ``torch.device('{device_type}:{device_ordinal}')``.
 
 If the device ordinal is not present, this represents the current device for the device type; e.g., ``torch.device('cuda')`` is equivalent to ``torch.device('cuda:X')`` where ``X`` is the result of ``torch.cuda.current_device()``.
 
-### ``torch.layout``
+### [``torch.layout``](http://pytorch.org/docs/v0.4.0/tensor_attributes.html#torch.torch.layout)
 
 [``torch.layout``](http://pytorch.org/docs/v0.4.0/tensor_attributes.html#torch.torch.layout) is created to support more ``Tensor`` formats in future. Currently only ``torch.strided`` (dense tensors) and ``torch.sparse_coo`` (sparse tensors with COO format) are available.
 
@@ -199,7 +199,7 @@ False
 True
 ```
 
-#### ``torch.tensor(data, ...)``
+#### [``torch.tensor(data, ...)``](http://pytorch.org/docs/v0.4.0/torch.html#torch.tensor)
 [``torch.tensor``](http://pytorch.org/docs/v0.4.0/torch.html#torch.tensor) is one of the newly added [tensor creation methods](http://pytorch.org/docs/v0.4.0/torch.html#creation-ops). It takes in array like data of all kinds and copies the contained values into a new ``Tensor``. Unlike the ``torch.*Tensor`` methods, you can also create zero-dimensional ``Tensor``s (aka scalars) this way. Moreover, if a ``dtype`` argument isn't given, it will infer the suitable ``dtype`` given the data. It is the recommended way to create a tensor from existing data like a Python list. For example,
 
 ```python
