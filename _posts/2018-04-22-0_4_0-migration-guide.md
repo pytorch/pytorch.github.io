@@ -23,8 +23,8 @@ Note also that the ``type()`` of a Tensor no longer reflects the data type. Use 
 
 ```python
 >>> x = torch.DoubleTensor([1, 1, 1])
->>> print(type(x)) # was torch.DoubleTensor
-<class 'torch.Tensor'>
+>>> print(type(x))  # was torch.DoubleTensor
+"<class 'torch.Tensor'>"
 >>> print(x.type())  # OK: 'torch.DoubleTensor'
 'torch.DoubleTensor'
 >>> print(isinstance(x, torch.DoubleTensor))  # OK: True
@@ -156,7 +156,7 @@ In previous versions of PyTorch, we used to specify data type (e.g. float vs dou
 
 In this release, we introduce [``torch.dtype``](http://pytorch.org/docs/v0.4.0/tensor_attributes.html#torch.torch.dtype), [``torch.device``](http://pytorch.org/docs/v0.4.0/tensor_attributes.html#torch.torch.device) and [``torch.layout``](http://pytorch.org/docs/v0.4.0/tensor_attributes.html#torch.torch.layout) classes to allow better management of these properties via NumPy-style creation functions.
 
-#### [``torch.dtype``](http://pytorch.org/docs/v0.4.0/tensor_attributes.html#torch.torch.dtype)
+### [``torch.dtype``](http://pytorch.org/docs/v0.4.0/tensor_attributes.html#torch.torch.dtype)
 
 Below is a complete list of available [``torch.dtype``](http://pytorch.org/docs/v0.4.0/tensor_attributes.html#torch.torch.dtype)s (data types) and their corresponding tensor types.
 
