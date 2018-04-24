@@ -6,10 +6,10 @@ date: 2018-04-22 12:00:00 -0500
 ---
 
 Welcome to the migration guide for PyTorch 0.4.0. In this release we introduced [many exciting new features and critical bug fixes](https://github.com/pytorch/pytorch/releases/tag/v0.4.0), with the goal of providing users a better and cleaner interface. In this guide, we will cover the most important changes in migrating existing code from previous versions:
-* ``Tensor``s and ``Variable``s have merged
+* ``Tensors`` and ``Variables`` have merged
 * Support for 0-dimensional (scalar) ``Tensors``
 * Deprecation of the ``volatile`` flag
-* ``dtype``s, ``device``s, and Numpy-style ``Tensor`` creation functions
+* ``dtypes``, ``devices``, and Numpy-style ``Tensor`` creation functions
 * Writing device-agnostic code
 
 
@@ -242,6 +242,7 @@ We've also added more tensor creation methods. Some of them have ``torch.*_like`
     >>> x.new_ones(4, dtype=torch.int)
     tensor([ 1,  1,  1,  1], dtype=torch.int32)
     ```
+
 To specify the desired shape, you can either use a tuple (e.g., ``torch.zeros((2, 3))``) or variable arguments (e.g., ``torch.zeros(2, 3)``) in most cases.
 
 | Name                                                       | Returned ``Tensor``                                       | ``torch.*_like`` variant | ``tensor.new_*`` variant |
