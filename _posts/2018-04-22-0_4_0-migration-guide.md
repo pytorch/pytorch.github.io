@@ -32,13 +32,13 @@ Let's first see a quick example on our recommended changes for a common code pat
         if use_cuda:
             ...
         ...
-    ```  
+    ```
 
 + 0.4.0 (new):
 
     ```python
     # torch.device object used throughout this script
-    device = torch.device("cuda" if use_cuda else "cpu")  
+    device = torch.device("cuda" if use_cuda else "cpu")
 
     model = MyRNN().to(device)
 
@@ -67,7 +67,7 @@ I'm sure you noticed many interesting changes! In sections below, we will now co
 
 ``torch.autograd.Variable`` and [``torch.Tensor``](http://pytorch.org/docs/v0.4.0/tensors.html) are now the same class! This means that you don't need the ``Variable`` wrapper everywhere in your code anymore.
 
-``requires_grad``, the central flag for ``autograd``, is now an attribute on ``Tensor``s. Let's see how this change manifests in code!
+``requires_grad``, the central flag for [``autograd``](http://pytorch.org/docs/v0.4.0/autograd.html), is now an attribute on ``Tensor``s. Let's see how this change manifests in code!
 
 ### When does [``autograd``](http://pytorch.org/docs/v0.4.0/autograd.html) start tracking history now?
 
@@ -78,7 +78,7 @@ I'm sure you noticed many interesting changes! In sections below, we will now co
 >>> x.requires_grad
 False
 >>> y = torch.ones(1)  # another tensor with requires_grad=False
->>> z = x + y          
+>>> z = x + y
 >>> # both inputs have requires_grad=False. so does the output
 >>> z.requires_grad
 False
@@ -106,7 +106,7 @@ True
 
 #### Manipulating ``requires_grad`` flag
 
-Other than directly setting the attribute, you can change this flag **in-place** using [``my_tensor.requires_grad_(flag=True)``](http://pytorch.org/docs/master/tensors.html#torch.Tensor.requires_grad_), or, as in the above example, at creation time by passing it in as an argument (default is ``False``), e.g.,
+Other than directly setting the attribute, you can change this flag **in-place** using [``my_tensor.requires_grad_(requires_grad=True)``](http://pytorch.org/docs/master/tensors.html#torch.Tensor.requires_grad_), or, as in the above example, at creation time by passing it in as an argument (default is ``False``), e.g.,
 
 ```python
 >>> existing_tensor.requires_grad_()
@@ -147,7 +147,7 @@ False
 
 ``.data`` was the primary way to get the underlying ``Tensor`` from a ``Variable``. After this merge, calling ``y = x.data`` still has the same semantics. So ``y`` will be a ``Tensor`` that shares the same data with ``x``, is unrelated with the computation history of ``x``, and has ``requires_grad=False``.
 
-However, ``.data`` can be unsafe in some cases. Any changes on ``x.data`` won't be tracked by ``autograd``, and the computed gradients will be incorrect if ``x`` is needed in a backward pass. A safer alternative is to use [``x.detach()``](http://pytorch.org/docs/master/autograd.html#torch.Tensor.detach), which also returns a ``Tensor`` that shares data with ``requires_grad=False``, but will have its in-place changes reported by ``autograd`` if ``x`` is needed in backward.
+However, ``.data`` can be unsafe in some cases. Any changes on ``x.data`` won't be tracked by ``autograd``, and the computed gradients will be incorrect if ``x`` is needed in a backward pass. A safer alternative is to use [``x.detach()``](http://pytorch.org/docs/v0.4.0/autograd.html#torch.Tensor.detach), which also returns a ``Tensor`` that shares data with ``requires_grad=False``, but will have its in-place changes reported by ``autograd`` if ``x`` is needed in backward.
 
 ## Introducing ``torch.dtype``, ``torch.device`` and ``torch.layout``
 
@@ -170,6 +170,7 @@ Below is a complete list of available [``torch.dtype``](http://pytorch.org/docs/
 | 32-bit integer (signed)   | ``torch.int32``   or ``torch.int``     | ``torch.*.IntTensor``     |
 | 64-bit integer (signed)   | ``torch.int64``   or ``torch.long``    | ``torch.*.LongTensor``    |
 
+Use [``torch.set_default_dtype``](http://pytorch.org/docs/v0.4.0/torch.html#torch.set_default_dtype) and [``torch.get_default_dtype``](http://pytorch.org/docs/v0.4.0/torch.html#torch.get_default_dtype) to manipulate default ``dtype`` for floating point tensors.
 
 ### ``torch.device``
 
@@ -236,6 +237,8 @@ We've also added more tensor creation methods. Some of them have ``torch.*_like`
     >>> x.new_ones(4, dtype=torch.int)
     tensor([ 1,  1,  1,  1], dtype=torch.int32)
     ```
+
+To specify the desired shape, you can either use a tuple (e.g., ``torch.zeros((2, 3))``) or variable arguments (e.g., ``torch.zeros(2, 3)``) in most cases.
 
 | Name                                                       | Returned ``Tensor``                                       | ``torch.*_like`` variant | ``tensor.new_*`` variant |
 |:-----------------------------------------------------------|-----------------------------------------------------------|--------------------------|--------------------------|
