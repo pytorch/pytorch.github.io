@@ -33,7 +33,7 @@ True
 
 ### When does [``autograd``](http://pytorch.org/docs/v0.4.0/autograd.html) start tracking history now?
 
-``requires_grad``, the central flag for [``autograd``](http://pytorch.org/docs/v0.4.0/autograd.html), is now an attribute on ``Tensor``s.  The same rules previously used for ``Variables`` applies to ``Tensors``; [``autograd``](http://pytorch.org/docs/v0.4.0/autograd.html) starts tracking history when any input ``Tensor`` of an operation has ``requires_grad=True``. For example,
+``requires_grad``, the central flag for [``autograd``](http://pytorch.org/docs/v0.4.0/autograd.html), is now an attribute on ``Tensors``.  The same rules previously used for ``Variables`` applies to ``Tensors``; [``autograd``](http://pytorch.org/docs/v0.4.0/autograd.html) starts tracking history when any input ``Tensor`` of an operation has ``requires_grad=True``. For example,
 
 ```python
 >>> x = torch.ones(1)  # create a tensor with requires_grad=False (default)
@@ -88,7 +88,7 @@ However, ``.data`` can be unsafe in some cases. Any changes on ``x.data`` wouldn
 
 ## Support for 0-dimensional (scalar) Tensors
 
-Previously, indexing into a ``Tensor`` vector (1-dimensional tensor) gave a Python number but indexing into a ``Variable`` vector gave (incosistently!) a vector of size ``(1,)``!  Similar behavior existed with reduction functions, i.e. `tensor.sum()` would return a Python number, but `variable.sum()` would retun a vector of size `(1,)`.
+Previously, indexing into a ``Tensor`` vector (1-dimensional tensor) gave a Python number but indexing into a ``Variable`` vector gave (incosistently!) a vector of size ``(1,)``!  Similar behavior existed with reduction functions, e.g. `tensor.sum()` would return a Python number, but `variable.sum()` would retun a vector of size `(1,)`.
 
 Fortunately, this release introduces proper scalar (0-dimensional tensor) support in PyTorch!  Scalars can be created using the new `torch.tensor` function (which will be explained in more detail later; for now just think of it as the PyTorch equivalent of `numpy.array`).  Now you can do things like:
 
@@ -109,10 +109,10 @@ torch.Size([4])
 tensor(5.)
 >>> vector[3].item()             # .item() gives the value as a Python number
 5.0
->>> sum = torch.tensor([2, 3]).sum()
->>> sum
+>>> mysum = torch.tensor([2, 3]).sum()
+>>> mysum
 tensor(5)
->>> sum.size()
+>>> mysum.size()
 torch.Size([])
 ```
 
@@ -125,7 +125,7 @@ Note that if you don't convert to a Python number when accumulating losses, you 
 
 ## Deprecation of ``volatile`` flag
 
-The ``volatile`` flag is now deprecated and has no effect. Previously, any computation that involves a ``Variable`` with ``volatile=True`` won't be tracked by ``autograd``. This has now been replaced by [a set of more flexible context managers](http://pytorch.org/docs/v0.4.0/torch.html#locally-disabling-gradient-computation) including ``torch.no_grad()``, ``torch.set_grad_enabled(grad_mode)``, and others.
+The ``volatile`` flag is now deprecated and has no effect. Previously, any computation that involves a ``Variable`` with ``volatile=True`` wouldn't be tracked by ``autograd``. This has now been replaced by [a set of more flexible context managers](http://pytorch.org/docs/v0.4.0/torch.html#locally-disabling-gradient-computation) including ``torch.no_grad()``, ``torch.set_grad_enabled(grad_mode)``, and others.
 
 ```python
 >>> x = torch.zeros(1, requires_grad=True)
@@ -152,7 +152,7 @@ False
 
 ## [``dtypes``](http://pytorch.org/docs/v0.4.0/tensor_attributes.html#torch.torch.dtype), [``devices``](http://pytorch.org/docs/v0.4.0/tensor_attributes.html#torch.torch.device) and NumPy-style creation functions
 
-In previous versions of PyTorch, we used to specify data type (e.g. float vs double), device type (cpu vs cuda) and layout (dense vs sparse) together as a "tensor type". For example, ``torch.cuda.sparse.DoubleTensor`` was the ``Tensor`` type respresenting``double`` data type, living on CUDA devices, and with [COO sparse tensor layout](https://en.wikipedia.org/wiki/Sparse_matrix#Coordinate_list_(COO)).
+In previous versions of PyTorch, we used to specify data type (e.g. float vs double), device type (cpu vs cuda) and layout (dense vs sparse) together as a "tensor type". For example, ``torch.cuda.sparse.DoubleTensor`` was the ``Tensor`` type respresenting the ``double`` data type, living on CUDA devices, and with [COO sparse tensor layout](https://en.wikipedia.org/wiki/Sparse_matrix#Coordinate_list_(COO)).
 
 In this release, we introduce [``torch.dtype``](http://pytorch.org/docs/v0.4.0/tensor_attributes.html#torch.torch.dtype), [``torch.device``](http://pytorch.org/docs/v0.4.0/tensor_attributes.html#torch.torch.device) and [``torch.layout``](http://pytorch.org/docs/v0.4.0/tensor_attributes.html#torch.torch.layout) classes to allow better management of these properties via NumPy-style creation functions.
 
@@ -187,11 +187,11 @@ The device of a tensor can be accessed via its ``device`` attribute.
 
 ### [``torch.layout``](http://pytorch.org/docs/v0.4.0/tensor_attributes.html#torch.torch.layout)
 
-[``torch.layout``](http://pytorch.org/docs/v0.4.0/tensor_attributes.html#torch.torch.layout) represents the data layout of a [``Tensor``](http://pytorch.org/docs/v0.4.0/tensors.html). Currently``torch.strided`` (dense tensors) and ``torch.sparse_coo`` (sparse tensors with COO format) are supported.
+[``torch.layout``](http://pytorch.org/docs/v0.4.0/tensor_attributes.html#torch.torch.layout) represents the data layout of a [``Tensor``](http://pytorch.org/docs/v0.4.0/tensors.html). Currently``torch.strided`` (dense tensors, the default) and ``torch.sparse_coo`` (sparse tensors with COO format) are supported.
 
 The layout of a tensor can be access via its ``layout`` attribute.
 
-### Creating ``Tensor``s
+### Creating ``Tensors``
 
 [Methods that create a ``Tensor``](http://pytorch.org/docs/v0.4.0/torch.html#creation-ops) now also take in ``dtype``, ``device``, ``layout``, and ``requires_grad`` options to specify the desired attributes on the returned ``Tensor``. For example,
 
