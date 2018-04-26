@@ -11,6 +11,7 @@ Welcome to the migration guide for PyTorch 0.4.0. In this release we introduced 
 * Deprecation of the ``volatile`` flag
 * ``dtypes``, ``devices``, and Numpy-style ``Tensor`` creation functions
 * Writing device-agnostic code
+* New edge-case constraints on names of submodules, parameters, and buffers in ``nn.Module``
 
 
 ## Merging [``Tensor``](http://pytorch.org/docs/0.4.0/tensors.html) and ``Variable`` and classes
@@ -298,6 +299,10 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 input = data.to(device)
 model = MyModule(...).to(device)
 ```
+
+## New edge-case constraints on names of submodules, parameters, and buffers in ``nn.Module``
+
+`name` that is an empty string or contains `"."` is no longer permitted in `module.add_module(name, value)`, `module.add_parameter(name, value)` or `module.add_buffer(name, value)` because such names may cause lost data in the `state_dict`. If you are loading a checkpoint for modules containing such names, please update the module definition and patch the `state_dict` before loading it.
 
 ## Code Samples (Putting it all together)
 
