@@ -8,14 +8,14 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>torch.distributions.multivariate_normal &mdash; PyTorch master documentation</title>
+  <title>torch.autograd.anomaly_mode &mdash; PyTorch master documentation</title>
   
 
   
   
   
   
-    <link rel="canonical" href="https://pytorch.org/docs/stable/_modules/torch/distributions/multivariate_normal.html"/>
+    <link rel="canonical" href="https://pytorch.org/docs/stable/_modules/torch/autograd/anomaly_mode.html"/>
   
 
   
@@ -83,7 +83,7 @@
         <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
           
 <div>
-  <a style="color:#F05732" href="https://pytorch.org/docs/stable/_modules/torch/distributions/multivariate_normal.html">
+  <a style="color:#F05732" href="https://pytorch.org/docs/stable/_modules/torch/autograd/anomaly_mode.html">
     You are viewing unstable developer preview docs.
     Click here to view docs for latest stable release.
   </a>
@@ -723,7 +723,9 @@
         
           <li><a href="../../torch.html">torch</a> &raquo;</li>
         
-      <li>torch.distributions.multivariate_normal</li>
+          <li><a href="../autograd.html">torch.autograd</a> &raquo;</li>
+        
+      <li>torch.autograd.anomaly_mode</li>
     
     
       <li class="wy-breadcrumbs-aside">
@@ -738,197 +740,106 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
             
-  <h1>Source code for torch.distributions.multivariate_normal</h1><div class="highlight"><pre>
-<span></span><span class="kn">import</span> <span class="nn">math</span>
-<span class="kn">from</span> <span class="nn">numbers</span> <span class="k">import</span> <span class="n">Number</span>
-
-<span class="kn">import</span> <span class="nn">torch</span>
-<span class="kn">from</span> <span class="nn">torch.distributions</span> <span class="k">import</span> <span class="n">constraints</span>
-<span class="kn">from</span> <span class="nn">torch.distributions.distribution</span> <span class="k">import</span> <span class="n">Distribution</span>
-<span class="kn">from</span> <span class="nn">torch.distributions.utils</span> <span class="k">import</span> <span class="n">lazy_property</span>
+  <h1>Source code for torch.autograd.anomaly_mode</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span> <span class="nn">torch</span>
 
 
-<span class="k">def</span> <span class="nf">_get_batch_shape</span><span class="p">(</span><span class="n">bmat</span><span class="p">,</span> <span class="n">bvec</span><span class="p">):</span>
-    <span class="sa">r</span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Given a batch of matrices and a batch of vectors, compute the combined `batch_shape`.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">try</span><span class="p">:</span>
-        <span class="n">vec_shape</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">_infer_size</span><span class="p">(</span><span class="n">bvec</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">bmat</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
-    <span class="k">except</span> <span class="ne">RuntimeError</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Incompatible batch shapes: vector </span><span class="si">{}</span><span class="s2">, matrix </span><span class="si">{}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">bvec</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">bmat</span><span class="o">.</span><span class="n">shape</span><span class="p">))</span>
-    <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">(</span><span class="n">vec_shape</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+<div class="viewcode-block" id="detect_anomaly"><a class="viewcode-back" href="../../../autograd.html#torch.autograd.detect_anomaly">[docs]</a><span class="k">class</span> <span class="nc">detect_anomaly</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Context-manager that enable anomaly detection for the autograd engine.</span>
 
-
-<span class="k">def</span> <span class="nf">_batch_mv</span><span class="p">(</span><span class="n">bmat</span><span class="p">,</span> <span class="n">bvec</span><span class="p">):</span>
-    <span class="sa">r</span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Performs a batched matrix-vector product, with compatible but different batch shapes.</span>
-
-<span class="sd">    This function takes as input `bmat`, containing :math:`n \times n` matrices, and</span>
-<span class="sd">    `bvec`, containing length :math:`n` vectors.</span>
-
-<span class="sd">    Both `bmat` and `bvec` may have any number of leading dimensions, which correspond</span>
-<span class="sd">    to a batch shape. They are not necessarily assumed to have the same batch shape,</span>
-<span class="sd">    just ones which can be broadcasted.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">n</span> <span class="o">=</span> <span class="n">bvec</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
-    <span class="n">batch_shape</span> <span class="o">=</span> <span class="n">_get_batch_shape</span><span class="p">(</span><span class="n">bmat</span><span class="p">,</span> <span class="n">bvec</span><span class="p">)</span>
-
-    <span class="c1"># to conform with `torch.bmm` interface, both bmat and bvec should have `.dim() == 3`</span>
-    <span class="n">bmat</span> <span class="o">=</span> <span class="n">bmat</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="n">batch_shape</span> <span class="o">+</span> <span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">n</span><span class="p">))</span><span class="o">.</span><span class="n">reshape</span><span class="p">((</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">n</span><span class="p">,</span> <span class="n">n</span><span class="p">))</span>
-    <span class="n">bvec</span> <span class="o">=</span> <span class="n">bvec</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="n">batch_shape</span> <span class="o">+</span> <span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span><span class="o">.</span><span class="n">reshape</span><span class="p">((</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">n</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
-    <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">bmm</span><span class="p">(</span><span class="n">bmat</span><span class="p">,</span> <span class="n">bvec</span><span class="p">)</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">batch_shape</span> <span class="o">+</span> <span class="p">(</span><span class="n">n</span><span class="p">,))</span>
-
-
-<span class="k">def</span> <span class="nf">_batch_potrf_lower</span><span class="p">(</span><span class="n">bmat</span><span class="p">):</span>
-    <span class="sa">r</span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Applies a Cholesky decomposition to all matrices in a batch of arbitrary shape.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">n</span> <span class="o">=</span> <span class="n">bmat</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
-    <span class="n">cholesky</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">([</span><span class="n">C</span><span class="o">.</span><span class="n">potrf</span><span class="p">(</span><span class="n">upper</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span> <span class="k">for</span> <span class="n">C</span> <span class="ow">in</span> <span class="n">bmat</span><span class="o">.</span><span class="n">reshape</span><span class="p">((</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">n</span><span class="p">,</span> <span class="n">n</span><span class="p">))])</span>
-    <span class="k">return</span> <span class="n">cholesky</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">bmat</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
-
-
-<span class="k">def</span> <span class="nf">_batch_diag</span><span class="p">(</span><span class="n">bmat</span><span class="p">):</span>
-    <span class="sa">r</span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Returns the diagonals of a batch of square matrices.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">return</span> <span class="n">bmat</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">bmat</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span><span class="o">-</span><span class="mi">2</span><span class="p">]</span> <span class="o">+</span> <span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,))[</span><span class="o">...</span><span class="p">,</span> <span class="p">::</span><span class="n">bmat</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span>
-
-
-<span class="k">def</span> <span class="nf">_batch_inverse</span><span class="p">(</span><span class="n">bmat</span><span class="p">):</span>
-    <span class="sa">r</span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Returns the inverses of a batch of square matrices.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">n</span> <span class="o">=</span> <span class="n">bmat</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
-    <span class="n">flat_bmat</span> <span class="o">=</span> <span class="n">bmat</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">n</span><span class="p">,</span> <span class="n">n</span><span class="p">)</span>
-    <span class="n">flat_inv_bmat</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">([</span><span class="n">m</span><span class="o">.</span><span class="n">inverse</span><span class="p">()</span> <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="n">flat_bmat</span><span class="p">],</span> <span class="mi">0</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">flat_inv_bmat</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">bmat</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
-
-
-<span class="k">def</span> <span class="nf">_batch_mahalanobis</span><span class="p">(</span><span class="n">L</span><span class="p">,</span> <span class="n">x</span><span class="p">):</span>
-    <span class="sa">r</span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Computes the squared Mahalanobis distance :math:`\mathbf{x}^\top\mathbf{M}^{-1}\mathbf{x}`</span>
-<span class="sd">    for a factored :math:`\mathbf{M} = \mathbf{L}\mathbf{L}^\top`.</span>
-
-<span class="sd">    Accepts batches for both L and x.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="c1"># TODO: use `torch.potrs` or similar once a backwards pass is implemented.</span>
-    <span class="n">flat_L</span> <span class="o">=</span> <span class="n">L</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">((</span><span class="o">-</span><span class="mi">1</span><span class="p">,)</span> <span class="o">+</span> <span class="n">L</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">2</span><span class="p">:])</span>
-    <span class="n">L_inv</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">([</span><span class="n">torch</span><span class="o">.</span><span class="n">inverse</span><span class="p">(</span><span class="n">Li</span><span class="o">.</span><span class="n">t</span><span class="p">())</span> <span class="k">for</span> <span class="n">Li</span> <span class="ow">in</span> <span class="n">flat_L</span><span class="p">])</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">L</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
-    <span class="k">return</span> <span class="p">(</span><span class="n">x</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="o">*</span> <span class="n">L_inv</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="o">-</span><span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">pow</span><span class="p">(</span><span class="mf">2.0</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
-
-
-<div class="viewcode-block" id="MultivariateNormal"><a class="viewcode-back" href="../../../distributions.html#torch.distributions.multivariate_normal.MultivariateNormal">[docs]</a><span class="k">class</span> <span class="nc">MultivariateNormal</span><span class="p">(</span><span class="n">Distribution</span><span class="p">):</span>
-    <span class="sa">r</span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Creates a multivariate normal (also called Gaussian) distribution</span>
-<span class="sd">    parameterized by a mean vector and a covariance matrix.</span>
-
-<span class="sd">    The multivariate normal distribution can be parameterized either</span>
-<span class="sd">    in terms of a positive definite covariance matrix :math:`\mathbf{\Sigma}`</span>
-<span class="sd">    or a positive definite precision matrix :math:`\mathbf{\Sigma}^{-1}`</span>
-<span class="sd">    or a lower-triangular matrix :math:`\mathbf{L}` with positive-valued</span>
-<span class="sd">    diagonal entries, such that</span>
-<span class="sd">    :math:`\mathbf{\Sigma} = \mathbf{L}\mathbf{L}^\top`. This triangular matrix</span>
-<span class="sd">    can be obtained via e.g. Cholesky decomposition of the covariance.</span>
+<span class="sd">    This does two things:</span>
+<span class="sd">    - Running the forward pass with detection enabled will allow the backward</span>
+<span class="sd">    pass to print the traceback of the forward operation that created the failing</span>
+<span class="sd">    backward function.</span>
+<span class="sd">    - Any backward computation that generate &quot;nan&quot; value will raise an error.</span>
 
 <span class="sd">    Example:</span>
 
-<span class="sd">        &gt;&gt;&gt; m = MultivariateNormal(torch.zeros(2), torch.eye(2))</span>
-<span class="sd">        &gt;&gt;&gt; m.sample()  # normally distributed with mean=`[0,0]` and covariance_matrix=`I`</span>
-<span class="sd">        tensor([-0.2102, -0.5429])</span>
+<span class="sd">        &gt;&gt;&gt; import torch</span>
+<span class="sd">        &gt;&gt;&gt; from torch import autograd</span>
+<span class="sd">        &gt;&gt;&gt; class MyFunc(autograd.Function):</span>
+<span class="sd">        ...     @staticmethod</span>
+<span class="sd">        ...     def forward(ctx, inp):</span>
+<span class="sd">        ...         return inp.clone()</span>
+<span class="sd">        ...     @staticmethod</span>
+<span class="sd">        ...     def backward(ctx, gO):</span>
+<span class="sd">        ...         # Error during the backward pass</span>
+<span class="sd">        ...         raise RuntimeError(&quot;Some error in backward&quot;)</span>
+<span class="sd">        ...         return gO.clone()</span>
+<span class="sd">        &gt;&gt;&gt; def run_fn(a):</span>
+<span class="sd">        ...     out = MyFunc.apply(a)</span>
+<span class="sd">        ...     return out.sum()</span>
+<span class="sd">        &gt;&gt;&gt; inp = torch.rand(10, 10, requires_grad=True)</span>
+<span class="sd">        &gt;&gt;&gt; out = run_fn(inp)</span>
+<span class="sd">        &gt;&gt;&gt; out.backward()</span>
+<span class="sd">            Traceback (most recent call last):</span>
+<span class="sd">              File &quot;&lt;stdin&gt;&quot;, line 1, in &lt;module&gt;</span>
+<span class="sd">              File &quot;/your/pytorch/install/torch/tensor.py&quot;, line 93, in backward</span>
+<span class="sd">                torch.autograd.backward(self, gradient, retain_graph, create_graph)</span>
+<span class="sd">              File &quot;/your/pytorch/install/torch/autograd/__init__.py&quot;, line 90, in backward</span>
+<span class="sd">                allow_unreachable=True)  # allow_unreachable flag</span>
+<span class="sd">              File &quot;/your/pytorch/install/torch/autograd/function.py&quot;, line 76, in apply</span>
+<span class="sd">                return self._forward_cls.backward(self, *args)</span>
+<span class="sd">              File &quot;&lt;stdin&gt;&quot;, line 8, in backward</span>
+<span class="sd">            RuntimeError: Some error in backward</span>
+<span class="sd">        &gt;&gt;&gt; with autograd.detect_anomaly():</span>
+<span class="sd">        ...     inp = torch.rand(10, 10, requires_grad=True)</span>
+<span class="sd">        ...     out = run_fn(inp)</span>
+<span class="sd">        ...     out.backward()</span>
+<span class="sd">            Traceback of forward call that caused the error:</span>
+<span class="sd">              File &quot;tmp.py&quot;, line 53, in &lt;module&gt;</span>
+<span class="sd">                out = run_fn(inp)</span>
+<span class="sd">              File &quot;tmp.py&quot;, line 44, in run_fn</span>
+<span class="sd">                out = MyFunc.apply(a)</span>
+<span class="sd">            Traceback (most recent call last):</span>
+<span class="sd">              File &quot;&lt;stdin&gt;&quot;, line 4, in &lt;module&gt;</span>
+<span class="sd">              File &quot;/your/pytorch/install/torch/tensor.py&quot;, line 93, in backward</span>
+<span class="sd">                torch.autograd.backward(self, gradient, retain_graph, create_graph)</span>
+<span class="sd">              File &quot;/your/pytorch/install/torch/autograd/__init__.py&quot;, line 90, in backward</span>
+<span class="sd">                allow_unreachable=True)  # allow_unreachable flag</span>
+<span class="sd">              File &quot;/your/pytorch/install/torch/autograd/function.py&quot;, line 76, in apply</span>
+<span class="sd">                return self._forward_cls.backward(self, *args)</span>
+<span class="sd">              File &quot;&lt;stdin&gt;&quot;, line 8, in backward</span>
+<span class="sd">            RuntimeError: Some error in backward</span>
 
-<span class="sd">    Args:</span>
-<span class="sd">        loc (Tensor): mean of the distribution</span>
-<span class="sd">        covariance_matrix (Tensor): positive-definite covariance matrix</span>
-<span class="sd">        precision_matrix (Tensor): positive-definite precision matrix</span>
-<span class="sd">        scale_tril (Tensor): lower-triangular factor of covariance, with positive-valued diagonal</span>
-
-<span class="sd">    Note:</span>
-<span class="sd">        Only one of :attr:`covariance_matrix` or :attr:`precision_matrix` or</span>
-<span class="sd">        :attr:`scale_tril` can be specified.</span>
-
-<span class="sd">        Using :attr:`scale_tril` will be more efficient: all computations internally</span>
-<span class="sd">        are based on :attr:`scale_tril`. If :attr:`covariance_matrix` or</span>
-<span class="sd">        :attr:`precision_matrix` is passed instead, it is only used to compute</span>
-<span class="sd">        the corresponding lower triangular matrices using a Cholesky decomposition.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">arg_constraints</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;loc&#39;</span><span class="p">:</span> <span class="n">constraints</span><span class="o">.</span><span class="n">real_vector</span><span class="p">,</span>
-                       <span class="s1">&#39;covariance_matrix&#39;</span><span class="p">:</span> <span class="n">constraints</span><span class="o">.</span><span class="n">positive_definite</span><span class="p">,</span>
-                       <span class="s1">&#39;precision_matrix&#39;</span><span class="p">:</span> <span class="n">constraints</span><span class="o">.</span><span class="n">positive_definite</span><span class="p">,</span>
-                       <span class="s1">&#39;scale_tril&#39;</span><span class="p">:</span> <span class="n">constraints</span><span class="o">.</span><span class="n">lower_cholesky</span><span class="p">}</span>
-    <span class="n">support</span> <span class="o">=</span> <span class="n">constraints</span><span class="o">.</span><span class="n">real</span>
-    <span class="n">has_rsample</span> <span class="o">=</span> <span class="kc">True</span>
 
-    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">loc</span><span class="p">,</span> <span class="n">covariance_matrix</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">precision_matrix</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">scale_tril</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">validate_args</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
-        <span class="n">event_shape</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">(</span><span class="n">loc</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">:])</span>
-        <span class="k">if</span> <span class="p">(</span><span class="n">covariance_matrix</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">)</span> <span class="o">+</span> <span class="p">(</span><span class="n">scale_tril</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">)</span> <span class="o">+</span> <span class="p">(</span><span class="n">precision_matrix</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Exactly one of covariance_matrix or precision_matrix or scale_tril may be specified.&quot;</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">scale_tril</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">if</span> <span class="n">scale_tril</span><span class="o">.</span><span class="n">dim</span><span class="p">()</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;scale_tril matrix must be at least two-dimensional, &quot;</span>
-                                 <span class="s2">&quot;with optional leading batch dimensions&quot;</span><span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">scale_tril</span> <span class="o">=</span> <span class="n">scale_tril</span>
-            <span class="n">batch_shape</span> <span class="o">=</span> <span class="n">_get_batch_shape</span><span class="p">(</span><span class="n">scale_tril</span><span class="p">,</span> <span class="n">loc</span><span class="p">)</span>
-        <span class="k">elif</span> <span class="n">covariance_matrix</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">if</span> <span class="n">covariance_matrix</span><span class="o">.</span><span class="n">dim</span><span class="p">()</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;covariance_matrix must be at least two-dimensional, &quot;</span>
-                                 <span class="s2">&quot;with optional leading batch dimensions&quot;</span><span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">covariance_matrix</span> <span class="o">=</span> <span class="n">covariance_matrix</span>
-            <span class="n">batch_shape</span> <span class="o">=</span> <span class="n">_get_batch_shape</span><span class="p">(</span><span class="n">covariance_matrix</span><span class="p">,</span> <span class="n">loc</span><span class="p">)</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="k">if</span> <span class="n">precision_matrix</span><span class="o">.</span><span class="n">dim</span><span class="p">()</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;precision_matrix must be at least two-dimensional, &quot;</span>
-                                 <span class="s2">&quot;with optional leading batch dimensions&quot;</span><span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">precision_matrix</span> <span class="o">=</span> <span class="n">precision_matrix</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">covariance_matrix</span> <span class="o">=</span> <span class="n">_batch_inverse</span><span class="p">(</span><span class="n">precision_matrix</span><span class="p">)</span>
-            <span class="n">batch_shape</span> <span class="o">=</span> <span class="n">_get_batch_shape</span><span class="p">(</span><span class="n">precision_matrix</span><span class="p">,</span> <span class="n">loc</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">loc</span> <span class="o">=</span> <span class="n">loc</span>
-        <span class="nb">super</span><span class="p">(</span><span class="n">MultivariateNormal</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">batch_shape</span><span class="p">,</span> <span class="n">event_shape</span><span class="p">,</span> <span class="n">validate_args</span><span class="o">=</span><span class="n">validate_args</span><span class="p">)</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">prev</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">is_anomaly_enabled</span><span class="p">()</span>
 
-<div class="viewcode-block" id="MultivariateNormal.scale_tril"><a class="viewcode-back" href="../../../distributions.html#torch.distributions.multivariate_normal.MultivariateNormal.scale_tril">[docs]</a>    <span class="nd">@lazy_property</span>
-    <span class="k">def</span> <span class="nf">scale_tril</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">return</span> <span class="n">_batch_potrf_lower</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">covariance_matrix</span><span class="p">)</span></div>
+    <span class="k">def</span> <span class="nf">__enter__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">torch</span><span class="o">.</span><span class="n">set_anomaly_enabled</span><span class="p">(</span><span class="kc">True</span><span class="p">)</span>
 
-<div class="viewcode-block" id="MultivariateNormal.covariance_matrix"><a class="viewcode-back" href="../../../distributions.html#torch.distributions.multivariate_normal.MultivariateNormal.covariance_matrix">[docs]</a>    <span class="nd">@lazy_property</span>
-    <span class="k">def</span> <span class="nf">covariance_matrix</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">matmul</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">scale_tril</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">scale_tril</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">2</span><span class="p">))</span></div>
+    <span class="k">def</span> <span class="nf">__exit__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">):</span>
+        <span class="n">torch</span><span class="o">.</span><span class="n">set_anomaly_enabled</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">prev</span><span class="p">)</span>
+        <span class="k">return</span> <span class="kc">False</span></div>
 
-<div class="viewcode-block" id="MultivariateNormal.precision_matrix"><a class="viewcode-back" href="../../../distributions.html#torch.distributions.multivariate_normal.MultivariateNormal.precision_matrix">[docs]</a>    <span class="nd">@lazy_property</span>
-    <span class="k">def</span> <span class="nf">precision_matrix</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="c1"># TODO: use `torch.potri` on `scale_tril` once a backwards pass is implemented.</span>
-        <span class="n">scale_tril_inv</span> <span class="o">=</span> <span class="n">_batch_inverse</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">scale_tril</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">matmul</span><span class="p">(</span><span class="n">scale_tril_inv</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">2</span><span class="p">),</span> <span class="n">scale_tril_inv</span><span class="p">)</span></div>
 
-    <span class="nd">@property</span>
-    <span class="k">def</span> <span class="nf">mean</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">loc</span>
+<div class="viewcode-block" id="set_detect_anomaly"><a class="viewcode-back" href="../../../autograd.html#torch.autograd.set_detect_anomaly">[docs]</a><span class="k">class</span> <span class="nc">set_detect_anomaly</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Context-manager that sets the anomaly detection for the autograd engine on or off.</span>
 
-    <span class="nd">@property</span>
-    <span class="k">def</span> <span class="nf">variance</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="n">n</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">covariance_matrix</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
-        <span class="n">var</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">([</span><span class="n">cov</span><span class="o">.</span><span class="n">diag</span><span class="p">()</span> <span class="k">for</span> <span class="n">cov</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">covariance_matrix</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">n</span><span class="p">,</span> <span class="n">n</span><span class="p">)])</span>
-        <span class="k">return</span> <span class="n">var</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">covariance_matrix</span><span class="o">.</span><span class="n">size</span><span class="p">()[:</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+<span class="sd">    ``set_detect_anomaly`` will enable or disable the autograd anomaly detection</span>
+<span class="sd">    based on its argument :attr:`mode`.</span>
+<span class="sd">    It can be used as a context-manager or as a function.</span>
 
-<div class="viewcode-block" id="MultivariateNormal.rsample"><a class="viewcode-back" href="../../../distributions.html#torch.distributions.multivariate_normal.MultivariateNormal.rsample">[docs]</a>    <span class="k">def</span> <span class="nf">rsample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">sample_shape</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">()):</span>
-        <span class="n">shape</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_extended_shape</span><span class="p">(</span><span class="n">sample_shape</span><span class="p">)</span>
-        <span class="n">eps</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">loc</span><span class="o">.</span><span class="n">new</span><span class="p">(</span><span class="o">*</span><span class="n">shape</span><span class="p">)</span><span class="o">.</span><span class="n">normal_</span><span class="p">()</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">loc</span> <span class="o">+</span> <span class="n">_batch_mv</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">scale_tril</span><span class="p">,</span> <span class="n">eps</span><span class="p">)</span></div>
+<span class="sd">    See ``detect_anomaly`` above for details of the anomaly detection behaviour.</span>
 
-<div class="viewcode-block" id="MultivariateNormal.log_prob"><a class="viewcode-back" href="../../../distributions.html#torch.distributions.multivariate_normal.MultivariateNormal.log_prob">[docs]</a>    <span class="k">def</span> <span class="nf">log_prob</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_validate_args</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_validate_sample</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
-        <span class="n">diff</span> <span class="o">=</span> <span class="n">value</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">loc</span>
-        <span class="n">M</span> <span class="o">=</span> <span class="n">_batch_mahalanobis</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">scale_tril</span><span class="p">,</span> <span class="n">diff</span><span class="p">)</span>
-        <span class="n">log_det</span> <span class="o">=</span> <span class="n">_batch_diag</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">scale_tril</span><span class="p">)</span><span class="o">.</span><span class="n">abs</span><span class="p">()</span><span class="o">.</span><span class="n">log</span><span class="p">()</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
-        <span class="k">return</span> <span class="o">-</span><span class="mf">0.5</span> <span class="o">*</span> <span class="p">(</span><span class="n">M</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">loc</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="o">*</span> <span class="n">math</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">math</span><span class="o">.</span><span class="n">pi</span><span class="p">))</span> <span class="o">-</span> <span class="n">log_det</span></div>
+<span class="sd">    Arguments:</span>
+<span class="sd">        mode (bool): Flag whether to enable anomaly detection (``True``),</span>
+<span class="sd">                     or disable (``False``).</span>
 
-<div class="viewcode-block" id="MultivariateNormal.entropy"><a class="viewcode-back" href="../../../distributions.html#torch.distributions.multivariate_normal.MultivariateNormal.entropy">[docs]</a>    <span class="k">def</span> <span class="nf">entropy</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="n">log_det</span> <span class="o">=</span> <span class="n">_batch_diag</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">scale_tril</span><span class="p">)</span><span class="o">.</span><span class="n">abs</span><span class="p">()</span><span class="o">.</span><span class="n">log</span><span class="p">()</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
-        <span class="n">H</span> <span class="o">=</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="p">(</span><span class="mf">1.0</span> <span class="o">+</span> <span class="n">math</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">math</span><span class="o">.</span><span class="n">pi</span><span class="p">))</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">_event_shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">+</span> <span class="n">log_det</span>
-        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_batch_shape</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">H</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">H</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_batch_shape</span><span class="p">)</span></div></div>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">mode</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">prev</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">is_anomaly_enabled</span><span class="p">()</span>
+        <span class="n">torch</span><span class="o">.</span><span class="n">set_anomaly_enabled</span><span class="p">(</span><span class="n">mode</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">__enter__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">pass</span>
+
+    <span class="k">def</span> <span class="nf">__exit__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">):</span>
+        <span class="n">torch</span><span class="o">.</span><span class="n">set_anomaly_enabled</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">prev</span><span class="p">)</span>
+        <span class="k">return</span> <span class="kc">False</span></div>
 </pre></div>
 
            </div>
