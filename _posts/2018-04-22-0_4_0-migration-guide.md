@@ -124,7 +124,7 @@ tensor([ 0.,  0.,  0.])
 
 ## Support for 0-dimensional (scalar) Tensors
 
-Previously, indexing into a ``Tensor`` vector (1-dimensional tensor) gave a Python number but indexing into a ``Variable`` vector gave (incosistently!) a vector of size ``(1,)``!  Similar behavior existed with reduction functions, e.g. `tensor.sum()` would return a Python number, but `variable.sum()` would retun a vector of size `(1,)`.
+Previously, indexing into a ``Tensor`` vector (1-dimensional tensor) gave a Python number but indexing into a ``Variable`` vector gave (incosistently!) a vector of size ``(1,)``!  Similar behavior existed with reduction functions, e.g. `tensor.sum()` would return a Python number, but `variable.sum()` would return a vector of size `(1,)`.
 
 Fortunately, this release introduces proper scalar (0-dimensional tensor) support in PyTorch!  Scalars can be created using the new `torch.tensor` function (which will be explained in more detail later; for now just think of it as the PyTorch equivalent of `numpy.array`).  Now you can do things like:
 
