@@ -8,14 +8,14 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>torch.cuda.comm &mdash; PyTorch master documentation</title>
+  <title>torch.distributions.lowrank_multivariate_normal &mdash; PyTorch master documentation</title>
   
 
   
   
   
   
-    <link rel="canonical" href="https://pytorch.org/docs/stable/_modules/torch/cuda/comm.html"/>
+    <link rel="canonical" href="https://pytorch.org/docs/stable/_modules/torch/distributions/lowrank_multivariate_normal.html"/>
   
 
   
@@ -83,7 +83,7 @@
         <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
           
 <div>
-  <a style="color:#F05732" href="https://pytorch.org/docs/stable/_modules/torch/cuda/comm.html">
+  <a style="color:#F05732" href="https://pytorch.org/docs/stable/_modules/torch/distributions/lowrank_multivariate_normal.html">
     You are viewing unstable developer preview docs.
     Click here to view docs for latest stable release.
   </a>
@@ -737,9 +737,7 @@
         
           <li><a href="../../torch.html">torch</a> &raquo;</li>
         
-          <li><a href="../cuda.html">torch.cuda</a> &raquo;</li>
-        
-      <li>torch.cuda.comm</li>
+      <li>torch.distributions.lowrank_multivariate_normal</li>
     
     
       <li class="wy-breadcrumbs-aside">
@@ -754,167 +752,187 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
             
-  <h1>Source code for torch.cuda.comm</h1><div class="highlight"><pre>
-<span></span><span class="kn">import</span> <span class="nn">torch</span>
-<span class="kn">from</span> <span class="nn">.</span> <span class="k">import</span> <span class="n">nccl</span>
-<span class="kn">from</span> <span class="nn">torch._utils</span> <span class="k">import</span> <span class="n">_accumulate</span><span class="p">,</span> <span class="n">_take_tensors</span><span class="p">,</span> <span class="n">_flatten_dense_tensors</span><span class="p">,</span> \
-    <span class="n">_flatten_sparse_tensors</span><span class="p">,</span> <span class="n">_unflatten_dense_tensors</span><span class="p">,</span> \
-    <span class="n">_unflatten_sparse_tensors</span><span class="p">,</span> <span class="n">_reorder_tensors_as</span>
+  <h1>Source code for torch.distributions.lowrank_multivariate_normal</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span> <span class="nn">math</span>
+
+<span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">from</span> <span class="nn">torch.distributions</span> <span class="k">import</span> <span class="n">constraints</span>
+<span class="kn">from</span> <span class="nn">torch.distributions.distribution</span> <span class="k">import</span> <span class="n">Distribution</span>
+<span class="kn">from</span> <span class="nn">torch.distributions.multivariate_normal</span> <span class="k">import</span> <span class="p">(</span><span class="n">_batch_diag</span><span class="p">,</span> <span class="n">_batch_mahalanobis</span><span class="p">,</span> <span class="n">_batch_mv</span><span class="p">,</span>
+                                                     <span class="n">_batch_potrf_lower</span><span class="p">,</span> <span class="n">_batch_trtrs_lower</span><span class="p">,</span>
+                                                     <span class="n">_get_batch_shape</span><span class="p">)</span>
+<span class="kn">from</span> <span class="nn">torch.distributions.utils</span> <span class="k">import</span> <span class="n">lazy_property</span>
 
 
-<div class="viewcode-block" id="broadcast"><a class="viewcode-back" href="../../../cuda.html#torch.cuda.comm.broadcast">[docs]</a><span class="k">def</span> <span class="nf">broadcast</span><span class="p">(</span><span class="n">tensor</span><span class="p">,</span> <span class="n">devices</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;Broadcasts a tensor to a number of GPUs.</span>
-
-<span class="sd">    Arguments:</span>
-<span class="sd">        tensor (Tensor): tensor to broadcast.</span>
-<span class="sd">        devices (Iterable): an iterable of devices among which to broadcast.</span>
-<span class="sd">          Note that it should be like (src, dst1, dst2, ...), the first element</span>
-<span class="sd">          of which is the source device to broadcast from.</span>
-
-<span class="sd">    Returns:</span>
-<span class="sd">        A tuple containing copies of the ``tensor``, placed on devices</span>
-<span class="sd">        corresponding to indices from ``devices``.</span>
+<span class="k">def</span> <span class="nf">_batch_vector_diag</span><span class="p">(</span><span class="n">bvec</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Returns the diagonal matrices of a batch of vectors.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">_broadcast</span><span class="p">(</span><span class="n">tensor</span><span class="p">,</span> <span class="n">devices</span><span class="p">)</span></div>
+    <span class="n">n</span> <span class="o">=</span> <span class="n">bvec</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+    <span class="n">bmat</span> <span class="o">=</span> <span class="n">bvec</span><span class="o">.</span><span class="n">new_zeros</span><span class="p">(</span><span class="n">bvec</span><span class="o">.</span><span class="n">shape</span> <span class="o">+</span> <span class="p">(</span><span class="n">n</span><span class="p">,))</span>
+    <span class="n">bmat</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">bvec</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,))[</span><span class="o">...</span><span class="p">,</span> <span class="p">::</span><span class="n">n</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">bvec</span>
+    <span class="k">return</span> <span class="n">bmat</span>
 
 
-<div class="viewcode-block" id="broadcast_coalesced"><a class="viewcode-back" href="../../../cuda.html#torch.cuda.comm.broadcast_coalesced">[docs]</a><span class="k">def</span> <span class="nf">broadcast_coalesced</span><span class="p">(</span><span class="n">tensors</span><span class="p">,</span> <span class="n">devices</span><span class="p">,</span> <span class="n">buffer_size</span><span class="o">=</span><span class="mi">10485760</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;Broadcasts a sequence tensors to the specified GPUs.</span>
-<span class="sd">    Small tensors are first coalesced into a buffer to reduce the number</span>
-<span class="sd">    of synchronizations.</span>
-
-<span class="sd">    Arguments:</span>
-<span class="sd">        tensors (sequence): tensors to broadcast.</span>
-<span class="sd">        devices (Iterable): an iterable of devices among which to broadcast.</span>
-<span class="sd">          Note that it should be like (src, dst1, dst2, ...), the first element</span>
-<span class="sd">          of which is the source device to broadcast from.</span>
-<span class="sd">        buffer_size (int): maximum size of the buffer used for coalescing</span>
-
-<span class="sd">    Returns:</span>
-<span class="sd">        A tuple containing copies of the ``tensor``, placed on devices</span>
-<span class="sd">        corresponding to indices from ``devices``.</span>
+<span class="k">def</span> <span class="nf">_batch_capacitance_tril</span><span class="p">(</span><span class="n">W</span><span class="p">,</span> <span class="n">D</span><span class="p">):</span>
+    <span class="sa">r</span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Computes Cholesky of :math:`I + W.T @ inv(D) @ W` for a batch of matrices :math:`W`</span>
+<span class="sd">    and a batch of vectors :math:`D`.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">_broadcast_coalesced</span><span class="p">(</span><span class="n">tensors</span><span class="p">,</span> <span class="n">devices</span><span class="p">,</span> <span class="n">buffer_size</span><span class="p">)</span></div>
+    <span class="n">m</span> <span class="o">=</span> <span class="n">W</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+    <span class="n">Wt_Dinv</span> <span class="o">=</span> <span class="n">W</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">2</span><span class="p">)</span> <span class="o">/</span> <span class="n">D</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">2</span><span class="p">)</span>
+    <span class="n">K</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">matmul</span><span class="p">(</span><span class="n">Wt_Dinv</span><span class="p">,</span> <span class="n">W</span><span class="p">)</span><span class="o">.</span><span class="n">contiguous</span><span class="p">()</span>
+    <span class="n">K</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">m</span> <span class="o">*</span> <span class="n">m</span><span class="p">)[:,</span> <span class="p">::</span><span class="n">m</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span> <span class="o">+=</span> <span class="mi">1</span>  <span class="c1"># add identity matrix to K</span>
+    <span class="k">return</span> <span class="n">_batch_potrf_lower</span><span class="p">(</span><span class="n">K</span><span class="p">)</span>
 
 
-<div class="viewcode-block" id="reduce_add"><a class="viewcode-back" href="../../../cuda.html#torch.cuda.comm.reduce_add">[docs]</a><span class="k">def</span> <span class="nf">reduce_add</span><span class="p">(</span><span class="n">inputs</span><span class="p">,</span> <span class="n">destination</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;Sums tensors from multiple GPUs.</span>
-
-<span class="sd">    All inputs should have matching shapes.</span>
-
-<span class="sd">    Arguments:</span>
-<span class="sd">        inputs (Iterable[Tensor]): an iterable of tensors to add.</span>
-<span class="sd">        destination (int, optional): a device on which the output will be</span>
-<span class="sd">            placed (default: current device).</span>
-
-<span class="sd">    Returns:</span>
-<span class="sd">        A tensor containing an elementwise sum of all inputs, placed on the</span>
-<span class="sd">        ``destination`` device.</span>
+<span class="k">def</span> <span class="nf">_batch_lowrank_logdet</span><span class="p">(</span><span class="n">W</span><span class="p">,</span> <span class="n">D</span><span class="p">,</span> <span class="n">capacitance_tril</span><span class="p">):</span>
+    <span class="sa">r</span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Uses &quot;matrix determinant lemma&quot;::</span>
+<span class="sd">        log|W @ W.T + D| = log|C| + log|D|,</span>
+<span class="sd">    where :math:`C` is the capacitance matrix :math:`I + W.T @ inv(D) @ W`, to compute</span>
+<span class="sd">    the log determinant.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="c1"># TODO: try to find an input on another gpu, copy it,</span>
-    <span class="c1"># and accumulate into the copy</span>
-    <span class="k">if</span> <span class="n">destination</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">destination</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">current_device</span><span class="p">()</span>
-    <span class="n">input_size</span> <span class="o">=</span> <span class="n">inputs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">size</span><span class="p">()</span>
-    <span class="n">nccl_root</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">inp</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">inputs</span><span class="p">):</span>
-        <span class="k">assert</span> <span class="n">inp</span><span class="o">.</span><span class="n">is_cuda</span><span class="p">,</span> <span class="s2">&quot;reduce_add expects all inputs to be on GPUs&quot;</span>
-        <span class="k">if</span> <span class="n">inp</span><span class="o">.</span><span class="n">get_device</span><span class="p">()</span> <span class="o">==</span> <span class="n">destination</span><span class="p">:</span>
-            <span class="n">nccl_root</span> <span class="o">=</span> <span class="n">i</span>
-        <span class="k">if</span> <span class="n">inp</span><span class="o">.</span><span class="n">size</span><span class="p">()</span> <span class="o">!=</span> <span class="n">input_size</span><span class="p">:</span>
-            <span class="n">got</span> <span class="o">=</span> <span class="s1">&#39;x&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">inp</span><span class="o">.</span><span class="n">size</span><span class="p">())</span>
-            <span class="n">expected</span> <span class="o">=</span> <span class="s1">&#39;x&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">input_size</span><span class="p">)</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;input </span><span class="si">{}</span><span class="s2"> has invalid size: got </span><span class="si">{}</span><span class="s2">, but expected &quot;</span>
-                             <span class="s2">&quot;</span><span class="si">{}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">got</span><span class="p">,</span> <span class="n">expected</span><span class="p">))</span>
-    <span class="k">if</span> <span class="n">nccl_root</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;reduce_add expects destination to be on the same GPU with one of the tensors&quot;</span><span class="p">)</span>
-    <span class="n">result</span> <span class="o">=</span> <span class="n">inp</span><span class="o">.</span><span class="n">new</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="n">destination</span><span class="p">)</span><span class="o">.</span><span class="n">resize_as_</span><span class="p">(</span><span class="n">inp</span><span class="p">)</span><span class="o">.</span><span class="n">zero_</span><span class="p">()</span>
-
-    <span class="k">if</span> <span class="n">nccl</span><span class="o">.</span><span class="n">is_available</span><span class="p">(</span><span class="n">inputs</span><span class="p">)</span> <span class="ow">and</span> <span class="n">inputs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">get_device</span><span class="p">()</span> <span class="o">==</span> <span class="n">destination</span><span class="p">:</span>
-        <span class="n">outputs</span> <span class="o">=</span> <span class="p">[</span><span class="n">result</span><span class="p">]</span> <span class="o">+</span> <span class="p">[</span><span class="n">t</span><span class="o">.</span><span class="n">new</span><span class="p">(</span><span class="n">t</span><span class="o">.</span><span class="n">size</span><span class="p">())</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">inputs</span><span class="p">[</span><span class="mi">1</span><span class="p">:]]</span>
-        <span class="n">nccl</span><span class="o">.</span><span class="n">reduce</span><span class="p">(</span><span class="n">inputs</span><span class="p">,</span> <span class="n">outputs</span><span class="p">,</span> <span class="n">root</span><span class="o">=</span><span class="n">nccl_root</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">result</span>
-    <span class="k">for</span> <span class="n">inp</span> <span class="ow">in</span> <span class="n">inputs</span><span class="p">:</span>
-        <span class="n">input_correct_gpu</span> <span class="o">=</span> <span class="n">inp</span><span class="o">.</span><span class="n">cuda</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">get_device</span><span class="p">())</span>
-        <span class="n">result</span><span class="o">.</span><span class="n">add_</span><span class="p">(</span><span class="n">input_correct_gpu</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">result</span></div>
+    <span class="k">return</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">_batch_diag</span><span class="p">(</span><span class="n">capacitance_tril</span><span class="p">)</span><span class="o">.</span><span class="n">log</span><span class="p">()</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="o">+</span> <span class="n">D</span><span class="o">.</span><span class="n">log</span><span class="p">()</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
 
 
-<span class="k">def</span> <span class="nf">reduce_add_coalesced</span><span class="p">(</span><span class="n">inputs</span><span class="p">,</span> <span class="n">destination</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">buffer_size</span><span class="o">=</span><span class="mi">10485760</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;Sums tensors from multiple GPUs.</span>
-
-<span class="sd">    Small tensors are first coalesced into a buffer to reduce the number</span>
-<span class="sd">    of synchronizations.</span>
-
-<span class="sd">    Arguments:</span>
-<span class="sd">        inputs (Iterable[Iterable[Tensor]]): iterable of iterables that</span>
-<span class="sd">            contain tensors from a single device.</span>
-<span class="sd">        destination (int, optional): a device on which the output will be</span>
-<span class="sd">            placed (default: current device).</span>
-<span class="sd">        buffer_size (int): maximum size of the buffer used for coalescing</span>
-
-<span class="sd">    Returns:</span>
-<span class="sd">        A tuple of tensors containing an elementwise sum of each group of</span>
-<span class="sd">        inputs, placed on the ``destination`` device.</span>
+<span class="k">def</span> <span class="nf">_batch_lowrank_mahalanobis</span><span class="p">(</span><span class="n">W</span><span class="p">,</span> <span class="n">D</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">capacitance_tril</span><span class="p">):</span>
+    <span class="sa">r</span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Uses &quot;Woodbury matrix identity&quot;::</span>
+<span class="sd">        inv(W @ W.T + D) = inv(D) - inv(D) @ W @ inv(C) @ W.T @ inv(D),</span>
+<span class="sd">    where :math:`C` is the capacitance matrix :math:`I + W.T @ inv(D) @ W`, to compute the squared</span>
+<span class="sd">    Mahalanobis distance :math:`x.T @ inv(W @ W.T + D) @ x`.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">dense_tensors</span> <span class="o">=</span> <span class="p">[[]</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">inputs</span><span class="p">]</span>  <span class="c1"># shape (num_gpus, num_tensors)</span>
-    <span class="n">output</span> <span class="o">=</span> <span class="p">[]</span>
-    <span class="n">ref_order</span> <span class="o">=</span> <span class="p">[]</span>
-    <span class="c1"># process sparse ones first since they may have different sizes on different gpus</span>
-    <span class="k">for</span> <span class="n">tensor_at_gpus</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="o">*</span><span class="n">inputs</span><span class="p">):</span>
-        <span class="k">if</span> <span class="nb">all</span><span class="p">(</span><span class="n">t</span><span class="o">.</span><span class="n">is_sparse</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">tensor_at_gpus</span><span class="p">):</span>
-            <span class="n">result</span> <span class="o">=</span> <span class="n">reduce_add</span><span class="p">(</span><span class="n">tensor_at_gpus</span><span class="p">,</span> <span class="n">destination</span><span class="p">)</span>
-            <span class="n">output</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
-            <span class="n">ref_order</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">tensor_at_gpus</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+    <span class="n">Wt_Dinv</span> <span class="o">=</span> <span class="n">W</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">2</span><span class="p">)</span> <span class="o">/</span> <span class="n">D</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">2</span><span class="p">)</span>
+    <span class="n">Wt_Dinv_x</span> <span class="o">=</span> <span class="n">_batch_mv</span><span class="p">(</span><span class="n">Wt_Dinv</span><span class="p">,</span> <span class="n">x</span><span class="p">)</span>
+    <span class="n">mahalanobis_term1</span> <span class="o">=</span> <span class="p">(</span><span class="n">x</span><span class="o">.</span><span class="n">pow</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span> <span class="o">/</span> <span class="n">D</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+    <span class="n">mahalanobis_term2</span> <span class="o">=</span> <span class="n">_batch_mahalanobis</span><span class="p">(</span><span class="n">capacitance_tril</span><span class="p">,</span> <span class="n">Wt_Dinv_x</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">mahalanobis_term1</span> <span class="o">-</span> <span class="n">mahalanobis_term2</span>
+
+
+<div class="viewcode-block" id="LowRankMultivariateNormal"><a class="viewcode-back" href="../../../distributions.html#torch.distributions.lowrank_multivariate_normal.LowRankMultivariateNormal">[docs]</a><span class="k">class</span> <span class="nc">LowRankMultivariateNormal</span><span class="p">(</span><span class="n">Distribution</span><span class="p">):</span>
+    <span class="sa">r</span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Creates a multivariate normal distribution with covariance matrix having a low-rank form</span>
+<span class="sd">    parameterized by `cov_factor` and `cov_diag`::</span>
+<span class="sd">        covariance_matrix = cov_factor @ cov_factor.T + cov_diag</span>
+
+<span class="sd">    Example:</span>
+
+<span class="sd">        &gt;&gt;&gt; m = MultivariateNormal(torch.zeros(2), torch.tensor([1, 0]), torch.tensor([1, 1]))</span>
+<span class="sd">        &gt;&gt;&gt; m.sample()  # normally distributed with mean=`[0,0]`, cov_factor=`[1,0]`, cov_diag=`[1,1]`</span>
+<span class="sd">        tensor([-0.2102, -0.5429])</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        loc (Tensor): mean of the distribution with shape `batch_shape + event_shape`</span>
+<span class="sd">        cov_factor (Tensor): factor part of low-rank form of covariance matrix with shape</span>
+<span class="sd">            `batch_shape + event_shape + (rank,)`</span>
+<span class="sd">        cov_diag (Tensor): diagonal part of low-rank form of covariance matrix with shape</span>
+<span class="sd">            `batch_shape + event_shape`</span>
+
+<span class="sd">    Note:</span>
+<span class="sd">        The computation for determinant and inverse of covariance matrix is avoided when</span>
+<span class="sd">        `cov_factor.shape[1] &lt;&lt; cov_factor.shape[0]` thanks to `Woodbury matrix identity</span>
+<span class="sd">        &lt;https://en.wikipedia.org/wiki/Woodbury_matrix_identity&gt;`_ and</span>
+<span class="sd">        `matrix determinant lemma &lt;https://en.wikipedia.org/wiki/Matrix_determinant_lemma&gt;`_.</span>
+<span class="sd">        Thanks to these formulas, we just need to compute the determinant and inverse of</span>
+<span class="sd">        the small size &quot;capacitance&quot; matrix::</span>
+<span class="sd">            capacitance = I + cov_factor.T @ inv(cov_diag) @ cov_factor</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">arg_constraints</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;loc&quot;</span><span class="p">:</span> <span class="n">constraints</span><span class="o">.</span><span class="n">real</span><span class="p">,</span>
+                       <span class="s2">&quot;cov_factor&quot;</span><span class="p">:</span> <span class="n">constraints</span><span class="o">.</span><span class="n">real</span><span class="p">,</span>
+                       <span class="s2">&quot;cov_diag&quot;</span><span class="p">:</span> <span class="n">constraints</span><span class="o">.</span><span class="n">positive</span><span class="p">}</span>
+    <span class="n">support</span> <span class="o">=</span> <span class="n">constraints</span><span class="o">.</span><span class="n">real</span>
+    <span class="n">has_rsample</span> <span class="o">=</span> <span class="kc">True</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">loc</span><span class="p">,</span> <span class="n">cov_factor</span><span class="p">,</span> <span class="n">cov_diag</span><span class="p">,</span> <span class="n">validate_args</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">loc</span><span class="o">.</span><span class="n">dim</span><span class="p">()</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;loc must be at least one-dimensional.&quot;</span><span class="p">)</span>
+        <span class="n">event_shape</span> <span class="o">=</span> <span class="n">loc</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">:]</span>
+        <span class="k">if</span> <span class="n">cov_factor</span><span class="o">.</span><span class="n">dim</span><span class="p">()</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;cov_factor must be at least two-dimensional, &quot;</span>
+                             <span class="s2">&quot;with optional leading batch dimensions&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">cov_factor</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">2</span><span class="p">:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">!=</span> <span class="n">event_shape</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;cov_factor must be a batch of matrices with shape </span><span class="si">{}</span><span class="s2"> x m&quot;</span>
+                             <span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">event_shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]))</span>
+        <span class="k">if</span> <span class="n">cov_diag</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">:]</span> <span class="o">!=</span> <span class="n">event_shape</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;cov_diag must be a batch of vectors with shape </span><span class="si">{}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">event_shape</span><span class="p">))</span>
+
+        <span class="n">scale_batch_shape</span> <span class="o">=</span> <span class="n">_get_batch_shape</span><span class="p">(</span><span class="n">cov_factor</span><span class="p">,</span> <span class="n">cov_diag</span><span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">batch_shape</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">_infer_size</span><span class="p">(</span><span class="n">loc</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">scale_batch_shape</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">RuntimeError</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Incompatible batch shapes: loc </span><span class="si">{}</span><span class="s2">, cov_factor </span><span class="si">{}</span><span class="s2">, cov_diag </span><span class="si">{}</span><span class="s2">&quot;</span>
+                             <span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">loc</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">cov_factor</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">cov_diag</span><span class="o">.</span><span class="n">shape</span><span class="p">))</span>
+
+        <span class="n">loc_shape</span> <span class="o">=</span> <span class="n">batch_shape</span> <span class="o">+</span> <span class="n">event_shape</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">loc</span> <span class="o">=</span> <span class="n">loc</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="n">loc_shape</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cov_factor</span> <span class="o">=</span> <span class="n">cov_factor</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="n">loc_shape</span> <span class="o">+</span> <span class="n">cov_factor</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">:])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cov_diag</span> <span class="o">=</span> <span class="n">cov_diag</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="n">loc_shape</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_capacitance_tril</span> <span class="o">=</span> <span class="n">_batch_capacitance_tril</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cov_factor</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">cov_diag</span><span class="p">)</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">LowRankMultivariateNormal</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">batch_shape</span><span class="p">,</span> <span class="n">event_shape</span><span class="p">,</span>
+                                                        <span class="n">validate_args</span><span class="o">=</span><span class="n">validate_args</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">mean</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">loc</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">variance</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">cov_factor</span><span class="o">.</span><span class="n">pow</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">cov_diag</span>
+
+<div class="viewcode-block" id="LowRankMultivariateNormal.scale_tril"><a class="viewcode-back" href="../../../distributions.html#torch.distributions.lowrank_multivariate_normal.LowRankMultivariateNormal.scale_tril">[docs]</a>    <span class="nd">@lazy_property</span>
+    <span class="k">def</span> <span class="nf">scale_tril</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="c1"># The following identity is used to increase the numerically computation stability</span>
+        <span class="c1"># for Cholesky decomposition (see http://www.gaussianprocess.org/gpml/, Section 3.4.3):</span>
+        <span class="c1">#     W @ W.T + D = D1/2 @ (I + D-1/2 @ W @ W.T @ D-1/2) @ D1/2</span>
+        <span class="c1"># The matrix &quot;I + D-1/2 @ W @ W.T @ D-1/2&quot; has eigenvalues bounded from below by 1,</span>
+        <span class="c1"># hence it is well-conditioned and safe to take Cholesky decomposition.</span>
+        <span class="n">n</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_event_shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">cov_diag_sqrt_unsqueeze</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cov_diag</span><span class="o">.</span><span class="n">sqrt</span><span class="p">()</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">Dinvsqrt_W</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cov_factor</span> <span class="o">/</span> <span class="n">cov_diag_sqrt_unsqueeze</span>
+        <span class="n">K</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">matmul</span><span class="p">(</span><span class="n">Dinvsqrt_W</span><span class="p">,</span> <span class="n">Dinvsqrt_W</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">2</span><span class="p">))</span><span class="o">.</span><span class="n">contiguous</span><span class="p">()</span>
+        <span class="n">K</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">n</span> <span class="o">*</span> <span class="n">n</span><span class="p">)[:,</span> <span class="p">::</span><span class="n">n</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span> <span class="o">+=</span> <span class="mi">1</span>  <span class="c1"># add identity matrix to K</span>
+        <span class="k">return</span> <span class="n">cov_diag_sqrt_unsqueeze</span> <span class="o">*</span> <span class="n">_batch_potrf_lower</span><span class="p">(</span><span class="n">K</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="LowRankMultivariateNormal.covariance_matrix"><a class="viewcode-back" href="../../../distributions.html#torch.distributions.lowrank_multivariate_normal.LowRankMultivariateNormal.covariance_matrix">[docs]</a>    <span class="nd">@lazy_property</span>
+    <span class="k">def</span> <span class="nf">covariance_matrix</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">matmul</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cov_factor</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">cov_factor</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">2</span><span class="p">))</span> <span class="o">+</span>
+                <span class="n">_batch_vector_diag</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cov_diag</span><span class="p">))</span></div>
+
+<div class="viewcode-block" id="LowRankMultivariateNormal.precision_matrix"><a class="viewcode-back" href="../../../distributions.html#torch.distributions.lowrank_multivariate_normal.LowRankMultivariateNormal.precision_matrix">[docs]</a>    <span class="nd">@lazy_property</span>
+    <span class="k">def</span> <span class="nf">precision_matrix</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="c1"># We use &quot;Woodbury matrix identity&quot; to take advantage of low rank form::</span>
+        <span class="c1">#     inv(W @ W.T + D) = inv(D) - inv(D) @ W @ inv(C) @ W.T @ inv(D)</span>
+        <span class="c1"># where :math:`C` is the capacitance matrix.</span>
+        <span class="n">Wt_Dinv</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cov_factor</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">2</span><span class="p">)</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">cov_diag</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">2</span><span class="p">)</span>
+        <span class="n">A</span> <span class="o">=</span> <span class="n">_batch_trtrs_lower</span><span class="p">(</span><span class="n">Wt_Dinv</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_capacitance_tril</span><span class="p">)</span>
+        <span class="k">return</span> <span class="p">(</span><span class="n">_batch_vector_diag</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cov_diag</span><span class="o">.</span><span class="n">reciprocal</span><span class="p">())</span> <span class="o">-</span>
+                <span class="n">torch</span><span class="o">.</span><span class="n">matmul</span><span class="p">(</span><span class="n">A</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">2</span><span class="p">),</span> <span class="n">A</span><span class="p">))</span></div>
+
+<div class="viewcode-block" id="LowRankMultivariateNormal.rsample"><a class="viewcode-back" href="../../../distributions.html#torch.distributions.lowrank_multivariate_normal.LowRankMultivariateNormal.rsample">[docs]</a>    <span class="k">def</span> <span class="nf">rsample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">sample_shape</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">()):</span>
+        <span class="n">shape</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_extended_shape</span><span class="p">(</span><span class="n">sample_shape</span><span class="p">)</span>
+        <span class="n">eps_W</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">loc</span><span class="o">.</span><span class="n">new_empty</span><span class="p">(</span><span class="n">shape</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cov_factor</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">),))</span><span class="o">.</span><span class="n">normal_</span><span class="p">()</span>
+        <span class="n">eps_D</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">loc</span><span class="o">.</span><span class="n">new_empty</span><span class="p">(</span><span class="n">shape</span><span class="p">)</span><span class="o">.</span><span class="n">normal_</span><span class="p">()</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">loc</span> <span class="o">+</span> <span class="n">_batch_mv</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cov_factor</span><span class="p">,</span> <span class="n">eps_W</span><span class="p">)</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">cov_diag</span><span class="o">.</span><span class="n">sqrt</span><span class="p">()</span> <span class="o">*</span> <span class="n">eps_D</span></div>
+
+<div class="viewcode-block" id="LowRankMultivariateNormal.log_prob"><a class="viewcode-back" href="../../../distributions.html#torch.distributions.lowrank_multivariate_normal.LowRankMultivariateNormal.log_prob">[docs]</a>    <span class="k">def</span> <span class="nf">log_prob</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_validate_args</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_validate_sample</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+        <span class="n">diff</span> <span class="o">=</span> <span class="n">value</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">loc</span>
+        <span class="n">M</span> <span class="o">=</span> <span class="n">_batch_lowrank_mahalanobis</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cov_factor</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">cov_diag</span><span class="p">,</span> <span class="n">diff</span><span class="p">,</span>
+                                       <span class="bp">self</span><span class="o">.</span><span class="n">_capacitance_tril</span><span class="p">)</span>
+        <span class="n">log_det</span> <span class="o">=</span> <span class="n">_batch_lowrank_logdet</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cov_factor</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">cov_diag</span><span class="p">,</span>
+                                        <span class="bp">self</span><span class="o">.</span><span class="n">_capacitance_tril</span><span class="p">)</span>
+        <span class="k">return</span> <span class="o">-</span><span class="mf">0.5</span> <span class="o">*</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_event_shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="n">math</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">math</span><span class="o">.</span><span class="n">pi</span><span class="p">)</span> <span class="o">+</span> <span class="n">log_det</span> <span class="o">+</span> <span class="n">M</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="LowRankMultivariateNormal.entropy"><a class="viewcode-back" href="../../../distributions.html#torch.distributions.lowrank_multivariate_normal.LowRankMultivariateNormal.entropy">[docs]</a>    <span class="k">def</span> <span class="nf">entropy</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">log_det</span> <span class="o">=</span> <span class="n">_batch_lowrank_logdet</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cov_factor</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">cov_diag</span><span class="p">,</span>
+                                        <span class="bp">self</span><span class="o">.</span><span class="n">_capacitance_tril</span><span class="p">)</span>
+        <span class="n">H</span> <span class="o">=</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_event_shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="p">(</span><span class="mf">1.0</span> <span class="o">+</span> <span class="n">math</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">math</span><span class="o">.</span><span class="n">pi</span><span class="p">))</span> <span class="o">+</span> <span class="n">log_det</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_batch_shape</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">H</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="k">for</span> <span class="n">coll</span><span class="p">,</span> <span class="n">t</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">dense_tensors</span><span class="p">,</span> <span class="n">tensor_at_gpus</span><span class="p">):</span>
-                <span class="n">coll</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">t</span><span class="o">.</span><span class="n">to_dense</span><span class="p">()</span> <span class="k">if</span> <span class="n">t</span><span class="o">.</span><span class="n">is_sparse</span> <span class="k">else</span> <span class="n">t</span><span class="p">)</span>
-            <span class="n">ref_order</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">dense_tensors</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
-    <span class="n">itrs</span> <span class="o">=</span> <span class="p">[</span><span class="n">_take_tensors</span><span class="p">(</span><span class="n">tensors</span><span class="p">,</span> <span class="n">buffer_size</span><span class="p">)</span> <span class="k">for</span> <span class="n">tensors</span> <span class="ow">in</span> <span class="n">dense_tensors</span><span class="p">]</span>
-    <span class="c1"># now the dense ones, which have consistent sizes</span>
-    <span class="k">for</span> <span class="n">chunks</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="o">*</span><span class="n">itrs</span><span class="p">):</span>
-        <span class="n">flat_tensors</span> <span class="o">=</span> <span class="p">[</span><span class="n">_flatten_dense_tensors</span><span class="p">(</span><span class="n">chunk</span><span class="p">)</span> <span class="k">for</span> <span class="n">chunk</span> <span class="ow">in</span> <span class="n">chunks</span><span class="p">]</span>
-        <span class="n">flat_result</span> <span class="o">=</span> <span class="n">reduce_add</span><span class="p">(</span><span class="n">flat_tensors</span><span class="p">,</span> <span class="n">destination</span><span class="p">)</span>
-        <span class="n">output</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">_unflatten_dense_tensors</span><span class="p">(</span><span class="n">flat_result</span><span class="p">,</span> <span class="n">chunks</span><span class="p">[</span><span class="mi">0</span><span class="p">]))</span>
-    <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">_reorder_tensors_as</span><span class="p">(</span><span class="n">output</span><span class="p">,</span> <span class="n">ref_order</span><span class="p">))</span>
-
-
-<div class="viewcode-block" id="scatter"><a class="viewcode-back" href="../../../cuda.html#torch.cuda.comm.scatter">[docs]</a><span class="k">def</span> <span class="nf">scatter</span><span class="p">(</span><span class="n">tensor</span><span class="p">,</span> <span class="n">devices</span><span class="p">,</span> <span class="n">chunk_sizes</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">streams</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;Scatters tensor across multiple GPUs.</span>
-
-<span class="sd">    Arguments:</span>
-<span class="sd">        tensor (Tensor): tensor to scatter.</span>
-<span class="sd">        devices (Iterable[int]): iterable of ints, specifying among which</span>
-<span class="sd">            devices the tensor should be scattered.</span>
-<span class="sd">        chunk_sizes (Iterable[int], optional): sizes of chunks to be placed on</span>
-<span class="sd">            each device. It should match ``devices`` in length and sum to</span>
-<span class="sd">            ``tensor.size(dim)``. If not specified, the tensor will be divided</span>
-<span class="sd">            into equal chunks.</span>
-<span class="sd">        dim (int, optional): A dimension along which to chunk the tensor.</span>
-
-<span class="sd">    Returns:</span>
-<span class="sd">        A tuple containing chunks of the ``tensor``, spread across given</span>
-<span class="sd">        ``devices``.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">_scatter</span><span class="p">(</span><span class="n">tensor</span><span class="p">,</span> <span class="n">devices</span><span class="p">,</span> <span class="n">chunk_sizes</span><span class="p">,</span> <span class="n">dim</span><span class="p">,</span> <span class="n">streams</span><span class="p">))</span></div>
-
-
-<div class="viewcode-block" id="gather"><a class="viewcode-back" href="../../../cuda.html#torch.cuda.comm.gather">[docs]</a><span class="k">def</span> <span class="nf">gather</span><span class="p">(</span><span class="n">tensors</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">destination</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;Gathers tensors from multiple GPUs.</span>
-
-<span class="sd">    Tensor sizes in all dimension different than ``dim`` have to match.</span>
-
-<span class="sd">    Arguments:</span>
-<span class="sd">        tensors (Iterable[Tensor]): iterable of tensors to gather.</span>
-<span class="sd">        dim (int): a dimension along which the tensors will be concatenated.</span>
-<span class="sd">        destination (int, optional): output device (-1 means CPU, default:</span>
-<span class="sd">            current device)</span>
-
-<span class="sd">    Returns:</span>
-<span class="sd">        A tensor located on ``destination`` device, that is a result of</span>
-<span class="sd">        concatenating ``tensors`` along ``dim``.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">_gather</span><span class="p">(</span><span class="n">tensors</span><span class="p">,</span> <span class="n">dim</span><span class="p">,</span> <span class="n">destination</span><span class="p">)</span></div>
+            <span class="k">return</span> <span class="n">H</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_batch_shape</span><span class="p">)</span></div></div>
 </pre></div>
 
            </div>
