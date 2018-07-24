@@ -63,7 +63,7 @@
             
             
               <div class="version">
-                <a href="http://pytorch.org/docs/versions.html">master (0.5.0a0+74c29ac ) &#x25BC</a>
+                <a href="http://pytorch.org/docs/versions.html">master (0.5.0a0+099b5ba ) &#x25BC</a>
               </div>
             
           
@@ -827,7 +827,7 @@
             <span class="k">return</span> <span class="n">os</span><span class="o">.</span><span class="n">getppid</span><span class="p">()</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">manager_pid</span>
 
 
-<span class="k">def</span> <span class="nf">_worker_loop</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="n">index_queue</span><span class="p">,</span> <span class="n">data_queue</span><span class="p">,</span> <span class="n">collate_fn</span><span class="p">,</span> <span class="n">seed</span><span class="p">,</span> <span class="n">init_fn</span><span class="p">,</span> <span class="n">worker_id</span><span class="p">):</span>
+<span class="k">def</span> <span class="nf">_worker_loop</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="n">index_queue</span><span class="p">,</span> <span class="n">data_queue</span><span class="p">,</span> <span class="n">done_event</span><span class="p">,</span> <span class="n">collate_fn</span><span class="p">,</span> <span class="n">seed</span><span class="p">,</span> <span class="n">init_fn</span><span class="p">,</span> <span class="n">worker_id</span><span class="p">):</span>
     <span class="k">global</span> <span class="n">_use_shared_memory</span>
     <span class="n">_use_shared_memory</span> <span class="o">=</span> <span class="kc">True</span>
 
@@ -841,6 +841,11 @@
     <span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="n">seed</span><span class="p">)</span>
     <span class="n">torch</span><span class="o">.</span><span class="n">manual_seed</span><span class="p">(</span><span class="n">seed</span><span class="p">)</span>
 
+    <span class="c1"># Do not wait for putting thread to join when this worker exits. Otherwise,</span>
+    <span class="c1"># this worker may always be waiting to put and doesn&#39;t check index_queue</span>
+    <span class="c1"># and done_event for termination signal.</span>
+    <span class="n">data_queue</span><span class="o">.</span><span class="n">cancel_join_thread</span><span class="p">()</span>
+
     <span class="k">if</span> <span class="n">init_fn</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">init_fn</span><span class="p">(</span><span class="n">worker_id</span><span class="p">)</span>
 
@@ -850,11 +855,13 @@
         <span class="k">try</span><span class="p">:</span>
             <span class="n">r</span> <span class="o">=</span> <span class="n">index_queue</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="n">MANAGER_STATUS_CHECK_INTERVAL</span><span class="p">)</span>
         <span class="k">except</span> <span class="n">queue</span><span class="o">.</span><span class="n">Empty</span><span class="p">:</span>
-            <span class="k">if</span> <span class="n">watchdog</span><span class="o">.</span><span class="n">is_alive</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">watchdog</span><span class="o">.</span><span class="n">is_alive</span><span class="p">()</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">done_event</span><span class="o">.</span><span class="n">is_set</span><span class="p">():</span>
                 <span class="k">continue</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="k">break</span>
-        <span class="k">if</span> <span class="n">r</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="c1"># use done_event so that we can get faster exiting signal even if there</span>
+        <span class="c1"># are still indices in index_queue</span>
+        <span class="k">if</span> <span class="n">r</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">done_event</span><span class="o">.</span><span class="n">is_set</span><span class="p">():</span>
             <span class="k">break</span>
         <span class="n">idx</span><span class="p">,</span> <span class="n">batch_indices</span> <span class="o">=</span> <span class="n">r</span>
         <span class="k">try</span><span class="p">:</span>
@@ -866,7 +873,7 @@
             <span class="k">del</span> <span class="n">samples</span>
 
 
-<span class="k">def</span> <span class="nf">_worker_manager_loop</span><span class="p">(</span><span class="n">in_queue</span><span class="p">,</span> <span class="n">out_queue</span><span class="p">,</span> <span class="n">done_event</span><span class="p">,</span> <span class="n">pin_memory</span><span class="p">,</span> <span class="n">device_id</span><span class="p">):</span>
+<span class="k">def</span> <span class="nf">_pin_memory_loop</span><span class="p">(</span><span class="n">in_queue</span><span class="p">,</span> <span class="n">out_queue</span><span class="p">,</span> <span class="n">done_event</span><span class="p">,</span> <span class="n">pin_memory</span><span class="p">,</span> <span class="n">device_id</span><span class="p">):</span>
     <span class="k">if</span> <span class="n">pin_memory</span><span class="p">:</span>
         <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">set_device</span><span class="p">(</span><span class="n">device_id</span><span class="p">)</span>
 
@@ -877,7 +884,7 @@
             <span class="k">if</span> <span class="n">done_event</span><span class="o">.</span><span class="n">is_set</span><span class="p">():</span>
                 <span class="k">return</span>
             <span class="k">raise</span>
-        <span class="k">if</span> <span class="n">r</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">r</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">done_event</span><span class="o">.</span><span class="n">is_set</span><span class="p">():</span>
             <span class="k">break</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">r</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">ExceptionWrapper</span><span class="p">):</span>
             <span class="n">out_queue</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">r</span><span class="p">)</span>
@@ -997,7 +1004,6 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span> <span class="o">=</span> <span class="n">loader</span><span class="o">.</span><span class="n">num_workers</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">pin_memory</span> <span class="o">=</span> <span class="n">loader</span><span class="o">.</span><span class="n">pin_memory</span> <span class="ow">and</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">timeout</span> <span class="o">=</span> <span class="n">loader</span><span class="o">.</span><span class="n">timeout</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">done_event</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Event</span><span class="p">()</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">sample_iter</span> <span class="o">=</span> <span class="nb">iter</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_sampler</span><span class="p">)</span>
 
@@ -1007,35 +1013,32 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">worker_init_fn</span> <span class="o">=</span> <span class="n">loader</span><span class="o">.</span><span class="n">worker_init_fn</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">index_queues</span> <span class="o">=</span> <span class="p">[</span><span class="n">multiprocessing</span><span class="o">.</span><span class="n">Queue</span><span class="p">()</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span><span class="p">)]</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">worker_queue_idx</span> <span class="o">=</span> <span class="mi">0</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">worker_result_queue</span> <span class="o">=</span> <span class="n">multiprocessing</span><span class="o">.</span><span class="n">SimpleQueue</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">worker_result_queue</span> <span class="o">=</span> <span class="n">multiprocessing</span><span class="o">.</span><span class="n">Queue</span><span class="p">()</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">batches_outstanding</span> <span class="o">=</span> <span class="mi">0</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">worker_pids_set</span> <span class="o">=</span> <span class="kc">False</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">shutdown</span> <span class="o">=</span> <span class="kc">False</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">send_idx</span> <span class="o">=</span> <span class="mi">0</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">rcvd_idx</span> <span class="o">=</span> <span class="mi">0</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">reorder_dict</span> <span class="o">=</span> <span class="p">{}</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">done_event</span> <span class="o">=</span> <span class="n">multiprocessing</span><span class="o">.</span><span class="n">Event</span><span class="p">()</span>
 
             <span class="bp">self</span><span class="o">.</span><span class="n">workers</span> <span class="o">=</span> <span class="p">[</span>
                 <span class="n">multiprocessing</span><span class="o">.</span><span class="n">Process</span><span class="p">(</span>
                     <span class="n">target</span><span class="o">=</span><span class="n">_worker_loop</span><span class="p">,</span>
                     <span class="n">args</span><span class="o">=</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dataset</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">index_queues</span><span class="p">[</span><span class="n">i</span><span class="p">],</span>
-                          <span class="bp">self</span><span class="o">.</span><span class="n">worker_result_queue</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">collate_fn</span><span class="p">,</span> <span class="n">base_seed</span> <span class="o">+</span> <span class="n">i</span><span class="p">,</span>
+                          <span class="bp">self</span><span class="o">.</span><span class="n">worker_result_queue</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">done_event</span><span class="p">,</span>
+                          <span class="bp">self</span><span class="o">.</span><span class="n">collate_fn</span><span class="p">,</span> <span class="n">base_seed</span> <span class="o">+</span> <span class="n">i</span><span class="p">,</span>
                           <span class="bp">self</span><span class="o">.</span><span class="n">worker_init_fn</span><span class="p">,</span> <span class="n">i</span><span class="p">))</span>
                 <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span><span class="p">)]</span>
 
-            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">pin_memory</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">timeout</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">pin_memory</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">data_queue</span> <span class="o">=</span> <span class="n">queue</span><span class="o">.</span><span class="n">Queue</span><span class="p">()</span>
-                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">pin_memory</span><span class="p">:</span>
-                    <span class="n">maybe_device_id</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">current_device</span><span class="p">()</span>
-                <span class="k">else</span><span class="p">:</span>
-                    <span class="c1"># do not initialize cuda context if not necessary</span>
-                    <span class="n">maybe_device_id</span> <span class="o">=</span> <span class="kc">None</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">worker_manager_thread</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Thread</span><span class="p">(</span>
-                    <span class="n">target</span><span class="o">=</span><span class="n">_worker_manager_loop</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">pin_memory_thread</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Thread</span><span class="p">(</span>
+                    <span class="n">target</span><span class="o">=</span><span class="n">_pin_memory_loop</span><span class="p">,</span>
                     <span class="n">args</span><span class="o">=</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">worker_result_queue</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_queue</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">done_event</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">pin_memory</span><span class="p">,</span>
-                          <span class="n">maybe_device_id</span><span class="p">))</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">worker_manager_thread</span><span class="o">.</span><span class="n">daemon</span> <span class="o">=</span> <span class="kc">True</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">worker_manager_thread</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+                          <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">current_device</span><span class="p">()))</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">pin_memory_thread</span><span class="o">.</span><span class="n">daemon</span> <span class="o">=</span> <span class="kc">True</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">pin_memory_thread</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">data_queue</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">worker_result_queue</span>
 
@@ -1121,33 +1124,29 @@
         <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="s2">&quot;_DataLoaderIter cannot be pickled&quot;</span><span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">_shutdown_workers</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">try</span><span class="p">:</span>
-            <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">shutdown</span><span class="p">:</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">shutdown</span> <span class="o">=</span> <span class="kc">True</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">done_event</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
-                <span class="k">for</span> <span class="n">q</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">index_queues</span><span class="p">:</span>
-                    <span class="n">q</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
-                <span class="c1"># if some workers are waiting to put, make place for them</span>
-                <span class="k">try</span><span class="p">:</span>
-                    <span class="k">while</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">worker_result_queue</span><span class="o">.</span><span class="n">empty</span><span class="p">():</span>
-                        <span class="bp">self</span><span class="o">.</span><span class="n">worker_result_queue</span><span class="o">.</span><span class="n">get</span><span class="p">()</span>
-                <span class="k">except</span> <span class="p">(</span><span class="ne">FileNotFoundError</span><span class="p">,</span> <span class="ne">ImportError</span><span class="p">):</span>
-                    <span class="c1"># Many weird errors can happen here due to Python</span>
-                    <span class="c1"># shutting down. These are more like obscure Python bugs.</span>
-                    <span class="c1"># FileNotFoundError can happen when we rebuild the fd</span>
-                    <span class="c1"># fetched from the queue but the socket is already closed</span>
-                    <span class="c1"># from the worker side.</span>
-                    <span class="c1"># ImportError can happen when the unpickler loads the</span>
-                    <span class="c1"># resource from `get`.</span>
-                    <span class="k">pass</span>
-                <span class="c1"># done_event should be sufficient to exit worker_manager_thread,</span>
-                <span class="c1"># but be safe here and put another None</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">worker_result_queue</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
-        <span class="k">finally</span><span class="p">:</span>
-            <span class="c1"># removes pids no matter what</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">shutdown</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">shutdown</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="c1"># removes pids from the C side data structure first so worker</span>
+            <span class="c1"># termination afterwards won&#39;t trigger false positive error report.</span>
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">worker_pids_set</span><span class="p">:</span>
                 <span class="n">_remove_worker_pids</span><span class="p">(</span><span class="nb">id</span><span class="p">(</span><span class="bp">self</span><span class="p">))</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">worker_pids_set</span> <span class="o">=</span> <span class="kc">False</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">done_event</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">pin_memory</span><span class="p">:</span>
+                <span class="c1"># Sending `None` to `pin_memory_thread` must be before</span>
+                <span class="c1"># stopping worker processes because the workers may leave</span>
+                <span class="c1"># corrupted data in `worker_result_queue`, causing</span>
+                <span class="c1"># `pin_memory_thread` unable to read and terminate properly.</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">worker_result_queue</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
+            <span class="c1"># Workers can&#39;t be waiting to put be cause their output queue</span>
+            <span class="c1"># is a multiprocessing.Queue and its .put is non-blocking.</span>
+            <span class="c1"># They can only be waiting to get, so we put `None` here.</span>
+            <span class="k">for</span> <span class="n">q</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">index_queues</span><span class="p">:</span>
+                <span class="n">q</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">w</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">workers</span><span class="p">:</span>
+                <span class="n">w</span><span class="o">.</span><span class="n">join</span><span class="p">()</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">pin_memory</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">pin_memory_thread</span><span class="o">.</span><span class="n">join</span><span class="p">()</span>
 
     <span class="k">def</span> <span class="nf">__del__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
