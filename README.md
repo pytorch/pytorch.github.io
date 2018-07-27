@@ -21,12 +21,12 @@ To run the website locally for development:
 
 ```
 # Build the site on the preview server
-jekyll serve --livereload
+make serve
 
 # Now browse to http://localhost:4000
 ```
 
-### Building the Static Site 
+### Building the Static Site
 
 To build the static website from source:
 
