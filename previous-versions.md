@@ -59,12 +59,20 @@ There are three major lists below: Linux binaries compiled with CUDA 8 support,
 Linux binaries with CUDA 7.5 support, and Mac OSX & miscellaneous other binaries.
 
 ### PyTorch Linux binaries compiled with CUDA 9.1
+- [cu91/torch-0.4.0-cp36-cp36m-linux_x86_64.whl](http://download.pytorch.org/whl/cu91/torch-0.4.0-cp36-cp36m-linux_x86_64.whl)
+- [cu91/torch-0.4.0-cp35-cp35m-linux_x86_64.whl](http://download.pytorch.org/whl/cu91/torch-0.4.0-cp35-cp35m-linux_x86_64.whl)
+- [cu91/torch-0.4.0-cp27-cp27mu-linux_x86_64.whl](http://download.pytorch.org/whl/cu91/torch-0.4.0-cp27-cp27mu-linux_x86_64.whl)
+- [cu91/torch-0.4.0-cp27-cp27m-linux_x86_64.whl](http://download.pytorch.org/whl/cu91/torch-0.4.0-cp27-cp27m-linux_x86_64.whl)
 - [cu91/torch-0.3.1-cp36-cp36m-linux_x86_64.whl](http://download.pytorch.org/whl/cu91/torch-0.3.1-cp36-cp36m-linux_x86_64.whl)
 - [cu91/torch-0.3.1-cp35-cp35m-linux_x86_64.whl](http://download.pytorch.org/whl/cu91/torch-0.3.1-cp35-cp35m-linux_x86_64.whl)
 - [cu91/torch-0.3.1-cp27-cp27mu-linux_x86_64.whl](http://download.pytorch.org/whl/cu91/torch-0.3.1-cp27-cp27mu-linux_x86_64.whl)
 - [cu91/torch-0.3.1-cp27-cp27m-linux_x86_64.whl](http://download.pytorch.org/whl/cu91/torch-0.3.1-cp27-cp27m-linux_x86_64.whl)
 
 ### PyTorch Linux binaries compiled with CUDA 9.0
+- [cu90/torch-0.4.0-cp36-cp36m-linux_x86_64.whl](http://download.pytorch.org/whl/cu90/torch-0.4.0-cp36-cp36m-linux_x86_64.whl)
+- [cu90/torch-0.4.0-cp35-cp35m-linux_x86_64.whl](http://download.pytorch.org/whl/cu90/torch-0.4.0-cp35-cp35m-linux_x86_64.whl)
+- [cu90/torch-0.4.0-cp27-cp27mu-linux_x86_64.whl](http://download.pytorch.org/whl/cu90/torch-0.4.0-cp27-cp27mu-linux_x86_64.whl)
+- [cu90/torch-0.4.0-cp27-cp27m-linux_x86_64.whl](http://download.pytorch.org/whl/cu90/torch-0.4.0-cp27-cp27m-linux_x86_64.whl)
 - [cu90/torch-0.3.1-cp36-cp36m-linux_x86_64.whl](http://download.pytorch.org/whl/cu90/torch-0.3.1-cp36-cp36m-linux_x86_64.whl)
 - [cu90/torch-0.3.1-cp35-cp35m-linux_x86_64.whl](http://download.pytorch.org/whl/cu90/torch-0.3.1-cp35-cp35m-linux_x86_64.whl)
 - [cu90/torch-0.3.1-cp27-cp27mu-linux_x86_64.whl](http://download.pytorch.org/whl/cu90/torch-0.3.1-cp27-cp27mu-linux_x86_64.whl)
@@ -75,6 +83,10 @@ Linux binaries with CUDA 7.5 support, and Mac OSX & miscellaneous other binaries
 - [cu90/torch-0.3.0.post4-cp27-cp27m-linux_x86_64.whl](http://download.pytorch.org/whl/cu90/torch-0.3.0.post4-cp27-cp27m-linux_x86_64.whl)
 
 ### PyTorch Linux binaries compiled with CUDA 8
+- [cu80/torch-0.4.0-cp36-cp36m-linux_x86_64.whl](http://download.pytorch.org/whl/cu80/torch-0.4.0-cp36-cp36m-linux_x86_64.whl)
+- [cu80/torch-0.4.0-cp35-cp35m-linux_x86_64.whl](http://download.pytorch.org/whl/cu80/torch-0.4.0-cp35-cp35m-linux_x86_64.whl)
+- [cu80/torch-0.4.0-cp27-cp27mu-linux_x86_64.whl](http://download.pytorch.org/whl/cu80/torch-0.4.0-cp27-cp27mu-linux_x86_64.whl)
+- [cu80/torch-0.4.0-cp27-cp27m-linux_x86_64.whl](http://download.pytorch.org/whl/cu80/torch-0.4.0-cp27-cp27m-linux_x86_64.whl)
 - [cu80/torch-0.3.1-cp36-cp36m-linux_x86_64.whl](http://download.pytorch.org/whl/cu80/torch-0.3.1-cp36-cp36m-linux_x86_64.whl)
 - [cu80/torch-0.3.1-cp35-cp35m-linux_x86_64.whl](http://download.pytorch.org/whl/cu80/torch-0.3.1-cp35-cp35m-linux_x86_64.whl)
 - [cu80/torch-0.3.1-cp27-cp27mu-linux_x86_64.whl](http://download.pytorch.org/whl/cu80/torch-0.3.1-cp27-cp27mu-linux_x86_64.whl)
@@ -185,6 +197,9 @@ Linux binaries with CUDA 7.5 support, and Mac OSX & miscellaneous other binaries
 ### Mac and misc. binaries
 - [torchvision-0.1.6-py3-none-any.whl](http://download.pytorch.org/whl/torchvision-0.1.6-py3-none-any.whl)
 - [torchvision-0.1.6-py2-none-any.whl](http://download.pytorch.org/whl/torchvision-0.1.6-py2-none-any.whl)
+- [torch-0.4.0-cp36-cp36m-macosx_10_7_x86_64.whl](http://download.pytorch.org/whl/torch-0.4.0-cp36-cp36m-macosx_10_7_x86_64.whl)
+- [torch-0.4.0-cp35-cp35m-macosx_10_7_x86_64.whl](http://download.pytorch.org/whl/torch-0.4.0-cp35-cp35m-macosx_10_6_x86_64.whl)
+- [torch-0.4.0-cp27-none-macosx_10_7_x86_64.whl](http://download.pytorch.org/whl/torch-0.4.0-cp27-none-macosx_10_6_x86_64.whl)
 - [torch-0.3.1-cp36-cp36m-macosx_10_7_x86_64.whl](http://download.pytorch.org/whl/torch-0.3.1-cp36-cp36m-macosx_10_7_x86_64.whl)
 - [torch-0.3.1-cp35-cp35m-macosx_10_7_x86_64.whl](http://download.pytorch.org/whl/torch-0.3.1-cp35-cp35m-macosx_10_6_x86_64.whl)
 - [torch-0.3.1-cp27-none-macosx_10_7_x86_64.whl](http://download.pytorch.org/whl/torch-0.3.1-cp27-none-macosx_10_6_x86_64.whl)
