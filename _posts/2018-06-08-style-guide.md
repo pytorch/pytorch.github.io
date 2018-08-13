@@ -1,7 +1,6 @@
 ---
 layout: default
 title: Base Style Guide
-category: [style_guide]
 ---
 
 ## Header 2
