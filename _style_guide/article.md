@@ -61,11 +61,11 @@ This is body copy after an ordered list. Lorem ipsum dolor sit amet, consectetur
 
 > "This is a blockquote. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat"
 
-```
+```sh
   brew install pytorch # Here is a small code block
 ```
 
-{% highlight python %}
+```python
 # Here is a large code block with syntax highlighting
 
 # !/usr/bin/python3
@@ -104,4 +104,4 @@ for t in [ 'zingo', 'sarah', 'bill', 'wilma' ]:
         print('=>', fred[t])
     else:
         print('is not present.')
-{% endhighlight %}
+```
