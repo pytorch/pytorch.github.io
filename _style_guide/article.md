@@ -20,7 +20,7 @@ This is body copy. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed 
 
 ---
 
-This is more body copy. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. [Here is an inline link](#). Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
+This is more body copy with `code snippets`. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. [Here is an inline link](#). Ut enim ad minim veniam, quis nostrud `torch.*.FloatTensor` ullamco laboris nisi ut aliquip ex ea commodo consequat.
 
 _This is italicized body copy. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat_
 
@@ -105,3 +105,17 @@ for t in [ 'zingo', 'sarah', 'bill', 'wilma' ]:
     else:
         print('is not present.')
 ```
+
+Here is a table:
+
+| Data | type torch.dtype | Tensor types |
+|------|------------------|--------------|
+| 32-bit floating point | `torch.float32` or `torch.float` | `torch.*.FloatTensor`
+| 64-bit floating point | `torch.float64` or `torch.double` | `torch.*.DoubleTensor`
+| 16-bit floating point | `torch.float16` or `torch.half` | `torch.*.HalfTensor`
+| 8-bit integer (unsigned) |  `torch.uint8` | `torch.*.ByteTensor`
+| 8-bit integer (signed) | `torch.int8` | `torch.*.CharTensor`
+| 16-bit integer (signed) | `torch.int16` or `torch.short` | `torch.*.ShortTensor`
+| 32-bit integer (signed) | `torch.int32` or `torch.int` | `torch.*.IntTensor`
+| 64-bit integer (signed) | `torch.int64` or `torch.long` | `torch.*.LongTensor`
+

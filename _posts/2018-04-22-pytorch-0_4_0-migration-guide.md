@@ -1,6 +1,6 @@
 ---
 layout: blog_detail
-title: 'The road to 1.0: production ready PyTorch'
+title: 'PyTorch 0.4.0 Migration Guide'
 category: [updates]
 ---
 
@@ -190,17 +190,18 @@ In this release, we introduce [`torch.dtype`](http://pytorch.org/docs/0.4.0/tens
 
 ### [`torch.dtype`](http://pytorch.org/docs/0.4.0/tensor_attributes.html#torch.torch.dtype)
 
-Below is a complete list of available [`torch.dtype`](http://pytorch.org/docs/0.4.0/tensor_attributes.html#torch.torch.dtype]s (data types) and their corresponding tensor types.
+Below is a complete list of available [`torch.dtype`](http://pytorch.org/docs/0.4.0/tensor_attributes.html#torch.torch.dtype)s (data types) and their corresponding tensor types.
 
-Data type torch.dtype Tensor types
-32-bit floating point torch.float32 or torch.float  torch.*.FloatTensor
-64-bit floating point torch.float64 or torch.double torch.*.DoubleTensor
-16-bit floating point torch.float16 or torch.half torch.*.HalfTensor
-8-bit integer (unsigned)  torch.uint8 torch.*.ByteTensor
-8-bit integer (signed)  torch.int8  torch.*.CharTensor
-16-bit integer (signed) torch.int16 or torch.short  torch.*.ShortTensor
-32-bit integer (signed) torch.int32 or torch.int  torch.*.IntTensor
-64-bit integer (signed) torch.int64 or torch.long torch.*.LongTensor
+| Data | type torch.dtype | Tensor types |
+|------|------------------|--------------|
+| 32-bit floating point | `torch.float32` or `torch.float` | `torch.*.FloatTensor`
+| 64-bit floating point | `torch.float64` or `torch.double` | `torch.*.DoubleTensor`
+| 16-bit floating point | `torch.float16` or `torch.half` | `torch.*.HalfTensor`
+| 8-bit integer (unsigned) |  `torch.uint8` | `torch.*.ByteTensor`
+| 8-bit integer (signed) | `torch.int8` | `torch.*.CharTensor`
+| 16-bit integer (signed) | `torch.int16` or `torch.short` | `torch.*.ShortTensor`
+| 32-bit integer (signed) | `torch.int32` or `torch.int` | `torch.*.IntTensor`
+| 64-bit integer (signed) | `torch.int64` or `torch.long` | `torch.*.LongTensor`
 
 The dtype of a tensor can be access via its `dtype` attribute.
 
@@ -251,53 +252,53 @@ tensor(1)
 torch.float32
 >>> torch.tensor([1, 2]).dtype    # type inferece
 torch.int64
-``
+```
 
 We've also added more tensor creation methods. Some of them have `torch.*_like` and/or `tensor.new_*` variants.
 
-- torch.*_like takes in an input Tensor instead of a shape. It returns a Tensor with same attributes as  the input Tensor by default unless otherwise specified:
+- `torch.*_like` takes in an input `Tensor` instead of a shape. It returns a `Tensor` with same attributes as the input `Tensor` by default unless otherwise specified:
 
-```python
+  ```python
  >>> x = torch.randn(3, dtype=torch.float64)
  >>> torch.zeros_like(x)
  tensor([ 0.,  0.,  0.], dtype=torch.float64)
  >>> torch.zeros_like(x, dtype=torch.int)
  tensor([ 0,  0,  0], dtype=torch.int32)
- ```
+  ```
 
 - `tensor.new_*` can also create `Tensors` with same attributes as `tensor`, but it always takes in a shape argument:
 
-```python
+  ```python
  >>> x = torch.randn(3, dtype=torch.float64)
  >>> x.new_ones(2)
  tensor([ 1.,  1.], dtype=torch.float64)
  >>> x.new_ones(4, dtype=torch.int)
  tensor([ 1,  1,  1,  1], dtype=torch.int32)
- ```
+  ```
 
 To specify the desired shape, you can either use a tuple (e.g., `torch.zeros((2, 3))`) or variable arguments (e.g., `torch.zeros(2, 3)`) in most cases.
 
-Name  Returned Tensor torch.*_like variant  tensor.new_* variant
-torch.empty unintialized memory ✔ ✔
-torch.zeros all zeros ✔ ✔
-torch.ones  all ones  ✔ ✔
-torch.full  filled with a given value ✔ ✔
-torch.rand  i.i.d. continuous Uniform[0, 1) ✔
-torch.randn i.i.d. Normal(0, 1) ✔
-torch.randint i.i.d. discrete Uniform in given range  ✔
-torch.randperm  random permutation of {0, 1, ..., n - 1}
-torch.tensor  copied from existing data (list, NumPy ndarray, etc.)   ✔
-torch.from_numpy* from NumPy ndarray (sharing storage without copying)
-torch.arange,
-torch.range, and
-torch.linspace  uniformly spaced values in a given range
-torch.logspace  logarithmically spaced values in a given range
-torch.eye identity matrix
+| Name | Returned `Tensor` | `torch.*_like` variant | `tensor.new_*` variant |
+|------|-----------------|----------------------|----------------------|
+| [`torch.empty`](http://pytorch.org/docs/0.4.0/torch.html#torch.empty) | unintialized memory | ✔ | ✔ |
+| [`torch.zeros`](http://pytorch.org/docs/0.4.0/torch.html#torch.zeros) | all zeros | ✔ | ✔ |
+| [`torch.ones`](http://pytorch.org/docs/0.4.0/torch.html#torch.ones) | all ones | ✔ | ✔ |
+| [`torch.full`](http://pytorch.org/docs/0.4.0/torch.html#torch.full) | filled with a given value | ✔ | ✔ |
+| [`torch.rand`](http://pytorch.org/docs/0.4.0/torch.html#torch.rand) | i.i.d. continuous Uniform[0, 1) | ✔ |
+| [`torch.randn`](http://pytorch.org/docs/0.4.0/torch.html#torch.randn) | i.i.d. `Normal(0, 1)` | ✔ |
+| [`torch.randint`](http://pytorch.org/docs/0.4.0/torch.html#torch.randint) | i.i.d. discrete Uniform in given range | ✔ |
+| [`torch.randperm`](http://pytorch.org/docs/0.4.0/torch.html#torch.randperm) | random permutation of `{0, 1, ..., n - 1}` |
+| [`torch.tensor`](http://pytorch.org/docs/0.4.0/torch.html#torch.tensor) | copied from existing data (list, NumPy ndarray, etc.) | | ✔ |
+| [`torch.from_numpy`*](http://pytorch.org/docs/0.4.0/torch.html#torch.from_numpy) | from NumPy `ndarray` (sharing storage without copying) |
+| [`torch.arange`](http://pytorch.org/docs/0.4.0/torch.html#torch.arange), [`torch.range`](http://pytorch.org/docs/0.4.0/torch.html#torch.range), and [`torch.linspace`](http://pytorch.org/docs/0.4.0/torch.html#torch.linspace) | uniformly spaced values in a given range |
+| [`torch.logspace`](http://pytorch.org/docs/0.4.0/torch.html#torch.logspace) | logarithmically spaced values in a given range |
+| [`torch.eye`](http://pytorch.org/docs/0.4.0/torch.html#torch.eye) | identity matrix |
+
 
 *: [`torch.from_numpy`](http://pytorch.org/docs/0.4.0/torch.html#torch.from_numpy) only takes in a NumPy `ndarray` as its input argument.
 
 
-##Writing device-agnostic code
+## Writing device-agnostic code
 
 Previous versions of PyTorch made it difficult to write code that was device agnostic (i.e. that could run on both CUDA-enabled and CPU-only machines without modification).
 
