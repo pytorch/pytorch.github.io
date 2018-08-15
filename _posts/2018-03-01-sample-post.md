@@ -2,6 +2,7 @@
 layout: blog_detail
 title: 'Sample Post'
 category: [customer-showcase]
+author: PyTorch Contributor
 ---
 
 Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Mi eget mauris pharetra et. Vulputate dignissim suspendisse in est. Nibh sit amet commodo nulla facilisi. Lacus vel facilisis volutpat est velit.

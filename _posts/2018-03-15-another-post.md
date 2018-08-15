@@ -3,6 +3,7 @@ layout: blog_detail
 title: 'Another post'
 category: [customer-showcase]
 image: http://via.placeholder.com/400
+author: PyTorch Man
 ---
 
 Ut porttitor leo a diam. Pharetra massa massa ultricies mi. Platea dictumst quisque sagittis purus sit amet. Quisque id diam vel quam elementum pulvinar. Odio eu feugiat pretium nibh ipsum consequat nisl vel. Eu facilisis sed odio morbi. Dui vivamus arcu felis bibendum.
