@@ -192,7 +192,7 @@ In this release, we introduce [`torch.dtype`](http://pytorch.org/docs/0.4.0/tens
 
 Below is a complete list of available [`torch.dtype`](http://pytorch.org/docs/0.4.0/tensor_attributes.html#torch.torch.dtype)s (data types) and their corresponding tensor types.
 
-| Data | type torch.dtype | Tensor types |
+| Data | `type torch.dtype` | Tensor types |
 |------|------------------|--------------|
 | 32-bit floating point | `torch.float32` or `torch.float` | `torch.*.FloatTensor`
 | 64-bit floating point | `torch.float64` or `torch.double` | `torch.*.DoubleTensor`

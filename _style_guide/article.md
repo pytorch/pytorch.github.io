@@ -63,6 +63,7 @@ This is body copy after an ordered list. Lorem ipsum dolor sit amet, consectetur
 
 ```sh
   brew install pytorch # Here is a small code block
+  brew install pytorch # Here is a small code block
 ```
 
 ```python
