@@ -3,7 +3,7 @@ layout: default
 title: Start Via Cloud Partners
 slug: start-via-cloud-partners
 category: [get-started]
-date: 2018-07-31 00:00:02
+date: 2018-08-02 00:00:01
 ---
 
 ## Start Via Cloud Partners

@@ -3,7 +3,7 @@ layout: default
 title: Try Now via CoLab
 slug: try-now-via-colab
 category: [get-started]
-date: 2018-07-31 00:00:03
+date: 2018-08-01 00:00:01
 ---
 
 ## Try Now via CoLab

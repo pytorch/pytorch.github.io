@@ -6,22 +6,7 @@ category: [get-started]
 date: 2018-07-31 00:00:01
 ---
 
-## Start Locally
-
-<div class="row quick-start-guides">
-  <div class="col-md-6">
-    <p class="step-counter">1/4</p>
-    <div class="select-instructions">Select Your OS</div>
-  </div>
-
-  <div class="col-md-6">
-    <ul>
-      <li>Linux</li>
-      <li class="selected">MacOS</li>
-      <li>Windows</li>
-    </ul>
-  </div>
-</div>
+{% include quick_start_locally_module.html %}
 
 ---
 
