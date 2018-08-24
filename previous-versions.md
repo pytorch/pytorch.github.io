@@ -19,15 +19,15 @@ replace "0.1.12" in the following commands with the desired version
 
 Installing with CUDA 8
 
-`conda install pytorch=0.1.12 cuda80 -c soumith`
+`conda install pytorch=0.1.12 cuda80 -c pytorch`
 
 Installing with CUDA 7.5
 
-`conda install pytorch=0.1.12 cuda75 -c soumith`
+`conda install pytorch=0.1.12 cuda75 -c pytorch`
 
 Installing without CUDA
 
-`conda install pytorch=0.1.12 -c soumith`
+`conda install pytorch=0.1.12 -c pytorch`
 
 ### From source
 
