@@ -49,7 +49,7 @@ var scrollToAnchor = {
 
         if(match) {
           anchorOffset = $(match).offset().top - this.getFixedOffset();
-          $('html, body').animate({ scrollTop: anchorOffset});
+          $('html, body').scrollTop(anchorOffset);
 
           // Add the state to history as-per normal anchor links
           if(HISTORY_SUPPORT && pushToHistory) {
