@@ -28,6 +28,21 @@ function selectedOption(option, selection, category) {
   $(selection).addClass("selected");
   opts[category] = selection.id;
   commandMessage(buildMatcher());
+  if (category === "os") {
+    display(opts.os);
+  }
+}
+
+function display(selection) {
+  var container = document.getElementById('installation');
+  var elements = container.getElementsByClassName("os");
+  for (var i = 0; i < elements.length; i++) {
+    if (elements[i].classList.contains(selection)) {
+      $(elements[i]).addClass("selected");
+    } else {
+      $(elements[i]).removeClass("selected");
+    }
+  }
 }
 
 function buildMatcher() {
