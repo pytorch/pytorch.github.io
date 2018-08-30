@@ -1,7 +1,6 @@
 ---
 layout: blog_detail
 title: 'PyTorch 0.4.0 Migration Guide'
-category: [updates]
 ---
 
 Welcome to the migration guide for PyTorch 0.4.0. In this release we introduced [many exciting new features and critical bug fixes](https://github.com/pytorch/pytorch/releases/tag/v0.4.0), with the goal of providing users a better and cleaner interface. In this guide, we will cover the most important changes in migrating existing code from previous versions:

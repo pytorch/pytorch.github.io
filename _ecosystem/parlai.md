@@ -2,7 +2,6 @@
 layout: ecosystem_detail
 title: ParlAI
 slug: parlai
-category: [speech]
 summary: Framework for dialog AI research, implemented in Python
 background-class: ecosystem-background
 body-class: ecosystem ecosystem-detail

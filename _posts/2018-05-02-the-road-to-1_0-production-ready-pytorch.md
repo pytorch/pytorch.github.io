@@ -1,7 +1,6 @@
 ---
 layout: blog_detail
 title: 'The road to 1.0: production ready PyTorch'
-category: [updates]
 author: PyTorch Contributor
 ---
 

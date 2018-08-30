@@ -1,7 +1,6 @@
 ---
 layout: blog_detail
 title: 'Another post'
-category: [customer-showcase]
 image: http://via.placeholder.com/400
 author: PyTorch Man
 ---

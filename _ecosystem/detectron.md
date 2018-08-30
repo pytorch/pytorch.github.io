@@ -2,7 +2,6 @@
 layout: ecosystem_detail
 title: Detectron
 slug: detectron
-category: [speech]
 summary: A Pytorch Implementation of Detectron
 background-class: ecosystem-background
 body-class: ecosystem ecosystem-detail
