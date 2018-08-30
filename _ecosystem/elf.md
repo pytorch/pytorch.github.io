@@ -1,7 +1,6 @@
 ---
 layout: ecosystem_detail
 title: ELF
-slug: elf
 summary: Extensive, Lightweight, and Flexible platform for game research
 background-class: ecosystem-background
 body-class: ecosystem ecosystem-detail
