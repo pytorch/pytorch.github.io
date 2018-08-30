@@ -1,7 +1,6 @@
 ---
 layout: blog_detail
 title: 'Sample Post'
-category: [customer-showcase]
 author: PyTorch Contributor
 ---
 
