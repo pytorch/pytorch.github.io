@@ -59,6 +59,9 @@ function selectedOption(option, selection, category) {
 
 function display(selection) {
   var container = document.getElementById('installation');
+  if (container === null) {
+    return;
+  }
   var elements = container.getElementsByClassName("os");
   for (var i = 0; i < elements.length; i++) {
     if (elements[i].classList.contains(selection)) {
