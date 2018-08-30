@@ -6,7 +6,15 @@ category: [get-started]
 date: 2018-07-31 00:00:01
 ---
 
-{% include quick_start_locally_module.html %}
+## Start Locally
+
+<div class="container-fluid quick-start-module quick-starts">
+  <div class="row">
+    <div class="col-md-12">
+      {% include quick_start_local.html %}
+    </div>
+  </div>
+</div>
 
 ---
 
