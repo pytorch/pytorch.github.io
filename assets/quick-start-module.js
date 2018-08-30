@@ -30,6 +30,8 @@ cuda.on("click", function() {
   selectedOption(cuda, this, "cuda");
 });
 
+// Force a selection onclick to get the right operating system selected from
+// the start
 document.getElementById(opts.os).click();
 
 
