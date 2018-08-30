@@ -1,9 +1,16 @@
+// Keys are Substrings as diplayed by navigator.platform
+var supportedOperatingSystems = new Map([
+  ['linux', 'linux'],
+  ['mac', 'macos'],
+  ['win', 'windows'],
+]);
+
 var opts = {
-  cuda: "9.0",
-  os: "linux",
-  pm: "conda",
-  python: "3.6"
-};
+  cuda: 'cuda9.0',
+  os: getDefaultSelectedPlatform(),
+  pm: 'conda',
+  python: 'python3.6',
+}
 
 var os = $(".os > .option");
 var package = $(".package > .option");
@@ -22,6 +29,21 @@ python.on("click", function() {
 cuda.on("click", function() {
   selectedOption(cuda, this, "cuda");
 });
+
+document.getElementById(opts.os).click();
+
+
+// determine platform (mac, linux, windows) based on user's platform
+function getDefaultSelectedPlatform() {
+  var platform = navigator.platform.toLowerCase();
+  for (var [navPlatformSubstring, os] of supportedOperatingSystems.entries()) {
+    if (platform.indexOf(navPlatformSubstring) !== -1) {
+      return os;
+    }
+  }
+  // Just return something if user platform is not in our supported map
+  return supportedOperatingSystems.values().next().value;
+}
 
 function selectedOption(option, selection, category) {
   $(option).removeClass("selected");
