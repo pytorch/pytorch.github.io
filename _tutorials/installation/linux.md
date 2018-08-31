@@ -4,16 +4,21 @@ PyTorch can be installed and used on various Linux distributions. Depending on y
 
 ## Prerequisites
 
-### Supported LINUX DISTRIBUTIONS
+### Supported Linux Distributions
 
-PyTorch is supported on the following Linux distributions:
+PyTorch is supported on Linux distributions that use [glibc](https://www.gnu.org/software/libc/) >= v2.17, which include the following:
 
-* [Ubuntu](https://www.ubuntu.com/download/desktop), minimum version [xxxx]()
-* XXX
-* XXX
+* [Arch Linux](https://www.archlinux.org/download/), minimum version 2012-07-15
+* [CentOS](https://www.centos.org/download/), minimum version 7.3-1611
+* [Debian](https://www.debian.org/distrib/), minimum version 8.0
+* [Fedora](https://getfedora.org/), minimum version 24
+* [Mint](https://linuxmint.com/download.php), minimum version 14
+* [OpenSUSE](https://software.opensuse.org/), minimum version 42.1
+* [PCLinuxOS](https://www.pclinuxos.com/get-pclinuxos/), minimum version 2014.7
+* [Slackware](http://www.slackware.com/getslack/), minimum version 14.2
+* [Ubuntu](https://www.ubuntu.com/download/desktop), minimum version 13.04
 
-
-> The install instructions here will generally apply to all supported Linux distributions. The specific examples shown will be run on an Ubuntu 18.04 machine
+> The install instructions here will generally apply to all supported Linux distributions. An example difference is that your distribution may support `yum` instead of `apt`. The specific examples shown were run on an Ubuntu 18.04 machine.
 
 ### Python
 
