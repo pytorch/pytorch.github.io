@@ -1,9 +1,8 @@
 ---
 layout: default
 title: Start Via Cloud Partners
-slug: start-via-cloud-partners
-category: [get-started]
-date: 2018-08-02 00:00:01
+order: 3
+published: true
 ---
 
 ## Start Via Cloud Partners
