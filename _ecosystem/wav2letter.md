@@ -2,7 +2,7 @@
 layout: ecosystem_detail
 title: Wav2Letter
 summary: Simple and efficient end-to-end Automatic Speech Recognition (ASR) system from Facebook AI Research
-background-class: ecosystem-background
+background-class: ecosystem-detail-background
 body-class: ecosystem ecosystem-detail
 call-to-action: Try via CoLab
 ---

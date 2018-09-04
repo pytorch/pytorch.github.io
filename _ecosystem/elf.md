@@ -2,7 +2,7 @@
 layout: ecosystem_detail
 title: ELF
 summary: Extensive, Lightweight, and Flexible platform for game research
-background-class: ecosystem-background
+background-class: ecosystem-detail-background
 body-class: ecosystem ecosystem-detail
 call-to-action: Try via CoLab
 ---
