@@ -333,3 +333,27 @@ function commandMessage(key) {
     $("#command").html(object[key]);
   }
 }
+
+// Cloud Partners sub-menu toggle listeners
+$(".dropdown").on("show.bs.dropdown", function () {
+  var cloudOptionRow = $(this).next(".cloud-option-row");
+  cloudOptionRow.addClass("dropdown-padding");
+  if (cloudOptionRow.length == 0) {
+    $(this).addClass("bottom-row-padding");
+  }
+  $(this)
+    .find(".cloud-option")
+    .addClass("active-cloud-options with-down-arrow")
+    .removeClass("animated-border");
+});
+
+$(".dropdown").on("hide.bs.dropdown", function () {
+  var cloudOptionRow = $(this).next(".cloud-option-row");
+  cloudOptionRow.removeClass("dropdown-padding");
+  if (cloudOptionRow.length == 0) {
+    $(this).removeClass("bottom-row-padding");
+  }
+  $(".cloud-option")
+    .removeClass("active-cloud-options with-down-arrow")
+    .addClass("animated-border with-right-arrow")
+});
