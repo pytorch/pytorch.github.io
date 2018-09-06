@@ -6,6 +6,3 @@ external: true
 link: https://github.com/pytorch/elf
 ---
 
-## ELF
-
-Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
