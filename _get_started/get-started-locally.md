@@ -1,9 +1,8 @@
 ---
 layout: default
 title: Start Locally
-slug: start-locally
-category: [get-started]
-date: 2018-07-31 00:00:01
+order: 1
+published: true
 ---
 
 ## Start Locally
