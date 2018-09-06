@@ -15,6 +15,7 @@ snippet: >
     print()
   ```
 summary: Deep integration into Python allows popular libraries and packages to be used, while a new pure C++ interface (beta) enables performance-critical research.
+featured: true
 ---
 
 Deep integration into Python allows popular libraries and packages to be used, while a new pure C++ interface (beta) enables performance-critical research.
