@@ -16,4 +16,4 @@ snippet: >
   ```
 ---
 
-Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nulla ac velit vel elit sollicitudin mattis nec. Lorem ipsum dolor sit amet.
+Export models in the standard ONNX (Open Neural Network Exchange) format for direct access to ONNX-compatible platforms, runtimes, visualizers, and more.

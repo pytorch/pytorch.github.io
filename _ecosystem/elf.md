@@ -1,10 +1,9 @@
 ---
 layout: ecosystem_detail
 title: ELF
-summary: Extensive, Lightweight, and Flexible platform for game research
-background-class: ecosystem-detail-background
-body-class: ecosystem ecosystem-detail
-call-to-action: Try via CoLab
+summary: ELF is a platform for game research that allows developers to train and test their algorithms in various game environments.
+external: true
+link: https://github.com/pytorch/elf
 ---
 
 ## ELF

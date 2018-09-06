@@ -16,4 +16,4 @@ snippet: >
   ```
 ---
 
-Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nulla ac velit vel elit sollicitudin mattis nec. Lorem ipsum dolor sit amet.
+Deep integration into Python allows popular libraries and packages to be used, while a new pure C++ interface (beta) enables performance-critical research.

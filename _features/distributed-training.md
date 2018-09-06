@@ -16,4 +16,4 @@ snippet: >
   ```
 ---
 
-Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nulla ac velit vel elit sollicitudin mattis nec. Lorem ipsum dolor sit amet.
+Take advantage of native support for asynchronous execution of collective operations and peer-to-peer communication that is accessible from both Python and C++.

@@ -1,0 +1,11 @@
+---
+layout: ecosystem_detail
+title: GPyTorch
+summary: GPyTorch is a Gaussian process library implemented using PyTorch, designed for creating scalable, flexible Gaussian process models.
+external: true
+link: http://pyro.ai/
+---
+
+## PYRO
+
+Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.

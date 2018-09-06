@@ -1,7 +1,7 @@
 ---
 layout: blog_detail
 title: Stanford University
-logo: assets/images/stanford-university-logo.png
+logo: assets/images/stanford-university.png
 ---
 
-Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
+Using PyTorch's flexibility to efficiently research new algorithmic approaches.

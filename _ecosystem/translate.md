@@ -1,10 +1,9 @@
 ---
 layout: ecosystem_detail
-title: Wav2Letter
-summary: Simple and efficient end-to-end Automatic Speech Recognition (ASR) system from Facebook AI Research
-background-class: ecosystem-detail-background
-body-class: ecosystem ecosystem-detail
-call-to-action: Try via CoLab
+title: Translate
+summary: Translate is an open source project based on Facebook's machine translation systems.
+external: true
+link: https://github.com/pytorch/translate
 ---
 
 ## Get Started

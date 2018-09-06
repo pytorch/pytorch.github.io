@@ -16,4 +16,4 @@ snippet: >
   ```
 ---
 
-Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nulla ac velit vel elit sollicitudin mattis nec. Lorem ipsum dolor sit amet.
+Access a rich ecosystem of tools and libraries to extend PyTorch and support development in areas from computer vision to reinforcement learning.

@@ -1,7 +1,7 @@
 ---
 title: PyTorch Discuss
-summary: Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nulla
+summary: Browse and join discussions on deep learning with PyTorch.
 class: pytorch-resource
 link: https://discuss.pytorch.org
-order: 3
+order: 4
 ---
