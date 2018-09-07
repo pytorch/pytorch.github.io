@@ -8,9 +8,8 @@ PyTorch can be installed and used on various Windows distributions. Depending on
 
 PyTorch is supported on the following Windows distributions:
 
-* Windows 10
-* XXX
-* XXX
+* [Windows](https://www.microsoft.com/en-us/windows) 7 and greater; [Windows 10](https://www.microsoft.com/en-us/software-download/windows10ISO) or greater recommended.
+* [Windows Server 2008](https://docs.microsoft.com/en-us/windows-server/windows-server) r2 and greater
 
 > The install instructions here will generally apply to all supported Windows distributions. The specific examples shown will be run on a Windows 10 Enterprise machine
 
