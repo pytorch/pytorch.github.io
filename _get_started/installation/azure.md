@@ -2,11 +2,11 @@
 
 To gain the full experience of what PyTorch has to offer, a machine with at least one dedicated NVIDA GPU is necessary. While it is not always practical to have your own machine with these specifications, there are our cloud based solutions to allow you to test and use PyTorch's full features.
 
-Azure [provides](https://azure.microsoft.com/en-us/services/machine-learning-services/){:target="_blank"}:
+Azure [provides](https://azure.microsoft.com/en-us/services/machine-learning-services/){:target="_blank"}.
 
-* dedicated, pre-built [machine learning virtual machines](https://azure.microsoft.com/en-us/services/virtual-machines/data-science-virtual-machines/), complete with PyTorch
+* dedicated, pre-built [machine learning virtual machines](https://azure.microsoft.com/en-us/services/virtual-machines/data-science-virtual-machines/){:target="_blank"}, complete with PyTorch
 * bare Linux and Windows virtual machines for you to do a custom install of PyTorch
-* a [learning studio](https://azure.microsoft.com/en-us/services/machine-learning-studio/) and [notebooks](https://notebooks.azure.com/pytorch) to help you learn PyTorch and machine learning
+* a [learning studio](https://azure.microsoft.com/en-us/services/machine-learning-studio/){:target="_blank"} and [notebooks](https://notebooks.azure.com/pytorch){:target="_blank"} to help you learn PyTorch and machine learning
 
 ## Azure Primer
 
@@ -16,7 +16,7 @@ Once you are logged in, you will be brought to your [Azure portal](https://porta
 
 ### Machine Learning Studio
 
-Azure provides a no-coding required learning suite to help you learn machine learning with PyTorch. [Machine Learning Studio](https://studio.azureml.net/) is a browser-based, visual drag-and-drop authoring environment that allows you to build and run machine learning based applications.
+Azure provides a no-coding required learning suite to help you learn machine learning with PyTorch. [Machine Learning Studio](https://studio.azureml.net/){:target="_blank"} is a browser-based, visual drag-and-drop authoring environment that allows you to build and run machine learning based applications.
 
 ### GPU-based Virtual Machnes
 
@@ -27,7 +27,7 @@ The expense of your virutal machine is directly correlated to the number of GPUs
 
 ## Pre-Configured Data Science Virtual Machines
 
-Azure [provides](https://azure.microsoft.com/en-us/services/virtual-machines/data-science-virtual-machines/) [pre-configured](https://docs.microsoft.com/en-us/azure/machine-learning/data-science-virtual-machine/) data learning and machine learning virtual machines. PyTorch are available on many of these - for example here is the [documentation](https://docs.microsoft.com/en-us/azure/machine-learning/data-science-virtual-machine/dsvm-ubuntu-intro) for how to setup an Azure virtual machine on Ubuntu Linux.
+Azure [provides](https://azure.microsoft.com/en-us/services/virtual-machines/data-science-virtual-machines/){:target="_blank"} [pre-configured](https://docs.microsoft.com/en-us/azure/machine-learning/data-science-virtual-machine/){:target="_blank"} data learning and machine learning virtual machines. PyTorch are available on many of these - for example here is the [documentation](https://docs.microsoft.com/en-us/azure/machine-learning/data-science-virtual-machine/dsvm-ubuntu-intro){:target="_blank"} for how to setup an Azure virtual machine on Ubuntu Linux.
 
 
 ## Installing PyTorch From Scratch
