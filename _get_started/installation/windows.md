@@ -221,11 +221,11 @@ tensor([[0.3380, 0.3845, 0.3217],
         [0.4675, 0.3947, 0.1426]])
 ```
 
-Additionally, to check if your GPU driver and CUDA is enabled and accessible by PyTorch. Run the following commands to return whether or not the CUDA driver is enabled:
+Additionally, to check if your GPU driver and CUDA is enabled and accessible by PyTorch, run the following commands to return whether or not the CUDA driver is enabled:
 
 ```python
 import torch
-torch.cuda.is_enabled();
+torch.cuda.is_available();
 ```
 
 ## Building from source

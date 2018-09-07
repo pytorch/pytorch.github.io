@@ -56,7 +56,9 @@ sh Anaconda3-5.2.0-Linux-x86_64.sh
 # and follow the prompts. The defaults are generally good.`
 ```
 
-[![asciicast](https://asciinema.org/a/dcg4o30O20BZMsXkWzYiqO3r2.png)](https://asciinema.org/a/dcg4o30O20BZMsXkWzYiqO3r2)
+<div id="screencast">
+<script src="https://asciinema.org/a/SRbIn2nFnsUiYtlIcUsDVXN4n.js" id="asciicast-SRbIn2nFnsUiYtlIcUsDVXN4n" data-speed="3" async></script>
+</div>
 
 > You may have to open a new terminal or re-source your `~/.bashrc `to get access to the `conda` command
 
@@ -92,7 +94,9 @@ To install PyTorch via Anaconda, and do not have a [CUDA-capable](https://develo
 conda install pytorch-cpu torchvision-cpu -c pytorch
 ```
 
-[![asciicast](https://asciinema.org/a/Bw5UJb52QIpl0ozJqCf0e9aRx.png)](https://asciinema.org/a/Bw5UJb52QIpl0ozJqCf0e9aRx)
+<div id="screencast">
+<script src="https://asciinema.org/a/wtojk0bqpUDIb3yIHUsZqD9Ha.js" id="asciicast-wtojk0bqpUDIb3yIHUsZqD9Ha" data-speed="3" async></script>
+</div>
 
 #### CUDA 9.0
 
@@ -102,7 +106,9 @@ To install PyTorch via Anaconda, and you are using CUDA 9.0, use the following `
 conda install pytorch torchvision -c pytorch
 ```
 
-[![asciicast](https://asciinema.org/a/kSu4UYIqVIIhjdXRJ1l83fWYt.png)](https://asciinema.org/a/kSu4UYIqVIIhjdXRJ1l83fWYt)
+<div id="screencast">
+<script src="https://asciinema.org/a/HaCIxmYVEd8xGRAKsDu9hv9up.js" id="asciicast-HaCIxmYVEd8xGRAKsDu9hv9up" data-speed="5" async></script>
+</div>
 
 #### CUDA 8.x
 
@@ -244,14 +250,16 @@ tensor([[0.3380, 0.3845, 0.3217],
         [0.4675, 0.3947, 0.1426]])
 ```
 
-[![asciicast](https://asciinema.org/a/DrvhqLACTwhLLRNVPULP838Ov.png)](https://asciinema.org/a/DrvhqLACTwhLLRNVPULP838Ov)
-
-Additionally, to check if your GPU driver and CUDA is enabled and accessible by PyTorch. Run the following commands to return whether or not the CUDA driver is enabled:
+Additionally, to check if your GPU driver and CUDA is enabled and accessible by PyTorch, run the following commands to return whether or not the CUDA driver is enabled:
 
 ```python
 import torch
-torch.cuda.is_enabled();
+torch.cuda.is_available();
 ```
+
+<div id="screencast">
+<script src="https://asciinema.org/a/15dyZZvvakqbfKgfh2LByMkXz.js" id="asciicast-15dyZZvvakqbfKgfh2LByMkXz" data-speed="2" async></script>
+</div>
 
 ## Building from source
 
