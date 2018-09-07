@@ -2,7 +2,7 @@
 
 To gain the full experience of what PyTorch has to offer, a machine with at least one dedicated NVIDA GPU is necessary. While it is not always practical to have your own machine with these specifications, there are our cloud based solutions to allow you to test and use PyTorch's full features.
 
-Azure [provides](https://azure.microsoft.com/en-us/services/machine-learning-services/){:target="_blank"}.
+Azure [provides](https://azure.microsoft.com/en-us/services/machine-learning-services/){:target="_blank"}:
 
 * dedicated, pre-built [machine learning virtual machines](https://azure.microsoft.com/en-us/services/virtual-machines/data-science-virtual-machines/){:target="_blank"}, complete with PyTorch
 * bare Linux and Windows virtual machines for you to do a custom install of PyTorch
@@ -20,7 +20,7 @@ Azure provides a no-coding required learning suite to help you learn machine lea
 
 ### GPU-based Virtual Machnes
 
-Generally, you will be using [Azure Virtual Machines](https://azure.microsoft.com/en-us/services/virtual-machines/){:target="_blank"}) to begin with with PyTorch. Microsoft has various virtual machine types and pricing options, with both [Linux](https://azure.microsoft.com/en-us/pricing/details/virtual-machines/linux/){:target="_blank"} and [Windows](https://azure.microsoft.com/en-us/pricing/details/virtual-machines/windows/){:target="_blank"}, all of which are configured for specific use cases. For PyTorch, it is highly recommended that you use the GPU optimized(https://docs.microsoft.com/en-us/azure/virtual-machines/linux/sizes-gpu){:target="_blank"}, virtual machines. They are tailored for the high compute needs of machine learning.
+Generally, you will be using [Azure Virtual Machines](https://azure.microsoft.com/en-us/services/virtual-machines/){:target="_blank"}) to begin with with PyTorch. Microsoft has various virtual machine types and pricing options, with both [Linux](https://azure.microsoft.com/en-us/pricing/details/virtual-machines/linux/){:target="_blank"} and [Windows](https://azure.microsoft.com/en-us/pricing/details/virtual-machines/windows/){:target="_blank"}, all of which are configured for specific use cases. For PyTorch, it is highly recommended that you use the [GPU optimized](https://docs.microsoft.com/en-us/azure/virtual-machines/linux/sizes-gpu){:target="_blank"}, virtual machines. They are tailored for the high compute needs of machine learning.
 
 The expense of your virutal machine is directly correlated to the number of GPUs that it contains. The NC6 virtual machine is, for example, is one of the smallest, cheapest virtual machines and can actually be suitable for many use cases.
 
