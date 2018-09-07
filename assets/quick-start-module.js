@@ -380,32 +380,19 @@ function commandMessage(key) {
 }
 
 // Cloud Partners sub-menu toggle listeners
-$(".dropdown").on("show.bs.dropdown", function () {
-  var cloudOptionRow = $(this).next(".cloud-option-row");
-  cloudOptionRow.addClass("dropdown-padding");
-  if (cloudOptionRow.length == 0) {
-    $(this).addClass("bottom-row-padding");
-  }
-  $(this)
-    .find(".cloud-option")
-    .addClass("active-cloud-options with-down-arrow")
-    .removeClass("animated-border");
-  var cls = $(this).find(".cloud-option-body")[0].className;
-  for (var i = 0; i < supportedCloudPlatforms.length; i++) {
-    console.log(cls);
-    if (cls.includes(supportedCloudPlatforms[i])) {
-      display(supportedCloudPlatforms[i], 'cloud', 'platform');
+$("[data-toggle='cloud-dropdown']").on("click", function(e) {
+  if ($(this).hasClass("open")) {
+    $(this).removeClass("open");
+  } else {
+    $("[data-toggle='cloud-dropdown'].open").removeClass("open");
+    $(this).addClass("open");
+    var cls = $(this).find(".cloud-option-body")[0].className;
+    for (var i = 0; i < supportedCloudPlatforms.length; i++) {
+      console.log(cls);
+      if (cls.includes(supportedCloudPlatforms[i])) {
+        display(supportedCloudPlatforms[i], 'cloud', 'platform');
+      }
     }
   }
 });
 
-$(".dropdown").on("hide.bs.dropdown", function () {
-  var cloudOptionRow = $(this).next(".cloud-option-row");
-  cloudOptionRow.removeClass("dropdown-padding");
-  if (cloudOptionRow.length == 0) {
-    $(this).removeClass("bottom-row-padding");
-  }
-  $(".cloud-option")
-    .removeClass("active-cloud-options with-down-arrow")
-    .addClass("animated-border with-right-arrow")
-});

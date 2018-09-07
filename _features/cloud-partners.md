@@ -14,6 +14,7 @@ snippet: >
         a = a + 1
     print()
   ```
+summary: Get up and running quickly with PyTorch through cloud platforms for training and inference.
 ---
 
-Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nulla ac velit vel elit sollicitudin mattis nec. Lorem ipsum dolor sit amet.
+Get up and running quickly with PyTorch through cloud platforms for training and inference.

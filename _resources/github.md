@@ -1,7 +1,7 @@
 ---
 title: Github
-summary: Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nulla
+summary: Report bugs, request features, discuss issues, and more.
 class: github
 link: https://github.com/pytorch/pytorch
-order: 2
+order: 3
 ---

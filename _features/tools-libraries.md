@@ -14,6 +14,8 @@ snippet: >
         a = a + 1
     print()
   ```
+summary: Access a rich ecosystem of tools and libraries to extend PyTorch and support development in areas from computer vision to reinforcement learning.
+featured: true
 ---
 
-Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nulla ac velit vel elit sollicitudin mattis nec. Lorem ipsum dolor sit amet.
+Access a rich ecosystem of tools and libraries to extend PyTorch and support development in areas from computer vision to reinforcement learning.

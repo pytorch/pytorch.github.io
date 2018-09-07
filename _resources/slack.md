@@ -1,7 +1,7 @@
 ---
 title: Slack
-summary: Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nulla
+summary: Get your questions answered and collaborate. Request access
 class: slack
 link: https://pytorch.slack.com
-order: 1
+order: 5
 ---
