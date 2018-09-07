@@ -7,10 +7,16 @@ var supportedOperatingSystems = new Map([
 
 var opts = {
   cuda: 'cuda9.0',
-  os: getDefaultSelectedPlatform(),
+  os: getDefaultSelectedOS(),
   pm: 'conda',
   python: 'python3.6',
-}
+};
+
+var supportedCloudPlatforms = [
+  'aws',
+  'google-cloud',
+  'microsoft-azure',
+];
 
 var os = $(".os > .option");
 var package = $(".package > .option");
@@ -35,8 +41,8 @@ cuda.on("click", function() {
 document.getElementById(opts.os).click();
 
 
-// determine platform (mac, linux, windows) based on user's platform
-function getDefaultSelectedPlatform() {
+// determine os (mac, linux, windows) based on user's platform
+function getDefaultSelectedOS() {
   var platform = navigator.platform.toLowerCase();
   for (var [navPlatformSubstring, os] of supportedOperatingSystems.entries()) {
     if (platform.indexOf(navPlatformSubstring) !== -1) {
@@ -53,13 +59,13 @@ function selectedOption(option, selection, category) {
   opts[category] = selection.id;
   commandMessage(buildMatcher());
   if (category === "os") {
-    display(opts.os);
+    display(opts.os, 'installation', 'os');
   }
 }
 
-function display(selection) {
-  var container = document.getElementById('installation');
-  var elements = container.getElementsByClassName("os");
+function display(selection, id, category) {
+  var container = document.getElementById(id);
+  var elements = container.getElementsByClassName(category);
   for (var i = 0; i < elements.length; i++) {
     if (elements[i].classList.contains(selection)) {
       $(elements[i]).addClass("selected");
@@ -384,6 +390,13 @@ $(".dropdown").on("show.bs.dropdown", function () {
     .find(".cloud-option")
     .addClass("active-cloud-options with-down-arrow")
     .removeClass("animated-border");
+  var cls = $(this).find(".cloud-option-body")[0].className;
+  for (var i = 0; i < supportedCloudPlatforms.length; i++) {
+    console.log(cls);
+    if (cls.includes(supportedCloudPlatforms[i])) {
+      display(supportedCloudPlatforms[i], 'cloud', 'platform');
+    }
+  }
 });
 
 $(".dropdown").on("hide.bs.dropdown", function () {
