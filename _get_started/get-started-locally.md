@@ -17,12 +17,33 @@ published: true
 
 ---
 
-{% capture mac %}{% include_relative installation/mac.md %}{% endcapture %}
-{% capture linux %}{% include_relative installation/linux.md %}{% endcapture %}
-{% capture windows %}{% include_relative installation/windows.md %}{% endcapture %}
+{% capture mac %}
+<div class="inline_toc" markdown="1">
+* TOC
+{:toc}
+</div>
+{% include_relative installation/mac.md %}
+{% endcapture %}
+
+{% capture linux %}
+<div class="inline_toc" markdown="1">
+* TOC
+{:toc}
+</div>
+{% include_relative installation/linux.md %}
+{% endcapture %}
+
+{% capture windows %}
+<div class="inline_toc" markdown="1">
+* TOC
+{:toc}
+</div>
+{% include_relative installation/windows.md %}
+{% endcapture %}
+
 
 <div id="installation">
-  <div class="os macos">{{mac | markdownify }}</div>
-  <div class="os linux selected">{{linux | markdownify }}</div>
-  <div class="os windows">{{windows | markdownify }}</div>
+  <div class="os macos">{{ mac | markdownify }}</div>
+  <div class="os linux selected">{{ linux | markdownify }}</div>
+  <div class="os windows">{{ windows | markdownify }}</div>
 </div>
