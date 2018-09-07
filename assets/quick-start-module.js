@@ -383,6 +383,8 @@ function commandMessage(key) {
 $("[data-toggle='cloud-dropdown']").on("click", function(e) {
   if ($(this).hasClass("open")) {
     $(this).removeClass("open");
+    // If you deselect a current drop-down item, don't display it's info any longer
+    display(null, 'cloud', 'platform');
   } else {
     $("[data-toggle='cloud-dropdown'].open").removeClass("open");
     $(this).addClass("open");
