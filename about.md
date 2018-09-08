@@ -5,6 +5,8 @@ permalink: /about/
 layout: about
 ---
 
+# About
+
 PyTorch is a python package that provides two high-level features:
 
 - Tensor computation (like numpy) with strong GPU acceleration
