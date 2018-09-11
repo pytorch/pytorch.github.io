@@ -24,7 +24,16 @@ published: true
 {% include_relative installation/aws.md %}
 {% endcapture %}
 
+{% capture azure %}
+<div class="inline_toc" markdown="1">
+* TOC
+{:toc}
+</div>
+{% include_relative installation/azure.md %}
+{% endcapture %}
+
 <div id="cloud">
   <div class="platform aws">{{aws | markdownify }}</div>
+  <div class="platform microsoft-azure">{{azure | markdownify }}</div>
 </div>
 
