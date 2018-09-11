@@ -70,6 +70,8 @@ var twitter = {
         </div>"
       );
 
+      tweetWrapper.prepend("<div class=\"tweet-bird\"></div>");
+
       tweetsWrapper.append(tweetWrapper);
     });
 
