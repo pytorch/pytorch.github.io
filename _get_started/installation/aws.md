@@ -9,25 +9,25 @@ AWS [provides](https://aws.amazon.com/machine-learning/amis/){:target="_blank"} 
 
 ## Quick Start on Linux
 
-If you want to get started with a bare Linux AWS instance that you can login into from the commmand-line and install PyTorch, this step-by-step guide will help you do that.
+If you want to get started with a Linux AWS instance that has PyTorch already installed and that you can login into from the command-line, this step-by-step guide will help you do that.
 
-1. Log into your [AWS console](https://aws.amazon.com/console/). If you do not have an AWS account, see the [primer](#aws-primer) below.
+1. Sign into your [AWS console](https://aws.amazon.com/console/). If you do not have an AWS account, see the [primer](#aws-primer) below.
 1. Click on `Launch a virtual machine`.
-1. Select `Deep Learning Base AMI (Ubuntu)`.
-   > This allows you to customize your PyTorch installation. If you wanted an AWS instance with a pre-defined version of PyTorch already installed, you could choose the `Deep Learning AMI (Ubuntu)` which will have everything you need to get going with PyTorch.
+1. Select `Deep Learning AMI (Ubuntu)`.
+   > This gives you an instance with a pre-defined version of PyTorch already installed. If you wanted a bare AWS instance that required PyTorch to be installed, you could choose the `Deep Learning Base AMI (Ubuntu)`, which will have the hardware, but none of the software already available.
 1. You can choose any of the available instances to try PyTorch, even the *free-tier*, but it is recommended for best performance that you get a *GPU compute* or *Compute optimized* instance. For example, a GPU compute `p3.2xlarge` is a good instance type for PyTorch.
    > Other instance options include the Compute Optimized c5-series (e.g., `c5.2xlarge`) or the General Compute t2-series or t3-series (e.g., `t2.2xlarge`). It is important to note that if you choose an instance without a GPU, PyTorch will only be running in CPU compute mode, and operations may take much, much longer.
 1. Click on `Review and Launch`. 
 1. Review the instance information and click `Launch`.
 1. You will want to `Create a new key pair` if you do not have one already to use. Pick a name and download it locally via the `Download Key Pair` button.
-1. Now click on `Launch Instances`. You now have a live instance to use for PyTroch. If you click on `View Instances`, you will see your running instance.
+1. Now click on `Launch Instances`. You now have a live instance to use for PyTorch. If you click on `View Instances`, you will see your running instance.
 1. Take note of the `Public DNS` as this will be used to `ssh` into your instance from the command-line.
 1. Open a command-line prompt
 1. Ensure that your key-pair has the proper permissions, or you will not be able to log in. Type `chmod 400 path/to/downloaded/key-pair.pem`.
 1. Type `ssh -i path/to/downloaded/key-pair.pem ubuntu@<Public DNS that you noted above>`. e.g., `ssh -i ~/Downloads/aws-quick-start.pem ubuntu@ec2-55-181-112-129.us-west-2.compute.amazonaws.com`. If asked to continue connection, type `yes`.
-1. You should now see a prompt similar to `ubuntu@ip-100-30-20-95`. If so, you are now connected to your instance. 
-1. Now follow the [Linux getting started instructions](get-started) in order to install PyTorch.
-   > If you chose the `Deep Learning AMI (Ubuntu)` instead of the `Deep Learning Base AMI (Ubuntu)`, then you will not need to install PyTorch. It will be available for you.
+1. You should now see a prompt similar to `ubuntu@ip-100-30-20-95`. If so, you are now connected to your instance.
+1. Verify that PyTorch is installed by running the [verification steps](get-started#verification).
+   > If you chose the `Deep Learning Base AMI (Ubuntu)` instead of the `Deep Learning AMI (Ubuntu)`, then you will need to install PyTorch. Follow the [Linux getting started instructions](get-started) in order to install it.
 
 ## AWS Primer
 
