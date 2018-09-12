@@ -44,10 +44,10 @@ build: install include-yarn-deps
 	rm -rf _site/scripts
 
 serve: install include-yarn-deps
-	JEKYLL_ENV=production $(JEKYLL) serve --config _config.yml,_config_dev.yml
+	JEKYLL_ENV=development $(JEKYLL) serve --config _config.yml,_config_dev.yml
 
 build_deploy: include-yarn-deps
-	$(JEKYLL) build
+	JEKYLL_ENV=production $(JEKYLL) build
 	rm _site/Gemfile
 	rm _site/Gemfile.lock
 	rm _site/Makefile
