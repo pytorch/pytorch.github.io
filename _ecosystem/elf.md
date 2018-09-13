@@ -5,5 +5,8 @@ summary: ELF is a platform for game research that allows developers to train and
 external: true
 link: https://github.com/pytorch/elf
 logo-class: elf
+order: 2
+summary-home: ELF is a platform for game research that allows developers to train and test their algorithms in various game environments.
+featured-home: true
 ---
 
