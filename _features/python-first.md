@@ -14,8 +14,10 @@ snippet: >
         a = a + 1
     print()
   ```
-summary-home: Deep integration into Python allows popular libraries and packages to be used, while a new pure C++ interface (beta) enables performance-critical research.
+
+summary-home: Deep integration into Python allows popular libraries and packages to be used for easily writing neural network layers in Python.
 featured-home: true
+
 ---
 
-Deep integration into Python allows popular libraries and packages to be used, while a new pure C++ interface (beta) enables performance-critical research.
+PyTorch is not a Python binding into a monolithic C++ framework. It's built to be deeply integrated into Python so it can be used with popular libraries and packages such as Cython and Numba.

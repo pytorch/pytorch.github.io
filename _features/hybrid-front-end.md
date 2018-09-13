@@ -14,8 +14,10 @@ snippet: >
         a = a + 1
     print()
   ```
-summary-home: A new hybrid front-end provides ease-of-use and flexibility in eager mode, while seamlessly transitioning to graph mode for speed, optimization, and functionality in C++ runtime environments.
+
+summary-home: A new hybrid front-end seamlessly transitions between eager mode and graph mode to provide both flexibility and speed.
 featured-home: true
+
 ---
 
 A new hybrid front-end provides ease-of-use and flexibility in eager mode, while seamlessly transitioning to graph mode for speed, optimization, and functionality in C++ runtime environments.
