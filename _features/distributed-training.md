@@ -14,8 +14,8 @@ snippet: >
         a = a + 1
     print()
   ```
-summary: Take advantage of native support for asynchronous execution of collective operations and peer-to-peer communication that is accessible from both Python and C++.
-featured: true
+summary-home: Take advantage of native support for asynchronous execution of collective operations and peer-to-peer communication that is accessible from both Python and C++.
+featured-home: true
 ---
 
 Take advantage of native support for asynchronous execution of collective operations and peer-to-peer communication that is accessible from both Python and C++.
