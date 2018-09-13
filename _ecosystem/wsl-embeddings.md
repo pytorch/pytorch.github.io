@@ -5,4 +5,6 @@ summary: WSL Embeddings allow developers to experiment with image recognition ca
 external: true
 link: https://facebook.ai/developers/tools/wslembeddings
 order: 7
+logo-class: vision
+
 ---
