@@ -1,7 +1,6 @@
 ---
-layout: default
+layout: general
 title: Previous PyTorch Versions
-order: 3
 published: true
 ---
 
