@@ -14,8 +14,10 @@ snippet: >
         a = a + 1
     print()
   ```
-summary-home: Access a rich ecosystem of tools and libraries to extend PyTorch and support development in areas from computer vision to reinforcement learning.
+
+summary-home: A rich ecosystem of tools and libraries extends PyTorch and supports development in computer vision, NLP and more.
 featured-home: true
+
 ---
 
-Access a rich ecosystem of tools and libraries to extend PyTorch and support development in areas from computer vision to reinforcement learning.
+An active community of researchers and developers have built a rich ecosystem of tools and libraries for extending PyTorch and supporting development in areas from computer vision to reinforcement learning.

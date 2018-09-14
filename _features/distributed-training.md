@@ -14,8 +14,10 @@ snippet: >
         a = a + 1
     print()
   ```
-summary-home: Take advantage of native support for asynchronous execution of collective operations and peer-to-peer communication that is accessible from both Python and C++.
+
+summary-home: Scalable distributed training and performance optimization in research and production is enabled by the torch.distributed backend.
 featured-home: true
+
 ---
 
-Take advantage of native support for asynchronous execution of collective operations and peer-to-peer communication that is accessible from both Python and C++.
+Optimize performance in both research and production by taking advantage of native support for asynchronous execution of collective operations and peer-to-peer communication that is accessible from Python and C++.
