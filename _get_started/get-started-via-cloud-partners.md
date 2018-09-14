@@ -17,26 +17,26 @@ published: true
 ---
 
 {% capture aws %}
-<div class="inline_toc" markdown="1">
+<nav class="inline_toc" markdown="1">
 * TOC
 {:toc}
-</div>
+</nav>
 {% include_relative installation/aws.md %}
 {% endcapture %}
 
 {% capture azure %}
-<div class="inline_toc" markdown="1">
+<nav class="inline_toc" markdown="1">
 * TOC
 {:toc}
-</div>
+</nav>
 {% include_relative installation/azure.md %}
 {% endcapture %}
 
 {% capture google-cloud %}
-<div class="inline_toc" markdown="1">
+<nav class="inline_toc" markdown="1">
 * TOC
 {:toc}
-</div>
+</nav>
 {% include_relative installation/google-cloud.md %}
 {% endcapture %}
 

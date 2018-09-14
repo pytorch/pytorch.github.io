@@ -18,26 +18,26 @@ published: true
 ---
 
 {% capture mac %}
-<div class="inline_toc" markdown="1">
+<nav class="inline_toc" markdown="1">
 * TOC
 {:toc}
-</div>
+</nav>
 {% include_relative installation/mac.md %}
 {% endcapture %}
 
 {% capture linux %}
-<div class="inline_toc" markdown="1">
+<nav class="inline_toc" markdown="1">
 * TOC
 {:toc}
-</div>
+</nav>
 {% include_relative installation/linux.md %}
 {% endcapture %}
 
 {% capture windows %}
-<div class="inline_toc" markdown="1">
+<nav class="inline_toc" markdown="1">
 * TOC
 {:toc}
-</div>
+</nav>
 {% include_relative installation/windows.md %}
 {% endcapture %}
 
