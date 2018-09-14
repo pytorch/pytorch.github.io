@@ -4,10 +4,10 @@ To gain the full experience of what PyTorch has to offer, a machine with at leas
 
 AWS [provides](https://aws.amazon.com/machine-learning/amis/){:target="_blank"} both:
 
-* dedicated, pre-built machine learning instances, complete with PyTorch
-* bare Linux and Windows instances for you to do a custom install of PyTorch.
+* Deep Learning AMIs: dedicated, pre-built machine learning instances, complete with PyTorch
+* Deep Learning Base AMI: bare Linux and Windows instances for you to do a custom install of PyTorch.
 
-## Quick Start on Linux
+## Quick Start on Deep Learning AMI
 
 If you want to get started with a Linux AWS instance that has PyTorch already installed and that you can login into from the command-line, this step-by-step guide will help you do that.
 
@@ -15,8 +15,8 @@ If you want to get started with a Linux AWS instance that has PyTorch already in
 1. Click on `Launch a virtual machine`.
 1. Select `Deep Learning AMI (Ubuntu)`.
    > This gives you an instance with a pre-defined version of PyTorch already installed. If you wanted a bare AWS instance that required PyTorch to be installed, you could choose the `Deep Learning Base AMI (Ubuntu)`, which will have the hardware, but none of the software already available.
-1. You can choose any of the available instances to try PyTorch, even the *free-tier*, but it is recommended for best performance that you get a *GPU compute* or *Compute optimized* instance. For example, a GPU compute `p3.2xlarge` is a good instance type for PyTorch.
-   > Other instance options include the Compute Optimized c5-series (e.g., `c5.2xlarge`) or the General Compute t2-series or t3-series (e.g., `t2.2xlarge`). It is important to note that if you choose an instance without a GPU, PyTorch will only be running in CPU compute mode, and operations may take much, much longer.
+1. Choose a GPU compute `p3.2xlarge` instance type.
+   > You can choose any of the available instances to try PyTorch, even the *free-tier*, but it is recommended for best performance that you get a *GPU compute* or *Compute optimized* instance. Other instance options include the Compute Optimized c5-series (e.g., `c5.2xlarge`) or the General Compute t2-series or t3-series (e.g., `t2.2xlarge`). It is important to note that if you choose an instance without a GPU, PyTorch will only be running in CPU compute mode, and operations may take much, much longer.
 1. Click on `Review and Launch`. 
 1. Review the instance information and click `Launch`.
 1. You will want to `Create a new key pair` if you do not have one already to use. Pick a name and download it locally via the `Download Key Pair` button.
