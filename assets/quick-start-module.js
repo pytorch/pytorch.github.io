@@ -7,7 +7,7 @@ var supportedOperatingSystems = new Map([
 
 var opts = {
   cuda: 'cuda9.0',
-  os: getDefaultSelectedOS(),
+  os: getAnchorSelectedOS() || getDefaultSelectedOS(),
   pm: 'conda',
   python: 'python3.6',
 };
@@ -38,7 +38,9 @@ cuda.on("click", function() {
 
 // Force a selection onclick to get the right operating system selected from
 // the start
-document.getElementById(opts.os).click();
+$( document ).ready(function() {
+    document.getElementById(opts.os).click();
+});
 
 
 // determine os (mac, linux, windows) based on user's platform
@@ -51,6 +53,27 @@ function getDefaultSelectedOS() {
   }
   // Just return something if user platform is not in our supported map
   return supportedOperatingSystems.values().next().value;
+}
+
+// determine os based on location hash
+function getAnchorSelectedOS() {
+  var anchor = location.hash;
+  console.log("getAnchorSelectedOS - 1 "+anchor);
+  var ANCHOR_REGEX = /^#[^ ]+$/;
+  // Look for anchor in the href
+  if (!ANCHOR_REGEX.test(anchor)) {
+    return false;
+  }
+  // Look for anchor with OS in the first portion
+  var testOS = anchor.slice(1).split("-")[0];
+  console.log("getAnchorSelectedOS - 2 "+testOS);
+  for (var [navPlatformSubstring, os] of supportedOperatingSystems.entries()) {
+    if (testOS.indexOf(navPlatformSubstring) !== -1) {
+      console.log("getAnchorSelectedOS - 3 "+os);
+      return os;
+    }
+  }
+  return false;
 }
 
 function selectedOption(option, selection, category) {
