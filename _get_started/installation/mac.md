@@ -2,7 +2,7 @@
 
 PyTorch can be installed and used on MacOS. Depending on your system and compute requirements, your experience with PyTorch on a Mac may vary in terms of processing time. It is recommended, but not required, that your Mac have an NVIDIA GPU in order to harness the full power of PyTorch's [CUDA](https://developer.nvidia.com/cuda-zone) [support](https://pytorch.org/tutorials/beginner/blitz/tensor_tutorial.html?highlight=cuda#cuda-tensors).
 
-> Currently, CUDA support on MacOS is only available by [building PyTorch from source](#building-from-source)
+> Currently, CUDA support on MacOS is only available by [building PyTorch from source](#mac-from-source)
 
 ## Prerequisites
 
@@ -122,6 +122,7 @@ torch.cuda.is_available();
 </div>
 
 ## Building from source
+{: #mac-from-source}
 
 For the majority of PyTorch users, installing from a pre-built binary via a package manager will be provide the best experience. However, there are times when you may want to install the bleeding edge PyTorch code, whether for testing or actual development on the PyTorch core. To install the latest PyTorch code, you will need to [build PyTorch from source](https://github.com/pytorch/pytorch#from-source).
 
