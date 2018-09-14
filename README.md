@@ -2,7 +2,7 @@
 
 [https://shiftlab.github.io/pytorch](https://shiftlab.github.io/pytorch)
 
-A static website built in [Jekyll](https://jekyllrb.com/) and [Bootstrap](https://getbootstrap.com/) for [Pytorch](https://pytorch.org/), and its tutorials and documentation.
+A static website built in [Jekyll](https://jekyllrb.com/) and [Bootstrap](https://getbootstrap.com/) for [PyTorch](https://pytorch.org/), and its tutorials and documentation.
 
 ##Prerequisites
 

@@ -1,4 +1,4 @@
-# Pytorch Usage Details: Google Cloud
+# PyTorch Usage Details: Google Cloud
 
 To gain the full experience of what PyTorch has to offer, a machine with at least one dedicated NVIDA GPU is necessary. While it is not always practical to have your own machine with these specifications, there are our cloud based solutions to allow you to test and use PyTorch's full features.
 
