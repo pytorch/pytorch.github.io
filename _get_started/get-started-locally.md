@@ -21,6 +21,7 @@ published: true
 <nav class="inline_toc" markdown="1">
 * TOC
 {:toc}
+{::options toc_levels="1..3" /}
 </nav>
 {% include_relative installation/mac.md %}
 {% endcapture %}
@@ -29,6 +30,7 @@ published: true
 <nav class="inline_toc" markdown="1">
 * TOC
 {:toc}
+{::options toc_levels="1..3" /}
 </nav>
 {% include_relative installation/linux.md %}
 {% endcapture %}
@@ -37,6 +39,7 @@ published: true
 <nav class="inline_toc" markdown="1">
 * TOC
 {:toc}
+{::options toc_levels="1..3" /}
 </nav>
 {% include_relative installation/windows.md %}
 {% endcapture %}

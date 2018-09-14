@@ -1,8 +1,10 @@
-# PyTorch Installation Details: Linux
+# Installing on Linux
+{:.no_toc}
 
 PyTorch can be installed and used on various Linux distributions. Depending on your system and compute requirements, your experience with PyTorch on Linux may vary in terms of processing time. It is recommended, but not required, that your Linux system has an NVIDIA GPU in order to harness the full power of PyTorch's [CUDA](https://developer.nvidia.com/cuda-zone) [support](https://pytorch.org/tutorials/beginner/blitz/tensor_tutorial.html?highlight=cuda#cuda-tensors)..
 
 ## Prerequisites
+{: #linux-prerequisites}
 
 ### Supported Linux Distributions
 
@@ -87,6 +89,7 @@ sudo apt install python-pip
 ```
 
 ## Installation
+{: #linux-installation}
 
 ### Anaconda
 
@@ -241,6 +244,7 @@ pip3 install torchvision
 ```
 
 ## Verification
+{: #linux-verification}
 
 To ensure that PyTorch was installed correctly, we can verify the installation by running sample PyTorch code. Here we will construct a randomly initialized tensor.
 
@@ -309,4 +313,4 @@ cd pytorch
 python setup.py install
 ```
 
-You can verify the installation as described above[#verification]
+You can verify the installation as described [above](#linux-verification).

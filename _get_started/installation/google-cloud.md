@@ -1,6 +1,7 @@
-# PyTorch Usage Details: Google Cloud
+# Using PyTorch with Google Cloud
+{:.no_toc}
 
-To gain the full experience of what PyTorch has to offer, a machine with at least one dedicated NVIDA GPU is necessary. While it is not always practical to have your own machine with these specifications, there are our cloud based solutions to allow you to test and use PyTorch's full features.
+To gain the full experience of what PyTorch has to offer, a machine with at least one dedicated NVIDIA GPU is necessary. While it is not always practical to have your own machine with these specifications, there are our cloud based solutions to allow you to test and use PyTorch's full features.
 
 Google Cloud [provides](https://cloud.google.com/products/){:target="_blank"} both:
 
@@ -8,6 +9,7 @@ Google Cloud [provides](https://cloud.google.com/products/){:target="_blank"} bo
 * bare [Linux and Windows virtual machines](https://cloud.google.com/compute/){:target="_blank"} for you to do a custom install of PyTorch.
 
 ## Google Cloud Primer
+{: #google-cloud-primer}
 
 In order to use Google Cloud, you need to set up an [Google account](https://accounts.google.com/){:target="_blank"}, if you do not have one already. You will create a username (typically an `@gmail.com` email address) and password. After words, you will be able to [try Google Cloud](https://console.cloud.google.com/freetrial){:target="_blank"}. You will also provide contact and billing information. The billing information is initially used to prove you are a real person. And then, after your trial, you can choose to upgrade to a paid account.
 
@@ -24,5 +26,6 @@ For custom virtual machines, generally you will want to use [Compute Enginee Vir
 The expense of your virutal machine is directly correlated to the number of GPUs that it contains. One NVIDIA Tesla P100 virtual machine, for example, can actually be suitable for many use cases.
 
 ## Installing PyTorch From Scratch
+{: #google-cloud-from-scratch}
 
 You may prefer to start with a bare instance to install PyTorch. Once you have connected to your instance, setting up PyTorch is the same as [setting up locally](get-started) for your operating system of choice.

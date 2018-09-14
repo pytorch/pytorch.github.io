@@ -1,8 +1,10 @@
-# PyTorch Installation Details: Windows
+# Installing on Windows
+{:.no_toc}
 
 PyTorch can be installed and used on various Windows distributions. Depending on your system and compute requirements, your experience with PyTorch on Windows may vary in terms of processing time. It is recommended, but not required, that your Windows system has an NVIDIA GPU in order to harness the full power of PyTorch's [CUDA](https://developer.nvidia.com/cuda-zone) [support](https://pytorch.org/tutorials/beginner/blitz/tensor_tutorial.html?highlight=cuda#cuda-tensors).
 
 ## Prerequisites
+{: #windows-prerequisites}
 
 ### Supported Windows Distributions
 
@@ -46,6 +48,7 @@ To install Anaconda, you will use the [64-bit graphical installer](https://www.a
 If you installed Python by any of the recommended ways above[LINK], `[pip](https://pypi.org/project/pip/)` will have already been installed for you.
 
 ## Installation
+{: #windows-installation}
 
 ### Anaconda
 
@@ -192,6 +195,7 @@ pip3 install torchvision
 ```
 
 ## Verification
+{: #windows-verification}
 
 To ensure that PyTorch was installed correctly, we can verify the installation by running sample PyTorch code. Here we will construct a randomly initialized tensor.
 
@@ -261,4 +265,4 @@ call "%VS150COMNTOOLS%\vcvarsall.bat" x64 -vcvars_ver=14.11
 python setup.py install
 ```
 
-You can verify the installation as described [above](#verification).
+You can verify the installation as described [above](#windows-verification).
