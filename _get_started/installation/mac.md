@@ -29,8 +29,12 @@ sh Anaconda3-5.2.0-MacOSX-x86_64.sh
 # and follow the prompts. The defaults are generally good.`
 ```
 
-<div id="screencast">
-<script src="https://asciinema.org/a/PS2oOMynjw5YR96WcgVLJDXqf.js" id="asciicast-PS2oOMynjw5YR96WcgVLJDXqf" data-speed="4" async></script>
+<div>
+  <a href="javascript:void(0);" class="btn btn-lg btn-green with-right-arrow show-screencast">Show Demo</a>
+  <div class="screencast">
+    <script src="https://asciinema.org/a/PS2oOMynjw5YR96WcgVLJDXqf.js" id="asciicast-PS2oOMynjw5YR96WcgVLJDXqf" data-speed="4" async></script>
+    <a href="javascript:void(0);" class="btn btn-lg btn-green show-info with-left-arrow">Hide Demo</a>
+  </div>
 </div>
 
 #### pip
@@ -59,8 +63,12 @@ To install PyTorch via Anaconda, use the following conda command:
 conda install pytorch torchvision -c pytorch
 ```
 
-<div id="screencast">
-<script src="https://asciinema.org/a/iLaHS145GyJtwyJ3MswYaSOSC.js" id="asciicast-iLaHS145GyJtwyJ3MswYaSOSC" data-speed="2" async></script>
+<div>
+  <a href="javascript:void(0);" class="btn btn-lg btn-green with-right-arrow show-screencast">Show Demo</a>
+  <div class="screencast">
+    <script src="https://asciinema.org/a/iLaHS145GyJtwyJ3MswYaSOSC.js" id="asciicast-iLaHS145GyJtwyJ3MswYaSOSC" data-speed="2" async></script>
+    <a href="javascript:void(0);" class="btn btn-lg btn-green show-info with-left-arrow">Hide Demo</a>
+  </div>
 </div>
 
 ### pip
@@ -105,8 +113,12 @@ import torch
 torch.cuda.is_available();
 ```
 
-<div id="screencast">
-<script src="https://asciinema.org/a/byF9rotzbaW0jzFnwWfAeW4ak.js" id="asciicast-byF9rotzbaW0jzFnwWfAeW4ak" data-speed="2" async></script>
+<div>
+  <a href="javascript:void(0);" class="btn btn-lg btn-green with-right-arrow show-screencast">Show Demo</a>
+  <div class="screencast">
+    <script src="https://asciinema.org/a/byF9rotzbaW0jzFnwWfAeW4ak.js" id="asciicast-byF9rotzbaW0jzFnwWfAeW4ak" data-speed="2" async></script>
+    <a href="javascript:void(0);" class="btn btn-lg btn-green show-info with-left-arrow">Hide Demo</a>
+  </div>
 </div>
 
 ## Building from source
