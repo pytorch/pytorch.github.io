@@ -15,7 +15,7 @@ snippet: >
     print()
   ```
 
-summary-home: Optimize performance with scalable distributed training in both research and production through the torch.distributed backend.
+summary-home: Scalable distributed training and performance optimization in research and production is enabled by the torch.distributed backend.
 featured-home: true
 
 ---
