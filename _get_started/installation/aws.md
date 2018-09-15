@@ -1,6 +1,7 @@
-# PyTorch Usage Details: AWS
+# Using PyTorch with AWS
+{:.no_toc}
 
-To gain the full experience of what PyTorch has to offer, a machine with at least one dedicated NVIDA GPU is necessary. While it is not always practical to have your own machine with these specifications, there are our cloud based solutions to allow you to test and use PyTorch's full features.
+To gain the full experience of what PyTorch has to offer, a machine with at least one dedicated NVIDIA GPU is necessary. While it is not always practical to have your own machine with these specifications, there are our cloud based solutions to allow you to test and use PyTorch's full features.
 
 AWS [provides](https://aws.amazon.com/machine-learning/amis/){:target="_blank"} both:
 
@@ -8,6 +9,7 @@ AWS [provides](https://aws.amazon.com/machine-learning/amis/){:target="_blank"} 
 * Deep Learning Base AMI: bare Linux and Windows instances for you to do a custom install of PyTorch.
 
 ## Quick Start on Deep Learning AMI
+{: #aws-quick-start}
 
 If you want to get started with a Linux AWS instance that has PyTorch already installed and that you can login into from the command-line, this step-by-step guide will help you do that.
 
@@ -30,6 +32,7 @@ If you want to get started with a Linux AWS instance that has PyTorch already in
    > If you chose the `Deep Learning Base AMI (Ubuntu)` instead of the `Deep Learning AMI (Ubuntu)`, then you will need to install PyTorch. Follow the [Linux getting started instructions](get-started) in order to install it.
 
 ## AWS Primer
+{: #aws-primer}
 
 In order to use AWS, you need to set up an [AWS account](https://aws.amazon.com/getting-started/){:target="_blank"}, if you do not have one already. You will create a username (your email address), password and an AWS account name (since you can create multiple AWS accounts for different purposes). You will also provide contact and billing information. The billing information is important because while AWS does provide what they call “free-tier” instances, to use PyTorch you will want more powerful, paid instances.
 
@@ -50,12 +53,14 @@ Once you decided upon your instance type, you will need to create, optionally co
 * [Command-line](https://docs.aws.amazon.com/cli/latest/userguide/cli-using-ec2.html){:target="_blank"}
 
 ## AWS SageMaker
+{: #aws-sagemaker}
 
 With [SageMaker](https://aws.amazon.com/sagemaker) service AWS provides a fully-managed service that allows developers and data scientists to build, train, and deploy machine learning models.
 
 See AWS documentation to learn [how to configure Amazon SageMaker with PyTorch]((https://docs.aws.amazon.com/sagemaker/latest/dg/pytorch.html)).
 
 ## Pre-Built AMIs
+{: #aws-amis}
 
 AWS provides instances (called AWS Deep Learning AMIs) pre-built with a modern version of PyTorch. The available AMIs are:
 
@@ -66,5 +71,6 @@ AWS provides instances (called AWS Deep Learning AMIs) pre-built with a modern v
 Amazon has written a good [blog post](https://aws.amazon.com/blogs/machine-learning/get-started-with-deep-learning-using-the-aws-deep-learning-ami/){:target="_blank"} on getting started with pre-built AMI.
 
 ## Installing PyTorch From Scratch
+{: #aws-from-scratch}
 
 You may prefer to start with a bare instance to install PyTorch. Once you have connected to your instance, setting up PyTorch is the same as [setting up locally](get-started) for your operating system of choice.

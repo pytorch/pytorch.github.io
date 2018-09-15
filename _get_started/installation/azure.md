@@ -1,6 +1,7 @@
-# PyTorch Usage Details: Azure
+# Using PyTorch with Azure
+{:.no_toc}
 
-To gain the full experience of what PyTorch has to offer, a machine with at least one dedicated NVIDA GPU is necessary. While it is not always practical to have your own machine with these specifications, there are our cloud based solutions to allow you to test and use PyTorch's full features.
+To gain the full experience of what PyTorch has to offer, a machine with at least one dedicated NVIDIA GPU is necessary. While it is not always practical to have your own machine with these specifications, there are our cloud based solutions to allow you to test and use PyTorch's full features.
 
 Azure [provides](https://azure.microsoft.com/en-us/services/machine-learning-services/){:target="_blank"}:
 
@@ -9,6 +10,7 @@ Azure [provides](https://azure.microsoft.com/en-us/services/machine-learning-ser
 * [notebooks](https://notebooks.azure.com/pytorch){:target="_blank"} to help you learn PyTorch and machine learning.
 
 ## Azure Primer
+{: #microsoft-azure-primer}
 
 In order to use Azure, you need to set up an [Azure account](https://azure.microsoft.com/en-us/free/){:target="_blank"}, if you do not have one already. You will use a Microsoft-recognized email address and password. You will also verify your identity by providing contact and billing information. The billing information is necessary because while Azure does provide free usage credits and free services, you may need or want higher-end services as well.
 
@@ -21,9 +23,11 @@ Generally, you will be using [Azure Virtual Machines](https://azure.microsoft.co
 The expense of your virtual machine is directly correlated to the number of GPUs that it contains. The NC6 virtual machine is, for example, one of the smallest, cheapest virtual machines and can actually be suitable for many use cases.
 
 ## Pre-Configured Data Science Virtual Machines
+{: #microsoft-azure-virtual-machines}
 
 Azure [provides](https://azure.microsoft.com/en-us/services/virtual-machines/data-science-virtual-machines/){:target="_blank"} [pre-configured](https://docs.microsoft.com/en-us/azure/machine-learning/data-science-virtual-machine/){:target="_blank"} data learning and machine learning virtual machines. PyTorch are available on many of these - for example here is the [documentation](https://docs.microsoft.com/en-us/azure/machine-learning/data-science-virtual-machine/dsvm-ubuntu-intro){:target="_blank"} for how to setup an Azure virtual machine on Ubuntu Linux.
 
 ## Installing PyTorch From Scratch
+{: #microsoft-azure-from-scratch}
 
 You may prefer to start with a bare virtual machine to install PyTorch. Once you have connected to your virtual machine, setting up PyTorch is the same as [setting up locally](get-started) for your operating system of choice.

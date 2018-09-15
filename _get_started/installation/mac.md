@@ -1,18 +1,20 @@
-# PyTorch Installation Details: Mac
+# Installing on macOS
+{:.no_toc}
 
-PyTorch can be installed and used on MacOS. Depending on your system and compute requirements, your experience with PyTorch on a Mac may vary in terms of processing time. It is recommended, but not required, that your Mac have an NVIDIA GPU in order to harness the full power of PyTorch's [CUDA](https://developer.nvidia.com/cuda-zone) [support](https://pytorch.org/tutorials/beginner/blitz/tensor_tutorial.html?highlight=cuda#cuda-tensors).
+PyTorch can be installed and used on macOS. Depending on your system and compute requirements, your experience with PyTorch on a Mac may vary in terms of processing time. It is recommended, but not required, that your Mac have an NVIDIA GPU in order to harness the full power of PyTorch's [CUDA](https://developer.nvidia.com/cuda-zone) [support](https://pytorch.org/tutorials/beginner/blitz/tensor_tutorial.html?highlight=cuda#cuda-tensors).
 
-> Currently, CUDA support on MacOS is only available by [building PyTorch from source](#mac-from-source)
+> Currently, CUDA support on macOS is only available by [building PyTorch from source](#mac-from-source)
 
 ## Prerequisites
+{: #mac-prerequisites}
 
-### Mac OS Version
+### macOS Version
 
-PyTorch is supported on MacOS 10.10 (Yosemite) or above.
+PyTorch is supported on macOS 10.10 (Yosemite) or above.
 
 ### Python
 
-By default, MacOS is installed with Python 2.7. PyTorch can be installed with Python 2.7, but it is recommended that you use Python 3.6 or greater, which can be installed either through the Anaconda package manager (see [below](#anaconda)), [Homebrew](https://brew.sh/), or the [Python website](https://www.python.org/downloads/mac-osx/).
+By default, macOS is installed with Python 2.7. PyTorch can be installed with Python 2.7, but it is recommended that you use Python 3.6 or greater, which can be installed either through the Anaconda package manager (see [below](#anaconda)), [Homebrew](https://brew.sh/), or the [Python website](https://www.python.org/downloads/mac-osx/).
 
 ### Package Manager
 
@@ -54,6 +56,7 @@ sudo easy_install pip
 ```
 
 ## Installation
+{: #mac-installation}
 
 ### Anaconda
 
@@ -86,6 +89,7 @@ pip install torch torchvision
 ```
 
 ## Verification
+{: #mac-verification}
 
 To ensure that PyTorch was installed correctly, we can verify the installation by running sample PyTorch code. Here we will construct a randomly initialized tensor.
 
@@ -147,4 +151,4 @@ cd pytorch
 MACOSX_DEPLOYMENT_TARGET=10.9 CC=clang CXX=clang++ python setup.py install
 ```
 
-You can verify the installation as described [above](#verification).
+You can verify the installation as described [above](#mac-verification).
