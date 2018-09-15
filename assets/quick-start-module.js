@@ -58,7 +58,6 @@ function getDefaultSelectedOS() {
 // determine os based on location hash
 function getAnchorSelectedOS() {
   var anchor = location.hash;
-  console.log("getAnchorSelectedOS - 1 "+anchor);
   var ANCHOR_REGEX = /^#[^ ]+$/;
   // Look for anchor in the href
   if (!ANCHOR_REGEX.test(anchor)) {
@@ -66,10 +65,8 @@ function getAnchorSelectedOS() {
   }
   // Look for anchor with OS in the first portion
   var testOS = anchor.slice(1).split("-")[0];
-  console.log("getAnchorSelectedOS - 2 "+testOS);
   for (var [navPlatformSubstring, os] of supportedOperatingSystems.entries()) {
     if (testOS.indexOf(navPlatformSubstring) !== -1) {
-      console.log("getAnchorSelectedOS - 3 "+os);
       return os;
     }
   }
@@ -88,6 +85,10 @@ function selectedOption(option, selection, category) {
 
 function display(selection, id, category) {
   var container = document.getElementById(id);
+  // Check if there's a container to display the selection
+  if (container === null) {
+    return;
+  }
   var elements = container.getElementsByClassName(category);
   for (var i = 0; i < elements.length; i++) {
     if (elements[i].classList.contains(selection)) {
@@ -413,7 +414,6 @@ $("[data-toggle='cloud-dropdown']").on("click", function(e) {
     $(this).addClass("open");
     var cls = $(this).find(".cloud-option-body")[0].className;
     for (var i = 0; i < supportedCloudPlatforms.length; i++) {
-      console.log(cls);
       if (cls.includes(supportedCloudPlatforms[i])) {
         display(supportedCloudPlatforms[i], 'cloud', 'platform');
       }
