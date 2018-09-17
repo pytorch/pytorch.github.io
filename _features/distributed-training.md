@@ -3,16 +3,11 @@ title: Distributed Training
 order: 2
 snippet: >
   ```python
-    #!/usr/bin/python3
-
-    # Simple while loop
-    a = 0
-    while a < 15:
-        print(a, end=' ')
-        if a == 10:
-            print("made it to ten!!")
-        a = a + 1
-    print()
+    import torch.distributed as dist
+    from torch.nn.parallel import DistributedDataParallel
+    
+    dist.init_process_group(backend='gloo')
+    model = DistributedDataParallel(model)
   ```
 
 summary-home: Scalable distributed training and performance optimization in research and production is enabled by the torch.distributed backend.

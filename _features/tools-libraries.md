@@ -3,16 +3,23 @@ title: Tools & Libraries
 order: 4
 snippet: >
   ```python
-    #!/usr/bin/python3
+    from torchvision import transforms, utils
+    scale = Rescale(256)
+    crop = RandomCrop(128)
+    composed = transforms.Compose([Rescale(256),
+    RandomCrop(224)])
 
-    # Simple while loop
-    a = 0
-    while a < 15:
-        print(a, end=' ')
-        if a == 10:
-            print("made it to ten!!")
-        a = a + 1
-    print()
+    fig = plt.figure()
+    sample = face_dataset[65]
+    for i, tsfrm in enumerate([scale, crop, composed]):
+    transformed_sample = tsfrm(sample)
+
+    ax = plt.subplot(1, 3, i + 1)
+    plt.tight_layout()
+    ax.set_title(type(tsfrm).__name__)
+    show_landmarks(**transformed_sample)
+
+    plt.show()
   ```
 
 summary-home: A rich ecosystem of tools and libraries extends PyTorch and supports development in computer vision, NLP and more.

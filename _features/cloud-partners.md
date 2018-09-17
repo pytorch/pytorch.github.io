@@ -3,16 +3,14 @@ title: Cloud Partners
 order: 6
 snippet: >
   ```python
-    #!/usr/bin/python3
-
-    # Simple while loop
-    a = 0
-    while a < 15:
-        print(a, end=' ')
-        if a == 10:
-            print("made it to ten!!")
-        a = a + 1
-    print()
+    export IMAGE_FAMILY="pytorch-latest-cpu"
+    export ZONE="us-west1-b"
+    export INSTANCE_NAME="my-instance"
+    
+    gcloud compute instances create $INSTANCE_NAME \
+      --zone=$ZONE \
+      --image-family=$IMAGE_FAMILY \
+      --image-project=deeplearning-platform-release
   ```
 
 summary-home: PyTorch is well supported on major cloud platforms, providing frictionless development and easy scaling.

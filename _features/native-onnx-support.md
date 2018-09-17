@@ -3,16 +3,13 @@ title: Native ONNX Support
 order: 5
 snippet: >
   ```python
-    #!/usr/bin/python3
+    from torch.autograd import Variable
+    import torch.onnx
+    import torchvision
 
-    # Simple while loop
-    a = 0
-    while a < 15:
-        print(a, end=' ')
-        if a == 10:
-            print("made it to ten!!")
-        a = a + 1
-    print()
+    dummy_input = Variable(torch.randn(1, 3, 224, 224))
+    model = torchvision.models.alexnet(pretrained=True)
+    torch.onnx.export(model, dummy_input, "alexnet.onnx")
   ```
 ---
 
