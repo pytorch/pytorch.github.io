@@ -28,8 +28,45 @@ If you want to get started with a Linux AWS instance that has PyTorch already in
 1. Ensure that your key-pair has the proper permissions, or you will not be able to log in. Type `chmod 400 path/to/downloaded/key-pair.pem`.
 1. Type `ssh -i path/to/downloaded/key-pair.pem ubuntu@<Public DNS that you noted above>`. e.g., `ssh -i ~/Downloads/aws-quick-start.pem ubuntu@ec2-55-181-112-129.us-west-2.compute.amazonaws.com`. If asked to continue connection, type `yes`.
 1. You should now see a prompt similar to `ubuntu@ip-100-30-20-95`. If so, you are now connected to your instance.
-1. Verify that PyTorch is installed by running the [verification steps](get-started#verification).
+1. Verify that PyTorch is installed by running the [verification steps below](#quick-start-verification).
    > If you chose the `Deep Learning Base AMI (Ubuntu)` instead of the `Deep Learning AMI (Ubuntu)`, then you will need to install PyTorch. Follow the [Linux getting started instructions](get-started) in order to install it.
+
+### Quick Start Verification
+
+To ensure that PyTorch was installed correctly, we can verify the installation by running sample PyTorch code. Here we will construct a randomly initialized tensor.
+
+
+```python
+from __future__ import print_function
+import torch
+x = torch.rand(5, 3)
+print(x)
+```
+
+The output should be something similar to:
+
+```
+tensor([[0.3380, 0.3845, 0.3217],
+        [0.8337, 0.9050, 0.2650],
+        [0.2979, 0.7141, 0.9069],
+        [0.1449, 0.1132, 0.1375],
+        [0.4675, 0.3947, 0.1426]])
+```
+
+Additionally, to check if your GPU driver and CUDA is enabled and accessible by PyTorch, run the following commands to return whether or not the CUDA driver is enabled:
+
+```python
+import torch
+torch.cuda.is_available();
+```
+
+<div>
+  <a href="javascript:void(0);" class="btn btn-lg btn-orange btn-demo show-screencast">Show Demo</a>
+  <div class="screencast">
+    <script src="https://asciinema.org/a/15dyZZvvakqbfKgfh2LByMkXz.js" id="asciicast-15dyZZvvakqbfKgfh2LByMkXz" data-speed="2" async></script>
+    <a href="javascript:void(0);" class="btn btn-lg btn-orange btn-demo show-info">Hide Demo</a>
+  </div>
+</div>
 
 ## AWS Primer
 {: #aws-primer}
