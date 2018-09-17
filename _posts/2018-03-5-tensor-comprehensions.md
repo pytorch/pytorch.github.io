@@ -2,6 +2,7 @@
 layout: blog_detail
 title: 'Tensor Comprehensions in PyTorch'
 author: Priya Goyal (FAIR), Nicolas Vasilache (FAIR), Oleksandr Zinenko (Inria & DI ENS), Theodoros Theodoridis (ETH Zürich), Zachary DeVito (FAIR), William S. Moses (MIT CSAIL), Sven Verdoolaege (FAIR), Andrew Adams (FAIR), Albert Cohen (Inria & DI ENS & FAIR)
+redirect_from: /2018/03/05/tensor-comprehensions.html
 ---
 
 Tensor Comprehensions (TC) is a tool that lowers the barrier for writing high-performance code. It generates GPU code from a simple high-level language and autotunes the code for specific input sizes.
