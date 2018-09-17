@@ -1,6 +1,9 @@
 ---
-layout: default
+layout: get_started
 title: Start Locally
+permalink: /get-started/locally/
+background-class: get-started-background
+body-class: get-started
 order: 1
 published: true
 ---
@@ -50,3 +53,11 @@ published: true
   <div class="os linux selected">{{ linux | markdownify }}</div>
   <div class="os windows">{{ windows | markdownify }}</div>
 </div>
+
+<script type="text/javascript">
+  var pageId = "get-started-locally"; // TBD: Make this programmatic
+  $(".main-content-menu .nav-item").removeClass("nav-select");
+  $(".main-content-menu .nav-link[data-id='" + pageId + "']").parent(".nav-item").addClass("nav-select");
+</script>
+<script src="{{ site.baseurl }}/assets/quick-start-module.js"></script>
+<script src="{{ site.baseurl }}/assets/show-screencast.js"></script>

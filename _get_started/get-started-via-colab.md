@@ -1,6 +1,9 @@
 ---
-layout: default
+layout: get_started
 title: Try Now via CoLab
+permalink: /get-started/colab/
+background-class: get-started-background
+body-class: get-started
 order: 2
 ---
 
@@ -38,3 +41,12 @@ print()
 {% endhighlight %}
 
 Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
+
+
+<script type="text/javascript">
+  var pageId = "get-started-via-colab"; // TBD: Make this programmatic
+  $(".main-content-menu .nav-item").removeClass("nav-select");
+  $(".main-content-menu .nav-link[data-id='" + pageId + "']").parent(".nav-item").addClass("nav-select");
+</script>
+<script src="{{ site.baseurl }}/assets/quick-start-module.js"></script>
+<script src="{{ site.baseurl }}/assets/show-screencast.js"></script>
