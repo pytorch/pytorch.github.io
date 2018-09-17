@@ -61,10 +61,10 @@ sh Anaconda3-5.2.0-Linux-x86_64.sh
 > You may have to open a new terminal or re-source your `~/.bashrc `to get access to the `conda` command.
 
 <div>
-  <a href="javascript:void(0);" class="btn btn-lg btn-green with-right-arrow show-screencast">Show Demo</a>
+  <a href="javascript:void(0);" class="btn btn-lg btn-orange btn-demo show-screencast">Show Demo</a>
   <div class="screencast">
     <script src="https://asciinema.org/a/SRbIn2nFnsUiYtlIcUsDVXN4n.js" id="asciicast-SRbIn2nFnsUiYtlIcUsDVXN4n" data-speed="3" async></script>
-    <a href="javascript:void(0);" class="btn btn-lg btn-green show-info with-left-arrow">Hide Demo</a>
+    <a href="javascript:void(0);" class="btn btn-lg btn-orange btn-demo show-info">Hide Demo</a>
   </div>
 </div>
 
@@ -102,10 +102,10 @@ conda install pytorch-cpu torchvision-cpu -c pytorch
 ```
 
 <div>
-  <a href="javascript:void(0);" class="btn btn-lg btn-green with-right-arrow show-screencast">Show Demo</a>
+  <a href="javascript:void(0);" class="btn btn-lg btn-orange btn-demo show-screencast">Show Demo</a>
   <div class="screencast">
     <script src="https://asciinema.org/a/wtojk0bqpUDIb3yIHUsZqD9Ha.js" id="asciicast-wtojk0bqpUDIb3yIHUsZqD9Ha" data-speed="3" async></script>
-    <a href="javascript:void(0);" class="btn btn-lg btn-green show-info with-left-arrow">Hide Demo</a>
+    <a href="javascript:void(0);" class="btn btn-lg btn-orange btn-demo show-info">Hide Demo</a>
   </div>
 </div>
 
@@ -118,10 +118,10 @@ conda install pytorch torchvision -c pytorch
 ```
 
 <div>
-  <a href="javascript:void(0);" class="btn btn-lg btn-green with-right-arrow show-screencast">Show Demo</a>
+  <a href="javascript:void(0);" class="btn btn-lg btn-orange btn-demo show-screencast">Show Demo</a>
   <div class="screencast">
     <script src="https://asciinema.org/a/HaCIxmYVEd8xGRAKsDu9hv9up.js" id="asciicast-HaCIxmYVEd8xGRAKsDu9hv9up" data-speed="5" async></script>
-    <a href="javascript:void(0);" class="btn btn-lg btn-green show-info with-left-arrow">Hide Demo</a>
+    <a href="javascript:void(0);" class="btn btn-lg btn-orange btn-demo show-info ">Hide Demo</a>
   </div>
 </div>
 
@@ -274,10 +274,10 @@ torch.cuda.is_available();
 ```
 
 <div>
-  <a href="javascript:void(0);" class="btn btn-lg btn-green with-right-arrow show-screencast">Show Demo</a>
+  <a href="javascript:void(0);" class="btn btn-lg btn-orange btn-demo show-screencast">Show Demo</a>
   <div class="screencast">
     <script src="https://asciinema.org/a/15dyZZvvakqbfKgfh2LByMkXz.js" id="asciicast-15dyZZvvakqbfKgfh2LByMkXz" data-speed="2" async></script>
-    <a href="javascript:void(0);" class="btn btn-lg btn-green show-info with-left-arrow">Hide Demo</a>
+    <a href="javascript:void(0);" class="btn btn-lg btn-orange btn-demo show-info">Hide Demo</a>
   </div>
 </div>
 
