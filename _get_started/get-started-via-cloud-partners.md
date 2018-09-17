@@ -1,11 +1,11 @@
 ---
 layout: default
-title: Start Via Cloud Partners
+title: Start via Cloud Partners
 order: 3
 published: true
 ---
 
-## Start Via Cloud Partners
+## Start via Cloud Partners
 
 <div class="container-fluid quick-start-module quick-starts">
   <div class="cloud-options-col">
