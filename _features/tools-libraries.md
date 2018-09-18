@@ -4,6 +4,7 @@ order: 4
 snippet: >
   ```python
     from torchvision import transforms, utils
+    
     scale = Rescale(256)
     crop = RandomCrop(128)
     composed = transforms.Compose([Rescale(256),
