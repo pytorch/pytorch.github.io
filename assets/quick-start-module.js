@@ -623,7 +623,7 @@ function commandMessage(key) {
       "pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cu92/torch_nightly.html",
 
     "preview,pip,linux,cudanone,python3.5":
-      "# Preview Build Not Yet Available on MacOS.",
+      "pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html",
 
     "preview,pip,linux,cuda8,python3.5":
       "pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cu80/torch_nightly.html",
@@ -635,7 +635,7 @@ function commandMessage(key) {
       "pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cu92/torch_nightly.html",
 
     "preview,pip,linux,cudanone,python3.6":
-      "# Preview Build Not Yet Available on MacOS.",
+      "pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html",
 
     "preview,pip,linux,cuda8,python3.6":
       "pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cu80/torch_nightly.html",
@@ -647,7 +647,7 @@ function commandMessage(key) {
       "pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cu92/torch_nightly.html",
 
     "preview,pip,linux,cudanone,python3.7":
-      "# Preview Build Not Yet Available on MacOS.",
+      "pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html",
 
     "preview,pip,linux,cuda8,python3.7":
       "pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cu80/torch_nightly.html",
