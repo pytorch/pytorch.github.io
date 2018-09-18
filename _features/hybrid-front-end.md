@@ -5,7 +5,7 @@ snippet: >
   ```python
     @torch.jit.script
 
-    def fizzbuzz(niter : int
+    def fizzbuzz(niter : int):
 
       for i in range(niter):
         if i % 3 == 0 and i % 5 == 0:
