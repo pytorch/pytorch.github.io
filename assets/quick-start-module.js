@@ -187,49 +187,49 @@ function commandMessage(key) {
       "conda install pytorch-cpu torchvision-cpu -c pytorch",
 
     "stable,conda,macos,cuda8,python2.7":
-      "conda install pytorch torchvision -c pytorch <br /> # MacOS Binaries dont support CUDA, install from source if CUDA is needed",
+      "conda install pytorch torchvision -c pytorch<br /># MacOS Binaries dont support CUDA, install from source if CUDA is needed",
 
     "stable,conda,macos,cuda9.0,python2.7":
-      "conda install pytorch torchvision -c pytorch <br /> # MacOS Binaries dont support CUDA, install from source if CUDA is needed",
+      "conda install pytorch torchvision -c pytorch<br /># MacOS Binaries dont support CUDA, install from source if CUDA is needed",
 
     "stable,conda,macos,cuda9.2,python2.7":
-      "conda install pytorch torchvision -c pytorch <br /> # MacOS Binaries dont support CUDA, install from source if CUDA is needed",
+      "conda install pytorch torchvision -c pytorch<br /># MacOS Binaries dont support CUDA, install from source if CUDA is needed",
 
     "stable,conda,macos,cudanone,python2.7":
       "conda install pytorch torchvision -c pytorch",
 
     "stable,conda,macos,cuda8,python3.5":
-      "conda install pytorch torchvision -c pytorch <br /> # MacOS Binaries dont support CUDA, install from source if CUDA is needed",
+      "conda install pytorch torchvision -c pytorch<br /># MacOS Binaries dont support CUDA, install from source if CUDA is needed",
 
     "stable,conda,macos,cuda9.0,python3.5":
-      "conda install pytorch torchvision -c pytorch <br /> # MacOS Binaries dont support CUDA, install from source if CUDA is needed",
+      "conda install pytorch torchvision -c pytorch<br /># MacOS Binaries dont support CUDA, install from source if CUDA is needed",
 
     "stable,conda,macos,cuda9.2,python3.5":
-      "conda install pytorch torchvision -c pytorch <br /> # MacOS Binaries dont support CUDA, install from source if CUDA is needed",
+      "conda install pytorch torchvision -c pytorch<br /># MacOS Binaries dont support CUDA, install from source if CUDA is needed",
 
     "stable,conda,macos,cudanone,python3.5":
       "conda install pytorch torchvision -c pytorch",
 
     "stable,conda,macos,cuda8,python3.6":
-      "conda install pytorch torchvision -c pytorch <br /> # MacOS Binaries dont support CUDA, install from source if CUDA is needed",
+      "conda install pytorch torchvision -c pytorch<br /># MacOS Binaries dont support CUDA, install from source if CUDA is needed",
 
     "stable,conda,macos,cuda9.0,python3.6":
-      "conda install pytorch torchvision -c pytorch <br /> # MacOS Binaries dont support CUDA, install from source if CUDA is needed",
+      "conda install pytorch torchvision -c pytorch<br /># MacOS Binaries dont support CUDA, install from source if CUDA is needed",
 
     "stable,conda,macos,cuda9.2,python3.6":
-      "conda install pytorch torchvision -c pytorch <br /> # MacOS Binaries dont support CUDA, install from source if CUDA is needed",
+      "conda install pytorch torchvision -c pytorch<br /># MacOS Binaries dont support CUDA, install from source if CUDA is needed",
 
     "stable,conda,macos,cudanone,python3.6":
       "conda install pytorch torchvision -c pytorch",
 
     "stable,conda,macos,cuda8,python3.7":
-      "conda install pytorch torchvision -c pytorch <br /> # MacOS Binaries dont support CUDA, install from source if CUDA is needed",
+      "conda install pytorch torchvision -c pytorch<br /># MacOS Binaries dont support CUDA, install from source if CUDA is needed",
 
     "stable,conda,macos,cuda9.0,python3.7":
-      "conda install pytorch torchvision -c pytorch <br /> # MacOS Binaries dont support CUDA, install from source if CUDA is needed",
+      "conda install pytorch torchvision -c pytorch<br /># MacOS Binaries dont support CUDA, install from source if CUDA is needed",
 
     "stable,conda,macos,cuda9.2,python3.7":
-      "conda install pytorch torchvision -c pytorch <br /> # MacOS Binaries dont support CUDA, install from source if CUDA is needed",
+      "conda install pytorch torchvision -c pytorch<br /># MacOS Binaries dont support CUDA, install from source if CUDA is needed",
 
     "stable,conda,macos,cudanone,python3.7":
       "conda install pytorch torchvision -c pytorch",
@@ -247,128 +247,128 @@ function commandMessage(key) {
       "# PyTorch does not support Python 2.7 on Windows. Please install with Python 3.",
 
     "stable,conda,windows,cuda8,python3.5":
-      "conda install pytorch cuda80 -c pytorch <br /> pip3 install torchvision",
+      "conda install pytorch cuda80 -c pytorch<br />pip3 install torchvision",
 
     "stable,conda,windows,cuda9.0,python3.5":
-      "conda install pytorch -c pytorch <br /> pip3 install torchvision",
+      "conda install pytorch -c pytorch<br />pip3 install torchvision",
 
     "stable,conda,windows,cuda9.2,python3.5":
-      "conda install pytorch cuda92 -c pytorch <br /> pip3 install torchvision",
+      "conda install pytorch cuda92 -c pytorch<br />pip3 install torchvision",
 
     "stable,conda,windows,cudanone,python3.5":
-      "conda install pytorch-cpu -c pytorch <br /> pip3 install torchvision",
+      "conda install pytorch-cpu -c pytorch<br />pip3 install torchvision",
 
     "stable,conda,windows,cuda8,python3.6":
-      "conda install pytorch cuda80 -c pytorch <br /> pip3 install torchvision",
+      "conda install pytorch cuda80 -c pytorch<br />pip3 install torchvision",
 
     "stable,conda,windows,cuda9.0,python3.6":
-      "conda install pytorch -c pytorch <br /> pip3 install torchvision",
+      "conda install pytorch -c pytorch<br />pip3 install torchvision",
 
     "stable,conda,windows,cuda9.2,python3.6":
-      "conda install pytorch cuda92 -c pytorch <br /> pip3 install torchvision",
+      "conda install pytorch cuda92 -c pytorch<br />pip3 install torchvision",
 
     "stable,conda,windows,cudanone,python3.6":
-      "conda install pytorch-cpu -c pytorch <br /> pip3 install torchvision",
+      "conda install pytorch-cpu -c pytorch<br />pip3 install torchvision",
 
     "stable,conda,windows,cuda8,python3.7":
-      "conda install pytorch cuda80 -c pytorch <br /> pip3 install torchvision",
+      "conda install pytorch cuda80 -c pytorch<br />pip3 install torchvision",
 
     "stable,conda,windows,cuda9.0,python3.7":
-      "conda install pytorch -c pytorch <br /> pip3 install torchvision",
+      "conda install pytorch -c pytorch<br />pip3 install torchvision",
 
     "stable,conda,windows,cuda9.2,python3.7":
-      "conda install pytorch cuda92 -c pytorch <br /> pip3 install torchvision",
+      "conda install pytorch cuda92 -c pytorch<br />pip3 install torchvision",
 
     "stable,conda,windows,cudanone,python3.7":
-      "conda install pytorch-cpu -c pytorch <br /> pip3 install torchvision",
+      "conda install pytorch-cpu -c pytorch<br />pip3 install torchvision",
 
     "stable,pip,macos,cuda8,python2.7":
-      "pip install torch torchvision <br /> # MacOS Binaries dont support CUDA, install from source if CUDA is needed",
+      "pip install torch torchvision<br /># MacOS Binaries dont support CUDA, install from source if CUDA is needed",
 
     "stable,pip,macos,cuda9.0,python2.7":
-      "pip install torch torchvision <br /> # MacOS Binaries dont support CUDA, install from source if CUDA is needed",
+      "pip install torch torchvision<br /># MacOS Binaries dont support CUDA, install from source if CUDA is needed",
 
     "stable,pip,macos,cuda9.2,python2.7":
-      "pip install torch torchvision <br /> # MacOS Binaries dont support CUDA, install from source if CUDA is needed",
+      "pip install torch torchvision<br /># MacOS Binaries dont support CUDA, install from source if CUDA is needed",
 
     "stable,pip,macos,cudanone,python2.7": "pip install torch torchvision",
 
     "stable,pip,macos,cuda8,python3.5":
-      "pip3 install torch torchvision <br /> # MacOS Binaries dont support CUDA, install from source if CUDA is needed",
+      "pip3 install torch torchvision<br /># MacOS Binaries dont support CUDA, install from source if CUDA is needed",
 
     "stable,pip,macos,cuda9.0,python3.5":
-      "pip3 install torch torchvision <br /> # MacOS Binaries dont support CUDA, install from source if CUDA is needed",
+      "pip3 install torch torchvision<br /># MacOS Binaries dont support CUDA, install from source if CUDA is needed",
 
     "stable,pip,macos,cuda9.2,python3.5":
-      "pip3 install torch torchvision <br /> # MacOS Binaries dont support CUDA, install from source if CUDA is needed",
+      "pip3 install torch torchvision<br /># MacOS Binaries dont support CUDA, install from source if CUDA is needed",
 
     "stable,pip,macos,cudanone,python3.5": "pip3 install torch torchvision",
 
     "stable,pip,macos,cuda8,python3.6":
-      "pip3 install torch torchvision <br /> # MacOS Binaries dont support CUDA, install from source if CUDA is needed",
+      "pip3 install torch torchvision<br /># MacOS Binaries dont support CUDA, install from source if CUDA is needed",
 
     "stable,pip,macos,cuda9.0,python3.6":
-      "pip3 install torch torchvision <br /> # MacOS Binaries dont support CUDA, install from source if CUDA is needed",
+      "pip3 install torch torchvision<br /># MacOS Binaries dont support CUDA, install from source if CUDA is needed",
 
     "stable,pip,macos,cuda9.2,python3.6":
-      "pip3 install torch torchvision <br /> # MacOS Binaries dont support CUDA, install from source if CUDA is needed",
+      "pip3 install torch torchvision<br /># MacOS Binaries dont support CUDA, install from source if CUDA is needed",
 
     "stable,pip,macos,cudanone,python3.6": "pip3 install torch torchvision",
 
     "stable,pip,macos,cuda8,python3.7":
-      "pip3 install torch torchvision <br /> # MacOS Binaries dont support CUDA, install from source if CUDA is needed",
+      "pip3 install torch torchvision<br /># MacOS Binaries dont support CUDA, install from source if CUDA is needed",
 
     "stable,pip,macos,cuda9.0,python3.7":
-      "pip3 install torch torchvision <br /> # MacOS Binaries dont support CUDA, install from source if CUDA is needed",
+      "pip3 install torch torchvision<br /># MacOS Binaries dont support CUDA, install from source if CUDA is needed",
 
     "stable,pip,macos,cuda9.2,python3.7":
-      "pip3 install torch torchvision <br /> # MacOS Binaries dont support CUDA, install from source if CUDA is needed",
+      "pip3 install torch torchvision<br /># MacOS Binaries dont support CUDA, install from source if CUDA is needed",
 
     "stable,pip,macos,cudanone,python3.7": "pip3 install torch torchvision",
 
     "stable,pip,linux,cudanone,python2.7":
-      "pip install http://download.pytorch.org/whl/cpu/torch-0.4.1-cp27-cp27mu-linux_x86_64.whl <br/> pip install torchvision <br/><br/> # if the above command does not work, then you have python 2.7 UCS2, use this command <br/> pip install http://download.pytorch.org/whl/cpu/torch-0.4.1-cp27-cp27m-linux_x86_64.whl",
+      "pip install http://download.pytorch.org/whl/cpu/torch-0.4.1-cp27-cp27mu-linux_x86_64.whl<br/>pip install torchvision <br/><br/> # if the above command does not work, then you have python 2.7 UCS2, use this command<br/>pip install http://download.pytorch.org/whl/cpu/torch-0.4.1-cp27-cp27m-linux_x86_64.whl",
 
     "stable,pip,linux,cuda8,python2.7":
-      "pip install http://download.pytorch.org/whl/cu80/torch-0.4.1-cp27-cp27mu-linux_x86_64.whl <br/> pip install torchvision <br/><br/> # if the above command does not work, then you have python 2.7 UCS2, use this command <br/> pip install http://download.pytorch.org/whl/cu80/torch-0.4.1-cp27-cp27m-linux_x86_64.whl",
+      "pip install http://download.pytorch.org/whl/cu80/torch-0.4.1-cp27-cp27mu-linux_x86_64.whl<br/>pip install torchvision<br/><br/># if the above command does not work, then you have python 2.7 UCS2, use this command<br/>pip install http://download.pytorch.org/whl/cu80/torch-0.4.1-cp27-cp27m-linux_x86_64.whl",
 
     "stable,pip,linux,cuda9.0,python2.7": "pip install torch torchvision",
 
     "stable,pip,linux,cuda9.2,python2.7":
-      "pip install http://download.pytorch.org/whl/cu92/torch-0.4.1-cp27-cp27mu-linux_x86_64.whl <br/> pip install torchvision <br/><br/> # if the above command does not work, then you have python 2.7 UCS2, use this command <br/> pip install http://download.pytorch.org/whl/cu92/torch-0.4.1-cp27-cp27m-linux_x86_64.whl",
+      "pip install http://download.pytorch.org/whl/cu92/torch-0.4.1-cp27-cp27mu-linux_x86_64.whl<br/>pip install torchvision<br/><br/># if the above command does not work, then you have python 2.7 UCS2, use this command<br/>pip install http://download.pytorch.org/whl/cu92/torch-0.4.1-cp27-cp27m-linux_x86_64.whl",
 
     "stable,pip,linux,cudanone,python3.5":
-      "pip3 install http://download.pytorch.org/whl/cpu/torch-0.4.1-cp35-cp35m-linux_x86_64.whl <br/> pip3 install torchvision",
+      "pip3 install http://download.pytorch.org/whl/cpu/torch-0.4.1-cp35-cp35m-linux_x86_64.whl<br/>pip3 install torchvision",
 
     "stable,pip,linux,cuda8,python3.5":
-      "pip3 install http://download.pytorch.org/whl/cu80/torch-0.4.1-cp35-cp35m-linux_x86_64.whl <br/> pip3 install torchvision",
+      "pip3 install http://download.pytorch.org/whl/cu80/torch-0.4.1-cp35-cp35m-linux_x86_64.whl<br/>pip3 install torchvision",
 
     "stable,pip,linux,cuda9.0,python3.5": "pip3 install torch torchvision",
 
     "stable,pip,linux,cuda9.2,python3.5":
-      "pip3 install http://download.pytorch.org/whl/cu92/torch-0.4.1-cp35-cp35m-linux_x86_64.whl <br/> pip3 install torchvision",
+      "pip3 install http://download.pytorch.org/whl/cu92/torch-0.4.1-cp35-cp35m-linux_x86_64.whl<br/>pip3 install torchvision",
 
     "stable,pip,linux,cudanone,python3.6":
-      "pip3 install http://download.pytorch.org/whl/cpu/torch-0.4.1-cp36-cp36m-linux_x86_64.whl <br/> pip3 install torchvision",
+      "pip3 install http://download.pytorch.org/whl/cpu/torch-0.4.1-cp36-cp36m-linux_x86_64.whl<br/>pip3 install torchvision",
 
     "stable,pip,linux,cuda8,python3.6":
-      "pip3 install http://download.pytorch.org/whl/cu80/torch-0.4.1-cp36-cp36m-linux_x86_64.whl <br/> pip3 install torchvision",
+      "pip3 install http://download.pytorch.org/whl/cu80/torch-0.4.1-cp36-cp36m-linux_x86_64.whl<br/>pip3 install torchvision",
 
     "stable,pip,linux,cuda9.0,python3.6": "pip3 install torch torchvision",
 
     "stable,pip,linux,cuda9.2,python3.6":
-      "pip3 install http://download.pytorch.org/whl/cu92/torch-0.4.1-cp36-cp36m-linux_x86_64.whl <br/> pip3 install torchvision",
+      "pip3 install http://download.pytorch.org/whl/cu92/torch-0.4.1-cp36-cp36m-linux_x86_64.whl<br/>pip3 install torchvision",
 
     "stable,pip,linux,cudanone,python3.7":
-      "pip3 install http://download.pytorch.org/whl/cpu/torch-0.4.1.post2-cp37-cp37m-linux_x86_64.whl <br/> pip3 install torchvision",
+      "pip3 install http://download.pytorch.org/whl/cpu/torch-0.4.1.post2-cp37-cp37m-linux_x86_64.whl<br/>pip3 install torchvision",
 
     "stable,pip,linux,cuda8,python3.7":
-      "pip3 install http://download.pytorch.org/whl/cu80/torch-0.4.1.post2-cp37-cp37m-linux_x86_64.whl <br/> pip3 install torchvision",
+      "pip3 install http://download.pytorch.org/whl/cu80/torch-0.4.1.post2-cp37-cp37m-linux_x86_64.whl<br/>pip3 install torchvision",
 
     "stable,pip,linux,cuda9.0,python3.7": "pip3 install torch torchvision",
 
     "stable,pip,linux,cuda9.2,python3.7":
-      "pip3 install http://download.pytorch.org/whl/cu92/torch-0.4.1.post2-cp37-cp37m-linux_x86_64.whl <br/> pip3 install torchvision",
+      "pip3 install http://download.pytorch.org/whl/cu92/torch-0.4.1.post2-cp37-cp37m-linux_x86_64.whl<br/>pip3 install torchvision",
 
     "stable,pip,windows,cudanone,python2.7":
       "# PyTorch does not support Python 2.7 on Windows. Please install with Python 3.",
@@ -383,40 +383,40 @@ function commandMessage(key) {
       "# PyTorch does not support Python 2.7 on Windows. Please install with Python 3.",
 
     "stable,pip,windows,cudanone,python3.5":
-      "pip3 install http://download.pytorch.org/whl/cpu/torch-0.4.1-cp35-cp35m-win_amd64.whl <br/> pip3 install torchvision",
+      "pip3 install http://download.pytorch.org/whl/cpu/torch-0.4.1-cp35-cp35m-win_amd64.whl<br/>pip3 install torchvision",
 
     "stable,pip,windows,cuda8,python3.5":
-      "pip3 install http://download.pytorch.org/whl/cu80/torch-0.4.1-cp35-cp35m-win_amd64.whl <br/> pip3 install torchvision",
+      "pip3 install http://download.pytorch.org/whl/cu80/torch-0.4.1-cp35-cp35m-win_amd64.whl<br/>pip3 install torchvision",
 
     "stable,pip,windows,cuda9.0,python3.5":
-      "pip3 install http://download.pytorch.org/whl/cu90/torch-0.4.1-cp35-cp35m-win_amd64.whl <br/> pip3 install torchvision",
+      "pip3 install http://download.pytorch.org/whl/cu90/torch-0.4.1-cp35-cp35m-win_amd64.whl<br/>pip3 install torchvision",
 
     "stable,pip,windows,cuda9.2,python3.5":
-      "pip3 install http://download.pytorch.org/whl/cu92/torch-0.4.1-cp35-cp35m-win_amd64.whl <br/> pip3 install torchvision",
+      "pip3 install http://download.pytorch.org/whl/cu92/torch-0.4.1-cp35-cp35m-win_amd64.whl<br/>pip3 install torchvision",
 
     "stable,pip,windows,cudanone,python3.6":
-      "pip3 install http://download.pytorch.org/whl/cpu/torch-0.4.1-cp36-cp36m-win_amd64.whl <br/> pip3 install torchvision",
+      "pip3 install http://download.pytorch.org/whl/cpu/torch-0.4.1-cp36-cp36m-win_amd64.whl<br/>pip3 install torchvision",
 
     "stable,pip,windows,cuda8,python3.6":
-      "pip3 install http://download.pytorch.org/whl/cu80/torch-0.4.1-cp36-cp36m-win_amd64.whl <br/> pip3 install torchvision",
+      "pip3 install http://download.pytorch.org/whl/cu80/torch-0.4.1-cp36-cp36m-win_amd64.whl<br/>pip3 install torchvision",
 
     "stable,pip,windows,cuda9.0,python3.6":
-      "pip3 install http://download.pytorch.org/whl/cu90/torch-0.4.1-cp36-cp36m-win_amd64.whl <br/> pip3 install torchvision",
+      "pip3 install http://download.pytorch.org/whl/cu90/torch-0.4.1-cp36-cp36m-win_amd64.whl<br/>pip3 install torchvision",
 
     "stable,pip,windows,cuda9.2,python3.6":
-      "pip3 install http://download.pytorch.org/whl/cu92/torch-0.4.1-cp36-cp36m-win_amd64.whl <br/> pip3 install torchvision",
+      "pip3 install http://download.pytorch.org/whl/cu92/torch-0.4.1-cp36-cp36m-win_amd64.whl<br/>pip3 install torchvision",
 
     "stable,pip,windows,cudanone,python3.7":
-      "pip3 install http://download.pytorch.org/whl/cpu/torch-0.4.1-cp37-cp37m-win_amd64.whl <br/> pip3 install torchvision",
+      "pip3 install http://download.pytorch.org/whl/cpu/torch-0.4.1-cp37-cp37m-win_amd64.whl<br/>pip3 install torchvision",
 
     "stable,pip,windows,cuda8,python3.7":
-      "pip3 install http://download.pytorch.org/whl/cu80/torch-0.4.1-cp37-cp37m-win_amd64.whl <br/> pip3 install torchvision",
+      "pip3 install http://download.pytorch.org/whl/cu80/torch-0.4.1-cp37-cp37m-win_amd64.whl<br/>pip3 install torchvision",
 
     "stable,pip,windows,cuda9.0,python3.7":
-      "pip3 install http://download.pytorch.org/whl/cu90/torch-0.4.1-cp37-cp37m-win_amd64.whl <br/> pip3 install torchvision",
+      "pip3 install http://download.pytorch.org/whl/cu90/torch-0.4.1-cp37-cp37m-win_amd64.whl<br/>pip3 install torchvision",
 
     "stable,pip,windows,cuda9.2,python3.7":
-      "pip3 install http://download.pytorch.org/whl/cu92/torch-0.4.1-cp37-cp37m-win_amd64.whl <br/> pip3 install torchvision",
+      "pip3 install http://download.pytorch.org/whl/cu92/torch-0.4.1-cp37-cp37m-win_amd64.whl<br/>pip3 install torchvision",
 
     "preview,conda,linux,cuda8,python2.7":
       "conda install pytorch-nightly -c pytorch",
@@ -563,52 +563,52 @@ function commandMessage(key) {
       "# Preview Build Not Yet Available on Windows.",
 
     "preview,pip,macos,cuda8,python2.7":
-      "pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html",
+      "# Preview Build Not Yet Available on MacOS.",
 
     "preview,pip,macos,cuda9.0,python2.7":
-      "pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html",
+      "# Preview Build Not Yet Available on MacOS.",
 
     "preview,pip,macos,cuda9.2,python2.7":
-      "pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html",
+      "# Preview Build Not Yet Available on MacOS.",
 
     "preview,pip,macos,cudanone,python2.7": 
-      "pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html",
+      "# Preview Build Not Yet Available on MacOS.",
 
     "preview,pip,macos,cuda8,python3.5":
-      "pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html",
+      "# Preview Build Not Yet Available on MacOS.",
 
     "preview,pip,macos,cuda9.0,python3.5":
-      "pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html",
+      "# Preview Build Not Yet Available on MacOS.",
 
     "preview,pip,macos,cuda9.2,python3.5":
-      "pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html",
+      "# Preview Build Not Yet Available on MacOS.",
 
     "preview,pip,macos,cudanone,python3.5": 
-      "pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html",
+      "# Preview Build Not Yet Available on MacOS.",
 
     "preview,pip,macos,cuda8,python3.6":
-      "pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html",
+      "# Preview Build Not Yet Available on MacOS.",
 
     "preview,pip,macos,cuda9.0,python3.6":
-      "pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html",
+      "# Preview Build Not Yet Available on MacOS.",
 
     "preview,pip,macos,cuda9.2,python3.6":
-      "pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html",
+      "# Preview Build Not Yet Available on MacOS.",
 
     "preview,pip,macos,cudanone,python3.6": 
-      "pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html",
+      "# Preview Build Not Yet Available on MacOS.",
 
     "preview,pip,macos,cuda8,python3.7":
-      "pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html",
+      "# Preview Build Not Yet Available on MacOS.",
 
     "preview,pip,macos,cuda9.0,python3.7":
-      "pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html",
+      "# Preview Build Not Yet Available on MacOS.",
 
     "preview,pip,macos,cuda9.2,python3.7":
-      "pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html",
+      "# Preview Build Not Yet Available on MacOS.",
 
     "preview,pip,macos,cudanone,python3.7": 
-      "pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html",
+      "# Preview Build Not Yet Available on MacOS.",
 
     "preview,pip,linux,cudanone,python2.7":
       "pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html",
@@ -623,7 +623,7 @@ function commandMessage(key) {
       "pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cu92/torch_nightly.html",
 
     "preview,pip,linux,cudanone,python3.5":
-      "pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html",
+      "# Preview Build Not Yet Available on MacOS.",
 
     "preview,pip,linux,cuda8,python3.5":
       "pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cu80/torch_nightly.html",
@@ -635,7 +635,7 @@ function commandMessage(key) {
       "pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cu92/torch_nightly.html",
 
     "preview,pip,linux,cudanone,python3.6":
-      "pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html",
+      "# Preview Build Not Yet Available on MacOS.",
 
     "preview,pip,linux,cuda8,python3.6":
       "pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cu80/torch_nightly.html",
@@ -647,7 +647,7 @@ function commandMessage(key) {
       "pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cu92/torch_nightly.html",
 
     "preview,pip,linux,cudanone,python3.7":
-      "pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html",
+      "# Preview Build Not Yet Available on MacOS.",
 
     "preview,pip,linux,cuda8,python3.7":
       "pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cu80/torch_nightly.html",
@@ -712,6 +712,6 @@ function commandMessage(key) {
       "# Follow instructions at this URL: https://github.com/pytorch/pytorch#from-source"
     );
   } else {
-    $("#command").html(object[key]);
+    $("#command").html("<pre>" + object[key] + "</pre>");
   }
 }
