@@ -2,7 +2,7 @@
 title: Cloud Partners
 order: 6
 snippet: >
-  ```python
+  ```sh
     export IMAGE_FAMILY="pytorch-latest-cpu"
     export ZONE="us-west1-b"
     export INSTANCE_NAME="my-instance"
