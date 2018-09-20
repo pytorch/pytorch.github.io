@@ -12,41 +12,42 @@ pwd
 remote=$(git config remote.origin.url)
 
 # make a directory to put the gp-pages branch
-mkdir gh-pages-branch
-cd gh-pages-branch
-# now lets setup a new repo so we can update the gh-pages branch
-git config --global user.email "$GH_EMAIL" > /dev/null 2>&1
-git config --global user.name "$GH_NAME" > /dev/null 2>&1
+mkdir master-branch
+cd master-branch
+# now lets setup a new repo so we can update the master branch
+git config --global user.email "facebook-circleci-bot@users.noreply.github.com" > /dev/null 2>&1
+git config --global user.name "Website Deployment Script" > /dev/null 2>&1
+echo "machine github.com login facebook-circleci-bot password $CIRCLECI_PUBLISH_TOKEN" > ~/.netrc
 git init
 git remote add --fetch origin "$remote"
 
-# switch into the the gh-pages branch
-if git rev-parse --verify origin/gh-pages > /dev/null 2>&1
+# switch into the the master branch
+if git rev-parse --verify origin/master > /dev/null 2>&1
 then
-    git checkout gh-pages
+    git checkout master
     # delete any old site as we are going to replace it
     # Note: this explodes if there aren't any, so moving it here for now
     git rm -rf .
 else
-    git checkout --orphan gh-pages
+    git checkout --orphan master
 fi
 
 cd "../"
 make build_deploy
-cd gh-pages-branch
+cd master-branch
 
 # copy over or recompile the new site
 cp -a "../_site/." .
 
 # stage any changes and new files
 git add -A
-# now commit, ignoring branch gh-pages doesn't seem to work, so trying skip
+# now commit, ignoring branch master doesn't seem to work, so trying skip
 git commit --allow-empty -m "Deploy to GitHub pages [ci skip]"
 # and push, but send any output to /dev/null to hide anything sensitive
-git push --force --quiet origin gh-pages
-# go back to where we started and remove the gh-pages git repo we made and used
+git push --force --quiet origin master
+# go back to where we started and remove the master git repo we made and used
 # for deployment
 cd ..
-rm -rf gh-pages-branch
+rm -rf master-branch
 
 echo "Finished Deployment!"
