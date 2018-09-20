@@ -11,7 +11,7 @@ set -e
 pwd
 remote=$(git config remote.origin.url)
 
-# make a directory to put the gp-pages branch
+# make a directory to put the master branch
 mkdir master-branch
 cd master-branch
 # now lets setup a new repo so we can update the master branch
@@ -42,7 +42,7 @@ cp -a "../_site/." .
 # stage any changes and new files
 git add -A
 # now commit, ignoring branch master doesn't seem to work, so trying skip
-git commit --allow-empty -m "Deploy to GitHub pages [ci skip]"
+git commit --allow-empty -m "Deploy to GitHub Pages on master [ci skip]"
 # and push, but send any output to /dev/null to hide anything sensitive
 git push --force --quiet origin master
 # go back to where we started and remove the master git repo we made and used
