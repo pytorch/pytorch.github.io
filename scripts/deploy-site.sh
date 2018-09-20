@@ -41,7 +41,7 @@ git add -A
 # now commit, ignoring branch master doesn't seem to work, so trying skip
 git commit --allow-empty -m "Deploy to GitHub Pages on master [ci skip]"
 # and push, but send any output to /dev/null to hide anything sensitive
-git push --force --quiet origin master
+git push --force --quiet https://facebook-circleci-bot:$CIRCLECI_PUBLISH_TOKEN@github.com/pytorch/pytorch.github.io.git master
 # go back to where we started and remove the master git repo we made and used
 # for deployment
 cd ..
