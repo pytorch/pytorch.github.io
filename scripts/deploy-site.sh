@@ -36,6 +36,9 @@ cd master-branch
 # copy over or recompile the new site
 cp -a "../_site/." .
 
+# have small jekyll config to allow underscores
+echo "include: [_static, _images, _modules, _sources, _tensor_str.html, _utils.html]" > _config.yml
+
 # stage any changes and new files
 git add -A
 # now commit, ignoring branch master doesn't seem to work, so trying skip
