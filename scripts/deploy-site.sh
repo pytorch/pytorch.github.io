@@ -15,9 +15,6 @@ remote=$(git config remote.origin.url)
 mkdir master-branch
 cd master-branch
 # now lets setup a new repo so we can update the master branch
-git config --global user.email "facebook-circleci-bot@users.noreply.github.com" > /dev/null 2>&1
-git config --global user.name "Website Deployment Script" > /dev/null 2>&1
-echo "machine github.com login facebook-circleci-bot password $CIRCLECI_PUBLISH_TOKEN" > ~/.netrc
 git init
 git remote add --fetch origin "$remote"
 
