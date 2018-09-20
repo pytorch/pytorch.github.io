@@ -1,10 +1,10 @@
-# shiftlab/pytorch
+# pytorch.org site
 
-[https://shiftlab.github.io/pytorch](https://shiftlab.github.io/pytorch)
+[https://pytorch.org](https://pytorch.org)
 
 A static website built in [Jekyll](https://jekyllrb.com/) and [Bootstrap](https://getbootstrap.com/) for [PyTorch](https://pytorch.org/), and its tutorials and documentation.
 
-##Prerequisites
+## Prerequisites
 
 Install the following packages before attempting to setup the project:
 
@@ -67,8 +67,8 @@ This will build the static site at `./_site`. This directory is not tracked in g
 
 ## Deployments
 
-The website is hosted on [Github Pages](https://pages.github.com/) at [https://shiftlab.github.io/pytorch](https://shiftlab.github.io/pytorch).
+The website is hosted on [Github Pages](https://pages.github.com/) at [https://pytorch.org](https://pytorch.org).
 
-To deploy changes, merge your latest code into the `master` branch. A build will be automatically built and commited to the `gh-pages` branch via a CircleCI job.
+To deploy changes, merge your latest code into the `sites` branch. A build will be automatically built and committed to the `master` branch via a CircleCI job.
 
-To view the status of the build visit [https://circleci.com/gh/shiftlab/pytorch](https://circleci.com/gh/shiftlab/pytorch).
+To view the status of the build visit [https://circleci.com/gh/pytorch/pytorch.github.io](https://circleci.com/gh/pytorch/pytorch.github.io).

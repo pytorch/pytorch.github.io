@@ -35,23 +35,9 @@ include-yarn-deps:
 
 build: install include-yarn-deps
 	$(JEKYLL) build --config _config.yml
-	rm _site/Gemfile
-	rm _site/Gemfile.lock
-	rm _site/Makefile
-	rm _site/package.json
-	rm -f _site/yarn-error.log
-	rm _site/yarn.lock
-	rm -rf _site/scripts
 
 serve: install include-yarn-deps
 	JEKYLL_ENV=development $(JEKYLL) serve --config _config.yml
 
 build_deploy: include-yarn-deps
 	JEKYLL_ENV=production $(JEKYLL) build
-	rm _site/Gemfile
-	rm _site/Gemfile.lock
-	rm _site/Makefile
-	rm _site/package.json
-	rm -f _site/yarn-error.log
-	rm _site/yarn.lock
-	rm -rf _site/scripts
