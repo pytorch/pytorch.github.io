@@ -7,7 +7,6 @@ body-class: get-started
 order: 4
 published: true
 redirect_from: /previous-versions.html
-r
 ---
 
 ## Installing previous versions of PyTorch
