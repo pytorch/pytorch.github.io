@@ -37,7 +37,7 @@ build: install include-yarn-deps
 	$(JEKYLL) build --config _config.yml
 
 serve: install include-yarn-deps
-	JEKYLL_ENV=development $(JEKYLL) serve --config _config.yml
+	JEKYLL_ENV=development $(JEKYLL) serve --incremental --config _config.yml
 
 build_deploy: include-yarn-deps
 	JEKYLL_ENV=production $(JEKYLL) build
