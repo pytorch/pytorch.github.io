@@ -1,10 +1,15 @@
 ---
-layout: general
+layout: get_started
 title: Previous PyTorch Versions
+permalink: /get-started/previous-versions/
+background-class: get-started-background
+body-class: get-started
+order: 4
 published: true
+redirect_from: /previous-versions.html
 ---
 
-# Installing previous versions of PyTorch
+## Installing previous versions of PyTorch
 
 We'd prefer you install the [latest version](http://pytorch.org/),
 but old binaries and installation instructions are provided below for
@@ -253,3 +258,11 @@ Linux binaries with CUDA 7.5 support, and Mac OSX & miscellaneous other binaries
 - [torch_cuda80-0.1.6.post20-cp27-cp27mu-linux_x86_64.whl](http://download.pytorch.org/whl/torch_cuda80-0.1.6.post20-cp27-cp27mu-linux_x86_64.whl)
 - [torch_cuda80-0.1.6.post17-cp35-cp35m-linux_x86_64.whl](http://download.pytorch.org/whl/torch_cuda80-0.1.6.post17-cp35-cp35m-linux_x86_64.whl)
 - [torch_cuda80-0.1.6.post17-cp27-cp27mu-linux_x86_64.whl](http://download.pytorch.org/whl/torch_cuda80-0.1.6.post17-cp27-cp27mu-linux_x86_64.whl)
+
+<script type="text/javascript">
+  var pageId = "previous-versions"; // TBD: Make this programmatic
+  $(".main-content-menu .nav-item").removeClass("nav-select");
+  $(".main-content-menu .nav-link[data-id='" + pageId + "']").parent(".nav-item").addClass("nav-select");
+</script>
+<script src="{{ site.baseurl }}/assets/quick-start-module.js"></script>
+<script src="{{ site.baseurl }}/assets/show-screencast.js"></script>

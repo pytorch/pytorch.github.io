@@ -4,7 +4,7 @@ title: Try Now via CoLab
 permalink: /get-started/colab/
 background-class: get-started-background
 body-class: get-started
-order: 2
+order: 3
 ---
 
 ## Try Now via CoLab
