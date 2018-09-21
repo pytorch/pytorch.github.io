@@ -7,11 +7,12 @@ body-class: get-started
 order: 4
 published: true
 redirect_from: /previous-versions.html
+r
 ---
 
 ## Installing previous versions of PyTorch
 
-We'd prefer you install the [latest version](http://pytorch.org/),
+We'd prefer you install the [latest version](http://pytorch.org/get-started/locally),
 but old binaries and installation instructions are provided below for
 your convenience.
 
