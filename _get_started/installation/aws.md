@@ -19,7 +19,7 @@ If you want to get started with a Linux AWS instance that has PyTorch already in
    > This gives you an instance with a pre-defined version of PyTorch already installed. If you wanted a bare AWS instance that required PyTorch to be installed, you could choose the `Deep Learning Base AMI (Ubuntu)`, which will have the hardware, but none of the software already available.
 1. Choose a GPU compute `p3.2xlarge` instance type.
    > You can choose any of the available instances to try PyTorch, even the *free-tier*, but it is recommended for best performance that you get a *GPU compute* or *Compute optimized* instance. Other instance options include the Compute Optimized c5-series (e.g., `c5.2xlarge`) or the General Compute t2-series or t3-series (e.g., `t2.2xlarge`). It is important to note that if you choose an instance without a GPU, PyTorch will only be running in CPU compute mode, and operations may take much, much longer.
-1. Click on `Review and Launch`. 
+1. Click on `Review and Launch`.
 1. Review the instance information and click `Launch`.
 1. You will want to `Create a new key pair` if you do not have one already to use. Pick a name and download it locally via the `Download Key Pair` button.
 1. Now click on `Launch Instances`. You now have a live instance to use for PyTorch. If you click on `View Instances`, you will see your running instance.
@@ -57,7 +57,7 @@ Additionally, to check if your GPU driver and CUDA is enabled and accessible by 
 
 ```python
 import torch
-torch.cuda.is_available();
+torch.cuda.is_available()
 ```
 
 <div>
