@@ -9,7 +9,7 @@ var opts = {
   cuda: 'cuda9.0',
   os: getAnchorSelectedOS() || getDefaultSelectedOS(),
   pm: 'conda',
-  python: 'python3.6',
+  language: 'python3.6',
   ptbuild: 'stable',
 };
 
@@ -21,7 +21,7 @@ var supportedCloudPlatforms = [
 
 var os = $(".os > .option");
 var package = $(".package > .option");
-var python = $(".python > .option");
+var language = $(".language > .option");
 var cuda = $(".cuda > .option");
 var ptbuild = $(".ptbuild > .option");
 
@@ -31,8 +31,8 @@ os.on("click", function() {
 package.on("click", function() {
   selectedOption(package, this, "pm");
 });
-python.on("click", function() {
-  selectedOption(python, this, "python");
+language.on("click", function() {
+  selectedOption(language, this, "language");
 });
 cuda.on("click", function() {
   selectedOption(cuda, this, "cuda");
@@ -43,7 +43,7 @@ ptbuild.on("click", function() {
 
 // Force a selection onclick to get the right operating system selected from
 // the start
-$( document ).ready(function() {
+$(document).ready(function() {
     document.getElementById(opts.os).click();
 });
 
@@ -82,6 +82,39 @@ function selectedOption(option, selection, category) {
   $(option).removeClass("selected");
   $(selection).addClass("selected");
   opts[category] = selection.id;
+  if (category === "pm") {
+    var elements = document.getElementsByClassName("language")[0].children;
+    if (selection.id !== "libtorch" && elements["cplusplus"].classList.contains("selected")) {
+      $(elements["cplusplus"]).removeClass("selected");
+      $(elements["python3.7"]).addClass("selected");
+      opts["language"] = "python3.7";
+    } else if (selection.id == "libtorch") {
+      for (var i = 0; i < elements.length; i++) {
+        if (elements[i].id === "cplusplus") {
+          $(elements[i]).addClass("selected");
+          opts["language"] = "cplusplus";
+        } else {
+          $(elements[i]).removeClass("selected");
+        }
+      }
+    }
+  } else if (category === "language") {
+    var elements = document.getElementsByClassName("package")[0].children;
+    if (selection.id !== "cplusplus" && elements["libtorch"].classList.contains("selected")) {
+      $(elements["libtorch"]).removeClass("selected");
+      $(elements["pip"]).addClass("selected");
+      opts["pm"] = "pip";
+    } else if (selection.id == "cplusplus") {
+      for (var i = 0; i < elements.length; i++) {
+        if (elements[i].id === "libtorch") {
+          $(elements[i]).addClass("selected");
+          opts["pm"] = "libtorch";
+        } else {
+          $(elements[i]).removeClass("selected");
+        }
+      }
+    }
+  }
   commandMessage(buildMatcher());
   if (category === "os") {
     display(opts.os, 'installation', 'os');
@@ -114,7 +147,7 @@ function buildMatcher() {
     "," +
     opts.cuda.toLowerCase() +
     "," +
-    opts.python.toLowerCase()
+    opts.language.toLowerCase()
   );
 }
 
@@ -418,6 +451,42 @@ function commandMessage(key) {
     "stable,pip,windows,cuda9.2,python3.7":
       "pip3 install http://download.pytorch.org/whl/cu92/torch-0.4.1-cp37-cp37m-win_amd64.whl<br/>pip3 install torchvision",
 
+    "stable,libtorch,linux,cudanone,cplusplus":
+      "# Currently only available as a Preview.",
+
+    "stable,libtorch,linux,cuda8,cplusplus":
+      "# Currently only available as a Preview.",
+
+    "stable,libtorch,linux,cuda9.0,cplusplus":
+      "# Currently only available as a Preview.",
+
+    "stable,libtorch,linux,cuda9.2,cplusplus":
+      "# Currently only available as a Preview.",
+
+    "stable,libtorch,macos,cudanone,cplusplus":
+      "# Currently only available as a Preview.",
+
+    "stable,libtorch,macos,cuda8,cplusplus":
+      "# Currently only available as a Preview.",
+
+    "stable,libtorch,macos,cuda9.0,cplusplus":
+      "# Currently only available as a Preview.",
+
+    "stable,libtorch,macos,cuda9.2,cplusplus":
+      "# Currently only available as a Preview.",
+
+    "stable,libtorch,windows,cudanone,cplusplus":
+      "# Currently only available as a Preview.",
+
+    "stable,libtorch,windows,cuda8,cplusplus":
+      "# Currently only available as a Preview.",
+
+    "stable,libtorch,windows,cuda9.0,cplusplus":
+      "# Currently only available as a Preview.",
+
+    "stable,libtorch,windows,cuda9.2,cplusplus":
+      "# Currently only available as a Preview.",
+
     "preview,conda,linux,cuda8,python2.7":
       "conda install pytorch-nightly -c pytorch",
 
@@ -704,7 +773,43 @@ function commandMessage(key) {
       "# Preview Build Not Yet Available on Windows.",
 
     "preview,pip,windows,cuda9.2,python3.7":
-      "# Preview Build Not Yet Available on Windows."
+      "# Preview Build Not Yet Available on Windows.",
+
+    "preview,libtorch,linux,cudanone,cplusplus":
+      "Download <a href='https://download.pytorch.org/libtorch/nightly/cpu/libtorch-shared-with-deps-latest.zip'>here</a>.",
+
+    "preview,libtorch,linux,cuda8,cplusplus":
+      "Download <a href='https://download.pytorch.org/libtorch/nightly/cu80/libtorch-shared-with-deps-latest.zip'>here</a>.",
+
+    "preview,libtorch,linux,cuda9.0,cplusplus":
+      "Download <a href='https://download.pytorch.org/libtorch/nightly/cu90/libtorch-shared-with-deps-latest.zip'>here</a>.",
+
+    "preview,libtorch,linux,cuda9.2,cplusplus":
+      "Download <a href='https://download.pytorch.org/libtorch/nightly/cu9.2/libtorch-shared-with-deps-latest.zip'>here</a>.",
+
+    "preview,libtorch,macos,cudanone,cplusplus":
+      "Download <a href='https://download.pytorch.org/libtorch/nightly/cpu/libtorch-macos-latest.zip'>here</a>.",
+
+    "preview,libtorch,macos,cuda8,cplusplus":
+      "# Currently only available CPU-only / no CUDA.",
+
+    "preview,libtorch,macos,cuda9.0,cplusplus":
+      "# Currently only available CPU-only / no CUDA.",
+
+    "preview,libtorch,macos,cuda9.2,cplusplus":
+      "# Currently only available CPU-only / no CUDA.",
+
+    "preview,libtorch,windows,cudanone,cplusplus":
+      "# Not currently available on Windows.",
+
+    "preview,libtorch,windows,cuda8,cplusplus":
+      "# Not currently available on Windows.",
+
+    "preview,libtorch,windows,cuda9.0,cplusplus":
+      "# Not currently available on Windows.",
+
+    "preview,libtorch,windows,cuda9.2,cplusplus":
+      "# Not currently available on Windows.",
   };
 
   if (!object.hasOwnProperty(key)) {
