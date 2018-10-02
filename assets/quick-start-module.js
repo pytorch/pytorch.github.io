@@ -145,7 +145,7 @@ function display(selection, id, category) {
 
 function buildMatcher() {
   return (
-    opts.ptbuild.toLowerCase() + 
+    opts.ptbuild.toLowerCase() +
     "," +
     opts.pm.toLowerCase() +
     "," +
@@ -494,52 +494,52 @@ function commandMessage(key) {
       "# Currently only available as a Preview.",
 
     "preview,conda,linux,cuda8,python2.7":
-      "conda install pytorch-nightly -c pytorch",
+      "conda install pytorch-nightly cuda80 -c pytorch",
 
     "preview,conda,linux,cuda9.0,python2.7":
       "conda install pytorch-nightly -c pytorch",
 
     "preview,conda,linux,cuda9.2,python2.7":
-      "conda install pytorch-nightly -c pytorch",
+      "conda install pytorch-nightly cuda92 -c pytorch",
 
     "preview,conda,linux,cudanone,python2.7":
-      "conda install pytorch-nightly -c pytorch",
+      "conda install pytorch-nightly-cpu -c pytorch",
 
     "preview,conda,linux,cuda8,python3.5":
-      "conda install pytorch-nightly -c pytorch",
+      "conda install pytorch-nightly cuda80 -c pytorch",
 
     "preview,conda,linux,cuda9.0,python3.5":
       "conda install pytorch-nightly -c pytorch",
 
     "preview,conda,linux,cuda9.2,python3.5":
-      "conda install pytorch-nightly -c pytorch",
+      "conda install pytorch-nightly cuda92 -c pytorch",
 
     "preview,conda,linux,cudanone,python3.5":
-      "conda install pytorch-nightly -c pytorch",
+      "conda install pytorch-nightly-cpu -c pytorch",
 
     "preview,conda,linux,cuda8,python3.6":
-      "conda install pytorch-nightly -c pytorch",
+      "conda install pytorch-nightly cuda80 -c pytorch",
 
     "preview,conda,linux,cuda9.0,python3.6":
       "conda install pytorch-nightly -c pytorch",
 
     "preview,conda,linux,cuda9.2,python3.6":
-      "conda install pytorch-nightly -c pytorch",
+      "conda install pytorch-nightly cuda92 -c pytorch",
 
     "preview,conda,linux,cudanone,python3.6":
-      "conda install pytorch-nightly -c pytorch",
+      "conda install pytorch-nightly-cpu -c pytorch",
 
     "preview,conda,linux,cuda8,python3.7":
-      "conda install pytorch-nightly -c pytorch",
+      "conda install pytorch-nightly cuda80 -c pytorch",
 
     "preview,conda,linux,cuda9.0,python3.7":
       "conda install pytorch-nightly -c pytorch",
 
     "preview,conda,linux,cuda9.2,python3.7":
-      "conda install pytorch-nightly -c pytorch",
+      "conda install pytorch-nightly cuda92 -c pytorch",
 
     "preview,conda,linux,cudanone,python3.7":
-      "conda install pytorch-nightly -c pytorch",
+      "conda install pytorch-nightly-cpu -c pytorch",
 
     "preview,conda,macos,cuda8,python2.7":
       "conda install pytorch-nightly -c pytorch",
@@ -646,7 +646,7 @@ function commandMessage(key) {
     "preview,pip,macos,cuda9.2,python2.7":
       "# Preview Build Not Yet Available on MacOS.",
 
-    "preview,pip,macos,cudanone,python2.7": 
+    "preview,pip,macos,cudanone,python2.7":
       "# Preview Build Not Yet Available on MacOS.",
 
     "preview,pip,macos,cuda8,python3.5":
@@ -658,7 +658,7 @@ function commandMessage(key) {
     "preview,pip,macos,cuda9.2,python3.5":
       "# Preview Build Not Yet Available on MacOS.",
 
-    "preview,pip,macos,cudanone,python3.5": 
+    "preview,pip,macos,cudanone,python3.5":
       "# Preview Build Not Yet Available on MacOS.",
 
     "preview,pip,macos,cuda8,python3.6":
@@ -670,7 +670,7 @@ function commandMessage(key) {
     "preview,pip,macos,cuda9.2,python3.6":
       "# Preview Build Not Yet Available on MacOS.",
 
-    "preview,pip,macos,cudanone,python3.6": 
+    "preview,pip,macos,cudanone,python3.6":
       "# Preview Build Not Yet Available on MacOS.",
 
     "preview,pip,macos,cuda8,python3.7":
@@ -682,7 +682,7 @@ function commandMessage(key) {
     "preview,pip,macos,cuda9.2,python3.7":
       "# Preview Build Not Yet Available on MacOS.",
 
-    "preview,pip,macos,cudanone,python3.7": 
+    "preview,pip,macos,cudanone,python3.7":
       "# Preview Build Not Yet Available on MacOS.",
 
     "preview,pip,linux,cudanone,python2.7":
@@ -691,7 +691,7 @@ function commandMessage(key) {
     "preview,pip,linux,cuda8,python2.7":
       "pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cu80/torch_nightly.html",
 
-    "preview,pip,linux,cuda9.0,python2.7": 
+    "preview,pip,linux,cuda9.0,python2.7":
       "pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cu90/torch_nightly.html",
 
     "preview,pip,linux,cuda9.2,python2.7":
@@ -703,7 +703,7 @@ function commandMessage(key) {
     "preview,pip,linux,cuda8,python3.5":
       "pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cu80/torch_nightly.html",
 
-    "preview,pip,linux,cuda9.0,python3.5": 
+    "preview,pip,linux,cuda9.0,python3.5":
       "pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cu90/torch_nightly.html",
 
     "preview,pip,linux,cuda9.2,python3.5":
@@ -715,7 +715,7 @@ function commandMessage(key) {
     "preview,pip,linux,cuda8,python3.6":
       "pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cu80/torch_nightly.html",
 
-    "preview,pip,linux,cuda9.0,python3.6": 
+    "preview,pip,linux,cuda9.0,python3.6":
       "pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cu90/torch_nightly.html",
 
     "preview,pip,linux,cuda9.2,python3.6":
@@ -727,7 +727,7 @@ function commandMessage(key) {
     "preview,pip,linux,cuda8,python3.7":
       "pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cu80/torch_nightly.html",
 
-    "preview,pip,linux,cuda9.0,python3.7": 
+    "preview,pip,linux,cuda9.0,python3.7":
       "pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cu90/torch_nightly.html",
 
     "preview,pip,linux,cuda9.2,python3.7":
