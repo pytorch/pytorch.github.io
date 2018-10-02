@@ -1,6 +1,6 @@
 ---
 title: Cloud Partners
-order: 6
+order: 7
 snippet: >
   ```sh
     export IMAGE_FAMILY="pytorch-latest-cpu"
