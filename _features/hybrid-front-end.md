@@ -4,9 +4,7 @@ order: 1
 snippet: >
   ```python
     @torch.jit.script
-    def RNN(h, x, 
-         W_h, U_h, W_y, 
-         b_h, b_y):
+    def RNN(h, x, W_h, U_h, W_y, b_h, b_y):
       y = []
       for t in range(x.size(0)):
         h = torch.tanh(x[t] @ W_h + h @ U_h + b_h)
