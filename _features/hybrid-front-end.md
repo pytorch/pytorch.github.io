@@ -3,8 +3,8 @@ title: Hybrid Front-End
 order: 1
 snippet: >
   ```python
-    @torch.jit.script
-    def RNN(h, x, 
+  @torch.jit.script
+  def RNN(h, x, 
        W_h, U_h, W_y, 
        b_h, b_y):
     y = []
