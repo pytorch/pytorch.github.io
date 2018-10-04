@@ -791,7 +791,7 @@ function commandMessage(key) {
       "Download here: <br/><a href='https://download.pytorch.org/libtorch/nightly/cu90/libtorch-shared-with-deps-latest.zip'>https://download.pytorch.org/libtorch/nightly/cu90/libtorch-shared-with-deps-latest.zip</a>",
 
     "preview,libtorch,linux,cuda9.2,cplusplus":
-      "Download here: <br/><a href='https://download.pytorch.org/libtorch/nightly/cu92/libtorch-shared-with-deps-latest.zip'>https://download.pytorch.org/libtorch/nightly/cu9.2/libtorch-shared-with-deps-latest.zip</a>",
+      "Download here: <br/><a href='https://download.pytorch.org/libtorch/nightly/cu92/libtorch-shared-with-deps-latest.zip'>https://download.pytorch.org/libtorch/nightly/cu92/libtorch-shared-with-deps-latest.zip</a>",
 
     "preview,libtorch,macos,cudanone,cplusplus":
       "Download here: <br/><a href='https://download.pytorch.org/libtorch/nightly/cpu/libtorch-macos-latest.zip'>https://download.pytorch.org/libtorch/nightly/cpu/libtorch-macos-latest.zip</a>",
