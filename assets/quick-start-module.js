@@ -638,52 +638,52 @@ function commandMessage(key) {
       "# Preview Build Not Yet Available on Windows.",
 
     "preview,pip,macos,cuda8,python2.7":
-      "# Preview Build Not Yet Available on MacOS.",
+      "pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html # On MacOS, we provide CPU-only packages, CUDA functionality is not provided",
 
     "preview,pip,macos,cuda9.0,python2.7":
-      "# Preview Build Not Yet Available on MacOS.",
+      "pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html # On MacOS, we provide CPU-only packages, CUDA functionality is not provided",
 
     "preview,pip,macos,cuda9.2,python2.7":
-      "# Preview Build Not Yet Available on MacOS.",
+      "pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html # On MacOS, we provide CPU-only packages, CUDA functionality is not provided",
 
     "preview,pip,macos,cudanone,python2.7":
-      "# Preview Build Not Yet Available on MacOS.",
+      "pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html",
 
     "preview,pip,macos,cuda8,python3.5":
-      "# Preview Build Not Yet Available on MacOS.",
+      "pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html # On MacOS, we provide CPU-only packages, CUDA functionality is not provided",
 
     "preview,pip,macos,cuda9.0,python3.5":
-      "# Preview Build Not Yet Available on MacOS.",
+      "pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html # On MacOS, we provide CPU-only packages, CUDA functionality is not provided",
 
     "preview,pip,macos,cuda9.2,python3.5":
-      "# Preview Build Not Yet Available on MacOS.",
+      "pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html # On MacOS, we provide CPU-only packages, CUDA functionality is not provided",
 
     "preview,pip,macos,cudanone,python3.5":
-      "# Preview Build Not Yet Available on MacOS.",
+      "pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html",
 
     "preview,pip,macos,cuda8,python3.6":
-      "# Preview Build Not Yet Available on MacOS.",
+      "pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html # On MacOS, we provide CPU-only packages, CUDA functionality is not provided",
 
     "preview,pip,macos,cuda9.0,python3.6":
-      "# Preview Build Not Yet Available on MacOS.",
+      "pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html # On MacOS, we provide CPU-only packages, CUDA functionality is not provided",
 
     "preview,pip,macos,cuda9.2,python3.6":
-      "# Preview Build Not Yet Available on MacOS.",
+      "pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html # On MacOS, we provide CPU-only packages, CUDA functionality is not provided",
 
     "preview,pip,macos,cudanone,python3.6":
-      "# Preview Build Not Yet Available on MacOS.",
+      "pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html",
 
     "preview,pip,macos,cuda8,python3.7":
-      "# Preview Build Not Yet Available on MacOS.",
+      "pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html # On MacOS, we provide CPU-only packages, CUDA functionality is not provided",
 
     "preview,pip,macos,cuda9.0,python3.7":
-      "# Preview Build Not Yet Available on MacOS.",
+      "pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html # On MacOS, we provide CPU-only packages, CUDA functionality is not provided",
 
     "preview,pip,macos,cuda9.2,python3.7":
-      "# Preview Build Not Yet Available on MacOS.",
+      "pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html # On MacOS, we provide CPU-only packages, CUDA functionality is not provided",
 
     "preview,pip,macos,cudanone,python3.7":
-      "# Preview Build Not Yet Available on MacOS.",
+      "pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html",
 
     "preview,pip,linux,cudanone,python2.7":
       "pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html",
