@@ -111,7 +111,7 @@
               
               
                 <div class="version">
-                  <a href="http://pytorch.org/docs/versions.html">master (1.0.0a0+dcd9d73 ) &#x25BC</a>
+                  <a href="http://pytorch.org/docs/versions.html">master (1.0.0a0+856252a ) &#x25BC</a>
                 </div>
               
             
@@ -163,6 +163,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../../../../torch.html">torch</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../tensors.html">torch.Tensor</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../tensor_attributes.html">Tensor Attributes</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../type_info.html">Type Info</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../sparse.html">torch.sparse</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../cuda.html">torch.cuda</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../storage.html">torch.Storage</a></li>
@@ -281,7 +282,27 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">n_power_iterations</span> <span class="o">=</span> <span class="n">n_power_iterations</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">eps</span> <span class="o">=</span> <span class="n">eps</span>
 
-    <span class="k">def</span> <span class="nf">compute_weight</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">module</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">compute_weight_and_update_u</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">module</span><span class="p">):</span>
+        <span class="c1"># NB: This updates the _u vector **in-place**. This is very important</span>
+        <span class="c1">#     because in DataParallel forward, the _u vector (being a buffer) is</span>
+        <span class="c1">#     broadcast from the parallelized module to each module replica,</span>
+        <span class="c1">#     which is a new module object on the fly. And each replica runs its</span>
+        <span class="c1">#     own spectral norm power iteration. So simply assigning the updated</span>
+        <span class="c1">#     _u vector to module this runs on will cause the update to be lost</span>
+        <span class="c1">#     forever. And the next time the parallelized module is replicated,</span>
+        <span class="c1">#     the same randomly initialized _u vector is broadcast!</span>
+        <span class="c1">#</span>
+        <span class="c1">#     Therefore, to make the change propagate back, we rely on two</span>
+        <span class="c1">#     important bahaviors (also enforced via tests):</span>
+        <span class="c1">#       1. DataParallel doesn&#39;t clone storage if the broadcast tensor is</span>
+        <span class="c1">#          alreay on correct device; and it makes sure that the</span>
+        <span class="c1">#          parallelized module is already on device[0].</span>
+        <span class="c1">#       2. If the out tensor in out= kwarg has correct shape, it will</span>
+        <span class="c1">#          just fill in the values.</span>
+        <span class="c1">#     Therefore, since the same power iteration is performed on all</span>
+        <span class="c1">#     devices, simply updating the _u tensor in-place will make sure</span>
+        <span class="c1">#     that the module replica on device[0] will update the _u vector on</span>
+        <span class="c1">#     the parallized module (by shared storage).</span>
         <span class="n">weight</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">+</span> <span class="s1">&#39;_orig&#39;</span><span class="p">)</span>
         <span class="n">u</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">+</span> <span class="s1">&#39;_u&#39;</span><span class="p">)</span>
         <span class="n">weight_mat</span> <span class="o">=</span> <span class="n">weight</span>
@@ -297,11 +318,11 @@
                 <span class="c1"># are the first left and right singular vectors.</span>
                 <span class="c1"># This power iteration produces approximations of `u` and `v`.</span>
                 <span class="n">v</span> <span class="o">=</span> <span class="n">normalize</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">matmul</span><span class="p">(</span><span class="n">weight_mat</span><span class="o">.</span><span class="n">t</span><span class="p">(),</span> <span class="n">u</span><span class="p">),</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">eps</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">eps</span><span class="p">)</span>
-                <span class="n">u</span> <span class="o">=</span> <span class="n">normalize</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">matmul</span><span class="p">(</span><span class="n">weight_mat</span><span class="p">,</span> <span class="n">v</span><span class="p">),</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">eps</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">eps</span><span class="p">)</span>
+                <span class="n">u</span> <span class="o">=</span> <span class="n">normalize</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">matmul</span><span class="p">(</span><span class="n">weight_mat</span><span class="p">,</span> <span class="n">v</span><span class="p">),</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">eps</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">eps</span><span class="p">,</span> <span class="n">out</span><span class="o">=</span><span class="n">u</span><span class="p">)</span>
 
         <span class="n">sigma</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">u</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">matmul</span><span class="p">(</span><span class="n">weight_mat</span><span class="p">,</span> <span class="n">v</span><span class="p">))</span>
         <span class="n">weight</span> <span class="o">=</span> <span class="n">weight</span> <span class="o">/</span> <span class="n">sigma</span>
-        <span class="k">return</span> <span class="n">weight</span><span class="p">,</span> <span class="n">u</span>
+        <span class="k">return</span> <span class="n">weight</span>
 
     <span class="k">def</span> <span class="nf">remove</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">module</span><span class="p">):</span>
         <span class="n">weight</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
@@ -312,12 +333,16 @@
 
     <span class="k">def</span> <span class="nf">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">module</span><span class="p">,</span> <span class="n">inputs</span><span class="p">):</span>
         <span class="k">if</span> <span class="n">module</span><span class="o">.</span><span class="n">training</span><span class="p">:</span>
-            <span class="n">weight</span><span class="p">,</span> <span class="n">u</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">compute_weight</span><span class="p">(</span><span class="n">module</span><span class="p">)</span>
+            <span class="n">weight</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">compute_weight_and_update_u</span><span class="p">(</span><span class="n">module</span><span class="p">)</span>
             <span class="nb">setattr</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">weight</span><span class="p">)</span>
-            <span class="nb">setattr</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">+</span> <span class="s1">&#39;_u&#39;</span><span class="p">,</span> <span class="n">u</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="n">r_g</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">+</span> <span class="s1">&#39;_orig&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">requires_grad</span>
-            <span class="nb">getattr</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">)</span><span class="o">.</span><span class="n">detach_</span><span class="p">()</span><span class="o">.</span><span class="n">requires_grad_</span><span class="p">(</span><span class="n">r_g</span><span class="p">)</span>
+            <span class="n">weight</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">)</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span>
+            <span class="c1"># NB: Cannot detach weight in-place here because if this is used</span>
+            <span class="c1">#     DataParallel, the buffers are broadcast using</span>
+            <span class="c1">#     `broadacast_coalesced` and `weight` here is actually a view,</span>
+            <span class="c1">#     and you can&#39;t detach views in-place.</span>
+            <span class="nb">setattr</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">weight</span><span class="o">.</span><span class="n">requires_grad_</span><span class="p">(</span><span class="n">r_g</span><span class="p">))</span>
 
     <span class="nd">@staticmethod</span>
     <span class="k">def</span> <span class="nf">apply</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">n_power_iterations</span><span class="p">,</span> <span class="n">dim</span><span class="p">,</span> <span class="n">eps</span><span class="p">):</span>

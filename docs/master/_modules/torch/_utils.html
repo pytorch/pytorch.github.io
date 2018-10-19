@@ -111,7 +111,7 @@
               
               
                 <div class="version">
-                  <a href="http://pytorch.org/docs/versions.html">master (1.0.0a0+dcd9d73 ) &#x25BC</a>
+                  <a href="http://pytorch.org/docs/versions.html">master (1.0.0a0+856252a ) &#x25BC</a>
                 </div>
               
             
@@ -163,6 +163,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../../torch.html">torch</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../tensors.html">torch.Tensor</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../tensor_attributes.html">Tensor Attributes</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../type_info.html">Type Info</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../sparse.html">torch.sparse</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../cuda.html">torch.cuda</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../storage.html">torch.Storage</a></li>
@@ -351,6 +352,43 @@
     <span class="k">return</span> <span class="n">kwargs</span><span class="p">[</span><span class="s1">&#39;async&#39;</span><span class="p">]</span>
 
 
+<span class="c1"># Note [Don&#39;t serialize hooks]</span>
+<span class="c1"># ~~~~~~~~~~~~~~~~~~~~~~~~~~~~</span>
+<span class="c1"># Since time immemorial, we have serialized the backward hooks associated with</span>
+<span class="c1"># variables.  This kind of half-worked--Python can pickle global functions</span>
+<span class="c1"># (but not closures!)--but there were problems.</span>
+<span class="c1">#</span>
+<span class="c1">#   - It&#39;s fragile.  If you serialize a backward hook into a saved</span>
+<span class="c1">#     model, and then you rename the function associated with the hook,</span>
+<span class="c1">#     now your saved model is broken and you can&#39;t load it anymore.</span>
+<span class="c1">#</span>
+<span class="c1">#   - It&#39;s not actually used.  The standard recommendation is to</span>
+<span class="c1">#     serialize the *state_dict* of a model, not the model itself</span>
+<span class="c1">#     (since this is more stable to code changes affecting the model</span>
+<span class="c1">#     serialization), and the state dict saves &quot;data&quot; only, thus</span>
+<span class="c1">#     stripping the the backward hooks.  In some cases, hooks are</span>
+<span class="c1">#     essential to the well-functioning of a model (e.g., DDP),</span>
+<span class="c1">#     but DDP already manages readding the hooks!</span>
+<span class="c1">#</span>
+<span class="c1">#   - We didn&#39;t serialize them in many cases.  Prior to #10220, we</span>
+<span class="c1">#     were dropping backward hooks in ForkingPickler.  We &quot;fixed&quot; this</span>
+<span class="c1">#     to be convenient with other serialization sites, but lack of</span>
+<span class="c1">#     serializing backward hooks wasn&#39;t actually the root cause of</span>
+<span class="c1">#     the bug.</span>
+<span class="c1">#</span>
+<span class="c1"># With these cases in mind, we have decided that a better strategy</span>
+<span class="c1"># is to just NOT serialize hooks at all.</span>
+<span class="c1">#</span>
+<span class="c1"># Since this is a BC-breaking change, we should warn when we previously</span>
+<span class="c1"># serialized a hook, but no longer do so. This will be done by adding a special</span>
+<span class="c1"># sentinel property to hooks will be used to suppress this warning. If a hook</span>
+<span class="c1"># has the property _torch_serialize_ignore, we will not emit a warning if we</span>
+<span class="c1"># attempt to serialize a Tensor with this hook attached to it.</span>
+<span class="c1">#</span>
+<span class="c1"># By the way, when _backward_hooks is skipped, we must give an EMPTY</span>
+<span class="c1"># OrderedDict(), if you pass a None you&#39;ll run afoul #12219.</span>
+
+
 <span class="k">def</span> <span class="nf">_rebuild_tensor</span><span class="p">(</span><span class="n">storage</span><span class="p">,</span> <span class="n">storage_offset</span><span class="p">,</span> <span class="n">size</span><span class="p">,</span> <span class="n">stride</span><span class="p">):</span>
     <span class="n">class_name</span> <span class="o">=</span> <span class="n">storage</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s1">&#39;Storage&#39;</span><span class="p">,</span> <span class="s1">&#39;Tensor&#39;</span><span class="p">)</span>
     <span class="n">module</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">import_module</span><span class="p">(</span><span class="n">storage</span><span class="o">.</span><span class="vm">__module__</span><span class="p">)</span>
@@ -361,12 +399,18 @@
 <span class="k">def</span> <span class="nf">_rebuild_tensor_v2</span><span class="p">(</span><span class="n">storage</span><span class="p">,</span> <span class="n">storage_offset</span><span class="p">,</span> <span class="n">size</span><span class="p">,</span> <span class="n">stride</span><span class="p">,</span> <span class="n">requires_grad</span><span class="p">,</span> <span class="n">backward_hooks</span><span class="p">):</span>
     <span class="n">tensor</span> <span class="o">=</span> <span class="n">_rebuild_tensor</span><span class="p">(</span><span class="n">storage</span><span class="p">,</span> <span class="n">storage_offset</span><span class="p">,</span> <span class="n">size</span><span class="p">,</span> <span class="n">stride</span><span class="p">)</span>
     <span class="n">tensor</span><span class="o">.</span><span class="n">requires_grad</span> <span class="o">=</span> <span class="n">requires_grad</span>
+    <span class="c1"># NB: This line exists only for backwards compatibility; the</span>
+    <span class="c1"># general expectation is that backward_hooks is an empty</span>
+    <span class="c1"># OrderedDict.  See Note [Don&#39;t serialize hooks]</span>
     <span class="n">tensor</span><span class="o">.</span><span class="n">_backward_hooks</span> <span class="o">=</span> <span class="n">backward_hooks</span>
     <span class="k">return</span> <span class="n">tensor</span>
 
 
 <span class="k">def</span> <span class="nf">_rebuild_parameter</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">requires_grad</span><span class="p">,</span> <span class="n">backward_hooks</span><span class="p">):</span>
     <span class="n">param</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Parameter</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">requires_grad</span><span class="p">)</span>
+    <span class="c1"># NB: This line exists only for backwards compatibility; the</span>
+    <span class="c1"># general expectation is that backward_hooks is an empty</span>
+    <span class="c1"># OrderedDict.  See Note [Don&#39;t serialize hooks]</span>
     <span class="n">param</span><span class="o">.</span><span class="n">_backward_hooks</span> <span class="o">=</span> <span class="n">backward_hooks</span>
 
     <span class="k">return</span> <span class="n">param</span>
