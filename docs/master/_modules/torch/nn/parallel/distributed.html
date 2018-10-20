@@ -111,7 +111,7 @@
               
               
                 <div class="version">
-                  <a href="http://pytorch.org/docs/versions.html">master (1.0.0a0+8cb0848 ) &#x25BC</a>
+                  <a href="http://pytorch.org/docs/versions.html">master (1.0.0a0+d120b9a ) &#x25BC</a>
                 </div>
               
             
@@ -403,8 +403,6 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">output_device</span> <span class="o">=</span> <span class="n">_get_device_index</span><span class="p">(</span><span class="n">output_device</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">broadcast_buffers</span> <span class="o">=</span> <span class="n">broadcast_buffers</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">allreduce_opts</span> <span class="o">=</span> <span class="n">dist</span><span class="o">.</span><span class="n">AllreduceOptions</span><span class="p">()</span>
-
         <span class="n">MB</span> <span class="o">=</span> <span class="mi">1024</span> <span class="o">*</span> <span class="mi">1024</span>
 
         <span class="c1"># used for intra-node param sync and inter-node sync as well</span>
@@ -472,25 +470,38 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">next_bucket</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">bucket_sizes</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">ready_buckets_not_reduced</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">reduction_works</span> <span class="o">=</span> <span class="p">[</span><span class="kc">None</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">bucket_sizes</span><span class="p">))]</span>
-
         <span class="bp">self</span><span class="o">.</span><span class="n">devs_ready</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">bucket_sizes</span><span class="p">))]</span>
-
-        <span class="c1"># default stream tracking to launch nccl reduce kernels</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">default_streams</span> <span class="o">=</span> <span class="p">[]</span>
-        <span class="k">for</span> <span class="n">dev_id</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">device_ids</span><span class="p">:</span>
-            <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="n">dev_id</span><span class="p">):</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">default_streams</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">current_stream</span><span class="p">())</span>
-
         <span class="bp">self</span><span class="o">.</span><span class="n">_register_grad_hooks</span><span class="p">()</span>
 
     <span class="k">def</span> <span class="nf">__getstate__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_check_default_group</span><span class="p">()</span>
         <span class="n">attrs</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">copy</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">)</span>
-        <span class="k">del</span> <span class="n">attrs</span><span class="p">[</span><span class="s1">&#39;_grad_accs&#39;</span><span class="p">]</span>
+        <span class="k">del</span> <span class="n">attrs</span><span class="p">[</span><span class="s1">&#39;process_group&#39;</span><span class="p">],</span> \
+            <span class="n">attrs</span><span class="p">[</span><span class="s1">&#39;allreduce_opts&#39;</span><span class="p">],</span> \
+            <span class="n">attrs</span><span class="p">[</span><span class="s1">&#39;default_streams&#39;</span><span class="p">],</span> \
+            <span class="n">attrs</span><span class="p">[</span><span class="s1">&#39;_grad_accs&#39;</span><span class="p">]</span>
         <span class="k">return</span> <span class="n">attrs</span>
 
     <span class="k">def</span> <span class="nf">__setstate__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">):</span>
+        <span class="c1"># If serializable, then the process group should be the default one</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">process_group</span> <span class="o">=</span> <span class="n">dist</span><span class="o">.</span><span class="n">get_default_group</span><span class="p">()</span>
         <span class="nb">super</span><span class="p">(</span><span class="n">DistributedDataParallel</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">__setstate__</span><span class="p">(</span><span class="n">state</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_register_grad_hooks</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">_check_default_group</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">pickle_not_supported</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">process_group</span> <span class="o">!=</span> <span class="n">dist</span><span class="o">.</span><span class="n">get_default_group</span><span class="p">():</span>
+                <span class="n">pickle_not_supported</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="k">except</span> <span class="ne">RuntimeError</span><span class="p">:</span>
+            <span class="n">pickle_not_supported</span> <span class="o">=</span> <span class="kc">True</span>
+
+        <span class="k">if</span> <span class="n">pickle_not_supported</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;DDP Pickling/Unpickling are only supported &quot;</span>
+                               <span class="s2">&quot;when using DDP with the default process &quot;</span>
+                               <span class="s2">&quot;group. That is, when you have called &quot;</span>
+                               <span class="s2">&quot;init_process_group and have not passed &quot;</span>
+                               <span class="s2">&quot;process_group argument to DDP constructor&quot;</span><span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">inputs</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
         <span class="n">inputs</span><span class="p">,</span> <span class="n">kwargs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">scatter</span><span class="p">(</span><span class="n">inputs</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">device_ids</span><span class="p">)</span>
@@ -544,6 +555,15 @@
 
     <span class="k">def</span> <span class="nf">_register_grad_hooks</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_grad_accs</span> <span class="o">=</span> <span class="p">[]</span>  <span class="c1"># need to keep them in scope</span>
+
+        <span class="c1"># default stream tracking to launch nccl reduce kernels</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">default_streams</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">dev_id</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">device_ids</span><span class="p">:</span>
+            <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="n">dev_id</span><span class="p">):</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">default_streams</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">current_stream</span><span class="p">())</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">allreduce_opts</span> <span class="o">=</span> <span class="n">dist</span><span class="o">.</span><span class="n">AllreduceOptions</span><span class="p">()</span>
+
         <span class="k">for</span> <span class="n">device_idx</span><span class="p">,</span> <span class="n">module</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_module_copies</span><span class="p">):</span>
             <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">module</span><span class="o">.</span><span class="n">parameters</span><span class="p">():</span>
                 <span class="k">if</span> <span class="n">p</span><span class="o">.</span><span class="n">requires_grad</span><span class="p">:</span>
