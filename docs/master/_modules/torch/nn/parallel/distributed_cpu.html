@@ -9,14 +9,14 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>torch.nn.utils.weight_norm &mdash; PyTorch master documentation</title>
+  <title>torch.nn.parallel.distributed_cpu &mdash; PyTorch master documentation</title>
   
 
   
   
   
   
-    <link rel="canonical" href="https://pytorch.org/docs/stable/_modules/torch/nn/utils/weight_norm.html"/>
+    <link rel="canonical" href="https://pytorch.org/docs/stable/_modules/torch/nn/parallel/distributed_cpu.html"/>
   
 
   
@@ -135,7 +135,7 @@
 
           
 <div>
-  <a style="color:#F05732" href="https://pytorch.org/docs/stable/_modules/torch/nn/utils/weight_norm.html">
+  <a style="color:#F05732" href="https://pytorch.org/docs/stable/_modules/torch/nn/parallel/distributed_cpu.html">
     You are viewing unstable developer preview docs.
     Click here to view docs for latest stable release.
   </a>
@@ -237,7 +237,7 @@
         
           <li><a href="../../../torch.html">torch</a> &gt;</li>
         
-      <li>torch.nn.utils.weight_norm</li>
+      <li>torch.nn.parallel.distributed_cpu</li>
     
     
       <li class="pytorch-breadcrumbs-aside">
@@ -262,120 +262,115 @@
             <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
              <article itemprop="articleBody" class="pytorch-article">
               
-  <h1>Source code for torch.nn.utils.weight_norm</h1><div class="highlight"><pre>
-<span></span><span class="sa">r</span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">Weight Normalization from https://arxiv.org/abs/1602.07868</span>
-<span class="sd">&quot;&quot;&quot;</span>
-<span class="kn">from</span> <span class="nn">torch.nn.parameter</span> <span class="k">import</span> <span class="n">Parameter</span>
-<span class="kn">from</span> <span class="nn">torch</span> <span class="k">import</span> <span class="n">_weight_norm</span><span class="p">,</span> <span class="n">norm_except_dim</span>
+  <h1>Source code for torch.nn.parallel.distributed_cpu</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">from</span> <span class="nn">torch._utils</span> <span class="k">import</span> <span class="n">_flatten_dense_tensors</span><span class="p">,</span> <span class="n">_unflatten_dense_tensors</span>
+<span class="kn">import</span> <span class="nn">torch.distributed</span> <span class="k">as</span> <span class="nn">dist</span>
+<span class="kn">from</span> <span class="nn">torch.nn.modules</span> <span class="k">import</span> <span class="n">Module</span>
+<span class="kn">from</span> <span class="nn">collections</span> <span class="k">import</span> <span class="n">defaultdict</span>
+<span class="kn">from</span> <span class="nn">torch.autograd</span> <span class="k">import</span> <span class="n">Variable</span>
+<span class="kn">import</span> <span class="nn">torch.utils.hooks</span>
 
 
-<span class="k">class</span> <span class="nc">WeightNorm</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
-    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">dim</span><span class="p">):</span>
-        <span class="k">if</span> <span class="n">dim</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">dim</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="n">name</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">dim</span> <span class="o">=</span> <span class="n">dim</span>
+<div class="viewcode-block" id="DistributedDataParallelCPU"><a class="viewcode-back" href="../../../../nn.html#torch.nn.parallel.DistributedDataParallelCPU">[docs]</a><span class="k">class</span> <span class="nc">DistributedDataParallelCPU</span><span class="p">(</span><span class="n">Module</span><span class="p">):</span>
+    <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Implements distributed data parallelism for CPU at the module level</span>
+<span class="sd">    and it will use PyTorch&#39;s new distributed package: c10d.</span>
 
-    <span class="k">def</span> <span class="nf">compute_weight</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">module</span><span class="p">):</span>
-        <span class="n">g</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">+</span> <span class="s1">&#39;_g&#39;</span><span class="p">)</span>
-        <span class="n">v</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">+</span> <span class="s1">&#39;_v&#39;</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">_weight_norm</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="n">g</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">dim</span><span class="p">)</span>
+<span class="sd">    This module support the ``mpi``, ``gloo``, backends.</span>
 
-    <span class="nd">@staticmethod</span>
-    <span class="k">def</span> <span class="nf">apply</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">dim</span><span class="p">):</span>
-        <span class="k">if</span> <span class="n">dim</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">dim</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>
+<span class="sd">    This container parallelizes the application of the given module by</span>
+<span class="sd">    splitting the input across the specified devices by chunking in the batch</span>
+<span class="sd">    dimension. The module is replicated on each machine, and each such replica</span>
+<span class="sd">    handles a portion of the input. During the backwards pass, gradients from</span>
+<span class="sd">    each node are averaged.</span>
 
-        <span class="n">fn</span> <span class="o">=</span> <span class="n">WeightNorm</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">dim</span><span class="p">)</span>
+<span class="sd">    This module could be used in conjunction with the DistributedSampler,</span>
+<span class="sd">    (see :class `torch.utils.data.distributed.DistributedSampler`)</span>
+<span class="sd">    which will load a subset of the original datset for each node with the same</span>
+<span class="sd">    batch size. So strong scaling should be configured like this:</span>
+<span class="sd">        n = 1, batch size = 128</span>
+<span class="sd">        n = 2, batch size = 64</span>
+<span class="sd">        n = 4, batch size = 32</span>
+<span class="sd">        n = 8, batch size = 16</span>
 
-        <span class="n">weight</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
+<span class="sd">    Creation of this class requires the distributed package to be already</span>
+<span class="sd">    initialized in the process group mode</span>
+<span class="sd">    (see :func:`torch.distributed.init_process_group`).</span>
 
-        <span class="c1"># remove w from parameter list</span>
-        <span class="k">del</span> <span class="n">module</span><span class="o">.</span><span class="n">_parameters</span><span class="p">[</span><span class="n">name</span><span class="p">]</span>
+<span class="sd">    .. warning::</span>
+<span class="sd">        Constructor, forward method, and differentiation of the output (or a</span>
+<span class="sd">        function of the output of this module) is a distributed synchronization</span>
+<span class="sd">        point. Take that into account in case different node might be</span>
+<span class="sd">        executing different code.</span>
 
-        <span class="c1"># add g and v as new parameters and express w as g/||v|| * v</span>
-        <span class="n">module</span><span class="o">.</span><span class="n">register_parameter</span><span class="p">(</span><span class="n">name</span> <span class="o">+</span> <span class="s1">&#39;_g&#39;</span><span class="p">,</span> <span class="n">Parameter</span><span class="p">(</span><span class="n">norm_except_dim</span><span class="p">(</span><span class="n">weight</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="n">dim</span><span class="p">)</span><span class="o">.</span><span class="n">data</span><span class="p">))</span>
-        <span class="n">module</span><span class="o">.</span><span class="n">register_parameter</span><span class="p">(</span><span class="n">name</span> <span class="o">+</span> <span class="s1">&#39;_v&#39;</span><span class="p">,</span> <span class="n">Parameter</span><span class="p">(</span><span class="n">weight</span><span class="o">.</span><span class="n">data</span><span class="p">))</span>
-        <span class="nb">setattr</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">fn</span><span class="o">.</span><span class="n">compute_weight</span><span class="p">(</span><span class="n">module</span><span class="p">))</span>
+<span class="sd">    .. warning::</span>
+<span class="sd">        This module assumes all parameters are registered in the model by the</span>
+<span class="sd">        time it is created. No parameters should be added nor removed later.</span>
 
-        <span class="c1"># recompute weight before every forward()</span>
-        <span class="n">module</span><span class="o">.</span><span class="n">register_forward_pre_hook</span><span class="p">(</span><span class="n">fn</span><span class="p">)</span>
+<span class="sd">    .. warning::</span>
+<span class="sd">        This module assumes all gradients are dense.</span>
 
-        <span class="k">return</span> <span class="n">fn</span>
+<span class="sd">    .. warning::</span>
+<span class="sd">        This module doesn&#39;t work with :func:`torch.autograd.grad` (i.e. it will</span>
+<span class="sd">        only work if gradients are to be accumulated in ``.grad`` attributes of</span>
+<span class="sd">        parameters).</span>
 
-    <span class="k">def</span> <span class="nf">remove</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">module</span><span class="p">):</span>
-        <span class="n">weight</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">compute_weight</span><span class="p">(</span><span class="n">module</span><span class="p">)</span>
-        <span class="nb">delattr</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
-        <span class="k">del</span> <span class="n">module</span><span class="o">.</span><span class="n">_parameters</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">+</span> <span class="s1">&#39;_g&#39;</span><span class="p">]</span>
-        <span class="k">del</span> <span class="n">module</span><span class="o">.</span><span class="n">_parameters</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">+</span> <span class="s1">&#39;_v&#39;</span><span class="p">]</span>
-        <span class="n">module</span><span class="o">.</span><span class="n">register_parameter</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">Parameter</span><span class="p">(</span><span class="n">weight</span><span class="o">.</span><span class="n">data</span><span class="p">))</span>
+<span class="sd">    .. note::</span>
+<span class="sd">        Parameters are broadcast between nodes in the __init__() function. The</span>
+<span class="sd">        module performs an all-reduce step on gradients and assumes that they</span>
+<span class="sd">        will be modified by the optimizer in all nodes in the same way.</span>
 
-    <span class="k">def</span> <span class="nf">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">module</span><span class="p">,</span> <span class="n">inputs</span><span class="p">):</span>
-        <span class="nb">setattr</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">compute_weight</span><span class="p">(</span><span class="n">module</span><span class="p">))</span>
-
-
-<div class="viewcode-block" id="weight_norm"><a class="viewcode-back" href="../../../../nn.html#torch.nn.utils.weight_norm">[docs]</a><span class="k">def</span> <span class="nf">weight_norm</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;weight&#39;</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">):</span>
-    <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Applies weight normalization to a parameter in the given module.</span>
-
-<span class="sd">    .. math::</span>
-<span class="sd">         \mathbf{w} = g \dfrac{\mathbf{v}}{\|\mathbf{v}\|}</span>
-
-<span class="sd">    Weight normalization is a reparameterization that decouples the magnitude</span>
-<span class="sd">    of a weight tensor from its direction. This replaces the parameter specified</span>
-<span class="sd">    by `name` (e.g. &quot;weight&quot;) with two parameters: one specifying the magnitude</span>
-<span class="sd">    (e.g. &quot;weight_g&quot;) and one specifying the direction (e.g. &quot;weight_v&quot;).</span>
-<span class="sd">    Weight normalization is implemented via a hook that recomputes the weight</span>
-<span class="sd">    tensor from the magnitude and direction before every :meth:`~Module.forward`</span>
-<span class="sd">    call.</span>
-
-<span class="sd">    By default, with `dim=0`, the norm is computed independently per output</span>
-<span class="sd">    channel/plane. To compute a norm over the entire weight tensor, use</span>
-<span class="sd">    `dim=None`.</span>
-
-<span class="sd">    See https://arxiv.org/abs/1602.07868</span>
+<span class="sd">    .. warning::</span>
+<span class="sd">        Forward and backward hooks defined on :attr:`module` and its submodules</span>
+<span class="sd">        won&#39;t be invoked anymore, unless the hooks are initialized in the</span>
+<span class="sd">        :meth:`forward` method.</span>
 
 <span class="sd">    Args:</span>
-<span class="sd">        module (nn.Module): containing module</span>
-<span class="sd">        name (str, optional): name of weight parameter</span>
-<span class="sd">        dim (int, optional): dimension over which to compute the norm</span>
-
-<span class="sd">    Returns:</span>
-<span class="sd">        The original module with the weight norm hook</span>
+<span class="sd">        module: module to be parallelized</span>
 
 <span class="sd">    Example::</span>
 
-<span class="sd">        &gt;&gt;&gt; m = weight_norm(nn.Linear(20, 40), name=&#39;weight&#39;)</span>
-<span class="sd">        Linear (20 -&gt; 40)</span>
-<span class="sd">        &gt;&gt;&gt; m.weight_g.size()</span>
-<span class="sd">        torch.Size([40, 1])</span>
-<span class="sd">        &gt;&gt;&gt; m.weight_v.size()</span>
-<span class="sd">        torch.Size([40, 20])</span>
-
+<span class="sd">        &gt;&gt;&gt; torch.distributed.init_process_group(world_size=4, init_method=&#39;...&#39;)</span>
+<span class="sd">        &gt;&gt;&gt; net = torch.nn.DistributedDataParallelCPU(model)</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">WeightNorm</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">dim</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">module</span></div>
 
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">module</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">DistributedDataParallelCPU</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">module</span> <span class="o">=</span> <span class="n">module</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sync_parameters</span><span class="p">()</span>
 
-<div class="viewcode-block" id="remove_weight_norm"><a class="viewcode-back" href="../../../../nn.html#torch.nn.utils.remove_weight_norm">[docs]</a><span class="k">def</span> <span class="nf">remove_weight_norm</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;weight&#39;</span><span class="p">):</span>
-    <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Removes the weight normalization reparameterization from a module.</span>
+        <span class="k">def</span> <span class="nf">allreduce_params</span><span class="p">():</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">needs_reduction</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">needs_reduction</span> <span class="o">=</span> <span class="kc">False</span>
+                <span class="n">buckets</span> <span class="o">=</span> <span class="n">defaultdict</span><span class="p">(</span><span class="nb">list</span><span class="p">)</span>
+                <span class="k">for</span> <span class="n">param</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="o">.</span><span class="n">parameters</span><span class="p">():</span>
+                    <span class="k">if</span> <span class="n">param</span><span class="o">.</span><span class="n">requires_grad</span> <span class="ow">and</span> <span class="n">param</span><span class="o">.</span><span class="n">grad</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                        <span class="n">tp</span> <span class="o">=</span> <span class="nb">type</span><span class="p">(</span><span class="n">param</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
+                        <span class="n">buckets</span><span class="p">[</span><span class="n">tp</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">param</span><span class="p">)</span>
 
-<span class="sd">    Args:</span>
-<span class="sd">        module (nn.Module): containing module</span>
-<span class="sd">        name (str, optional): name of weight parameter</span>
+                <span class="k">for</span> <span class="n">bucket</span> <span class="ow">in</span> <span class="n">buckets</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+                    <span class="n">grads</span> <span class="o">=</span> <span class="p">[</span><span class="n">param</span><span class="o">.</span><span class="n">grad</span><span class="o">.</span><span class="n">data</span> <span class="k">for</span> <span class="n">param</span> <span class="ow">in</span> <span class="n">bucket</span><span class="p">]</span>
+                    <span class="n">coalesced</span> <span class="o">=</span> <span class="n">_flatten_dense_tensors</span><span class="p">(</span><span class="n">grads</span><span class="p">)</span>
+                    <span class="n">dist</span><span class="o">.</span><span class="n">all_reduce</span><span class="p">(</span><span class="n">coalesced</span><span class="p">)</span>
+                    <span class="n">coalesced</span> <span class="o">/=</span> <span class="n">dist</span><span class="o">.</span><span class="n">get_world_size</span><span class="p">()</span>
+                    <span class="k">for</span> <span class="n">buf</span><span class="p">,</span> <span class="n">synced</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">grads</span><span class="p">,</span> <span class="n">_unflatten_dense_tensors</span><span class="p">(</span><span class="n">coalesced</span><span class="p">,</span> <span class="n">grads</span><span class="p">)):</span>
+                        <span class="n">buf</span><span class="o">.</span><span class="n">copy_</span><span class="p">(</span><span class="n">synced</span><span class="p">)</span>
 
-<span class="sd">    Example:</span>
-<span class="sd">        &gt;&gt;&gt; m = weight_norm(nn.Linear(20, 40))</span>
-<span class="sd">        &gt;&gt;&gt; remove_weight_norm(m)</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">hook</span> <span class="ow">in</span> <span class="n">module</span><span class="o">.</span><span class="n">_forward_pre_hooks</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">hook</span><span class="p">,</span> <span class="n">WeightNorm</span><span class="p">)</span> <span class="ow">and</span> <span class="n">hook</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="n">name</span><span class="p">:</span>
-            <span class="n">hook</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="n">module</span><span class="p">)</span>
-            <span class="k">del</span> <span class="n">module</span><span class="o">.</span><span class="n">_forward_pre_hooks</span><span class="p">[</span><span class="n">k</span><span class="p">]</span>
-            <span class="k">return</span> <span class="n">module</span>
+        <span class="k">for</span> <span class="n">param</span> <span class="ow">in</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="o">.</span><span class="n">parameters</span><span class="p">()):</span>
+            <span class="nd">@torch</span><span class="o">.</span><span class="n">utils</span><span class="o">.</span><span class="n">hooks</span><span class="o">.</span><span class="n">unserializable_hook</span>
+            <span class="k">def</span> <span class="nf">allreduce_hook</span><span class="p">(</span><span class="o">*</span><span class="n">unused</span><span class="p">):</span>
+                <span class="n">Variable</span><span class="o">.</span><span class="n">_execution_engine</span><span class="o">.</span><span class="n">queue_callback</span><span class="p">(</span><span class="n">allreduce_params</span><span class="p">)</span>
 
-    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;weight_norm of &#39;</span><span class="si">{}</span><span class="s2">&#39; not found in </span><span class="si">{}</span><span class="s2">&quot;</span>
-                     <span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">module</span><span class="p">))</span></div>
+            <span class="k">if</span> <span class="n">param</span><span class="o">.</span><span class="n">requires_grad</span><span class="p">:</span>
+                <span class="n">param</span><span class="o">.</span><span class="n">register_hook</span><span class="p">(</span><span class="n">allreduce_hook</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">sync_parameters</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">param</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="o">.</span><span class="n">parameters</span><span class="p">():</span>
+            <span class="n">dist</span><span class="o">.</span><span class="n">broadcast</span><span class="p">(</span><span class="n">param</span><span class="o">.</span><span class="n">data</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">inputs</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">needs_reduction</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="p">(</span><span class="o">*</span><span class="n">inputs</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
 </pre></div>
 
              </article>
