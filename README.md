@@ -16,19 +16,6 @@ Install the following packages before attempting to setup the project:
 
 #### Install required Ruby version:
 
-```
-#### You only need to run these commands if you are missing the needed Ruby version.
-
-rbenv install `cat .ruby-version`
-gem install bundler
-rbenv rehash
-
-####
-
-bundle install
-rbenv rehash
-```
-
 #### Install required Node version
 
 ```
