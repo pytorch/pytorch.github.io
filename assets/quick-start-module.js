@@ -820,7 +820,7 @@ function commandMessage(key) {
 
   if (!object.hasOwnProperty(key)) {
     $("#command").html(
-      "# Follow instructions at this URL: https://github.com/pytorch/pytorch#from-source"
+      "<pre> # Follow instructions at this URL: https://github.com/pytorch/pytorch#from-source </pre>"
     );
   } else {
     $("#command").html("<pre>" + object[key] + "</pre>");
