@@ -55,6 +55,20 @@ If you are using the default installed Python 2.7, you will need to install `pip
 sudo easy_install pip
 ```
 
+#### numpy
+
+If you are installing via `pip`, you will need to install `numpy` before installing PyTorch.
+
+```bash
+# Python 3.x
+pip3 install numpy
+```
+
+```bash
+# Python 2.x`
+pip install numpy
+```
+
 ## Installation
 {: #mac-installation}
 
@@ -78,7 +92,7 @@ conda install pytorch torchvision -c pytorch
 
 To install PyTorch via pip, use one of the following two commands, depending on your Python version:
 
-```
+```bash
 # Python 3.x
 pip3 install torch torchvision
 ```
