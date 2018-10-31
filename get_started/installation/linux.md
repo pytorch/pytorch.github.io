@@ -88,6 +88,20 @@ If you are using Python 2.7, you will need to use this command
 sudo apt install python-pip
 ```
 
+#### numpy
+
+If you are installing via `pip`, you will need to install `numpy` before installing PyTorch.
+
+```bash
+# Python 3.x
+pip3 install numpy
+```
+
+```bash
+# Python 2.x`
+pip install numpy
+```
+
 ## Installation
 {: #linux-installation}
 
