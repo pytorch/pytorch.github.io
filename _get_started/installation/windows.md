@@ -47,6 +47,15 @@ To install Anaconda, you will use the [64-bit graphical installer](https://www.a
 
 If you installed Python by any of the recommended ways above[LINK], `[pip](https://pypi.org/project/pip/)` will have already been installed for you.
 
+#### numpy
+
+If you are installing via `pip`, you will need to install `numpy` before installing PyTorch.
+
+```bash
+# Python 3.x
+pip3 install numpy
+```
+
 ## Installation
 {: #windows-installation}
 
