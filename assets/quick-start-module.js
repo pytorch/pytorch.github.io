@@ -41,10 +41,13 @@ ptbuild.on("click", function() {
   selectedOption(ptbuild, this, "ptbuild")
 });
 
-// Force a selection onclick to get the right operating system selected from
-// the start
+// Pre-select user's operating system
 $(document).ready(function() {
-    document.getElementById(opts.os).click();
+  var userOsOption = document.getElementById(opts.os);
+
+  if (userOsOption) {
+    selectedOption(os, userOsOption, "os");
+  }
 });
 
 
