@@ -110,7 +110,7 @@
               
               
                 <div class="version">
-                  <a href="http://pytorch.org/docs/versions.html">master (1.0.0a0+b652c2d ) &#x25BC</a>
+                  <a href="http://pytorch.org/docs/versions.html">master (1.0.0a0+d4f9dbf ) &#x25BC</a>
                 </div>
               
             
@@ -235,6 +235,8 @@
         
           <li><a href="../../torch.html">torch</a> &gt;</li>
         
+          <li><a href="../distributed.html">torch.distributed</a> &gt;</li>
+        
       <li>torch.distributed.distributed_c10d</li>
     
     
@@ -263,13 +265,14 @@
               
   <h1>Source code for torch.distributed.distributed_c10d</h1><div class="highlight"><pre>
 <span></span><span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">import</span> <span class="nn">warnings</span>
 <span class="kn">from</span> <span class="nn">torch._six</span> <span class="k">import</span> <span class="n">string_classes</span>
 <span class="kn">from</span> <span class="nn">datetime</span> <span class="k">import</span> <span class="n">timedelta</span>
 
 <span class="kn">from</span> <span class="nn">.rendezvous</span> <span class="k">import</span> <span class="n">rendezvous</span><span class="p">,</span> <span class="n">register_rendezvous_handler</span>
 <span class="kn">from</span> <span class="nn">.</span> <span class="k">import</span> <span class="n">BroadcastOptions</span><span class="p">,</span> <span class="n">AllreduceOptions</span><span class="p">,</span> <span class="n">ReduceOptions</span><span class="p">,</span> \
     <span class="n">ScatterOptions</span><span class="p">,</span> <span class="n">GatherOptions</span>
-<span class="kn">from</span> <span class="nn">.</span> <span class="k">import</span> <span class="n">ReduceOp</span> <span class="k">as</span> <span class="n">reduce_op</span>
+<span class="kn">from</span> <span class="nn">.</span> <span class="k">import</span> <span class="n">ReduceOp</span>
 <span class="kn">from</span> <span class="nn">.</span> <span class="k">import</span> <span class="n">PrefixStore</span>
 <span class="kn">from</span> <span class="nn">.</span> <span class="k">import</span> <span class="n">ProcessGroupGloo</span>
 
@@ -289,19 +292,19 @@
     <span class="n">_NCCL_AVAILABLE</span> <span class="o">=</span> <span class="kc">False</span>
 
 
-<span class="k">class</span> <span class="nc">DistBackend</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+<div class="viewcode-block" id="Backend"><a class="viewcode-back" href="../../../distributed.html#torch.distributed.Backend">[docs]</a><span class="k">class</span> <span class="nc">Backend</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    An enum-like class of available backends: GLOO, NCCL, and MPI.</span>
 
 <span class="sd">    The values of this class are lowercase strings, e.g., ``&quot;gloo&quot;``. They can</span>
-<span class="sd">    be accessed as attributes, e.g., ``DistBackend.NCCL``.</span>
+<span class="sd">    be accessed as attributes, e.g., ``Backend.NCCL``.</span>
 
 <span class="sd">    This class can be directly called to parse the string, e.g.,</span>
-<span class="sd">    ``DistBackend(backend_str)`` will check if ``backend_str`` is valid, and</span>
+<span class="sd">    ``Backend(backend_str)`` will check if ``backend_str`` is valid, and</span>
 <span class="sd">    return the parsed lowercase string if so. It also accepts uppercase strings,</span>
-<span class="sd">    e.g., ``DistBackend(&quot;GLOO&quot;)`` returns ``&quot;gloo&quot;``.</span>
+<span class="sd">    e.g., ``Backend(&quot;GLOO&quot;)`` returns ``&quot;gloo&quot;``.</span>
 
-<span class="sd">    .. note:: The entry ``DistBackend.UNDEFINED`` is present but only used as</span>
+<span class="sd">    .. note:: The entry ``Backend.UNDEFINED`` is present but only used as</span>
 <span class="sd">              initial value of some fields. Users should neither use it directly</span>
 <span class="sd">              nor assume its existence.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
@@ -314,20 +317,43 @@
     <span class="k">def</span> <span class="nf">__new__</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">name</span><span class="p">):</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">string_classes</span><span class="p">):</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Backend name must be a string, but got: </span><span class="si">{}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">name</span><span class="p">))</span>
-        <span class="n">value</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">DistBackend</span><span class="p">,</span> <span class="n">name</span><span class="o">.</span><span class="n">upper</span><span class="p">(),</span> <span class="n">DistBackend</span><span class="o">.</span><span class="n">UNDEFINED</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">value</span> <span class="o">==</span> <span class="n">DistBackend</span><span class="o">.</span><span class="n">TCP</span><span class="p">:</span>
+        <span class="n">value</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">Backend</span><span class="p">,</span> <span class="n">name</span><span class="o">.</span><span class="n">upper</span><span class="p">(),</span> <span class="n">Backend</span><span class="o">.</span><span class="n">UNDEFINED</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">value</span> <span class="o">==</span> <span class="n">Backend</span><span class="o">.</span><span class="n">TCP</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;TCP backend has been deprecated. Please use &quot;</span>
                              <span class="s2">&quot;Gloo or MPI backend for collective operations &quot;</span>
                              <span class="s2">&quot;on CPU tensors.&quot;</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">value</span> <span class="o">==</span> <span class="n">DistBackend</span><span class="o">.</span><span class="n">UNDEFINED</span><span class="p">:</span>
+        <span class="k">elif</span> <span class="n">value</span> <span class="o">==</span> <span class="n">Backend</span><span class="o">.</span><span class="n">UNDEFINED</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Invalid backend: &#39;</span><span class="si">{}</span><span class="s2">&#39;&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">name</span><span class="p">))</span>
-        <span class="k">return</span> <span class="n">value</span>
+        <span class="k">return</span> <span class="n">value</span></div>
 
-<span class="c1"># The following two values are here to maintain backward compatibility with</span>
-<span class="c1"># pre-c10d distributed package.</span>
+<span class="c1"># `_backend`, `dist_backend`, and `reduce_op` are here to maintain backward</span>
+<span class="c1"># compatibility with pre-c10d distributed package.</span>
 <span class="c1"># TODO: remove them when users are ready to take a hard dependency on PyTorch 1.</span>
-<span class="n">_backend</span> <span class="o">=</span> <span class="n">DistBackend</span><span class="o">.</span><span class="n">UNDEFINED</span>
-<span class="n">dist_backend</span> <span class="o">=</span> <span class="n">DistBackend</span>
+<span class="n">_backend</span> <span class="o">=</span> <span class="n">Backend</span><span class="o">.</span><span class="n">UNDEFINED</span>
+<span class="n">dist_backend</span> <span class="o">=</span> <span class="n">Backend</span>
+
+
+<div class="viewcode-block" id="reduce_op"><a class="viewcode-back" href="../../../distributed.html#torch.distributed.reduce_op">[docs]</a><span class="k">class</span> <span class="nc">reduce_op</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="sa">r</span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Deprecated enum-like class for reduction operations: ``SUM``, ``PRODUCT``,</span>
+<span class="sd">    ``MIN``, and ``MAX``.</span>
+
+<span class="sd">    :class:`~torch.distributed.ReduceOp` is recommended to use instead.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="c1"># __members__ is a dict storing key-value pairs for enum classes</span>
+        <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">ReduceOp</span><span class="o">.</span><span class="n">__members__</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="nb">setattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">__members__</span> <span class="o">=</span> <span class="n">ReduceOp</span><span class="o">.</span><span class="n">__members__</span>
+
+    <span class="k">def</span> <span class="nf">__getattribute__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">):</span>
+        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="s2">&quot;torch.distributed.reduce_op is deprecated, please use &quot;</span>
+                      <span class="s2">&quot;torch.distributed.ReduceOp instead&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">object</span><span class="o">.</span><span class="fm">__getattribute__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">)</span></div>
+
+<span class="n">reduce_op</span> <span class="o">=</span> <span class="n">reduce_op</span><span class="p">()</span>
 
 
 <span class="k">class</span> <span class="nc">group</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
@@ -341,8 +367,8 @@
 
 
 <span class="c1"># Cached process groups</span>
-<span class="c1"># For NCCL and GLOO pg, it is a map from ProcessGroup to (DistBackend, Store)</span>
-<span class="c1"># For MPI pg, it is a map from ProcessGroup to (DistBackend, Bool), where bool</span>
+<span class="c1"># For NCCL and GLOO pg, it is a map from ProcessGroup to (Backend, Store)</span>
+<span class="c1"># For MPI pg, it is a map from ProcessGroup to (Backend, Bool), where bool</span>
 <span class="c1"># represents if the ProcessGroup objects is part of the group</span>
 <span class="n">_pg_map</span> <span class="o">=</span> <span class="p">{}</span>
 <span class="c1"># Process group&#39;s names, map from ProcessGroup to str</span>
@@ -370,7 +396,7 @@
 
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">default_backend</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">_pg_map</span><span class="p">[</span><span class="n">get_default_group</span><span class="p">()]</span>
-    <span class="k">if</span> <span class="n">default_backend</span> <span class="o">!=</span> <span class="n">DistBackend</span><span class="o">.</span><span class="n">MPI</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">default_backend</span> <span class="o">!=</span> <span class="n">Backend</span><span class="o">.</span><span class="n">MPI</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">group</span> <span class="o">==</span> <span class="n">GroupMember</span><span class="o">.</span><span class="n">NON_GROUP_MEMBER</span>
     <span class="k">else</span><span class="p">:</span>
         <span class="k">if</span> <span class="n">group</span> <span class="o">==</span> <span class="n">GroupMember</span><span class="o">.</span><span class="n">WORLD</span><span class="p">:</span>
@@ -472,7 +498,7 @@
     <span class="k">return</span> <span class="n">_default_pg</span></div>
 
 
-<span class="k">def</span> <span class="nf">get_backend</span><span class="p">(</span><span class="n">group</span><span class="o">=</span><span class="n">group</span><span class="o">.</span><span class="n">WORLD</span><span class="p">):</span>
+<div class="viewcode-block" id="get_backend"><a class="viewcode-back" href="../../../distributed.html#torch.distributed.get_backend">[docs]</a><span class="k">def</span> <span class="nf">get_backend</span><span class="p">(</span><span class="n">group</span><span class="o">=</span><span class="n">group</span><span class="o">.</span><span class="n">WORLD</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Returns the backend of the given process group.</span>
 
@@ -493,7 +519,7 @@
         <span class="n">pg</span> <span class="o">=</span> <span class="n">group</span>
     <span class="k">if</span> <span class="n">_rank_not_in_group</span><span class="p">(</span><span class="n">pg</span><span class="p">):</span>
         <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Invalid process group specified&quot;</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">_pg_map</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">pg</span><span class="p">,</span> <span class="kc">None</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="k">return</span> <span class="n">_pg_map</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">pg</span><span class="p">,</span> <span class="kc">None</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span></div>
 
 
 <div class="viewcode-block" id="init_process_group"><a class="viewcode-back" href="../../../distributed.html#torch.distributed.init_process_group">[docs]</a><span class="k">def</span> <span class="nf">init_process_group</span><span class="p">(</span><span class="n">backend</span><span class="p">,</span>
@@ -504,11 +530,11 @@
 <span class="sd">    initialize the distributed package</span>
 
 <span class="sd">    Arguments:</span>
-<span class="sd">        backend (str or DistBackend): The backend to use. Depending on</span>
+<span class="sd">        backend (str or Backend): The backend to use. Depending on</span>
 <span class="sd">            build-time configurations, valid values include ``mpi``, ``gloo``,</span>
 <span class="sd">            and ``nccl``. This field should be given as a lowercase string</span>
 <span class="sd">            (e.g., ``&quot;gloo&quot;``), which can also be accessed via</span>
-<span class="sd">            :class:`DistBackend` attributes (e.g., ``DistBackend.GLOO``).</span>
+<span class="sd">            :class:`Backend` attributes (e.g., ``Backend.GLOO``).</span>
 <span class="sd">        init_method (str, optional): URL specifying how to initialize the</span>
 <span class="sd">                                     process group.</span>
 <span class="sd">        world_size (int, optional): Number of processes participating in</span>
@@ -516,7 +542,7 @@
 <span class="sd">        rank (int, optional): Rank of the current process.</span>
 <span class="sd">        group_name (str, optional, deprecated): Group name.</span>
 
-<span class="sd">    To enable ``backend == DistBackend.MPI``, PyTorch needs to built from source</span>
+<span class="sd">    To enable ``backend == Backend.MPI``, PyTorch needs to built from source</span>
 <span class="sd">    on a system that supports MPI. The same applies to NCCL as well.</span>
 
 <span class="sd">    &quot;&quot;&quot;</span>
@@ -536,14 +562,14 @@
     <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">,</span> \
         <span class="s2">&quot;got unexpected keyword arguments: </span><span class="si">%s</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="s2">&quot;,&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">kwargs</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
 
-    <span class="n">backend</span> <span class="o">=</span> <span class="n">DistBackend</span><span class="p">(</span><span class="n">backend</span><span class="p">)</span>
+    <span class="n">backend</span> <span class="o">=</span> <span class="n">Backend</span><span class="p">(</span><span class="n">backend</span><span class="p">)</span>
 
-    <span class="k">if</span> <span class="n">backend</span> <span class="o">==</span> <span class="n">DistBackend</span><span class="o">.</span><span class="n">MPI</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">backend</span> <span class="o">==</span> <span class="n">Backend</span><span class="o">.</span><span class="n">MPI</span><span class="p">:</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">is_mpi_available</span><span class="p">():</span>
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Distributed package doesn&#39;t have MPI built in&quot;</span><span class="p">)</span>
 
         <span class="n">_default_pg</span> <span class="o">=</span> <span class="n">ProcessGroupMPI</span><span class="p">([])</span>
-        <span class="n">_pg_map</span><span class="p">[</span><span class="n">_default_pg</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">DistBackend</span><span class="o">.</span><span class="n">MPI</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+        <span class="n">_pg_map</span><span class="p">[</span><span class="n">_default_pg</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">Backend</span><span class="o">.</span><span class="n">MPI</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
         <span class="n">_pg_names</span><span class="p">[</span><span class="n">_default_pg</span><span class="p">]</span> <span class="o">=</span> <span class="n">group_name</span>
     <span class="k">else</span><span class="p">:</span>
         <span class="c1"># backward compatible API</span>
@@ -555,20 +581,20 @@
         <span class="k">else</span><span class="p">:</span>
             <span class="n">store</span><span class="p">,</span> <span class="n">rank</span><span class="p">,</span> <span class="n">world_size</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="n">rendezvous</span><span class="p">(</span><span class="n">init_method</span><span class="p">))</span>
 
-        <span class="k">if</span> <span class="n">backend</span> <span class="o">==</span> <span class="n">DistBackend</span><span class="o">.</span><span class="n">GLOO</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">backend</span> <span class="o">==</span> <span class="n">Backend</span><span class="o">.</span><span class="n">GLOO</span><span class="p">:</span>
             <span class="n">_default_pg</span> <span class="o">=</span> <span class="n">ProcessGroupGloo</span><span class="p">(</span>
                 <span class="n">store</span><span class="p">,</span>
                 <span class="n">rank</span><span class="p">,</span>
                 <span class="n">world_size</span><span class="p">,</span>
                 <span class="n">timeout</span><span class="o">=</span><span class="n">_default_pg_timeout</span><span class="p">)</span>
-            <span class="n">_pg_map</span><span class="p">[</span><span class="n">_default_pg</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">DistBackend</span><span class="o">.</span><span class="n">GLOO</span><span class="p">,</span> <span class="n">store</span><span class="p">)</span>
+            <span class="n">_pg_map</span><span class="p">[</span><span class="n">_default_pg</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">Backend</span><span class="o">.</span><span class="n">GLOO</span><span class="p">,</span> <span class="n">store</span><span class="p">)</span>
             <span class="n">_pg_names</span><span class="p">[</span><span class="n">_default_pg</span><span class="p">]</span> <span class="o">=</span> <span class="n">group_name</span>
-        <span class="k">elif</span> <span class="n">backend</span> <span class="o">==</span> <span class="n">DistBackend</span><span class="o">.</span><span class="n">NCCL</span><span class="p">:</span>
+        <span class="k">elif</span> <span class="n">backend</span> <span class="o">==</span> <span class="n">Backend</span><span class="o">.</span><span class="n">NCCL</span><span class="p">:</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="n">is_nccl_available</span><span class="p">():</span>
                 <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Distributed package doesn&#39;t have NCCL &quot;</span>
                                    <span class="s2">&quot;built in&quot;</span><span class="p">)</span>
             <span class="n">_default_pg</span> <span class="o">=</span> <span class="n">ProcessGroupNCCL</span><span class="p">(</span><span class="n">store</span><span class="p">,</span> <span class="n">rank</span><span class="p">,</span> <span class="n">world_size</span><span class="p">)</span>
-            <span class="n">_pg_map</span><span class="p">[</span><span class="n">_default_pg</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">DistBackend</span><span class="o">.</span><span class="n">NCCL</span><span class="p">,</span> <span class="n">store</span><span class="p">)</span>
+            <span class="n">_pg_map</span><span class="p">[</span><span class="n">_default_pg</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">Backend</span><span class="o">.</span><span class="n">NCCL</span><span class="p">,</span> <span class="n">store</span><span class="p">)</span>
             <span class="n">_pg_names</span><span class="p">[</span><span class="n">_default_pg</span><span class="p">]</span> <span class="o">=</span> <span class="n">group_name</span>
 
     <span class="n">_backend</span> <span class="o">=</span> <span class="n">_pg_map</span><span class="p">[</span><span class="n">_default_pg</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
@@ -599,30 +625,30 @@
 
     <span class="n">default_backend</span><span class="p">,</span> <span class="n">default_store</span> <span class="o">=</span> <span class="n">_pg_map</span><span class="p">[</span><span class="n">_default_pg</span><span class="p">]</span>
 
-    <span class="k">if</span> <span class="n">default_backend</span> <span class="o">==</span> <span class="n">DistBackend</span><span class="o">.</span><span class="n">MPI</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">default_backend</span> <span class="o">==</span> <span class="n">Backend</span><span class="o">.</span><span class="n">MPI</span><span class="p">:</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">is_mpi_available</span><span class="p">():</span>
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Distributed package doesn&#39;t have MPI built in&quot;</span><span class="p">)</span>
         <span class="n">pg</span> <span class="o">=</span> <span class="n">ProcessGroupMPI</span><span class="p">(</span><span class="n">group_ranks</span><span class="p">)</span>
-        <span class="n">_pg_map</span><span class="p">[</span><span class="n">pg</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">DistBackend</span><span class="o">.</span><span class="n">MPI</span><span class="p">,</span> <span class="n">in_group</span><span class="p">)</span>
+        <span class="n">_pg_map</span><span class="p">[</span><span class="n">pg</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">Backend</span><span class="o">.</span><span class="n">MPI</span><span class="p">,</span> <span class="n">in_group</span><span class="p">)</span>
         <span class="n">_pg_names</span><span class="p">[</span><span class="n">pg</span><span class="p">]</span> <span class="o">=</span> <span class="n">group_name</span>
     <span class="k">else</span><span class="p">:</span>
         <span class="c1"># Create the prefix store</span>
         <span class="n">store</span> <span class="o">=</span> <span class="n">PrefixStore</span><span class="p">(</span><span class="n">group_name</span><span class="p">,</span> <span class="n">default_store</span><span class="p">)</span>
 
-        <span class="k">if</span> <span class="n">default_backend</span> <span class="o">==</span> <span class="n">DistBackend</span><span class="o">.</span><span class="n">GLOO</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">default_backend</span> <span class="o">==</span> <span class="n">Backend</span><span class="o">.</span><span class="n">GLOO</span><span class="p">:</span>
             <span class="n">pg</span> <span class="o">=</span> <span class="n">ProcessGroupGloo</span><span class="p">(</span>
                 <span class="n">store</span><span class="p">,</span>
                 <span class="n">rank</span><span class="p">,</span>
                 <span class="n">world_size</span><span class="p">,</span>
                 <span class="n">timeout</span><span class="o">=</span><span class="n">_default_pg_timeout</span><span class="p">)</span>
-            <span class="n">_pg_map</span><span class="p">[</span><span class="n">pg</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">DistBackend</span><span class="o">.</span><span class="n">GLOO</span><span class="p">,</span> <span class="n">store</span><span class="p">)</span>
+            <span class="n">_pg_map</span><span class="p">[</span><span class="n">pg</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">Backend</span><span class="o">.</span><span class="n">GLOO</span><span class="p">,</span> <span class="n">store</span><span class="p">)</span>
             <span class="n">_pg_names</span><span class="p">[</span><span class="n">pg</span><span class="p">]</span> <span class="o">=</span> <span class="n">group_name</span>
-        <span class="k">elif</span> <span class="n">default_backend</span> <span class="o">==</span> <span class="n">DistBackend</span><span class="o">.</span><span class="n">NCCL</span><span class="p">:</span>
+        <span class="k">elif</span> <span class="n">default_backend</span> <span class="o">==</span> <span class="n">Backend</span><span class="o">.</span><span class="n">NCCL</span><span class="p">:</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="n">is_nccl_available</span><span class="p">():</span>
                 <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Distributed package doesn&#39;t have NCCL &quot;</span>
                                    <span class="s2">&quot;built in&quot;</span><span class="p">)</span>
             <span class="n">pg</span> <span class="o">=</span> <span class="n">ProcessGroupNCCL</span><span class="p">(</span><span class="n">store</span><span class="p">,</span> <span class="n">rank</span><span class="p">,</span> <span class="n">world_size</span><span class="p">)</span>
-            <span class="n">_pg_map</span><span class="p">[</span><span class="n">pg</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">DistBackend</span><span class="o">.</span><span class="n">NCCL</span><span class="p">,</span> <span class="n">store</span><span class="p">)</span>
+            <span class="n">_pg_map</span><span class="p">[</span><span class="n">pg</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">Backend</span><span class="o">.</span><span class="n">NCCL</span><span class="p">,</span> <span class="n">store</span><span class="p">)</span>
             <span class="n">_pg_names</span><span class="p">[</span><span class="n">pg</span><span class="p">]</span> <span class="o">=</span> <span class="n">group_name</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Unsupported distributed backend by group&quot;</span><span class="p">)</span>
@@ -646,7 +672,7 @@
     <span class="k">global</span> <span class="n">_default_pg_init_method</span>
 
     <span class="n">default_backend</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">_pg_map</span><span class="p">[</span><span class="n">get_default_group</span><span class="p">()]</span>
-    <span class="k">if</span> <span class="p">(</span><span class="n">default_backend</span> <span class="o">!=</span> <span class="n">DistBackend</span><span class="o">.</span><span class="n">MPI</span> <span class="ow">and</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">default_backend</span> <span class="o">!=</span> <span class="n">Backend</span><span class="o">.</span><span class="n">MPI</span> <span class="ow">and</span>
             <span class="n">group</span> <span class="o">==</span> <span class="n">GroupMember</span><span class="o">.</span><span class="n">NON_GROUP_MEMBER</span><span class="p">):</span>
         <span class="k">return</span>
 
@@ -939,10 +965,10 @@
 
 
 <div class="viewcode-block" id="all_reduce_multigpu"><a class="viewcode-back" href="../../../distributed.html#torch.distributed.all_reduce_multigpu">[docs]</a><span class="k">def</span> <span class="nf">all_reduce_multigpu</span><span class="p">(</span><span class="n">tensor_list</span><span class="p">,</span>
-                        <span class="n">op</span><span class="o">=</span><span class="n">reduce_op</span><span class="o">.</span><span class="n">SUM</span><span class="p">,</span>
+                        <span class="n">op</span><span class="o">=</span><span class="n">ReduceOp</span><span class="o">.</span><span class="n">SUM</span><span class="p">,</span>
                         <span class="n">group</span><span class="o">=</span><span class="n">group</span><span class="o">.</span><span class="n">WORLD</span><span class="p">,</span>
                         <span class="n">async_op</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;</span>
+    <span class="sa">r</span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Reduces the tensor data across all machines in such a way that all get</span>
 <span class="sd">    the final result. This function reduces a number of tensors on every node,</span>
 <span class="sd">    while each tensor resides on different GPUs.</span>
@@ -962,7 +988,7 @@
 <span class="sd">            You also need to make sure that ``len(tensor_list)`` is the same for</span>
 <span class="sd">            all the distributed processes calling this function.</span>
 <span class="sd">        op (optional): One of the values from</span>
-<span class="sd">            ``torch.distributed.c10d.reduce_op``</span>
+<span class="sd">            ``torch.distributed.ReduceOp``</span>
 <span class="sd">            enum.  Specifies an operation used for element-wise reductions.</span>
 <span class="sd">        group (ProcessGroup, optional): The process group to work on</span>
 <span class="sd">        async_op (bool, optional): Whether this op should be an async op</span>
@@ -990,7 +1016,7 @@
 
 
 <div class="viewcode-block" id="all_reduce"><a class="viewcode-back" href="../../../distributed.html#torch.distributed.all_reduce">[docs]</a><span class="k">def</span> <span class="nf">all_reduce</span><span class="p">(</span><span class="n">tensor</span><span class="p">,</span>
-               <span class="n">op</span><span class="o">=</span><span class="n">reduce_op</span><span class="o">.</span><span class="n">SUM</span><span class="p">,</span>
+               <span class="n">op</span><span class="o">=</span><span class="n">ReduceOp</span><span class="o">.</span><span class="n">SUM</span><span class="p">,</span>
                <span class="n">group</span><span class="o">=</span><span class="n">group</span><span class="o">.</span><span class="n">WORLD</span><span class="p">,</span>
                <span class="n">async_op</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;</span>
@@ -1003,7 +1029,7 @@
 <span class="sd">        tensor (Tensor): Input and output of the collective. The function</span>
 <span class="sd">            operates in-place.</span>
 <span class="sd">        op (optional): One of the values from</span>
-<span class="sd">            ``torch.distributed.c10d.reduce_op``</span>
+<span class="sd">            ``torch.distributed.ReduceOp``</span>
 <span class="sd">            enum.  Specifies an operation used for element-wise reductions.</span>
 <span class="sd">        group (ProcessGroup, optional): The process group to work on</span>
 <span class="sd">        async_op (bool, optional): Whether this op should be an async op</span>
@@ -1032,7 +1058,7 @@
 
 <div class="viewcode-block" id="reduce_multigpu"><a class="viewcode-back" href="../../../distributed.html#torch.distributed.reduce_multigpu">[docs]</a><span class="k">def</span> <span class="nf">reduce_multigpu</span><span class="p">(</span><span class="n">tensor_list</span><span class="p">,</span>
                     <span class="n">dst</span><span class="p">,</span>
-                    <span class="n">op</span><span class="o">=</span><span class="n">reduce_op</span><span class="o">.</span><span class="n">SUM</span><span class="p">,</span>
+                    <span class="n">op</span><span class="o">=</span><span class="n">ReduceOp</span><span class="o">.</span><span class="n">SUM</span><span class="p">,</span>
                     <span class="n">group</span><span class="o">=</span><span class="n">group</span><span class="o">.</span><span class="n">WORLD</span><span class="p">,</span>
                     <span class="n">async_op</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
                     <span class="n">dst_tensor</span><span class="o">=</span><span class="mi">0</span><span class="p">):</span>
@@ -1053,7 +1079,7 @@
 <span class="sd">            all the distributed processes calling this function.</span>
 <span class="sd">        dst (int): Destination rank</span>
 <span class="sd">        op (optional): One of the values from</span>
-<span class="sd">            ``torch.distributed.c10d.reduce_op``</span>
+<span class="sd">            ``torch.distributed.ReduceOp``</span>
 <span class="sd">            enum.  Specifies an operation used for element-wise reductions.</span>
 <span class="sd">        group (ProcessGroup, optional): The process group to work on</span>
 <span class="sd">        async_op (bool, optional): Whether this op should be an async op</span>
@@ -1089,7 +1115,7 @@
 
 <div class="viewcode-block" id="reduce"><a class="viewcode-back" href="../../../distributed.html#torch.distributed.reduce">[docs]</a><span class="k">def</span> <span class="nf">reduce</span><span class="p">(</span><span class="n">tensor</span><span class="p">,</span>
            <span class="n">dst</span><span class="p">,</span>
-           <span class="n">op</span><span class="o">=</span><span class="n">reduce_op</span><span class="o">.</span><span class="n">SUM</span><span class="p">,</span>
+           <span class="n">op</span><span class="o">=</span><span class="n">ReduceOp</span><span class="o">.</span><span class="n">SUM</span><span class="p">,</span>
            <span class="n">group</span><span class="o">=</span><span class="n">group</span><span class="o">.</span><span class="n">WORLD</span><span class="p">,</span>
            <span class="n">async_op</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;</span>
@@ -1102,7 +1128,7 @@
 <span class="sd">            operates in-place.</span>
 <span class="sd">        dst (int): Destination rank</span>
 <span class="sd">        op (optional): One of the values from</span>
-<span class="sd">            ``torch.distributed.c10d.reduce_op``</span>
+<span class="sd">            ``torch.distributed.ReduceOp``</span>
 <span class="sd">            enum.  Specifies an operation used for element-wise reductions.</span>
 <span class="sd">        group (ProcessGroup, optional): The process group to work on</span>
 <span class="sd">        async_op (bool, optional): Whether this op should be an async op</span>
@@ -1408,7 +1434,7 @@
         <span class="n">group_world_size</span> <span class="o">=</span> <span class="n">global_world_size</span>
         <span class="n">group_rank</span> <span class="o">=</span> <span class="n">global_rank</span>
 
-    <span class="k">if</span> <span class="n">default_backend</span> <span class="o">==</span> <span class="n">DistBackend</span><span class="o">.</span><span class="n">MPI</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">default_backend</span> <span class="o">==</span> <span class="n">Backend</span><span class="o">.</span><span class="n">MPI</span><span class="p">:</span>
         <span class="n">in_group</span> <span class="o">=</span> <span class="n">global_rank</span> <span class="ow">in</span> <span class="n">ranks</span>
         <span class="n">pg</span> <span class="o">=</span> <span class="n">_new_process_group_helper</span><span class="p">(</span><span class="n">group_world_size</span><span class="p">,</span>
                                        <span class="n">group_rank</span><span class="p">,</span>
@@ -1419,14 +1445,14 @@
         <span class="k">if</span> <span class="n">global_rank</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">ranks</span><span class="p">:</span>
             <span class="k">return</span> <span class="n">GroupMember</span><span class="o">.</span><span class="n">NON_GROUP_MEMBER</span>
 
-        <span class="k">if</span> <span class="n">default_backend</span> <span class="o">!=</span> <span class="n">DistBackend</span><span class="o">.</span><span class="n">MPI</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">default_backend</span> <span class="o">!=</span> <span class="n">Backend</span><span class="o">.</span><span class="n">MPI</span><span class="p">:</span>
             <span class="n">pg</span> <span class="o">=</span> <span class="n">_new_process_group_helper</span><span class="p">(</span><span class="n">group_world_size</span><span class="p">,</span>
                                            <span class="n">group_rank</span><span class="p">,</span>
                                            <span class="n">input_ranks</span><span class="p">)</span>
 
     <span class="c1"># Create the global rank to group rank mapping</span>
     <span class="n">_pg_group_ranks</span><span class="p">[</span><span class="n">pg</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
-    <span class="k">if</span> <span class="n">default_backend</span> <span class="o">==</span> <span class="n">DistBackend</span><span class="o">.</span><span class="n">MPI</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">default_backend</span> <span class="o">==</span> <span class="n">Backend</span><span class="o">.</span><span class="n">MPI</span><span class="p">:</span>
         <span class="n">_pg_group_ranks</span><span class="p">[</span><span class="n">pg</span><span class="p">]</span> <span class="o">=</span> <span class="n">pg</span><span class="o">.</span><span class="n">group_ranks</span><span class="p">()</span>
     <span class="k">else</span><span class="p">:</span>
         <span class="k">for</span> <span class="n">rank</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">global_world_size</span><span class="p">):</span>
