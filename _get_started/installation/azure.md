@@ -26,7 +26,9 @@ The expense of your virtual machine is directly correlated to the number of GPUs
 ## Azure Machine Learning Service
 {: #microsoft-azure-machine-learning-service}
 
-The [Azure Machine Learning Service](https://azure.microsoft.com/en-us/services/machine-learning-service/) provides a cloud-based environment you can use to develop, train, test, deploy, manage, and track machine learning models. See [the documentation](https://docs.microsoft.com/azure/machine-learning/service/how-to-train-pytorch) to learn how to use PyTorch with Azure Machine Learning.
+The [Azure Machine Learning service](https://azure.microsoft.com/en-us/services/machine-learning-service/) is a cloud-based service you can use to accelerate your end-to-end machine learning workflows, from training to production. Azure Machine Learning allows you to easily move from training PyTorch models on your local machine to scaling out to the cloud. Using Azure ML’s CLI or Python SDK, you can leverage the service’s advanced functionality for distributed training, hyperparameter tuning, run history tracking, and production-scale model deployments.
+
+See [the documentation](https://docs.microsoft.com/en-us/azure/machine-learning/service/how-to-train-pytorch) to learn how to use PyTorch with Azure Machine Learning.
 
 ## Pre-Configured Data Science Virtual Machines
 {: #microsoft-azure-virtual-machines}
