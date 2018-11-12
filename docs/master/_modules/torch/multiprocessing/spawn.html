@@ -9,14 +9,14 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>torch.optim.rprop &mdash; PyTorch master documentation</title>
+  <title>torch.multiprocessing.spawn &mdash; PyTorch master documentation</title>
   
 
   
   
   
   
-    <link rel="canonical" href="https://pytorch.org/docs/stable/_modules/torch/optim/rprop.html"/>
+    <link rel="canonical" href="https://pytorch.org/docs/stable/_modules/torch/multiprocessing/spawn.html"/>
   
 
   
@@ -132,7 +132,7 @@
 
           
 <div>
-  <a style="color:#F05732" href="https://pytorch.org/docs/stable/_modules/torch/optim/rprop.html">
+  <a style="color:#F05732" href="https://pytorch.org/docs/stable/_modules/torch/multiprocessing/spawn.html">
     You are viewing unstable developer preview docs.
     Click here to view docs for latest stable release.
   </a>
@@ -233,7 +233,9 @@
         
           <li><a href="../../torch.html">torch</a> &gt;</li>
         
-      <li>torch.optim.rprop</li>
+          <li><a href="../multiprocessing.html">torch.multiprocessing</a> &gt;</li>
+        
+      <li>torch.multiprocessing.spawn</li>
     
     
       <li class="pytorch-breadcrumbs-aside">
@@ -259,86 +261,149 @@
             <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
              <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
               
-  <h1>Source code for torch.optim.rprop</h1><div class="highlight"><pre>
-<span></span><span class="kn">import</span> <span class="nn">math</span>
-<span class="kn">import</span> <span class="nn">torch</span>
-<span class="kn">from</span> <span class="nn">.optimizer</span> <span class="k">import</span> <span class="n">Optimizer</span>
+  <h1>Source code for torch.multiprocessing.spawn</h1><div class="highlight"><pre>
+<span></span><span class="kn">from</span> <span class="nn">__future__</span> <span class="k">import</span> <span class="n">absolute_import</span><span class="p">,</span> <span class="n">division</span><span class="p">,</span> <span class="n">print_function</span><span class="p">,</span> <span class="n">unicode_literals</span>
+
+<span class="kn">import</span> <span class="nn">multiprocessing</span>
+<span class="kn">import</span> <span class="nn">multiprocessing.connection</span>
+<span class="kn">import</span> <span class="nn">signal</span>
+<span class="kn">import</span> <span class="nn">sys</span>
 
 
-<div class="viewcode-block" id="Rprop"><a class="viewcode-back" href="../../../optim.html#torch.optim.Rprop">[docs]</a><span class="k">class</span> <span class="nc">Rprop</span><span class="p">(</span><span class="n">Optimizer</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;Implements the resilient backpropagation algorithm.</span>
+<span class="k">def</span> <span class="nf">_wrap</span><span class="p">(</span><span class="n">fn</span><span class="p">,</span> <span class="n">i</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">error_queue</span><span class="p">):</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">fn</span><span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">KeyboardInterrupt</span><span class="p">:</span>
+        <span class="k">pass</span>  <span class="c1"># SIGINT; Killed by parent, do nothing</span>
+    <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+        <span class="c1"># Propagate exception to parent process, keeping original traceback</span>
+        <span class="kn">import</span> <span class="nn">traceback</span>
+        <span class="n">error_queue</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">traceback</span><span class="o">.</span><span class="n">format_exc</span><span class="p">())</span>
+        <span class="n">sys</span><span class="o">.</span><span class="n">exit</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
 
-<span class="sd">    Arguments:</span>
-<span class="sd">        params (iterable): iterable of parameters to optimize or dicts defining</span>
-<span class="sd">            parameter groups</span>
-<span class="sd">        lr (float, optional): learning rate (default: 1e-2)</span>
-<span class="sd">        etas (Tuple[float, float], optional): pair of (etaminus, etaplis), that</span>
-<span class="sd">            are multiplicative increase and decrease factors</span>
-<span class="sd">            (default: (0.5, 1.2))</span>
-<span class="sd">        step_sizes (Tuple[float, float], optional): a pair of minimal and</span>
-<span class="sd">            maximal allowed step sizes (default: (1e-6, 50))</span>
-<span class="sd">    &quot;&quot;&quot;</span>
 
-    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">params</span><span class="p">,</span> <span class="n">lr</span><span class="o">=</span><span class="mf">1e-2</span><span class="p">,</span> <span class="n">etas</span><span class="o">=</span><span class="p">(</span><span class="mf">0.5</span><span class="p">,</span> <span class="mf">1.2</span><span class="p">),</span> <span class="n">step_sizes</span><span class="o">=</span><span class="p">(</span><span class="mf">1e-6</span><span class="p">,</span> <span class="mi">50</span><span class="p">)):</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="mf">0.0</span> <span class="o">&lt;=</span> <span class="n">lr</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Invalid learning rate: </span><span class="si">{}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">lr</span><span class="p">))</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="mf">0.0</span> <span class="o">&lt;</span> <span class="n">etas</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&lt;</span> <span class="mf">1.0</span> <span class="o">&lt;</span> <span class="n">etas</span><span class="p">[</span><span class="mi">1</span><span class="p">]:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Invalid eta values: </span><span class="si">{}</span><span class="s2">, </span><span class="si">{}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">etas</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">etas</span><span class="p">[</span><span class="mi">1</span><span class="p">]))</span>
+<div class="viewcode-block" id="SpawnContext"><a class="viewcode-back" href="../../../multiprocessing.html#torch.multiprocessing.SpawnContext">[docs]</a><span class="k">class</span> <span class="nc">SpawnContext</span><span class="p">:</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">processes</span><span class="p">,</span> <span class="n">error_queues</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">error_queues</span> <span class="o">=</span> <span class="n">error_queues</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">processes</span> <span class="o">=</span> <span class="n">processes</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sentinels</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="n">process</span><span class="o">.</span><span class="n">sentinel</span><span class="p">:</span> <span class="n">index</span>
+            <span class="k">for</span> <span class="n">index</span><span class="p">,</span> <span class="n">process</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">processes</span><span class="p">)</span>
+        <span class="p">}</span>
 
-        <span class="n">defaults</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">lr</span><span class="o">=</span><span class="n">lr</span><span class="p">,</span> <span class="n">etas</span><span class="o">=</span><span class="n">etas</span><span class="p">,</span> <span class="n">step_sizes</span><span class="o">=</span><span class="n">step_sizes</span><span class="p">)</span>
-        <span class="nb">super</span><span class="p">(</span><span class="n">Rprop</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">params</span><span class="p">,</span> <span class="n">defaults</span><span class="p">)</span>
+<div class="viewcode-block" id="SpawnContext.join"><a class="viewcode-back" href="../../../multiprocessing.html#torch.multiprocessing.SpawnContext.join">[docs]</a>    <span class="k">def</span> <span class="nf">join</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="sa">r</span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Tries to join one or more processes in this spawn context.</span>
+<span class="sd">        If one of them exited with a non-zero exit status, this function</span>
+<span class="sd">        kills the remaining processes and raises an exception with the cause</span>
+<span class="sd">        of the first process exiting.</span>
 
-<div class="viewcode-block" id="Rprop.step"><a class="viewcode-back" href="../../../optim.html#torch.optim.Rprop.step">[docs]</a>    <span class="k">def</span> <span class="nf">step</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">closure</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;Performs a single optimization step.</span>
+<span class="sd">        Returns ``True`` if all processes have been joined successfully,</span>
+<span class="sd">        ``False`` if there are more processes that need to be joined.</span>
 
 <span class="sd">        Arguments:</span>
-<span class="sd">            closure (callable, optional): A closure that reevaluates the model</span>
-<span class="sd">                and returns the loss.</span>
+<span class="sd">            timeout (float): Wait this long before giving up on waiting.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">loss</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="k">if</span> <span class="n">closure</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">loss</span> <span class="o">=</span> <span class="n">closure</span><span class="p">()</span>
+        <span class="c1"># Ensure this function can be called even when we&#39;re done.</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">sentinels</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">True</span>
 
-        <span class="k">for</span> <span class="n">group</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">param_groups</span><span class="p">:</span>
-            <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">group</span><span class="p">[</span><span class="s1">&#39;params&#39;</span><span class="p">]:</span>
-                <span class="k">if</span> <span class="n">p</span><span class="o">.</span><span class="n">grad</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                    <span class="k">continue</span>
-                <span class="n">grad</span> <span class="o">=</span> <span class="n">p</span><span class="o">.</span><span class="n">grad</span><span class="o">.</span><span class="n">data</span>
-                <span class="k">if</span> <span class="n">grad</span><span class="o">.</span><span class="n">is_sparse</span><span class="p">:</span>
-                    <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s1">&#39;Rprop does not support sparse gradients&#39;</span><span class="p">)</span>
-                <span class="n">state</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">state</span><span class="p">[</span><span class="n">p</span><span class="p">]</span>
+        <span class="c1"># Wait for any process to fail or all of them to succeed.</span>
+        <span class="n">ready</span> <span class="o">=</span> <span class="n">multiprocessing</span><span class="o">.</span><span class="n">connection</span><span class="o">.</span><span class="n">wait</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">sentinels</span><span class="o">.</span><span class="n">keys</span><span class="p">(),</span>
+            <span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">,</span>
+        <span class="p">)</span>
 
-                <span class="c1"># State initialization</span>
-                <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">state</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
-                    <span class="n">state</span><span class="p">[</span><span class="s1">&#39;step&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span>
-                    <span class="n">state</span><span class="p">[</span><span class="s1">&#39;prev&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
-                    <span class="n">state</span><span class="p">[</span><span class="s1">&#39;step_size&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">grad</span><span class="o">.</span><span class="n">new</span><span class="p">()</span><span class="o">.</span><span class="n">resize_as_</span><span class="p">(</span><span class="n">grad</span><span class="p">)</span><span class="o">.</span><span class="n">fill_</span><span class="p">(</span><span class="n">group</span><span class="p">[</span><span class="s1">&#39;lr&#39;</span><span class="p">])</span>
+        <span class="n">error_index</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">for</span> <span class="n">sentinel</span> <span class="ow">in</span> <span class="n">ready</span><span class="p">:</span>
+            <span class="n">index</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">sentinels</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">sentinel</span><span class="p">)</span>
+            <span class="n">process</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">processes</span><span class="p">[</span><span class="n">index</span><span class="p">]</span>
+            <span class="n">process</span><span class="o">.</span><span class="n">join</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">process</span><span class="o">.</span><span class="n">exitcode</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="n">error_index</span> <span class="o">=</span> <span class="n">index</span>
+                <span class="k">break</span>
 
-                <span class="n">etaminus</span><span class="p">,</span> <span class="n">etaplus</span> <span class="o">=</span> <span class="n">group</span><span class="p">[</span><span class="s1">&#39;etas&#39;</span><span class="p">]</span>
-                <span class="n">step_size_min</span><span class="p">,</span> <span class="n">step_size_max</span> <span class="o">=</span> <span class="n">group</span><span class="p">[</span><span class="s1">&#39;step_sizes&#39;</span><span class="p">]</span>
-                <span class="n">step_size</span> <span class="o">=</span> <span class="n">state</span><span class="p">[</span><span class="s1">&#39;step_size&#39;</span><span class="p">]</span>
+        <span class="c1"># Return if there was no error.</span>
+        <span class="k">if</span> <span class="n">error_index</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># Return whether or not all processes have been joined.</span>
+            <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">sentinels</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span>
 
-                <span class="n">state</span><span class="p">[</span><span class="s1">&#39;step&#39;</span><span class="p">]</span> <span class="o">+=</span> <span class="mi">1</span>
+        <span class="c1"># Assume failure. Terminate processes that are still alive.</span>
+        <span class="k">for</span> <span class="n">process</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">processes</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">process</span><span class="o">.</span><span class="n">is_alive</span><span class="p">():</span>
+                <span class="n">process</span><span class="o">.</span><span class="n">terminate</span><span class="p">()</span>
+            <span class="n">process</span><span class="o">.</span><span class="n">join</span><span class="p">()</span>
 
-                <span class="n">sign</span> <span class="o">=</span> <span class="n">grad</span><span class="o">.</span><span class="n">mul</span><span class="p">(</span><span class="n">state</span><span class="p">[</span><span class="s1">&#39;prev&#39;</span><span class="p">])</span><span class="o">.</span><span class="n">sign</span><span class="p">()</span>
-                <span class="n">sign</span><span class="p">[</span><span class="n">sign</span><span class="o">.</span><span class="n">gt</span><span class="p">(</span><span class="mi">0</span><span class="p">)]</span> <span class="o">=</span> <span class="n">etaplus</span>
-                <span class="n">sign</span><span class="p">[</span><span class="n">sign</span><span class="o">.</span><span class="n">lt</span><span class="p">(</span><span class="mi">0</span><span class="p">)]</span> <span class="o">=</span> <span class="n">etaminus</span>
-                <span class="n">sign</span><span class="p">[</span><span class="n">sign</span><span class="o">.</span><span class="n">eq</span><span class="p">(</span><span class="mi">0</span><span class="p">)]</span> <span class="o">=</span> <span class="mi">1</span>
+        <span class="c1"># There won&#39;t be an error on the queue if the process crashed.</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">error_queues</span><span class="p">[</span><span class="n">error_index</span><span class="p">]</span><span class="o">.</span><span class="n">empty</span><span class="p">():</span>
+            <span class="n">exitcode</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">processes</span><span class="p">[</span><span class="n">error_index</span><span class="p">]</span><span class="o">.</span><span class="n">exitcode</span>
+            <span class="k">if</span> <span class="n">exitcode</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="n">name</span> <span class="o">=</span> <span class="n">signal</span><span class="o">.</span><span class="n">Signals</span><span class="p">(</span><span class="o">-</span><span class="n">exitcode</span><span class="p">)</span><span class="o">.</span><span class="n">name</span>
+                <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span>
+                    <span class="s2">&quot;process </span><span class="si">%d</span><span class="s2"> terminated with signal </span><span class="si">%s</span><span class="s2">&quot;</span> <span class="o">%</span>
+                    <span class="p">(</span><span class="n">error_index</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
+                <span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span>
+                    <span class="s2">&quot;process </span><span class="si">%d</span><span class="s2"> terminated with exit code </span><span class="si">%d</span><span class="s2">&quot;</span> <span class="o">%</span>
+                    <span class="p">(</span><span class="n">error_index</span><span class="p">,</span> <span class="n">exitcode</span><span class="p">)</span>
+                <span class="p">)</span>
 
-                <span class="c1"># update stepsizes with step size updates</span>
-                <span class="n">step_size</span><span class="o">.</span><span class="n">mul_</span><span class="p">(</span><span class="n">sign</span><span class="p">)</span><span class="o">.</span><span class="n">clamp_</span><span class="p">(</span><span class="n">step_size_min</span><span class="p">,</span> <span class="n">step_size_max</span><span class="p">)</span>
+        <span class="n">original_trace</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">error_queues</span><span class="p">[</span><span class="n">error_index</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">()</span>
+        <span class="n">msg</span> <span class="o">=</span> <span class="s2">&quot;</span><span class="se">\n\n</span><span class="s2">-- Process </span><span class="si">%d</span><span class="s2"> terminated with the following error:</span><span class="se">\n</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="n">error_index</span>
+        <span class="n">msg</span> <span class="o">+=</span> <span class="n">original_trace</span>
+        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span></div></div>
 
-                <span class="c1"># for dir&lt;0, dfdx=0</span>
-                <span class="c1"># for dir&gt;=0 dfdx=dfdx</span>
-                <span class="n">grad</span> <span class="o">=</span> <span class="n">grad</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
-                <span class="n">grad</span><span class="p">[</span><span class="n">sign</span><span class="o">.</span><span class="n">eq</span><span class="p">(</span><span class="n">etaminus</span><span class="p">)]</span> <span class="o">=</span> <span class="mi">0</span>
 
-                <span class="c1"># update parameters</span>
-                <span class="n">p</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">addcmul_</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">grad</span><span class="o">.</span><span class="n">sign</span><span class="p">(),</span> <span class="n">step_size</span><span class="p">)</span>
+<div class="viewcode-block" id="spawn"><a class="viewcode-back" href="../../../multiprocessing.html#torch.multiprocessing.spawn">[docs]</a><span class="k">def</span> <span class="nf">spawn</span><span class="p">(</span><span class="n">fn</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="p">(),</span> <span class="n">nprocs</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">join</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+    <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Spawns ``nprocs`` processes that run ``fn`` with ``args``.</span>
 
-                <span class="n">state</span><span class="p">[</span><span class="s1">&#39;prev&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">copy_</span><span class="p">(</span><span class="n">grad</span><span class="p">)</span>
+<span class="sd">    If one of the processes exits with a non-zero exit status, the</span>
+<span class="sd">    remaining processes are killed and an exception is raised with the</span>
+<span class="sd">    cause of termination. In the case an exception was caught in the</span>
+<span class="sd">    child process, it is forwarded and its traceback is included in</span>
+<span class="sd">    the exception raised in the parent process.</span>
 
-        <span class="k">return</span> <span class="n">loss</span></div></div>
+<span class="sd">    Arguments:</span>
+<span class="sd">        fn (function): Function is called as the entrypoint of the</span>
+<span class="sd">            spawned process. This function must be defined at the top</span>
+<span class="sd">            level of a module so it can be pickled and spawned. This</span>
+<span class="sd">            is a requirement imposed by multiprocessing.</span>
+
+<span class="sd">            The function is called as ``fn(i, *args)``, where ``i`` is</span>
+<span class="sd">            the process index and ``args`` is the passed through tuple</span>
+<span class="sd">            of arguments.</span>
+
+<span class="sd">        args (tuple): Arguments passed to ``fn``.</span>
+<span class="sd">        nprocs (int): Number of processes to spawn.</span>
+<span class="sd">        join (bool): Perform a blocking join on all processes.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        None if ``join`` is ``True``,</span>
+<span class="sd">        :class:`~SpawnContext` if ``join`` is ``False``</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">mp</span> <span class="o">=</span> <span class="n">multiprocessing</span><span class="o">.</span><span class="n">get_context</span><span class="p">(</span><span class="s1">&#39;spawn&#39;</span><span class="p">)</span>
+    <span class="n">error_queues</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">processes</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">nprocs</span><span class="p">):</span>
+        <span class="n">error_queue</span> <span class="o">=</span> <span class="n">mp</span><span class="o">.</span><span class="n">SimpleQueue</span><span class="p">()</span>
+        <span class="n">process</span> <span class="o">=</span> <span class="n">mp</span><span class="o">.</span><span class="n">Process</span><span class="p">(</span>
+            <span class="n">target</span><span class="o">=</span><span class="n">_wrap</span><span class="p">,</span>
+            <span class="n">args</span><span class="o">=</span><span class="p">(</span><span class="n">fn</span><span class="p">,</span> <span class="n">i</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">error_queue</span><span class="p">),</span>
+            <span class="n">daemon</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">process</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+        <span class="n">error_queues</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">error_queue</span><span class="p">)</span>
+        <span class="n">processes</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">process</span><span class="p">)</span>
+
+    <span class="n">spawn_context</span> <span class="o">=</span> <span class="n">SpawnContext</span><span class="p">(</span><span class="n">processes</span><span class="p">,</span> <span class="n">error_queues</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">join</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">spawn_context</span>
+
+    <span class="c1"># Loop on join until it returns True or raises an exception.</span>
+    <span class="k">while</span> <span class="ow">not</span> <span class="n">spawn_context</span><span class="o">.</span><span class="n">join</span><span class="p">():</span>
+        <span class="k">pass</span></div>
 </pre></div>
 
              </article>
