@@ -13,11 +13,11 @@ Welcome to the migration guide for PyTorch 0.4.0. In this release we introduced 
 - Writing device-agnostic code
 - New edge-case constraints on names of submodules, parameters, and buffers in `nn.Module`
 
-## Merging [`Tensor`](http://pytorch.org/docs/0.4.0/tensors.html) and `Variable` and classes
+## Merging [`Tensor`](https://pytorch.org/docs/0.4.0/tensors.html) and `Variable` and classes
 
-[`torch.Tensor`](http://pytorch.org/docs/0.4.0/tensors.html) and `torch.autograd.Variable` are now the same class. More precisely, [`torch.Tensor`](http://pytorch.org/docs/0.4.0/tensors.html) is capable of tracking history and behaves like the old `Variable`; `Variable` wrapping continues to work as before but returns an object of type [`torch.Tensor`](http://pytorch.org/docs/0.4.0/tensors.html). This means that you don't need the `Variable` wrapper everywhere in your code anymore.
+[`torch.Tensor`](https://pytorch.org/docs/0.4.0/tensors.html) and `torch.autograd.Variable` are now the same class. More precisely, [`torch.Tensor`](https://pytorch.org/docs/0.4.0/tensors.html) is capable of tracking history and behaves like the old `Variable`; `Variable` wrapping continues to work as before but returns an object of type [`torch.Tensor`](https://pytorch.org/docs/0.4.0/tensors.html). This means that you don't need the `Variable` wrapper everywhere in your code anymore.
 
-### The `type()` of a [`Tensor`](http://pytorch.org/docs/0.4.0/tensors.html) has changed
+### The `type()` of a [`Tensor`](https://pytorch.org/docs/0.4.0/tensors.html) has changed
 
 Note also that the `type()` of a Tensor no longer reflects the data type. Use `isinstance()` or `x.type()`instead:
 
@@ -31,9 +31,9 @@ Note also that the `type()` of a Tensor no longer reflects the data type. Use `i
 True
 ```
 
-### When does [`autograd`](http://pytorch.org/docs/0.4.0/autograd.html) start tracking history now?
+### When does [`autograd`](https://pytorch.org/docs/0.4.0/autograd.html) start tracking history now?
 
-`requires_grad`, the central flag for [`autograd`](http://pytorch.org/docs/0.4.0/autograd.html), is now an attribute on `Tensors`. The same rules previously used for `Variables` applies to `Tensors`; [`autograd`](http://pytorch.org/docs/0.4.0/autograd.html) starts tracking history when any input `Tensor` of an operation has `requires_grad=True`. For example,
+`requires_grad`, the central flag for [`autograd`](https://pytorch.org/docs/0.4.0/autograd.html), is now an attribute on `Tensors`. The same rules previously used for `Variables` applies to `Tensors`; [`autograd`](https://pytorch.org/docs/0.4.0/autograd.html) starts tracking history when any input `Tensor` of an operation has `requires_grad=True`. For example,
 
 ```python
 >>> x = torch.ones(1)  # create a tensor with requires_grad=False (default)
@@ -68,7 +68,7 @@ True
 
 #### Manipulating `requires_grad` flag
 
-Other than directly setting the attribute, you can change this flag `in-place` using [`my_tensor.requires_grad_()`](http://pytorch.org/docs/0.4.0/tensors.html#torch.Tensor.requires_grad_), or, as in the above example, at creation time by passing it in as an argument (default is `False`), e.g.,
+Other than directly setting the attribute, you can change this flag `in-place` using [`my_tensor.requires_grad_()`](https://pytorch.org/docs/0.4.0/tensors.html#torch.Tensor.requires_grad_), or, as in the above example, at creation time by passing it in as an argument (default is `False`), e.g.,
 
 ```python
 >>> existing_tensor.requires_grad_()
@@ -83,7 +83,7 @@ True
 
 `.data` was the primary way to get the underlying `Tensor` from a `Variable`. After this merge, calling `y = x.data` still has similar semantics. So `y` will be a `Tensor` that shares the same data with `x`, is unrelated with the computation history of `x`, and has `requires_grad=False`.
 
-However, `.data` can be unsafe in some cases. Any changes on `x.data` wouldn't be tracked by `autograd`, and the computed gradients would be incorrect if `x` is needed in a backward pass. A safer alternative is to use [`x.detach()`](http://pytorch.org/docs/master/autograd.html#torch.Tensor.detach), which also returns a `Tensor` that shares data with `requires_grad=False`, but will have its in-place changes reported by `autograd` if `x` is needed in backward.
+However, `.data` can be unsafe in some cases. Any changes on `x.data` wouldn't be tracked by `autograd`, and the computed gradients would be incorrect if `x` is needed in a backward pass. A safer alternative is to use [`x.detach()`](https://pytorch.org/docs/master/autograd.html#torch.Tensor.detach), which also returns a `Tensor` that shares data with `requires_grad=False`, but will have its in-place changes reported by `autograd` if `x` is needed in backward.
 
 Here is an example of the difference between `.data` and `x.detach()` (and why we recommend using `detach` in general).
 
@@ -158,7 +158,7 @@ Note that if you don't convert to a Python number when accumulating losses, you 
 
 ## Deprecation of volatile flag
 
-The `volatile` flag is now deprecated and has no effect. Previously, any computation that involves a `Variable` with `volatile=True` wouldn't be tracked by `autograd`. This has now been replaced by a [set of more flexible context managers](http://pytorch.org/docs/0.4.0/torch.html#locally-disabling-gradient-computation) including `torch.no_grad()`, `torch.set_grad_enabled(grad_mode)`, and others.
+The `volatile` flag is now deprecated and has no effect. Previously, any computation that involves a `Variable` with `volatile=True` wouldn't be tracked by `autograd`. This has now been replaced by a [set of more flexible context managers](https://pytorch.org/docs/0.4.0/torch.html#locally-disabling-gradient-computation) including `torch.no_grad()`, `torch.set_grad_enabled(grad_mode)`, and others.
 
 ```python
 >>> x = torch.zeros(1, requires_grad=True)
@@ -182,15 +182,15 @@ True
 False
 ```
 
-## [`dtypes`](http://pytorch.org/docs/0.4.0/tensor_attributes.html#torch.torch.dtype), [`devices`](http://pytorch.org/docs/0.4.0/tensor_attributes.html#torch.torch.device) and NumPy-style creation functions
+## [`dtypes`](https://pytorch.org/docs/0.4.0/tensor_attributes.html#torch.torch.dtype), [`devices`](https://pytorch.org/docs/0.4.0/tensor_attributes.html#torch.torch.device) and NumPy-style creation functions
 
 In previous versions of PyTorch, we used to specify data type (e.g. float vs double), device type (cpu vs cuda) and layout (dense vs sparse) together as a "tensor type". For example, `torch.cuda.sparse.DoubleTensor` was the `Tensor` type respresenting the `double` data type, living on CUDA devices, and with [COO sparse tensor](https://en.wikipedia.org/wiki/Sparse_matrix#Coordinate_list_(COO)) layout.
 
-In this release, we introduce [`torch.dtype`](http://pytorch.org/docs/0.4.0/tensor_attributes.html#torch.torch.dtype), [`torch.device`](http://pytorch.org/docs/0.4.0/tensor_attributes.html#torch.torch.device) and [`torch.layout`](http://pytorch.org/docs/0.4.0/tensor_attributes.html#torch.torch.layout) classes to allow better management of these properties via NumPy-style creation functions.
+In this release, we introduce [`torch.dtype`](https://pytorch.org/docs/0.4.0/tensor_attributes.html#torch.torch.dtype), [`torch.device`](https://pytorch.org/docs/0.4.0/tensor_attributes.html#torch.torch.device) and [`torch.layout`](https://pytorch.org/docs/0.4.0/tensor_attributes.html#torch.torch.layout) classes to allow better management of these properties via NumPy-style creation functions.
 
-### [`torch.dtype`](http://pytorch.org/docs/0.4.0/tensor_attributes.html#torch.torch.dtype)
+### [`torch.dtype`](https://pytorch.org/docs/0.4.0/tensor_attributes.html#torch.torch.dtype)
 
-Below is a complete list of available [`torch.dtype`](http://pytorch.org/docs/0.4.0/tensor_attributes.html#torch.torch.dtype)s (data types) and their corresponding tensor types.
+Below is a complete list of available [`torch.dtype`](https://pytorch.org/docs/0.4.0/tensor_attributes.html#torch.torch.dtype)s (data types) and their corresponding tensor types.
 
 | Data | `type torch.dtype` | Tensor types |
 |------|------------------|--------------|
@@ -205,23 +205,23 @@ Below is a complete list of available [`torch.dtype`](http://pytorch.org/docs/0.
 
 The dtype of a tensor can be access via its `dtype` attribute.
 
-### [`torch.device`](http://pytorch.org/docs/0.4.0/tensor_attributes.html#torch.torch.device)
+### [`torch.device`](https://pytorch.org/docs/0.4.0/tensor_attributes.html#torch.torch.device)
 
-A [`torch.device`](http://pytorch.org/docs/0.4.0/tensor_attributes.html#torch.torch.device) contains a device type (`'cpu'` or `'cuda'`) and optional device ordinal (id) for the device type. It can be initilized with `torch.device('{device_type}')` or `torch.device('{device_type}:{device_ordinal}')`.
+A [`torch.device`](https://pytorch.org/docs/0.4.0/tensor_attributes.html#torch.torch.device) contains a device type (`'cpu'` or `'cuda'`) and optional device ordinal (id) for the device type. It can be initilized with `torch.device('{device_type}')` or `torch.device('{device_type}:{device_ordinal}')`.
 
 If the device ordinal is not present, this represents the current device for the device type; e.g., `torch.device('cuda')` is equivalent to `torch.device('cuda:X')` where `X` is the result of `torch.cuda.current_device()`.
 
 The device of a tensor can be accessed via its `device` attribute.
 
-### [`torch.layout`](http://pytorch.org/docs/0.4.0/tensor_attributes.html#torch.torch.layout)
+### [`torch.layout`](https://pytorch.org/docs/0.4.0/tensor_attributes.html#torch.torch.layout)
 
-[`torch.layout`](http://pytorch.org/docs/0.4.0/tensor_attributes.html#torch.torch.layout) represents the data layout of a [`Tensor`](http://pytorch.org/docs/0.4.0/tensors.html). Currently `torch.strided` (dense tensors, the default) and `torch.sparse_coo` (sparse tensors with COO format) are supported.
+[`torch.layout`](https://pytorch.org/docs/0.4.0/tensor_attributes.html#torch.torch.layout) represents the data layout of a [`Tensor`](https://pytorch.org/docs/0.4.0/tensors.html). Currently `torch.strided` (dense tensors, the default) and `torch.sparse_coo` (sparse tensors with COO format) are supported.
 
 The layout of a tensor can be access via its `layout` attribute.
 
 ### Creating Tensors
 
-[Methods that create a](http://pytorch.org/docs/0.4.0/torch.html#creation-ops) [`Tensor`](http://pytorch.org/docs/0.4.0/tensors.html) now also take in `dtype`, `device`, `layout`, and `requires_grad` options to specify the desired attributes on the returned `Tensor`. For example,
+[Methods that create a](https://pytorch.org/docs/0.4.0/torch.html#creation-ops) [`Tensor`](https://pytorch.org/docs/0.4.0/tensors.html) now also take in `dtype`, `device`, `layout`, and `requires_grad` options to specify the desired attributes on the returned `Tensor`. For example,
 
 ```python
 >>> device = torch.device("cuda:1")
@@ -236,9 +236,9 @@ False
 True
 ```
 
-##### [`torch.tensor(data, ...)`](http://pytorch.org/docs/0.4.0/torch.html#torch.tensor)
+##### [`torch.tensor(data, ...)`](https://pytorch.org/docs/0.4.0/torch.html#torch.tensor)
 
-[`torch.tensor`](http://pytorch.org/docs/0.4.0/torch.html#torch.tensor) is one of the newly added [tensor creation methods](http://pytorch.org/docs/0.4.0/torch.html#creation-ops). It takes in array-like data of all kinds and copies the contained values into a new `Tensor`. As mentioned earlier, [`torch.tensor`](http://pytorch.org/docs/0.4.0/torch.html#torch.tensor) is the PyTorch equivalent of NumPy's `numpy.array`constructor. Unlike the `torch.*Tensor` methods, you can also create zero-dimensional `Tensor`s (aka scalars) this way (a single python number is treated as a Size in the `torch.*Tensor methods`). Moreover, if a `dtype` argument isn't given, it will infer the suitable `dtype` given the data. It is the recommended way to create a tensor from existing data like a Python list. For example,
+[`torch.tensor`](https://pytorch.org/docs/0.4.0/torch.html#torch.tensor) is one of the newly added [tensor creation methods](https://pytorch.org/docs/0.4.0/torch.html#creation-ops). It takes in array-like data of all kinds and copies the contained values into a new `Tensor`. As mentioned earlier, [`torch.tensor`](https://pytorch.org/docs/0.4.0/torch.html#torch.tensor) is the PyTorch equivalent of NumPy's `numpy.array`constructor. Unlike the `torch.*Tensor` methods, you can also create zero-dimensional `Tensor`s (aka scalars) this way (a single python number is treated as a Size in the `torch.*Tensor methods`). Moreover, if a `dtype` argument isn't given, it will infer the suitable `dtype` given the data. It is the recommended way to create a tensor from existing data like a Python list. For example,
 
 ```python
 >>> cuda = torch.device("cuda")
@@ -280,22 +280,22 @@ To specify the desired shape, you can either use a tuple (e.g., `torch.zeros((2,
 
 | Name | Returned `Tensor` | `torch.*_like` variant | `tensor.new_*` variant |
 |------|-----------------|----------------------|----------------------|
-| [`torch.empty`](http://pytorch.org/docs/0.4.0/torch.html#torch.empty) | unintialized memory | ✔ | ✔ |
-| [`torch.zeros`](http://pytorch.org/docs/0.4.0/torch.html#torch.zeros) | all zeros | ✔ | ✔ |
-| [`torch.ones`](http://pytorch.org/docs/0.4.0/torch.html#torch.ones) | all ones | ✔ | ✔ |
-| [`torch.full`](http://pytorch.org/docs/0.4.0/torch.html#torch.full) | filled with a given value | ✔ | ✔ |
-| [`torch.rand`](http://pytorch.org/docs/0.4.0/torch.html#torch.rand) | i.i.d. continuous Uniform[0, 1) | ✔ |
-| [`torch.randn`](http://pytorch.org/docs/0.4.0/torch.html#torch.randn) | i.i.d. `Normal(0, 1)` | ✔ |
-| [`torch.randint`](http://pytorch.org/docs/0.4.0/torch.html#torch.randint) | i.i.d. discrete Uniform in given range | ✔ |
-| [`torch.randperm`](http://pytorch.org/docs/0.4.0/torch.html#torch.randperm) | random permutation of `{0, 1, ..., n - 1}` |
-| [`torch.tensor`](http://pytorch.org/docs/0.4.0/torch.html#torch.tensor) | copied from existing data (list, NumPy ndarray, etc.) | | ✔ |
-| [`torch.from_numpy`*](http://pytorch.org/docs/0.4.0/torch.html#torch.from_numpy) | from NumPy `ndarray` (sharing storage without copying) |
-| [`torch.arange`](http://pytorch.org/docs/0.4.0/torch.html#torch.arange), [`torch.range`](http://pytorch.org/docs/0.4.0/torch.html#torch.range), and [`torch.linspace`](http://pytorch.org/docs/0.4.0/torch.html#torch.linspace) | uniformly spaced values in a given range |
-| [`torch.logspace`](http://pytorch.org/docs/0.4.0/torch.html#torch.logspace) | logarithmically spaced values in a given range |
-| [`torch.eye`](http://pytorch.org/docs/0.4.0/torch.html#torch.eye) | identity matrix |
+| [`torch.empty`](https://pytorch.org/docs/0.4.0/torch.html#torch.empty) | unintialized memory | ✔ | ✔ |
+| [`torch.zeros`](https://pytorch.org/docs/0.4.0/torch.html#torch.zeros) | all zeros | ✔ | ✔ |
+| [`torch.ones`](https://pytorch.org/docs/0.4.0/torch.html#torch.ones) | all ones | ✔ | ✔ |
+| [`torch.full`](https://pytorch.org/docs/0.4.0/torch.html#torch.full) | filled with a given value | ✔ | ✔ |
+| [`torch.rand`](https://pytorch.org/docs/0.4.0/torch.html#torch.rand) | i.i.d. continuous Uniform[0, 1) | ✔ |
+| [`torch.randn`](https://pytorch.org/docs/0.4.0/torch.html#torch.randn) | i.i.d. `Normal(0, 1)` | ✔ |
+| [`torch.randint`](https://pytorch.org/docs/0.4.0/torch.html#torch.randint) | i.i.d. discrete Uniform in given range | ✔ |
+| [`torch.randperm`](https://pytorch.org/docs/0.4.0/torch.html#torch.randperm) | random permutation of `{0, 1, ..., n - 1}` |
+| [`torch.tensor`](https://pytorch.org/docs/0.4.0/torch.html#torch.tensor) | copied from existing data (list, NumPy ndarray, etc.) | | ✔ |
+| [`torch.from_numpy`*](https://pytorch.org/docs/0.4.0/torch.html#torch.from_numpy) | from NumPy `ndarray` (sharing storage without copying) |
+| [`torch.arange`](https://pytorch.org/docs/0.4.0/torch.html#torch.arange), [`torch.range`](https://pytorch.org/docs/0.4.0/torch.html#torch.range), and [`torch.linspace`](https://pytorch.org/docs/0.4.0/torch.html#torch.linspace) | uniformly spaced values in a given range |
+| [`torch.logspace`](https://pytorch.org/docs/0.4.0/torch.html#torch.logspace) | logarithmically spaced values in a given range |
+| [`torch.eye`](https://pytorch.org/docs/0.4.0/torch.html#torch.eye) | identity matrix |
 
 
-*: [`torch.from_numpy`](http://pytorch.org/docs/0.4.0/torch.html#torch.from_numpy) only takes in a NumPy `ndarray` as its input argument.
+*: [`torch.from_numpy`](https://pytorch.org/docs/0.4.0/torch.html#torch.from_numpy) only takes in a NumPy `ndarray` as its input argument.
 
 
 ## Writing device-agnostic code
@@ -304,7 +304,7 @@ Previous versions of PyTorch made it difficult to write code that was device agn
 
 PyTorch 0.4.0 makes this easier in two ways:
 
-- The `device` attribute of a Tensor gives the [torch.device](http://pytorch.org/docs/0.4.0/tensor_attributes.html#torch.torch.device) for all Tensors (`get_device` only works for CUDA tensors)
+- The `device` attribute of a Tensor gives the [torch.device](https://pytorch.org/docs/0.4.0/tensor_attributes.html#torch.torch.device) for all Tensors (`get_device` only works for CUDA tensors)
 - The `to` method of `Tensors` and `Modules` can be used to easily move objects to different devices (instead of having to call `cpu()` or `cuda()` based on the context)
 
 We recommend the following pattern:
@@ -374,6 +374,6 @@ To get a flavor of the overall recommended changes in 0.4.0, let's look at a qui
           ...
   ```
 
-Thank you for reading! Please refer to our [documentation](http://pytorch.org/docs/0.4.0/index.html) and [release notes](https://github.com/pytorch/pytorch/releases/tag/v0.4.0) for more details.
+Thank you for reading! Please refer to our [documentation](https://pytorch.org/docs/0.4.0/index.html) and [release notes](https://github.com/pytorch/pytorch/releases/tag/v0.4.0) for more details.
 
 Happy PyTorch-ing!
