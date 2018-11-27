@@ -9,14 +9,14 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>torch.distributed &mdash; PyTorch master documentation</title>
+  <title>torch._jit_internal &mdash; PyTorch master documentation</title>
   
 
   
   
   
   
-    <link rel="canonical" href="https://pytorch.org/docs/stable/_modules/torch/distributed.html"/>
+    <link rel="canonical" href="https://pytorch.org/docs/stable/_modules/torch/_jit_internal.html"/>
   
 
   
@@ -132,7 +132,7 @@
 
           
 <div>
-  <a style="color:#F05732" href="https://pytorch.org/docs/stable/_modules/torch/distributed.html">
+  <a style="color:#F05732" href="https://pytorch.org/docs/stable/_modules/torch/_jit_internal.html">
     You are viewing unstable developer preview docs.
     Click here to view docs for latest stable release.
   </a>
@@ -233,7 +233,7 @@
         
           <li><a href="../torch.html">torch</a> &gt;</li>
         
-      <li>torch.distributed</li>
+      <li>torch._jit_internal</li>
     
     
       <li class="pytorch-breadcrumbs-aside">
@@ -259,24 +259,158 @@
             <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
              <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
               
-  <h1>Source code for torch.distributed</h1><div class="highlight"><pre>
-<span></span><span class="kn">import</span> <span class="nn">torch</span>
+  <h1>Source code for torch._jit_internal</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">The weak_script annotation needs to be here instead of inside torch/jit/ so it</span>
+<span class="sd">can be used in other places in torch/ (namely torch.nn) without running into</span>
+<span class="sd">circular dependency problems</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">import</span> <span class="nn">weakref</span>
+<span class="kn">import</span> <span class="nn">inspect</span>
+<span class="k">try</span><span class="p">:</span>
+    <span class="kn">import</span> <span class="nn">builtins</span>  <span class="c1"># PY3</span>
+<span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+    <span class="kn">import</span> <span class="nn">__builtin__</span> <span class="k">as</span> <span class="nn">builtins</span>  <span class="c1"># PY2</span>
+
+<span class="c1"># Tracks standalone weak script functions</span>
+<span class="n">_compiled_weak_fns</span> <span class="o">=</span> <span class="n">weakref</span><span class="o">.</span><span class="n">WeakKeyDictionary</span><span class="p">()</span>
+
+<span class="c1"># Tracks which methods should be converted to strong methods</span>
+<span class="n">_weak_script_methods</span> <span class="o">=</span> <span class="n">weakref</span><span class="o">.</span><span class="n">WeakKeyDictionary</span><span class="p">()</span>
+
+<span class="c1"># Converted modules and their corresponding WeakScriptModuleProxy objects</span>
+<span class="n">_weak_modules</span> <span class="o">=</span> <span class="n">weakref</span><span class="o">.</span><span class="n">WeakKeyDictionary</span><span class="p">()</span>
+
+<span class="c1"># Types that have been declared as weak modules</span>
+<span class="n">_weak_types</span> <span class="o">=</span> <span class="n">weakref</span><span class="o">.</span><span class="n">WeakKeyDictionary</span><span class="p">()</span>
+
+<span class="c1"># Wrapper functions that can call either of 2 functions depending on a boolean</span>
+<span class="c1"># argument</span>
+<span class="n">_boolean_dispatched</span> <span class="o">=</span> <span class="n">weakref</span><span class="o">.</span><span class="n">WeakKeyDictionary</span><span class="p">()</span>
+
+<span class="n">COMPILATION_PENDING</span> <span class="o">=</span> <span class="nb">object</span><span class="p">()</span>
+<span class="n">COMPILED</span> <span class="o">=</span> <span class="nb">object</span><span class="p">()</span>
 
 
-<span class="k">def</span> <span class="nf">is_available</span><span class="p">():</span>
-    <span class="k">return</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="p">,</span> <span class="s2">&quot;_c10d_init&quot;</span><span class="p">)</span>
+<span class="k">def</span> <span class="nf">createResolutionCallback</span><span class="p">(</span><span class="n">frames_up</span><span class="o">=</span><span class="mi">0</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Creates a function which, given a string variable name,</span>
+<span class="sd">    returns the value of the variable in the scope of the caller of</span>
+<span class="sd">    the function which called createResolutionCallback (by default).</span>
+
+<span class="sd">    This is used to enable access in-scope Python variables inside</span>
+<span class="sd">    TorchScript fragments.</span>
+
+<span class="sd">    frames_up is number of additional frames to go up on the stack.</span>
+<span class="sd">    The default value is 0, which correspond to the frame of the caller</span>
+<span class="sd">    of createResolutionCallback. Also for example, if frames_up is set</span>
+<span class="sd">    to 1, then the frame of the caller&#39;s caller of createResolutionCallback</span>
+<span class="sd">    will be taken.</span>
+
+<span class="sd">    For example, the following program prints 2::</span>
+
+<span class="sd">        def bar():</span>
+<span class="sd">            cb = createResolutionCallback(1)</span>
+<span class="sd">            print(cb(&quot;foo&quot;))</span>
+
+<span class="sd">        def baz():</span>
+<span class="sd">            foo = 2</span>
+<span class="sd">            bar()</span>
+
+<span class="sd">        baz()</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">frame</span> <span class="o">=</span> <span class="n">inspect</span><span class="o">.</span><span class="n">currentframe</span><span class="p">()</span>
+    <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="k">while</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">frames_up</span> <span class="o">+</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="n">frame</span> <span class="o">=</span> <span class="n">frame</span><span class="o">.</span><span class="n">f_back</span>
+        <span class="n">i</span> <span class="o">+=</span> <span class="mi">1</span>
+
+    <span class="n">f_locals</span> <span class="o">=</span> <span class="n">frame</span><span class="o">.</span><span class="n">f_locals</span>
+    <span class="n">f_globals</span> <span class="o">=</span> <span class="n">frame</span><span class="o">.</span><span class="n">f_globals</span>
+
+    <span class="k">def</span> <span class="nf">env</span><span class="p">(</span><span class="n">key</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">f_locals</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">f_locals</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
+        <span class="k">elif</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">f_globals</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">f_globals</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
+        <span class="k">elif</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">builtins</span><span class="p">,</span> <span class="n">key</span><span class="p">):</span>
+            <span class="k">return</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">builtins</span><span class="p">,</span> <span class="n">key</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
+
+    <span class="k">return</span> <span class="n">env</span>
 
 
-<span class="k">if</span> <span class="n">is_available</span><span class="p">()</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">_c10d_init</span><span class="p">():</span>
-    <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Failed to initialize PyTorch distributed support&quot;</span><span class="p">)</span>
+<span class="k">def</span> <span class="nf">weak_script</span><span class="p">(</span><span class="n">fn</span><span class="p">,</span> <span class="n">_frames_up</span><span class="o">=</span><span class="mi">0</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Marks a function as a weak script function. When used in a script function</span>
+<span class="sd">    or ScriptModule, the weak script function will be lazily compiled and</span>
+<span class="sd">    inlined in the graph. When not used in a script function, the weak script</span>
+<span class="sd">    annotation has no effect.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">_compiled_weak_fns</span><span class="p">[</span><span class="n">fn</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">&quot;status&quot;</span><span class="p">:</span> <span class="n">COMPILATION_PENDING</span><span class="p">,</span>
+        <span class="s2">&quot;compiled_fn&quot;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="s2">&quot;rcb&quot;</span><span class="p">:</span> <span class="n">createResolutionCallback</span><span class="p">(</span><span class="n">_frames_up</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="n">fn</span>
 
 
-<span class="k">if</span> <span class="n">is_available</span><span class="p">():</span>
-    <span class="kn">from</span> <span class="nn">.distributed_c10d</span> <span class="k">import</span> <span class="o">*</span>
-    <span class="c1"># Variables prefixed with underscore are not auto imported</span>
-    <span class="c1"># See the comment in `distributed_c10d.py` above `_backend` on why we expose</span>
-    <span class="c1"># this.</span>
-    <span class="kn">from</span> <span class="nn">.distributed_c10d</span> <span class="k">import</span> <span class="n">_backend</span>
+<span class="k">def</span> <span class="nf">weak_module</span><span class="p">(</span><span class="bp">cls</span><span class="p">):</span>
+    <span class="n">_weak_types</span><span class="p">[</span><span class="bp">cls</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">&quot;method_stubs&quot;</span><span class="p">:</span> <span class="kc">None</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="bp">cls</span>
+
+
+<span class="k">def</span> <span class="nf">weak_script_method</span><span class="p">(</span><span class="n">fn</span><span class="p">):</span>
+    <span class="n">_weak_script_methods</span><span class="p">[</span><span class="n">fn</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">&quot;rcb&quot;</span><span class="p">:</span> <span class="n">createResolutionCallback</span><span class="p">(</span><span class="n">frames_up</span><span class="o">=</span><span class="mi">2</span><span class="p">),</span>
+        <span class="s2">&quot;original_method&quot;</span><span class="p">:</span> <span class="n">fn</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="n">fn</span>
+
+
+<span class="k">def</span> <span class="nf">boolean_dispatch</span><span class="p">(</span><span class="n">arg_name</span><span class="p">,</span> <span class="n">arg_index</span><span class="p">,</span> <span class="n">default</span><span class="p">,</span> <span class="n">if_true</span><span class="p">,</span> <span class="n">if_false</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Dispatches to either of 2 weak script functions based on a boolean argument.</span>
+<span class="sd">    In Torch Script, the boolean argument must be constant so that the correct</span>
+<span class="sd">    function to use can be determined at compile time.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">_compiled_weak_fns</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">if_true</span><span class="p">)</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">_compiled_weak_fns</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">if_false</span><span class="p">)</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;both functions must be weak script&quot;</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">fn</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="n">dispatch_flag</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="k">if</span> <span class="n">arg_name</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+            <span class="n">dispatch_flag</span> <span class="o">=</span> <span class="n">kwargs</span><span class="p">[</span><span class="n">arg_name</span><span class="p">]</span>
+        <span class="k">elif</span> <span class="n">arg_index</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">args</span><span class="p">):</span>
+            <span class="n">dispatch_flag</span> <span class="o">=</span> <span class="n">args</span><span class="p">[</span><span class="n">arg_index</span><span class="p">]</span>
+
+        <span class="k">if</span> <span class="n">dispatch_flag</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">if_true</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">if_false</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">if_true</span><span class="o">.</span><span class="vm">__doc__</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">if_false</span><span class="o">.</span><span class="vm">__doc__</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">doc</span> <span class="o">=</span> <span class="n">if_false</span><span class="o">.</span><span class="vm">__doc__</span>
+        <span class="n">if_true</span><span class="o">.</span><span class="vm">__doc__</span> <span class="o">=</span> <span class="n">doc</span>
+    <span class="k">elif</span> <span class="n">if_false</span><span class="o">.</span><span class="vm">__doc__</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">if_true</span><span class="o">.</span><span class="vm">__doc__</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">doc</span> <span class="o">=</span> <span class="n">if_true</span><span class="o">.</span><span class="vm">__doc__</span>
+        <span class="n">if_false</span><span class="o">.</span><span class="vm">__doc__</span> <span class="o">=</span> <span class="n">doc</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;only one function can have a docstring&quot;</span><span class="p">)</span>
+    <span class="n">fn</span><span class="o">.</span><span class="vm">__doc__</span> <span class="o">=</span> <span class="n">doc</span>
+
+    <span class="n">_boolean_dispatched</span><span class="p">[</span><span class="n">fn</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">&quot;if_true&quot;</span><span class="p">:</span> <span class="n">if_true</span><span class="p">,</span>
+        <span class="s2">&quot;if_false&quot;</span><span class="p">:</span> <span class="n">if_false</span><span class="p">,</span>
+        <span class="s2">&quot;index&quot;</span><span class="p">:</span> <span class="n">arg_index</span><span class="p">,</span>
+        <span class="s2">&quot;default&quot;</span><span class="p">:</span> <span class="n">default</span><span class="p">,</span>
+        <span class="s2">&quot;arg_name&quot;</span><span class="p">:</span> <span class="n">arg_name</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="n">fn</span>
 </pre></div>
 
              </article>
