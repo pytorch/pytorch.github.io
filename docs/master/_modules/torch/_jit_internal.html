@@ -9,14 +9,14 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>torch.random &mdash; PyTorch master documentation</title>
+  <title>torch._jit_internal &mdash; PyTorch master documentation</title>
   
 
   
   
   
   
-    <link rel="canonical" href="https://pytorch.org/docs/stable/_modules/torch/random.html"/>
+    <link rel="canonical" href="https://pytorch.org/docs/stable/_modules/torch/_jit_internal.html"/>
   
 
   
@@ -132,7 +132,7 @@
 
           
 <div>
-  <a style="color:#F05732" href="https://pytorch.org/docs/stable/_modules/torch/random.html">
+  <a style="color:#F05732" href="https://pytorch.org/docs/stable/_modules/torch/_jit_internal.html">
     You are viewing unstable developer preview docs.
     Click here to view docs for latest stable release.
   </a>
@@ -233,7 +233,7 @@
         
           <li><a href="../torch.html">torch</a> &gt;</li>
         
-      <li>torch.random</li>
+      <li>torch._jit_internal</li>
     
     
       <li class="pytorch-breadcrumbs-aside">
@@ -259,118 +259,158 @@
             <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
              <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
               
-  <h1>Source code for torch.random</h1><div class="highlight"><pre>
-<span></span><span class="kn">import</span> <span class="nn">torch</span>
-<span class="kn">import</span> <span class="nn">contextlib</span>
-<span class="kn">import</span> <span class="nn">warnings</span>
+  <h1>Source code for torch._jit_internal</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">The weak_script annotation needs to be here instead of inside torch/jit/ so it</span>
+<span class="sd">can be used in other places in torch/ (namely torch.nn) without running into</span>
+<span class="sd">circular dependency problems</span>
+<span class="sd">&quot;&quot;&quot;</span>
 
-<span class="kn">from</span> <span class="nn">torch._C</span> <span class="k">import</span> <span class="n">default_generator</span>
+<span class="kn">import</span> <span class="nn">weakref</span>
+<span class="kn">import</span> <span class="nn">inspect</span>
+<span class="k">try</span><span class="p">:</span>
+    <span class="kn">import</span> <span class="nn">builtins</span>  <span class="c1"># PY3</span>
+<span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+    <span class="kn">import</span> <span class="nn">__builtin__</span> <span class="k">as</span> <span class="nn">builtins</span>  <span class="c1"># PY2</span>
 
+<span class="c1"># Tracks standalone weak script functions</span>
+<span class="n">_compiled_weak_fns</span> <span class="o">=</span> <span class="n">weakref</span><span class="o">.</span><span class="n">WeakKeyDictionary</span><span class="p">()</span>
 
-<div class="viewcode-block" id="set_rng_state"><a class="viewcode-back" href="../../torch.html#torch.set_rng_state">[docs]</a><span class="k">def</span> <span class="nf">set_rng_state</span><span class="p">(</span><span class="n">new_state</span><span class="p">):</span>
-    <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Sets the random number generator state.</span>
+<span class="c1"># Tracks which methods should be converted to strong methods</span>
+<span class="n">_weak_script_methods</span> <span class="o">=</span> <span class="n">weakref</span><span class="o">.</span><span class="n">WeakKeyDictionary</span><span class="p">()</span>
 
-<span class="sd">    Args:</span>
-<span class="sd">        new_state (torch.ByteTensor): The desired state</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">default_generator</span><span class="o">.</span><span class="n">set_state</span><span class="p">(</span><span class="n">new_state</span><span class="p">)</span></div>
+<span class="c1"># Converted modules and their corresponding WeakScriptModuleProxy objects</span>
+<span class="n">_weak_modules</span> <span class="o">=</span> <span class="n">weakref</span><span class="o">.</span><span class="n">WeakKeyDictionary</span><span class="p">()</span>
 
+<span class="c1"># Types that have been declared as weak modules</span>
+<span class="n">_weak_types</span> <span class="o">=</span> <span class="n">weakref</span><span class="o">.</span><span class="n">WeakKeyDictionary</span><span class="p">()</span>
 
-<div class="viewcode-block" id="get_rng_state"><a class="viewcode-back" href="../../torch.html#torch.get_rng_state">[docs]</a><span class="k">def</span> <span class="nf">get_rng_state</span><span class="p">():</span>
-    <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Returns the random number generator state as a `torch.ByteTensor`.&quot;&quot;&quot;</span>
-    <span class="k">return</span> <span class="n">default_generator</span><span class="o">.</span><span class="n">get_state</span><span class="p">()</span></div>
+<span class="c1"># Wrapper functions that can call either of 2 functions depending on a boolean</span>
+<span class="c1"># argument</span>
+<span class="n">_boolean_dispatched</span> <span class="o">=</span> <span class="n">weakref</span><span class="o">.</span><span class="n">WeakKeyDictionary</span><span class="p">()</span>
 
-
-<div class="viewcode-block" id="manual_seed"><a class="viewcode-back" href="../../torch.html#torch.manual_seed">[docs]</a><span class="k">def</span> <span class="nf">manual_seed</span><span class="p">(</span><span class="n">seed</span><span class="p">):</span>
-    <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Sets the seed for generating random numbers. Returns a</span>
-<span class="sd">    `torch._C.Generator` object.</span>
-
-<span class="sd">    Args:</span>
-<span class="sd">        seed (int): The desired seed.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">seed</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">seed</span><span class="p">)</span>
-    <span class="kn">import</span> <span class="nn">torch.cuda</span>
-
-    <span class="k">if</span> <span class="ow">not</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">_in_bad_fork</span><span class="p">:</span>
-        <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">manual_seed_all</span><span class="p">(</span><span class="n">seed</span><span class="p">)</span>
-
-    <span class="k">return</span> <span class="n">default_generator</span><span class="o">.</span><span class="n">manual_seed</span><span class="p">(</span><span class="n">seed</span><span class="p">)</span></div>
+<span class="n">COMPILATION_PENDING</span> <span class="o">=</span> <span class="nb">object</span><span class="p">()</span>
+<span class="n">COMPILED</span> <span class="o">=</span> <span class="nb">object</span><span class="p">()</span>
 
 
-<div class="viewcode-block" id="initial_seed"><a class="viewcode-back" href="../../torch.html#torch.initial_seed">[docs]</a><span class="k">def</span> <span class="nf">initial_seed</span><span class="p">():</span>
-    <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Returns the initial seed for generating random numbers as a</span>
-<span class="sd">    Python `long`.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">return</span> <span class="n">default_generator</span><span class="o">.</span><span class="n">initial_seed</span><span class="p">()</span></div>
-
-
-<span class="n">_fork_rng_warned_already</span> <span class="o">=</span> <span class="kc">False</span>
-
-
-<span class="nd">@contextlib</span><span class="o">.</span><span class="n">contextmanager</span>
-<span class="k">def</span> <span class="nf">fork_rng</span><span class="p">(</span><span class="n">devices</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">enabled</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">_caller</span><span class="o">=</span><span class="s2">&quot;fork_rng&quot;</span><span class="p">,</span> <span class="n">_devices_kw</span><span class="o">=</span><span class="s2">&quot;devices&quot;</span><span class="p">):</span>
+<span class="k">def</span> <span class="nf">createResolutionCallback</span><span class="p">(</span><span class="n">frames_up</span><span class="o">=</span><span class="mi">0</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Forks the RNG, so that when you return, the RNG is reset</span>
-<span class="sd">    to the state that it was previously in.</span>
+<span class="sd">    Creates a function which, given a string variable name,</span>
+<span class="sd">    returns the value of the variable in the scope of the caller of</span>
+<span class="sd">    the function which called createResolutionCallback (by default).</span>
 
-<span class="sd">    Arguments:</span>
-<span class="sd">        devices (iterable of CUDA IDs): CUDA devices for which to fork</span>
-<span class="sd">            the RNG.  CPU RNG state is always forked.  By default, :meth:`fork_rng` operates</span>
-<span class="sd">            on all devices, but will emit a warning if your machine has a lot</span>
-<span class="sd">            of devices, since this function will run very slowly in that case.</span>
-<span class="sd">            If you explicitly specify devices, this warning will be supressed</span>
-<span class="sd">        enabled (bool): if ``False``, the RNG is not forked.  This is a convenience</span>
-<span class="sd">            argument for easily disabling the context manager without having</span>
-<span class="sd">            to reindent your Python code.</span>
+<span class="sd">    This is used to enable access in-scope Python variables inside</span>
+<span class="sd">    TorchScript fragments.</span>
+
+<span class="sd">    frames_up is number of additional frames to go up on the stack.</span>
+<span class="sd">    The default value is 0, which correspond to the frame of the caller</span>
+<span class="sd">    of createResolutionCallback. Also for example, if frames_up is set</span>
+<span class="sd">    to 1, then the frame of the caller&#39;s caller of createResolutionCallback</span>
+<span class="sd">    will be taken.</span>
+
+<span class="sd">    For example, the following program prints 2::</span>
+
+<span class="sd">        def bar():</span>
+<span class="sd">            cb = createResolutionCallback(1)</span>
+<span class="sd">            print(cb(&quot;foo&quot;))</span>
+
+<span class="sd">        def baz():</span>
+<span class="sd">            foo = 2</span>
+<span class="sd">            bar()</span>
+
+<span class="sd">        baz()</span>
 <span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">frame</span> <span class="o">=</span> <span class="n">inspect</span><span class="o">.</span><span class="n">currentframe</span><span class="p">()</span>
+    <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="k">while</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">frames_up</span> <span class="o">+</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="n">frame</span> <span class="o">=</span> <span class="n">frame</span><span class="o">.</span><span class="n">f_back</span>
+        <span class="n">i</span> <span class="o">+=</span> <span class="mi">1</span>
 
-    <span class="kn">import</span> <span class="nn">torch.cuda</span>
-    <span class="k">global</span> <span class="n">_fork_rng_warned_already</span>
+    <span class="n">f_locals</span> <span class="o">=</span> <span class="n">frame</span><span class="o">.</span><span class="n">f_locals</span>
+    <span class="n">f_globals</span> <span class="o">=</span> <span class="n">frame</span><span class="o">.</span><span class="n">f_globals</span>
 
-    <span class="c1"># Internal arguments:</span>
-    <span class="c1">#   _caller: the function which called fork_rng, which the user used</span>
-    <span class="c1">#   _devices_kw: the devices keyword of _caller</span>
+    <span class="k">def</span> <span class="nf">env</span><span class="p">(</span><span class="n">key</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">f_locals</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">f_locals</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
+        <span class="k">elif</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">f_globals</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">f_globals</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
+        <span class="k">elif</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">builtins</span><span class="p">,</span> <span class="n">key</span><span class="p">):</span>
+            <span class="k">return</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">builtins</span><span class="p">,</span> <span class="n">key</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
 
-    <span class="k">if</span> <span class="ow">not</span> <span class="n">enabled</span><span class="p">:</span>
-        <span class="k">yield</span>
-        <span class="k">return</span>
+    <span class="k">return</span> <span class="n">env</span>
 
-    <span class="k">if</span> <span class="n">devices</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">num_devices</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">device_count</span><span class="p">()</span>
-        <span class="k">if</span> <span class="n">num_devices</span> <span class="o">&gt;</span> <span class="mi">1</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">_fork_rng_warned_already</span><span class="p">:</span>
-            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
-                <span class="p">(</span><span class="s2">&quot;CUDA reports that you have </span><span class="si">{num_devices}</span><span class="s2"> available devices, and you &quot;</span>
-                 <span class="s2">&quot;have used </span><span class="si">{caller}</span><span class="s2"> without explicitly specifying which devices are being used. &quot;</span>
-                 <span class="s2">&quot;For safety, we initialize *every* CUDA device by default, which &quot;</span>
-                 <span class="s2">&quot;can be quite slow if you have a lot of GPUs.  If you know that you are only &quot;</span>
-                 <span class="s2">&quot;making use of a few CUDA devices, set the environment variable CUDA_VISIBLE_DEVICES &quot;</span>
-                 <span class="s2">&quot;or the &#39;</span><span class="si">{devices_kw}</span><span class="s2">&#39; keyword argument of </span><span class="si">{caller}</span><span class="s2"> with the set of devices &quot;</span>
-                 <span class="s2">&quot;you are actually using.  For example, if you are using CPU only, &quot;</span>
-                 <span class="s2">&quot;set CUDA_VISIBLE_DEVICES= or devices=[]; if you are using &quot;</span>
-                 <span class="s2">&quot;GPU 0 only, set CUDA_VISIBLE_DEVICES=0 or devices=[0].  To initialize &quot;</span>
-                 <span class="s2">&quot;all devices and suppress this warning, set the &#39;</span><span class="si">{devices_kw}</span><span class="s2">&#39; keyword argument &quot;</span>
-                 <span class="s2">&quot;to `range(torch.cuda.device_count())`.&quot;</span>
-                 <span class="p">)</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">num_devices</span><span class="o">=</span><span class="n">num_devices</span><span class="p">,</span> <span class="n">caller</span><span class="o">=</span><span class="n">_caller</span><span class="p">,</span> <span class="n">devices_kw</span><span class="o">=</span><span class="n">_devices_kw</span><span class="p">))</span>
-            <span class="n">_fork_rng_warned_already</span> <span class="o">=</span> <span class="kc">True</span>
-        <span class="n">devices</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="n">num_devices</span><span class="p">))</span>
+
+<span class="k">def</span> <span class="nf">weak_script</span><span class="p">(</span><span class="n">fn</span><span class="p">,</span> <span class="n">_frames_up</span><span class="o">=</span><span class="mi">0</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Marks a function as a weak script function. When used in a script function</span>
+<span class="sd">    or ScriptModule, the weak script function will be lazily compiled and</span>
+<span class="sd">    inlined in the graph. When not used in a script function, the weak script</span>
+<span class="sd">    annotation has no effect.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">_compiled_weak_fns</span><span class="p">[</span><span class="n">fn</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">&quot;status&quot;</span><span class="p">:</span> <span class="n">COMPILATION_PENDING</span><span class="p">,</span>
+        <span class="s2">&quot;compiled_fn&quot;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="s2">&quot;rcb&quot;</span><span class="p">:</span> <span class="n">createResolutionCallback</span><span class="p">(</span><span class="n">_frames_up</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="n">fn</span>
+
+
+<span class="k">def</span> <span class="nf">weak_module</span><span class="p">(</span><span class="bp">cls</span><span class="p">):</span>
+    <span class="n">_weak_types</span><span class="p">[</span><span class="bp">cls</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">&quot;method_stubs&quot;</span><span class="p">:</span> <span class="kc">None</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="bp">cls</span>
+
+
+<span class="k">def</span> <span class="nf">weak_script_method</span><span class="p">(</span><span class="n">fn</span><span class="p">):</span>
+    <span class="n">_weak_script_methods</span><span class="p">[</span><span class="n">fn</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">&quot;rcb&quot;</span><span class="p">:</span> <span class="n">createResolutionCallback</span><span class="p">(</span><span class="n">frames_up</span><span class="o">=</span><span class="mi">2</span><span class="p">),</span>
+        <span class="s2">&quot;original_method&quot;</span><span class="p">:</span> <span class="n">fn</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="n">fn</span>
+
+
+<span class="k">def</span> <span class="nf">boolean_dispatch</span><span class="p">(</span><span class="n">arg_name</span><span class="p">,</span> <span class="n">arg_index</span><span class="p">,</span> <span class="n">default</span><span class="p">,</span> <span class="n">if_true</span><span class="p">,</span> <span class="n">if_false</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Dispatches to either of 2 weak script functions based on a boolean argument.</span>
+<span class="sd">    In Torch Script, the boolean argument must be constant so that the correct</span>
+<span class="sd">    function to use can be determined at compile time.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">_compiled_weak_fns</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">if_true</span><span class="p">)</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">_compiled_weak_fns</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">if_false</span><span class="p">)</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;both functions must be weak script&quot;</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">fn</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="n">dispatch_flag</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="k">if</span> <span class="n">arg_name</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+            <span class="n">dispatch_flag</span> <span class="o">=</span> <span class="n">kwargs</span><span class="p">[</span><span class="n">arg_name</span><span class="p">]</span>
+        <span class="k">elif</span> <span class="n">arg_index</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">args</span><span class="p">):</span>
+            <span class="n">dispatch_flag</span> <span class="o">=</span> <span class="n">args</span><span class="p">[</span><span class="n">arg_index</span><span class="p">]</span>
+
+        <span class="k">if</span> <span class="n">dispatch_flag</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">if_true</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">if_false</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">if_true</span><span class="o">.</span><span class="vm">__doc__</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">if_false</span><span class="o">.</span><span class="vm">__doc__</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">doc</span> <span class="o">=</span> <span class="n">if_false</span><span class="o">.</span><span class="vm">__doc__</span>
+        <span class="n">if_true</span><span class="o">.</span><span class="vm">__doc__</span> <span class="o">=</span> <span class="n">doc</span>
+    <span class="k">elif</span> <span class="n">if_false</span><span class="o">.</span><span class="vm">__doc__</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">if_true</span><span class="o">.</span><span class="vm">__doc__</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">doc</span> <span class="o">=</span> <span class="n">if_true</span><span class="o">.</span><span class="vm">__doc__</span>
+        <span class="n">if_false</span><span class="o">.</span><span class="vm">__doc__</span> <span class="o">=</span> <span class="n">doc</span>
     <span class="k">else</span><span class="p">:</span>
-        <span class="c1"># Protect against user passing us a generator; we need to traverse this</span>
-        <span class="c1"># multiple times but a generator will be exhausted upon first traversal</span>
-        <span class="n">devices</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">devices</span><span class="p">)</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;only one function can have a docstring&quot;</span><span class="p">)</span>
+    <span class="n">fn</span><span class="o">.</span><span class="vm">__doc__</span> <span class="o">=</span> <span class="n">doc</span>
 
-    <span class="n">cpu_rng_state</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">get_rng_state</span><span class="p">()</span>
-    <span class="n">gpu_rng_states</span> <span class="o">=</span> <span class="p">[]</span>
-    <span class="k">for</span> <span class="n">device</span> <span class="ow">in</span> <span class="n">devices</span><span class="p">:</span>
-        <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="n">device</span><span class="p">):</span>
-            <span class="n">gpu_rng_states</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">get_rng_state</span><span class="p">())</span>
-
-    <span class="k">try</span><span class="p">:</span>
-        <span class="k">yield</span>
-    <span class="k">finally</span><span class="p">:</span>
-        <span class="n">torch</span><span class="o">.</span><span class="n">set_rng_state</span><span class="p">(</span><span class="n">cpu_rng_state</span><span class="p">)</span>
-        <span class="k">for</span> <span class="n">device</span><span class="p">,</span> <span class="n">gpu_rng_state</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">devices</span><span class="p">,</span> <span class="n">gpu_rng_states</span><span class="p">):</span>
-            <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="n">device</span><span class="p">):</span>
-                <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">set_rng_state</span><span class="p">(</span><span class="n">gpu_rng_state</span><span class="p">)</span>
+    <span class="n">_boolean_dispatched</span><span class="p">[</span><span class="n">fn</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">&quot;if_true&quot;</span><span class="p">:</span> <span class="n">if_true</span><span class="p">,</span>
+        <span class="s2">&quot;if_false&quot;</span><span class="p">:</span> <span class="n">if_false</span><span class="p">,</span>
+        <span class="s2">&quot;index&quot;</span><span class="p">:</span> <span class="n">arg_index</span><span class="p">,</span>
+        <span class="s2">&quot;default&quot;</span><span class="p">:</span> <span class="n">default</span><span class="p">,</span>
+        <span class="s2">&quot;arg_name&quot;</span><span class="p">:</span> <span class="n">arg_name</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="n">fn</span>
 </pre></div>
 
              </article>
