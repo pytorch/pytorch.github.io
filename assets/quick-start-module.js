@@ -96,9 +96,6 @@ function selectedOption(option, selection, category) {
         } else {
           $(elements[i]).removeClass("selected");
         }
-        $(document.getElementsByClassName("ptbuild")[0].children["stable"]).removeClass("selected");
-        $(document.getElementsByClassName("ptbuild")[0].children["preview"]).addClass("selected");
-        opts["ptbuild"] = "preview";
       }
     }
   } else if (category === "language") {
@@ -115,9 +112,6 @@ function selectedOption(option, selection, category) {
         } else {
           $(elements[i]).removeClass("selected");
         }
-        $(document.getElementsByClassName("ptbuild")[0].children["stable"]).removeClass("selected");
-        $(document.getElementsByClassName("ptbuild")[0].children["preview"]).addClass("selected");
-        opts["ptbuild"] = "preview";
       }
     }
   }
