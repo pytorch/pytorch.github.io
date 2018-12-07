@@ -145,10 +145,10 @@ conda install pytorch torchvision -c pytorch
 conda install pytorch torchvision cuda80 -c pytorch
 ```
 
-#### CUDA 9.2
+#### CUDA 10.0
 
 ```bash
-conda install pytorch torchvision cuda92 -c pytorch
+conda install pytorch torchvision cuda100 -c pytorch
 ```
 
 ### pip
@@ -159,28 +159,28 @@ To install PyTorch via pip, and do not have a [CUDA-capable](https://developer.n
 
 ```bash
 # Python 2.7
-pip install http://download.pytorch.org/whl/cpu/torch-0.4.1-cp27-cp27mu-linux_x86_64.whl
+pip install http://download.pytorch.org/whl/cpu/torch-1.0.0-cp27-cp27mu-linux_x86_64.whl
 pip install torchvision
 
 # if the above command does not work, then you have python 2.7 UCS2, use this command
-pip install http://download.pytorch.org/whl/cpu/torch-0.4.1-cp27-cp27m-linux_x86_64.whl
+pip install http://download.pytorch.org/whl/cpu/torch-1.0.0-cp27-cp27m-linux_x86_64.whl
 ```
 
 ```bash
 # Python 3.5
-pip3 install http://download.pytorch.org/whl/cpu/torch-0.4.1-cp35-cp35m-linux_x86_64.whl
+pip3 install http://download.pytorch.org/whl/cpu/torch-1.0.0-cp35-cp35m-linux_x86_64.whl
 pip3 install torchvision
 ```
 
 ```bash
 # Python 3.6
-pip3 install http://download.pytorch.org/whl/cpu/torch-0.4.1-cp36-cp36m-linux_x86_64.whl
+pip3 install http://download.pytorch.org/whl/cpu/torch-1.0.0-cp36-cp36m-linux_x86_64.whl
 pip3 install torchvision
 ```
 
 ```bash
 # Python 3.7
-pip3 install http://download.pytorch.org/whl/cpu/torch-0.4.1.post2-cp37-cp37m-linux_x86_64.whl
+pip3 install http://download.pytorch.org/whl/cpu/torch-1.0.0.post2-cp37-cp37m-linux_x86_64.whl
 pip3 install torchvision
 ```
 
@@ -203,57 +203,57 @@ pip install torch torchvision
 
 ```bash
 # Python 2.7
-pip install http://download.pytorch.org/whl/cu80/torch-0.4.1-cp27-cp27mu-linux_x86_64.whl
+pip install http://download.pytorch.org/whl/cu80/torch-1.0.0-cp27-cp27mu-linux_x86_64.whl
 pip install torchvision
 
 # if the above command does not work, then you have python 2.7 UCS2, use this command
-pip install http://download.pytorch.org/whl/cu80/torch-0.4.1-cp27-cp27m-linux_x86_64.whl
+pip install http://download.pytorch.org/whl/cu80/torch-1.0.0-cp27-cp27m-linux_x86_64.whl
 ```
 
 ```bash
 # Python 3.5
-pip3 install http://download.pytorch.org/whl/cu80/torch-0.4.1-cp35-cp35m-linux_x86_64.whl
+pip3 install http://download.pytorch.org/whl/cu80/torch-1.0.0-cp35-cp35m-linux_x86_64.whl
 pip3 install torchvision
 ```
 
 ```bash
 # Python 3.6
-pip3 install http://download.pytorch.org/whl/cu80/torch-0.4.1-cp36-cp36m-linux_x86_64.whl
+pip3 install http://download.pytorch.org/whl/cu80/torch-1.0.0-cp36-cp36m-linux_x86_64.whl
 pip3 install torchvision
 ```
 
 ```bash
 # Python 3.7
-pip3 install http://download.pytorch.org/whl/cu80/torch-0.4.1.post2-cp37-cp37m-linux_x86_64.whl
+pip3 install http://download.pytorch.org/whl/cu80/torch-1.0.0.post2-cp37-cp37m-linux_x86_64.whl
 pip3 install torchvision
 ```
 
-#### CUDA 9.2
+#### CUDA 10.0
 
 ```bash
 # Python 2.7
-pip install http://download.pytorch.org/whl/cu92/torch-0.4.1-cp27-cp27mu-linux_x86_64.whl
+pip install http://download.pytorch.org/whl/cu100/torch-1.0.0-cp27-cp27mu-linux_x86_64.whl
 pip install torchvision
 
 # if the above command does not work, then you have python 2.7 UCS2, use this command
-pip install http://download.pytorch.org/whl/cu80/torch-0.4.1-cp27-cp27m-linux_x86_64.whl
+pip install http://download.pytorch.org/whl/cu80/torch-1.0.0-cp27-cp27m-linux_x86_64.whl
 ```
 
 ```bash
 # Python 3.5
-pip3 install http://download.pytorch.org/whl/cu92/torch-0.4.1-cp35-cp35m-linux_x86_64.whl
+pip3 install http://download.pytorch.org/whl/cu100/torch-1.0.0-cp35-cp35m-linux_x86_64.whl
 pip3 install torchvision
 ```
 
 ```bash
 # Python 3.6
-pip3 install http://download.pytorch.org/whl/cu92/torch-0.4.1-cp36-cp36m-linux_x86_64.whl
+pip3 install http://download.pytorch.org/whl/cu100/torch-1.0.0-cp36-cp36m-linux_x86_64.whl
 pip3 install torchvision
 ```
 
 ```bash
 # Python 3.7
-pip3 install http://download.pytorch.org/whl/cu92/torch-0.4.1.post2-cp37-cp37m-linux_x86_64.whl
+pip3 install http://download.pytorch.org/whl/cu100/torch-1.0.0.post2-cp37-cp37m-linux_x86_64.whl
 pip3 install torchvision
 ```
 
