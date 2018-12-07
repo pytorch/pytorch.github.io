@@ -368,7 +368,7 @@ function commandMessage(key) {
     "stable,pip,linux,cuda9.0,python2.7": "pip install torch torchvision",
 
     "stable,pip,linux,cuda10.0,python2.7":
-      "pip install http://download.pytorch.org/whl/cu92/torch-1.0.0-cp27-cp27mu-linux_x86_64.whl<br/>pip install torchvision<br/><br/># if the above command does not work, then you have python 2.7 UCS2, use this command<br/>pip install http://download.pytorch.org/whl/cu92/torch-1.0.0-cp27-cp27m-linux_x86_64.whl",
+      "pip install http://download.pytorch.org/whl/cu100/torch-1.0.0-cp27-cp27mu-linux_x86_64.whl<br/>pip install torchvision<br/><br/># if the above command does not work, then you have python 2.7 UCS2, use this command<br/>pip install http://download.pytorch.org/whl/cu100/torch-1.0.0-cp27-cp27m-linux_x86_64.whl",
 
     "stable,pip,linux,cudanone,python3.5":
       "pip3 install http://download.pytorch.org/whl/cpu/torch-1.0.0-cp35-cp35m-linux_x86_64.whl<br/>pip3 install torchvision",
@@ -379,7 +379,7 @@ function commandMessage(key) {
     "stable,pip,linux,cuda9.0,python3.5": "pip3 install torch torchvision",
 
     "stable,pip,linux,cuda10.0,python3.5":
-      "pip3 install http://download.pytorch.org/whl/cu92/torch-1.0.0-cp35-cp35m-linux_x86_64.whl<br/>pip3 install torchvision",
+      "pip3 install http://download.pytorch.org/whl/cu100/torch-1.0.0-cp35-cp35m-linux_x86_64.whl<br/>pip3 install torchvision",
 
     "stable,pip,linux,cudanone,python3.6":
       "pip3 install http://download.pytorch.org/whl/cpu/torch-1.0.0-cp36-cp36m-linux_x86_64.whl<br/>pip3 install torchvision",
@@ -390,7 +390,7 @@ function commandMessage(key) {
     "stable,pip,linux,cuda9.0,python3.6": "pip3 install torch torchvision",
 
     "stable,pip,linux,cuda10.0,python3.6":
-      "pip3 install http://download.pytorch.org/whl/cu92/torch-1.0.0-cp36-cp36m-linux_x86_64.whl<br/>pip3 install torchvision",
+      "pip3 install http://download.pytorch.org/whl/cu100/torch-1.0.0-cp36-cp36m-linux_x86_64.whl<br/>pip3 install torchvision",
 
     "stable,pip,linux,cudanone,python3.7":
       "pip3 install http://download.pytorch.org/whl/cpu/torch-1.0.0.post2-cp37-cp37m-linux_x86_64.whl<br/>pip3 install torchvision",
@@ -401,7 +401,7 @@ function commandMessage(key) {
     "stable,pip,linux,cuda9.0,python3.7": "pip3 install torch torchvision",
 
     "stable,pip,linux,cuda10.0,python3.7":
-      "pip3 install http://download.pytorch.org/whl/cu92/torch-1.0.0.post2-cp37-cp37m-linux_x86_64.whl<br/>pip3 install torchvision",
+      "pip3 install http://download.pytorch.org/whl/cu100/torch-1.0.0.post2-cp37-cp37m-linux_x86_64.whl<br/>pip3 install torchvision",
 
     "stable,pip,windows,cudanone,python2.7":
       "# PyTorch does not support Python 2.7 on Windows. Please install with Python 3.",
@@ -425,7 +425,7 @@ function commandMessage(key) {
       "pip3 install http://download.pytorch.org/whl/cu90/torch-1.0.0-cp35-cp35m-win_amd64.whl<br/>pip3 install torchvision",
 
     "stable,pip,windows,cuda10.0,python3.5":
-      "pip3 install http://download.pytorch.org/whl/cu92/torch-1.0.0-cp35-cp35m-win_amd64.whl<br/>pip3 install torchvision",
+      "pip3 install http://download.pytorch.org/whl/cu100/torch-1.0.0-cp35-cp35m-win_amd64.whl<br/>pip3 install torchvision",
 
     "stable,pip,windows,cudanone,python3.6":
       "pip3 install http://download.pytorch.org/whl/cpu/torch-1.0.0-cp36-cp36m-win_amd64.whl<br/>pip3 install torchvision",
@@ -437,7 +437,7 @@ function commandMessage(key) {
       "pip3 install http://download.pytorch.org/whl/cu90/torch-1.0.0-cp36-cp36m-win_amd64.whl<br/>pip3 install torchvision",
 
     "stable,pip,windows,cuda10.0,python3.6":
-      "pip3 install http://download.pytorch.org/whl/cu92/torch-1.0.0-cp36-cp36m-win_amd64.whl<br/>pip3 install torchvision",
+      "pip3 install http://download.pytorch.org/whl/cu100/torch-1.0.0-cp36-cp36m-win_amd64.whl<br/>pip3 install torchvision",
 
     "stable,pip,windows,cudanone,python3.7":
       "pip3 install http://download.pytorch.org/whl/cpu/torch-1.0.0-cp37-cp37m-win_amd64.whl<br/>pip3 install torchvision",
@@ -449,7 +449,7 @@ function commandMessage(key) {
       "pip3 install http://download.pytorch.org/whl/cu90/torch-1.0.0-cp37-cp37m-win_amd64.whl<br/>pip3 install torchvision",
 
     "stable,pip,windows,cuda10.0,python3.7":
-      "pip3 install http://download.pytorch.org/whl/cu92/torch-1.0.0-cp37-cp37m-win_amd64.whl<br/>pip3 install torchvision",
+      "pip3 install http://download.pytorch.org/whl/cu100/torch-1.0.0-cp37-cp37m-win_amd64.whl<br/>pip3 install torchvision",
 
     "stable,libtorch,linux,cudanone,cplusplus":
       "Download here: <br/><a href='https://download.pytorch.org/libtorch/1.0.0/cpu/libtorch-shared-with-deps-latest.zip'>https://download.pytorch.org/libtorch/1.0.0/cpu/libtorch-shared-with-deps-latest.zip</a>",
@@ -461,7 +461,7 @@ function commandMessage(key) {
       "Download here: <br/><a href='https://download.pytorch.org/libtorch/1.0.0/cu90/libtorch-shared-with-deps-latest.zip'>https://download.pytorch.org/libtorch/1.0.0/cu90/libtorch-shared-with-deps-latest.zip</a>",
 
     "stable,libtorch,linux,cuda10.0,cplusplus":
-      "Download here: <br/><a href='https://download.pytorch.org/libtorch/1.0.0/cu92/libtorch-shared-with-deps-latest.zip'>https://download.pytorch.org/libtorch/1.0.0/cu92/libtorch-shared-with-deps-latest.zip</a>",
+      "Download here: <br/><a href='https://download.pytorch.org/libtorch/1.0.0/cu100/libtorch-shared-with-deps-latest.zip'>https://download.pytorch.org/libtorch/1.0.0/cu100/libtorch-shared-with-deps-latest.zip</a>",
 
     "stable,libtorch,macos,cudanone,cplusplus":
       "Download here: <br/><a href='https://download.pytorch.org/libtorch/1.0.0/cpu/libtorch-macos-latest.zip'>https://download.pytorch.org/libtorch/1.0.0/cpu/libtorch-macos-latest.zip</a>",
@@ -473,7 +473,7 @@ function commandMessage(key) {
       "Download here: <br/><a href='https://download.pytorch.org/libtorch/1.0.0/cu90/libtorch-macos-latest.zip'>https://download.pytorch.org/libtorch/1.0.0/cu90/libtorch-macos-latest.zip</a>",
 
     "stable,libtorch,macos,cuda10.0,cplusplus":
-      "Download here: <br/><a href='https://download.pytorch.org/libtorch/1.0.0/cu92/libtorch-macos-latest.zip'>https://download.pytorch.org/libtorch/1.0.0/cu80/libtorch-macos-latest.zip</a>",
+      "Download here: <br/><a href='https://download.pytorch.org/libtorch/1.0.0/cu100/libtorch-macos-latest.zip'>https://download.pytorch.org/libtorch/1.0.0/cu80/libtorch-macos-latest.zip</a>",
 
     "stable,libtorch,windows,cudanone,cplusplus":
       "# Not currently available on Windows.",
@@ -689,7 +689,7 @@ function commandMessage(key) {
       "pip install numpy torchvision_nightly<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cu90/torch_nightly.html",
 
     "preview,pip,linux,cuda10.0,python2.7":
-      "pip install numpy torchvision_nightly<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cu92/torch_nightly.html",
+      "pip install numpy torchvision_nightly<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cu100/torch_nightly.html",
 
     "preview,pip,linux,cudanone,python3.5":
       "pip install numpy torchvision_nightly<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html",
@@ -701,7 +701,7 @@ function commandMessage(key) {
       "pip install numpy torchvision_nightly<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cu90/torch_nightly.html",
 
     "preview,pip,linux,cuda10.0,python3.5":
-      "pip install numpy torchvision_nightly<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cu92/torch_nightly.html",
+      "pip install numpy torchvision_nightly<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cu100/torch_nightly.html",
 
     "preview,pip,linux,cudanone,python3.6":
       "pip install numpy torchvision_nightly<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html",
@@ -713,7 +713,7 @@ function commandMessage(key) {
       "pip install numpy torchvision_nightly<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cu90/torch_nightly.html",
 
     "preview,pip,linux,cuda10.0,python3.6":
-      "pip install numpy torchvision_nightly<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cu92/torch_nightly.html",
+      "pip install numpy torchvision_nightly<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cu100/torch_nightly.html",
 
     "preview,pip,linux,cudanone,python3.7":
       "pip install numpy torchvision_nightly<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html",
@@ -725,7 +725,7 @@ function commandMessage(key) {
       "pip install numpy torchvision_nightly<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cu90/torch_nightly.html",
 
     "preview,pip,linux,cuda10.0,python3.7":
-      "pip install numpy torchvision_nightly<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cu92/torch_nightly.html",
+      "pip install numpy torchvision_nightly<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cu100/torch_nightly.html",
 
     "preview,pip,windows,cudanone,python2.7":
       "# Preview Build With Python 2.7 On Windows Not Supported.",
@@ -749,7 +749,7 @@ function commandMessage(key) {
       "pip install numpy torchvision_nightly<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cu90/torch_nightly.html",
 
     "preview,pip,windows,cuda10.0,python3.5":
-      "pip install numpy torchvision_nightly<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cu92/torch_nightly.html",
+      "pip install numpy torchvision_nightly<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cu100/torch_nightly.html",
 
     "preview,pip,windows,cudanone,python3.6":
       "pip install numpy torchvision_nightly<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html",
@@ -761,7 +761,7 @@ function commandMessage(key) {
       "pip install numpy torchvision_nightly<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cu90/torch_nightly.html",
 
     "preview,pip,windows,cuda10.0,python3.6":
-      "pip install numpy torchvision_nightly<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cu92/torch_nightly.html",
+      "pip install numpy torchvision_nightly<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cu100/torch_nightly.html",
 
     "preview,pip,windows,cudanone,python3.7":
       "pip install numpy torchvision_nightly<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html",
@@ -773,7 +773,7 @@ function commandMessage(key) {
       "pip install numpy torchvision_nightly<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cu90/torch_nightly.html",
 
     "preview,pip,windows,cuda10.0,python3.7":
-      "pip install numpy torchvision_nightly<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cu92/torch_nightly.html",
+      "pip install numpy torchvision_nightly<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cu100/torch_nightly.html",
 
     "preview,libtorch,linux,cudanone,cplusplus":
       "Download here: <br/><a href='https://download.pytorch.org/libtorch/nightly/cpu/libtorch-shared-with-deps-latest.zip'>https://download.pytorch.org/libtorch/nightly/cpu/libtorch-shared-with-deps-latest.zip</a>",
@@ -785,7 +785,7 @@ function commandMessage(key) {
       "Download here: <br/><a href='https://download.pytorch.org/libtorch/nightly/cu90/libtorch-shared-with-deps-latest.zip'>https://download.pytorch.org/libtorch/nightly/cu90/libtorch-shared-with-deps-latest.zip</a>",
 
     "preview,libtorch,linux,cuda10.0,cplusplus":
-      "Download here: <br/><a href='https://download.pytorch.org/libtorch/nightly/cu92/libtorch-shared-with-deps-latest.zip'>https://download.pytorch.org/libtorch/nightly/cu92/libtorch-shared-with-deps-latest.zip</a>",
+      "Download here: <br/><a href='https://download.pytorch.org/libtorch/nightly/cu100/libtorch-shared-with-deps-latest.zip'>https://download.pytorch.org/libtorch/nightly/cu100/libtorch-shared-with-deps-latest.zip</a>",
 
     "preview,libtorch,macos,cudanone,cplusplus":
       "Download here: <br/><a href='https://download.pytorch.org/libtorch/nightly/cpu/libtorch-macos-latest.zip'>https://download.pytorch.org/libtorch/nightly/cpu/libtorch-macos-latest.zip</a>",
@@ -797,7 +797,7 @@ function commandMessage(key) {
       "Download here: <br/><a href='https://download.pytorch.org/libtorch/nightly/cu90/libtorch-macos-latest.zip'>https://download.pytorch.org/libtorch/nightly/cpu/libtorch-macos-latest.zip</a>",
 
     "preview,libtorch,macos,cuda10.0,cplusplus":
-      "Download here: <br/><a href='https://download.pytorch.org/libtorch/nightly/cu92/libtorch-macos-latest.zip'>https://download.pytorch.org/libtorch/nightly/cpu/libtorch-macos-latest.zip</a>",
+      "Download here: <br/><a href='https://download.pytorch.org/libtorch/nightly/cu100/libtorch-macos-latest.zip'>https://download.pytorch.org/libtorch/nightly/cpu/libtorch-macos-latest.zip</a>",
 
     "preview,libtorch,windows,cudanone,cplusplus":
       "# Not currently available on Windows.",

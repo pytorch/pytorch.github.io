@@ -241,19 +241,19 @@ pip install http://download.pytorch.org/whl/cu80/torch-1.0.0-cp27-cp27m-linux_x8
 
 ```bash
 # Python 3.5
-pip3 install http://download.pytorch.org/whl/cu92/torch-1.0.0-cp35-cp35m-linux_x86_64.whl
+pip3 install http://download.pytorch.org/whl/cu100/torch-1.0.0-cp35-cp35m-linux_x86_64.whl
 pip3 install torchvision
 ```
 
 ```bash
 # Python 3.6
-pip3 install http://download.pytorch.org/whl/cu92/torch-1.0.0-cp36-cp36m-linux_x86_64.whl
+pip3 install http://download.pytorch.org/whl/cu100/torch-1.0.0-cp36-cp36m-linux_x86_64.whl
 pip3 install torchvision
 ```
 
 ```bash
 # Python 3.7
-pip3 install http://download.pytorch.org/whl/cu92/torch-1.0.0.post2-cp37-cp37m-linux_x86_64.whl
+pip3 install http://download.pytorch.org/whl/cu100/torch-1.0.0.post2-cp37-cp37m-linux_x86_64.whl
 pip3 install torchvision
 ```
 

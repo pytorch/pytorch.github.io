@@ -91,7 +91,7 @@ pip3 install torchvision
 #### CUDA 10.0
 
 ```bash
-conda install pytorch cuda10.0 -c pytorch
+conda install pytorch cuda100 -c pytorch
 pip3 install torchvision
 ```
 
@@ -187,19 +187,19 @@ _CUDA 10.0_
 
 ```
 # Python 3.5
-pip3 install http://download.pytorch.org/whl/cu10.0/torch-1.0.0-cp35-cp35m-win_amd64.whl
+pip3 install http://download.pytorch.org/whl/cu100/torch-1.0.0-cp35-cp35m-win_amd64.whl
 pip3 install torchvision
 ```
 
 ```
 # Python 3.6
-pip3 install http://download.pytorch.org/whl/cu92/torch-1.0.0-cp36-cp36m-win_amd64.whl
+pip3 install http://download.pytorch.org/whl/cu100/torch-1.0.0-cp36-cp36m-win_amd64.whl
 pip3 install torchvision
 ```
 
 ```
 # Python 3.7
-pip3 install http://download.pytorch.org/whl/cu92/torch-1.0.0-cp37-cp37m-win_amd64.whl
+pip3 install http://download.pytorch.org/whl/cu100/torch-1.0.0-cp37-cp37m-win_amd64.whl
 pip3 install torchvision
 ```
 
