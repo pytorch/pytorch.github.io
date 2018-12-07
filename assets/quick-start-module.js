@@ -473,7 +473,7 @@ function commandMessage(key) {
       "Download here: <br/><a href='https://download.pytorch.org/libtorch/1.0.0/cu90/libtorch-macos-latest.zip'>https://download.pytorch.org/libtorch/1.0.0/cu90/libtorch-macos-latest.zip</a>",
 
     "stable,libtorch,macos,cuda10.0,cplusplus":
-      "Download here: <br/><a href='https://download.pytorch.org/libtorch/1.0.0/cu100/libtorch-macos-latest.zip'>https://download.pytorch.org/libtorch/1.0.0/cu80/libtorch-macos-latest.zip</a>",
+      "Download here: <br/><a href='https://download.pytorch.org/libtorch/1.0.0/cu100/libtorch-macos-latest.zip'>https://download.pytorch.org/libtorch/1.0.0/cu100/libtorch-macos-latest.zip</a>",
 
     "stable,libtorch,windows,cudanone,cplusplus":
       "# Not currently available on Windows.",
