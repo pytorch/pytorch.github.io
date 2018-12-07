@@ -455,7 +455,7 @@ function commandMessage(key) {
       "Download here: <br/><a href='https://download.pytorch.org/libtorch/cpu/libtorch-shared-with-deps-latest.zip'>https://download.pytorch.org/libtorch/cpu/libtorch-shared-with-deps-latest.zip</a>",
 
     "stable,libtorch,linux,cuda8,cplusplus":
-      "# Not currently available on Linux. Coming soon",
+      "# Not currently available on Linux. Coming soon.",
 
     "stable,libtorch,linux,cuda9.0,cplusplus":
       "Download here: <br/><a href='https://download.pytorch.org/libtorch/cu90/libtorch-shared-with-deps-latest.zip'>https://download.pytorch.org/libtorch/cu90/libtorch-shared-with-deps-latest.zip</a>",
@@ -779,7 +779,7 @@ function commandMessage(key) {
       "Download here: <br/><a href='https://download.pytorch.org/libtorch/nightly/cpu/libtorch-shared-with-deps-latest.zip'>https://download.pytorch.org/libtorch/nightly/cpu/libtorch-shared-with-deps-latest.zip</a>",
 
     "preview,libtorch,linux,cuda8,cplusplus":
-      "# Not currently available on Linux. Coming soon",
+      "# Not currently available on Linux. Coming soon.",
 
     "preview,libtorch,linux,cuda9.0,cplusplus":
       "Download here: <br/><a href='https://download.pytorch.org/libtorch/nightly/cu90/libtorch-shared-with-deps-latest.zip'>https://download.pytorch.org/libtorch/nightly/cu90/libtorch-shared-with-deps-latest.zip</a>",
