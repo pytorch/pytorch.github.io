@@ -393,15 +393,15 @@ function commandMessage(key) {
       "pip3 install http://download.pytorch.org/whl/cu100/torch-1.0.0-cp36-cp36m-linux_x86_64.whl<br/>pip3 install torchvision",
 
     "stable,pip,linux,cudanone,python3.7":
-      "pip3 install http://download.pytorch.org/whl/cpu/torch-1.0.0.post2-cp37-cp37m-linux_x86_64.whl<br/>pip3 install torchvision",
+      "pip3 install http://download.pytorch.org/whl/cpu/torch-1.0.0-cp37-cp37m-linux_x86_64.whl<br/>pip3 install torchvision",
 
     "stable,pip,linux,cuda8,python3.7":
-      "pip3 install http://download.pytorch.org/whl/cu80/torch-1.0.0.post2-cp37-cp37m-linux_x86_64.whl<br/>pip3 install torchvision",
+      "pip3 install http://download.pytorch.org/whl/cu80/torch-1.0.0-cp37-cp37m-linux_x86_64.whl<br/>pip3 install torchvision",
 
     "stable,pip,linux,cuda9.0,python3.7": "pip3 install torch torchvision",
 
     "stable,pip,linux,cuda10.0,python3.7":
-      "pip3 install http://download.pytorch.org/whl/cu100/torch-1.0.0.post2-cp37-cp37m-linux_x86_64.whl<br/>pip3 install torchvision",
+      "pip3 install http://download.pytorch.org/whl/cu100/torch-1.0.0-cp37-cp37m-linux_x86_64.whl<br/>pip3 install torchvision",
 
     "stable,pip,windows,cudanone,python2.7":
       "# PyTorch does not support Python 2.7 on Windows. Please install with Python 3.",
