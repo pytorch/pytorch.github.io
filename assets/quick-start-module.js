@@ -461,31 +461,31 @@ function commandMessage(key) {
       "Download here: <br/><a href='https://download.pytorch.org/libtorch/cu90/libtorch-shared-with-deps-latest.zip'>https://download.pytorch.org/libtorch/cu90/libtorch-shared-with-deps-latest.zip</a>",
 
     "stable,libtorch,linux,cuda10.0,cplusplus":
-      "Download here: <br/><a href='https://download.pytorch.org/libtorch/cu100/libtorch-shared-with-deps-latest.zip'>https://download.pytorch.org/libtorch/cu100/libtorch-shared-with-deps-latest.zip</a>",
+      "# Not currently available on Linux. Coming soon.",
 
     "stable,libtorch,macos,cudanone,cplusplus":
-      "# Not currently available on MacOS.",
+      "Download here: <br/><a href='https://download.pytorch.org/libtorch/cpu/libtorch-macos-latest.zip'> https://download.pytorch.org/libtorch/cpu/libtorch-macos-latest.zip </a>",
 
     "stable,libtorch,macos,cuda8,cplusplus":
-      "# Not currently available on MacOS.",
+      "MacOS binaries do not support CUDA. Download CPU libtorch here: <br/><a href='https://download.pytorch.org/libtorch/cpu/libtorch-macos-1.0.0.zip'> https://download.pytorch.org/libtorch/cpu/libtorch-macos-1.0.0.zip </a>",
 
     "stable,libtorch,macos,cuda9.0,cplusplus":
-      "# Not currently available on MacOS.",
+      "MacOS binaries do not support CUDA. Download CPU libtorch here: <br/><a href='https://download.pytorch.org/libtorch/cpu/libtorch-macos-1.0.0.zip'> https://download.pytorch.org/libtorch/cpu/libtorch-macos-1.0.0.zip </a>",
 
     "stable,libtorch,macos,cuda10.0,cplusplus":
-      "# Not currently available on MacOS.",
+      "MacOS binaries do not support CUDA. Download CPU libtorch here: <br/><a href='https://download.pytorch.org/libtorch/cpu/libtorch-macos-1.0.0.zip'> https://download.pytorch.org/libtorch/cpu/libtorch-macos-1.0.0.zip </a>",
 
     "stable,libtorch,windows,cudanone,cplusplus":
-      "# Not currently available on Windows.",
+      "Download here: <br/><a href='https://download.pytorch.org/libtorch/cpu/libtorch-win-shared-with-deps-latest.zip'>https://download.pytorch.org/libtorch/cpu/libtorch-win-shared-with-deps-latest.zip</a>",
 
     "stable,libtorch,windows,cuda8,cplusplus":
-      "# Not currently available on Windows.",
+      "Download here: <br/><a href='https://download.pytorch.org/libtorch/cu80/libtorch-win-shared-with-deps-latest.zip'>https://download.pytorch.org/libtorch/cu80/libtorch-win-shared-with-deps-latest.zip</a>",
 
     "stable,libtorch,windows,cuda9.0,cplusplus":
-      "# Not currently available on Windows.",
+      "Download here: <br/><a href='https://download.pytorch.org/libtorch/cu90/libtorch-win-shared-with-deps-latest.zip'>https://download.pytorch.org/libtorch/cu90/libtorch-win-shared-with-deps-latest.zip</a>",
 
     "stable,libtorch,windows,cuda10.0,cplusplus":
-      "# Not currently available on Windows.",
+      "Download here: <br/><a href='https://download.pytorch.org/libtorch/cu100/libtorch-win-shared-with-deps-latest.zip'>https://download.pytorch.org/libtorch/cu100/libtorch-win-shared-with-deps-latest.zip</a>",
 
     "preview,conda,linux,cuda8,python2.7":
       "conda install pytorch-nightly cuda80 -c pytorch",
@@ -785,19 +785,19 @@ function commandMessage(key) {
       "Download here: <br/><a href='https://download.pytorch.org/libtorch/nightly/cu90/libtorch-shared-with-deps-latest.zip'>https://download.pytorch.org/libtorch/nightly/cu90/libtorch-shared-with-deps-latest.zip</a>",
 
     "preview,libtorch,linux,cuda10.0,cplusplus":
-      "Download here: <br/><a href='https://download.pytorch.org/libtorch/nightly/cu100/libtorch-shared-with-deps-latest.zip'>https://download.pytorch.org/libtorch/nightly/cu100/libtorch-shared-with-deps-latest.zip</a>",
+      "# Not currently available on Linux. Coming soon.",
 
     "preview,libtorch,macos,cudanone,cplusplus":
-      "# Not currently available on MacOS.",
+      "Download here: <br/><a href='https://download.pytorch.org/libtorch/nightly/cpu/libtorch-macos-latest.zip'> https://download.pytorch.org/libtorch/nightly/cpu/libtorch-macos-latest.zip </a>",
 
     "preview,libtorch,macos,cuda8,cplusplus":
-      "# Not currently available on MacOS.",
+      "MacOS binaries do not support CUDA. Download CPU libtorch here: <br/><a href='https://download.pytorch.org/libtorch/nightly/cpu/libtorch-macos-latest.zip'> https://download.pytorch.org/libtorch/nightly/cpu/libtorch-macos-latest.zip </a>",
 
     "preview,libtorch,macos,cuda9.0,cplusplus":
-      "# Not currently available on MacOS.",
+      "MacOS binaries do not support CUDA. Download CPU libtorch here: <br/><a href='https://download.pytorch.org/libtorch/nightly/cpu/libtorch-macos-latest.zip'> https://download.pytorch.org/libtorch/nightly/cpu/libtorch-macos-latest.zip </a>",
 
     "preview,libtorch,macos,cuda10.0,cplusplus":
-      "# Not currently available on MacOS.",
+      "MacOS binaries do not support CUDA. Download CPU libtorch here: <br/><a href='https://download.pytorch.org/libtorch/nightly/cpu/libtorch-macos-latest.zip'> https://download.pytorch.org/libtorch/nightly/cpu/libtorch-macos-latest.zip </a>",
 
     "preview,libtorch,windows,cudanone,cplusplus":
       "# Not currently available on Windows.",
