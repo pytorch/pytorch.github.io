@@ -280,40 +280,40 @@ function commandMessage(key) {
       "# PyTorch does not support Python 2.7 on Windows. Please install with Python 3.",
 
     "stable,conda,windows,cuda8,python3.5":
-      "conda install pytorch cuda80 -c pytorch<br />pip3 install torchvision",
+      "conda install pytorch torchvision cuda80 -c pytorch",
 
     "stable,conda,windows,cuda9.0,python3.5":
-      "conda install pytorch -c pytorch<br />pip3 install torchvision",
+      "conda install pytorch torchvision -c pytorch ",
 
     "stable,conda,windows,cuda10.0,python3.5":
-      "conda install pytorch cuda100 -c pytorch<br />pip3 install torchvision",
+      "conda install pytorch torchvision cuda100 -c pytorch",
 
     "stable,conda,windows,cudanone,python3.5":
-      "conda install pytorch-cpu -c pytorch<br />pip3 install torchvision",
+      "conda install pytorch-cpu torchvision-cpu -c pytorch",
 
     "stable,conda,windows,cuda8,python3.6":
-      "conda install pytorch cuda80 -c pytorch<br />pip3 install torchvision",
+      "conda install pytorch torchvision cuda80 -c pytorch",
 
     "stable,conda,windows,cuda9.0,python3.6":
-      "conda install pytorch -c pytorch<br />pip3 install torchvision",
+      "conda install pytorch torchvision -c pytorch",
 
     "stable,conda,windows,cuda10.0,python3.6":
-      "conda install pytorch cuda100 -c pytorch<br />pip3 install torchvision",
+      "conda install pytorch torchvision cuda100 -c pytorch",
 
     "stable,conda,windows,cudanone,python3.6":
-      "conda install pytorch-cpu -c pytorch<br />pip3 install torchvision",
+      "conda install pytorch-cpu torchvision-cpu -c pytorch",
 
     "stable,conda,windows,cuda8,python3.7":
-      "conda install pytorch cuda80 -c pytorch<br />pip3 install torchvision",
+      "conda install pytorch torchvision cuda80 -c pytorch",
 
     "stable,conda,windows,cuda9.0,python3.7":
-      "conda install pytorch -c pytorch<br />pip3 install torchvision",
+      "conda install pytorch torchvision -c pytorch",
 
     "stable,conda,windows,cuda10.0,python3.7":
-      "conda install pytorch cuda100 -c pytorch<br />pip3 install torchvision",
+      "conda install pytorch torchvision cuda100 -c pytorch",
 
     "stable,conda,windows,cudanone,python3.7":
-      "conda install pytorch-cpu -c pytorch<br />pip3 install torchvision",
+      "conda install pytorch-cpu torchvision-cpu -c pytorch",
 
     "stable,pip,macos,cuda8,python2.7":
       "pip install torch torchvision<br /># MacOS Binaries dont support CUDA, install from source if CUDA is needed",
