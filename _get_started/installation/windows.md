@@ -68,8 +68,7 @@ To install PyTorch with Anaconda, you will need to open an Anaconda prompt via `
 To install PyTorch via Anaconda, and do not have a CUDA-capable[LINK] system or do not require CUDA, use the following `conda` command.
 
 ```bash
-conda install pytorch-cpu -c pytorch
-pip3 install torchvision
+conda install pytorch-cpu torchvision-cpu -c pytorch
 ```
 
 #### CUDA 9.0
@@ -77,22 +76,19 @@ pip3 install torchvision
 To install PyTorch via Anaconda, and you are using CUDA 9.0, use the following `conda` command:
 
 ```bash
-conda install pytorch -c pytorch
-pip3 install torchvision
+conda install pytorch torchvision -c pytorch
 ```
 
 #### CUDA 8.x
 
 ```bash
-conda install pytorch cuda80 -c pytorch
-pip3 install torchvision
+conda install pytorch torchvision cuda80 -c pytorch
 ```
 
 #### CUDA 10.0
 
 ```bash
-conda install pytorch cuda100 -c pytorch
-pip3 install torchvision
+conda install pytorch torchvision cuda100 -c pytorch
 ```
 
 ### pip
