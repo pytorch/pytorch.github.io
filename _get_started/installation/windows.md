@@ -99,28 +99,28 @@ To install PyTorch via pip, and do not have a [CUDA-capable](https://developer.n
 
 ```bash
 # Python 2.7
-pip install http://download.pytorch.org/whl/cpu/torch-1.0.0-cp27-cp27mu-linux_x86_64.whl
+pip install https://download.pytorch.org/whl/cpu/torch-1.0.0-cp27-cp27mu-linux_x86_64.whl
 pip install torchvision
 
 # if the above command does not work, then you have python 2.7 UCS2, use this command
-pip install http://download.pytorch.org/whl/cpu/torch-1.0.0-cp27-cp27m-linux_x86_64.whl
+pip install https://download.pytorch.org/whl/cpu/torch-1.0.0-cp27-cp27m-linux_x86_64.whl
 ```
 
 ```bash
 # Python 3.5
-pip3 install http://download.pytorch.org/whl/cpu/torch-1.0.0-cp35-cp35m-win_amd64.whl
+pip3 install https://download.pytorch.org/whl/cpu/torch-1.0.0-cp35-cp35m-win_amd64.whl
 pip3 install torchvision
 ```
 
 ```bash
 # Python 3.6
-pip3 install http://download.pytorch.org/whl/cpu/torch-1.0.0-cp36-cp36m-win_amd64.whl
+pip3 install https://download.pytorch.org/whl/cpu/torch-1.0.0-cp36-cp36m-win_amd64.whl
 pip3 install torchvision
 ```
 
 ```bash
 # Python 3.7
-pip3 install http://download.pytorch.org/whl/cpu/torch-1.0.0-cp37-cp37m-win_amd64.whl
+pip3 install https://download.pytorch.org/whl/cpu/torch-1.0.0-cp37-cp37m-win_amd64.whl
 pip3 install torchvision
 ```
 
@@ -132,19 +132,19 @@ To install PyTorch via pip, and you are using CUDA 9.0, use the following comman
 
 ```
 # Python 3.5
-pip3 install http://download.pytorch.org/whl/cu90/torch-1.0.0-cp35-cp35m-win_amd64.whl
+pip3 install https://download.pytorch.org/whl/cu90/torch-1.0.0-cp35-cp35m-win_amd64.whl
 pip3 install torchvision
 ```
 
 ```
 # Python 3.6
-pip3 install http://download.pytorch.org/whl/cu90/torch-1.0.0-cp36-cp36m-win_amd64.whl
+pip3 install https://download.pytorch.org/whl/cu90/torch-1.0.0-cp36-cp36m-win_amd64.whl
 pip3 install torchvision
 ```
 
 ```
 # Python 3.7
-pip3 install http://download.pytorch.org/whl/cu90/torch-1.0.0-cp37-cp37m-win_amd64.whl
+pip3 install https://download.pytorch.org/whl/cu90/torch-1.0.0-cp37-cp37m-win_amd64.whl
 pip3 install torchvision
 ```
 
@@ -162,19 +162,19 @@ _CUDA 8.x_
 
 ```
 # Python 3.5
-pip3 install http://download.pytorch.org/whl/cu80/torch-1.0.0-cp35-cp35m-win_amd64.whl
+pip3 install https://download.pytorch.org/whl/cu80/torch-1.0.0-cp35-cp35m-win_amd64.whl
 pip3 install torchvision
 ```
 
 ```
 # Python 3.6
-pip3 install http://download.pytorch.org/whl/cu80/torch-1.0.0-cp36-cp36m-win_amd64.whl
+pip3 install https://download.pytorch.org/whl/cu80/torch-1.0.0-cp36-cp36m-win_amd64.whl
 pip3 install torchvision
 ```
 
 ```
 # Python 3.7
-pip3 install http://download.pytorch.org/whl/cu80/torch-1.0.0-cp37-cp37m-win_amd64.whl
+pip3 install https://download.pytorch.org/whl/cu80/torch-1.0.0-cp37-cp37m-win_amd64.whl
 pip3 install torchvision
 ```
 
@@ -183,19 +183,19 @@ _CUDA 10.0_
 
 ```
 # Python 3.5
-pip3 install http://download.pytorch.org/whl/cu100/torch-1.0.0-cp35-cp35m-win_amd64.whl
+pip3 install https://download.pytorch.org/whl/cu100/torch-1.0.0-cp35-cp35m-win_amd64.whl
 pip3 install torchvision
 ```
 
 ```
 # Python 3.6
-pip3 install http://download.pytorch.org/whl/cu100/torch-1.0.0-cp36-cp36m-win_amd64.whl
+pip3 install https://download.pytorch.org/whl/cu100/torch-1.0.0-cp36-cp36m-win_amd64.whl
 pip3 install torchvision
 ```
 
 ```
 # Python 3.7
-pip3 install http://download.pytorch.org/whl/cu100/torch-1.0.0-cp37-cp37m-win_amd64.whl
+pip3 install https://download.pytorch.org/whl/cu100/torch-1.0.0-cp37-cp37m-win_amd64.whl
 pip3 install torchvision
 ```
 
