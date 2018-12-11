@@ -108,7 +108,7 @@
               
               
                 <div class="version">
-                  <a href="http://pytorch.org/docs/versions.html">master (1.0.0a0+25ddd65 ) &#x25BC</a>
+                  <a href="http://pytorch.org/docs/versions.html">master (1.0.0a0+5d3a347 ) &#x25BC</a>
                 </div>
               
             
@@ -283,30 +283,42 @@
         <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="s2">&quot;None of the inputs have requires_grad=True. Gradients will be None&quot;</span><span class="p">)</span>
 
 
-<span class="c1"># Global switch to toggle whether or not checkpointed passes stash and restore</span>
-<span class="c1"># the RNG state.  If True, any checkpoints making use of RNG should achieve deterministic</span>
-<span class="c1"># output compared to non-checkpointed passes.</span>
-<span class="n">preserve_rng_state</span> <span class="o">=</span> <span class="kc">True</span>
+<span class="c1"># We can&#39;t know if the run_fn will internally move some args to different devices,</span>
+<span class="c1"># which would require logic to preserve rng states for those devices as well.</span>
+<span class="c1"># We could paranoically stash and restore ALL the rng states for all visible devices,</span>
+<span class="c1"># but that seems very wasteful for most cases.  Compromise:  Stash the RNG state for</span>
+<span class="c1"># the device of all Tensor args.</span>
+<span class="c1">#</span>
+<span class="c1"># To consider:  maybe get_device_states and set_device_states should reside in torch/random.py?</span>
+<span class="k">def</span> <span class="nf">get_device_states</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">):</span>
+    <span class="c1"># This will not error out if &quot;arg&quot; is a CPU tensor or a non-tensor type because</span>
+    <span class="c1"># the conditionals short-circuit.</span>
+    <span class="n">fwd_gpu_devices</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">arg</span><span class="o">.</span><span class="n">get_device</span><span class="p">()</span> <span class="k">for</span> <span class="n">arg</span> <span class="ow">in</span> <span class="n">args</span>
+                               <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">arg</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="ow">and</span> <span class="n">arg</span><span class="o">.</span><span class="n">is_cuda</span><span class="p">))</span>
+
+    <span class="n">fwd_gpu_states</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">device</span> <span class="ow">in</span> <span class="n">fwd_gpu_devices</span><span class="p">:</span>
+        <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="n">device</span><span class="p">):</span>
+            <span class="n">fwd_gpu_states</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">get_rng_state</span><span class="p">())</span>
+
+    <span class="k">return</span> <span class="n">fwd_gpu_devices</span><span class="p">,</span> <span class="n">fwd_gpu_states</span>
+
+
+<span class="k">def</span> <span class="nf">set_device_states</span><span class="p">(</span><span class="n">devices</span><span class="p">,</span> <span class="n">states</span><span class="p">):</span>
+    <span class="k">for</span> <span class="n">device</span><span class="p">,</span> <span class="n">state</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">devices</span><span class="p">,</span> <span class="n">states</span><span class="p">):</span>
+        <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="n">device</span><span class="p">):</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">set_rng_state</span><span class="p">(</span><span class="n">state</span><span class="p">)</span>
 
 
 <span class="k">class</span> <span class="nc">CheckpointFunction</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">autograd</span><span class="o">.</span><span class="n">Function</span><span class="p">):</span>
 
     <span class="nd">@staticmethod</span>
-    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">run_function</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">run_function</span><span class="p">,</span> <span class="n">preserve_rng_state</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">):</span>
         <span class="n">check_backward_validity</span><span class="p">(</span><span class="n">args</span><span class="p">)</span>
         <span class="n">ctx</span><span class="o">.</span><span class="n">run_function</span> <span class="o">=</span> <span class="n">run_function</span>
+        <span class="n">ctx</span><span class="o">.</span><span class="n">preserve_rng_state</span> <span class="o">=</span> <span class="n">preserve_rng_state</span>
         <span class="k">if</span> <span class="n">preserve_rng_state</span><span class="p">:</span>
-            <span class="c1"># We can&#39;t know if the user will transfer some args from the host</span>
-            <span class="c1"># to the device during their run_fn.  Therefore, we stash both</span>
-            <span class="c1"># the cpu and cuda rng states unconditionally.</span>
-            <span class="c1">#</span>
-            <span class="c1"># TODO:</span>
-            <span class="c1"># We also can&#39;t know if the run_fn will internally move some args to a device</span>
-            <span class="c1"># other than the current device, which would require logic to preserve</span>
-            <span class="c1"># rng states for those devices as well.  We could paranoically stash and restore</span>
-            <span class="c1"># ALL the rng states for all visible devices, but that seems very wasteful for</span>
-            <span class="c1"># most cases.</span>
-            <span class="n">ctx</span><span class="o">.</span><span class="n">fwd_cpu_rng_state</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">get_rng_state</span><span class="p">()</span>
+            <span class="n">ctx</span><span class="o">.</span><span class="n">fwd_cpu_state</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">get_rng_state</span><span class="p">()</span>
             <span class="c1"># Don&#39;t eagerly initialize the cuda context by accident.</span>
             <span class="c1"># (If the user intends that the context is initialized later, within their</span>
             <span class="c1"># run_function, we SHOULD actually stash the cuda state here.  Unfortunately,</span>
@@ -314,7 +326,7 @@
             <span class="n">ctx</span><span class="o">.</span><span class="n">had_cuda_in_fwd</span> <span class="o">=</span> <span class="kc">False</span>
             <span class="k">if</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">_initialized</span><span class="p">:</span>
                 <span class="n">ctx</span><span class="o">.</span><span class="n">had_cuda_in_fwd</span> <span class="o">=</span> <span class="kc">True</span>
-                <span class="n">ctx</span><span class="o">.</span><span class="n">fwd_cuda_rng_state</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">get_rng_state</span><span class="p">()</span>
+                <span class="n">ctx</span><span class="o">.</span><span class="n">fwd_gpu_devices</span><span class="p">,</span> <span class="n">ctx</span><span class="o">.</span><span class="n">fwd_gpu_states</span> <span class="o">=</span> <span class="n">get_device_states</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">)</span>
         <span class="n">ctx</span><span class="o">.</span><span class="n">save_for_backward</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">)</span>
         <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>
             <span class="n">outputs</span> <span class="o">=</span> <span class="n">run_function</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">)</span>
@@ -328,12 +340,14 @@
         <span class="c1"># Stash the surrounding rng state, and mimic the state that was</span>
         <span class="c1"># present at this time during forward.  Restore the surrouding state</span>
         <span class="c1"># when we&#39;re done.</span>
-        <span class="n">rng_devices</span> <span class="o">=</span> <span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">current_device</span><span class="p">()]</span> <span class="k">if</span> <span class="n">ctx</span><span class="o">.</span><span class="n">had_cuda_in_fwd</span> <span class="k">else</span> <span class="p">[]</span>
-        <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">fork_rng</span><span class="p">(</span><span class="n">devices</span><span class="o">=</span><span class="n">rng_devices</span><span class="p">,</span> <span class="n">enabled</span><span class="o">=</span><span class="n">preserve_rng_state</span><span class="p">):</span>
-            <span class="k">if</span> <span class="n">preserve_rng_state</span><span class="p">:</span>
-                <span class="n">torch</span><span class="o">.</span><span class="n">set_rng_state</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">fwd_cpu_rng_state</span><span class="p">)</span>
+        <span class="n">rng_devices</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">if</span> <span class="n">ctx</span><span class="o">.</span><span class="n">preserve_rng_state</span> <span class="ow">and</span> <span class="n">ctx</span><span class="o">.</span><span class="n">had_cuda_in_fwd</span><span class="p">:</span>
+            <span class="n">rng_devices</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">fwd_gpu_devices</span>
+        <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">fork_rng</span><span class="p">(</span><span class="n">devices</span><span class="o">=</span><span class="n">rng_devices</span><span class="p">,</span> <span class="n">enabled</span><span class="o">=</span><span class="n">ctx</span><span class="o">.</span><span class="n">preserve_rng_state</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">ctx</span><span class="o">.</span><span class="n">preserve_rng_state</span><span class="p">:</span>
+                <span class="n">torch</span><span class="o">.</span><span class="n">set_rng_state</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">fwd_cpu_state</span><span class="p">)</span>
                 <span class="k">if</span> <span class="n">ctx</span><span class="o">.</span><span class="n">had_cuda_in_fwd</span><span class="p">:</span>
-                    <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">set_rng_state</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">fwd_cuda_rng_state</span><span class="p">)</span>
+                    <span class="n">set_device_states</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">fwd_gpu_devices</span><span class="p">,</span> <span class="n">ctx</span><span class="o">.</span><span class="n">fwd_gpu_states</span><span class="p">)</span>
             <span class="n">detached_inputs</span> <span class="o">=</span> <span class="n">detach_variable</span><span class="p">(</span><span class="n">inputs</span><span class="p">)</span>
             <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">enable_grad</span><span class="p">():</span>
                 <span class="n">outputs</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">run_function</span><span class="p">(</span><span class="o">*</span><span class="n">detached_inputs</span><span class="p">)</span>
@@ -341,10 +355,10 @@
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">outputs</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
             <span class="n">outputs</span> <span class="o">=</span> <span class="p">(</span><span class="n">outputs</span><span class="p">,)</span>
         <span class="n">torch</span><span class="o">.</span><span class="n">autograd</span><span class="o">.</span><span class="n">backward</span><span class="p">(</span><span class="n">outputs</span><span class="p">,</span> <span class="n">args</span><span class="p">)</span>
-        <span class="k">return</span> <span class="p">(</span><span class="kc">None</span><span class="p">,)</span> <span class="o">+</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">inp</span><span class="o">.</span><span class="n">grad</span> <span class="k">for</span> <span class="n">inp</span> <span class="ow">in</span> <span class="n">detached_inputs</span><span class="p">)</span>
+        <span class="k">return</span> <span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="o">+</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">inp</span><span class="o">.</span><span class="n">grad</span> <span class="k">for</span> <span class="n">inp</span> <span class="ow">in</span> <span class="n">detached_inputs</span><span class="p">)</span>
 
 
-<div class="viewcode-block" id="checkpoint"><a class="viewcode-back" href="../../../checkpoint.html#torch.utils.checkpoint.checkpoint">[docs]</a><span class="k">def</span> <span class="nf">checkpoint</span><span class="p">(</span><span class="n">function</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">):</span>
+<div class="viewcode-block" id="checkpoint"><a class="viewcode-back" href="../../../checkpoint.html#torch.utils.checkpoint.checkpoint">[docs]</a><span class="k">def</span> <span class="nf">checkpoint</span><span class="p">(</span><span class="n">function</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
     <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Checkpoint a model or part of the model</span>
 
 <span class="sd">    Checkpointing works by trading compute for memory. Rather than storing all</span>
@@ -382,15 +396,22 @@
 <span class="sd">            passed as the tuple. For example, in LSTM, if user passes</span>
 <span class="sd">            ``(activation, hidden)``, :attr:`function` should correctly use the</span>
 <span class="sd">            first input as ``activation`` and the second input as ``hidden``</span>
+<span class="sd">        preserve_rng_state(bool, optional, default=True):  Omit stashing and restoring</span>
+<span class="sd">            the RNG state during each checkpoint.</span>
 <span class="sd">        args: tuple containing inputs to the :attr:`function`</span>
 
 <span class="sd">    Returns:</span>
 <span class="sd">        Output of running :attr:`function` on :attr:`*args`</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">return</span> <span class="n">CheckpointFunction</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">function</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">)</span></div>
+    <span class="c1"># Hack to mix *args with **kwargs in a python 2.7-compliant way</span>
+    <span class="n">preserve</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s1">&#39;preserve_rng_state&#39;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">kwargs</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Unexpected keyword arguments: &quot;</span> <span class="o">+</span> <span class="s2">&quot;,&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">arg</span> <span class="k">for</span> <span class="n">arg</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">))</span>
+
+    <span class="k">return</span> <span class="n">CheckpointFunction</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">function</span><span class="p">,</span> <span class="n">preserve</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">)</span></div>
 
 
-<div class="viewcode-block" id="checkpoint_sequential"><a class="viewcode-back" href="../../../checkpoint.html#torch.utils.checkpoint.checkpoint_sequential">[docs]</a><span class="k">def</span> <span class="nf">checkpoint_sequential</span><span class="p">(</span><span class="n">functions</span><span class="p">,</span> <span class="n">segments</span><span class="p">,</span> <span class="o">*</span><span class="n">inputs</span><span class="p">):</span>
+<div class="viewcode-block" id="checkpoint_sequential"><a class="viewcode-back" href="../../../checkpoint.html#torch.utils.checkpoint.checkpoint_sequential">[docs]</a><span class="k">def</span> <span class="nf">checkpoint_sequential</span><span class="p">(</span><span class="n">functions</span><span class="p">,</span> <span class="n">segments</span><span class="p">,</span> <span class="o">*</span><span class="n">inputs</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
     <span class="sa">r</span><span class="sd">&quot;&quot;&quot;A helper function for checkpointing sequential models.</span>
 
 <span class="sd">    Sequential models execute a list of modules/functions in order</span>
@@ -416,6 +437,8 @@
 <span class="sd">            functions (comprising the model) to run sequentially.</span>
 <span class="sd">        segments: Number of chunks to create in the model</span>
 <span class="sd">        inputs: tuple of Tensors that are inputs to :attr:`functions`</span>
+<span class="sd">        preserve_rng_state(bool, optional, default=True):  Omit stashing and restoring</span>
+<span class="sd">            the RNG state during each checkpoint.</span>
 
 <span class="sd">    Returns:</span>
 <span class="sd">        Output of running :attr:`functions` sequentially on :attr:`*inputs`</span>
@@ -424,6 +447,10 @@
 <span class="sd">        &gt;&gt;&gt; model = nn.Sequential(...)</span>
 <span class="sd">        &gt;&gt;&gt; input_var = checkpoint_sequential(model, chunks, input_var)</span>
 <span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Hack to mix *args with **kwargs in a python 2.7-compliant way</span>
+    <span class="n">preserve</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s1">&#39;preserve_rng_state&#39;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">kwargs</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Unexpected keyword arguments: &quot;</span> <span class="o">+</span> <span class="s2">&quot;,&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">arg</span> <span class="k">for</span> <span class="n">arg</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">))</span>
 
     <span class="k">def</span> <span class="nf">run_function</span><span class="p">(</span><span class="n">start</span><span class="p">,</span> <span class="n">end</span><span class="p">,</span> <span class="n">functions</span><span class="p">):</span>
         <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="o">*</span><span class="n">inputs</span><span class="p">):</span>
@@ -443,7 +470,8 @@
     <span class="n">end</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>
     <span class="k">for</span> <span class="n">start</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">segment_size</span> <span class="o">*</span> <span class="p">(</span><span class="n">segments</span> <span class="o">-</span> <span class="mi">1</span><span class="p">),</span> <span class="n">segment_size</span><span class="p">):</span>
         <span class="n">end</span> <span class="o">=</span> <span class="n">start</span> <span class="o">+</span> <span class="n">segment_size</span> <span class="o">-</span> <span class="mi">1</span>
-        <span class="n">inputs</span> <span class="o">=</span> <span class="n">checkpoint</span><span class="p">(</span><span class="n">run_function</span><span class="p">(</span><span class="n">start</span><span class="p">,</span> <span class="n">end</span><span class="p">,</span> <span class="n">functions</span><span class="p">),</span> <span class="o">*</span><span class="n">inputs</span><span class="p">)</span>
+        <span class="n">inputs</span> <span class="o">=</span> <span class="n">checkpoint</span><span class="p">(</span><span class="n">run_function</span><span class="p">(</span><span class="n">start</span><span class="p">,</span> <span class="n">end</span><span class="p">,</span> <span class="n">functions</span><span class="p">),</span> <span class="o">*</span><span class="n">inputs</span><span class="p">,</span>
+                            <span class="n">preserve_rng_state</span><span class="o">=</span><span class="n">preserve</span><span class="p">)</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">inputs</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">):</span>
             <span class="n">inputs</span> <span class="o">=</span> <span class="p">(</span><span class="n">inputs</span><span class="p">,)</span>
     <span class="k">return</span> <span class="n">run_function</span><span class="p">(</span><span class="n">end</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">functions</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span> <span class="n">functions</span><span class="p">)(</span><span class="o">*</span><span class="n">inputs</span><span class="p">)</span></div>
