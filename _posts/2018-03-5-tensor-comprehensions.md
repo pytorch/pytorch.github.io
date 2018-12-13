@@ -170,7 +170,7 @@ Now the autotuner is tuned for these three specific image sizes `32x32`, `48x48`
 
 ### Lack of loops
 
-If you want to write an RNN, it's easy to see it as a `for` loop over time. However, the TC language does not have loops yet. If you reallly want to write RNNs, you can write unrolled loops.
+If you want to write an RNN, it's easy to see it as a `for` loop over time. However, the TC language does not have loops yet. If you really want to write RNNs, you can write unrolled loops.
 
 ### Strided-Tensors
 
