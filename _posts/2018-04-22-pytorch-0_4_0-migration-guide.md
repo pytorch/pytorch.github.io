@@ -103,7 +103,7 @@ tensor([ 0.,  0.,  0.])
 RuntimeError: one of the variables needed for gradient computation has been modified by an
 ```
 
-However, using `Tensor.data` can be unsafe and can easly result in incorrect gradients when a tensor is required for gradient computation but modified in-place.
+However, using `Tensor.data` can be unsafe and can easily result in incorrect gradients when a tensor is required for gradient computation but modified in-place.
 
 ```python
 >>> a = torch.tensor([1,2,3.], requires_grad = True)
@@ -122,7 +122,7 @@ tensor([ 0.,  0.,  0.])
 
 ## Support for 0-dimensional (scalar) Tensors
 
-Previously, indexing into a `Tensor` vector (1-dimensional tensor) gave a Python number but indexing into a `Variable` vector gave (incosistently!) a vector of size `(1,)`! Similar behavior existed with reduction functions, e.g. `tensor.sum()` would return a Python number, but `variable.sum()` would return a vector of size `(1,)`.
+Previously, indexing into a `Tensor` vector (1-dimensional tensor) gave a Python number but indexing into a `Variable` vector gave (inconsistently!) a vector of size `(1,)`! Similar behavior existed with reduction functions, e.g. `tensor.sum()` would return a Python number, but `variable.sum()` would return a vector of size `(1,)`.
 
 Fortunately, this release introduces proper scalar (0-dimensional tensor) support in PyTorch! Scalars can be created using the new `torch.tensor` function (which will be explained in more detail later; for now just think of it as the PyTorch equivalent of `numpy.array`). Now you can do things like:
 
@@ -184,7 +184,7 @@ False
 
 ## [`dtypes`](https://pytorch.org/docs/0.4.0/tensor_attributes.html#torch.torch.dtype), [`devices`](https://pytorch.org/docs/0.4.0/tensor_attributes.html#torch.torch.device) and NumPy-style creation functions
 
-In previous versions of PyTorch, we used to specify data type (e.g. float vs double), device type (cpu vs cuda) and layout (dense vs sparse) together as a "tensor type". For example, `torch.cuda.sparse.DoubleTensor` was the `Tensor` type respresenting the `double` data type, living on CUDA devices, and with [COO sparse tensor](https://en.wikipedia.org/wiki/Sparse_matrix#Coordinate_list_(COO)) layout.
+In previous versions of PyTorch, we used to specify data type (e.g. float vs double), device type (cpu vs cuda) and layout (dense vs sparse) together as a "tensor type". For example, `torch.cuda.sparse.DoubleTensor` was the `Tensor` type representing the `double` data type, living on CUDA devices, and with [COO sparse tensor](https://en.wikipedia.org/wiki/Sparse_matrix#Coordinate_list_(COO)) layout.
 
 In this release, we introduce [`torch.dtype`](https://pytorch.org/docs/0.4.0/tensor_attributes.html#torch.torch.dtype), [`torch.device`](https://pytorch.org/docs/0.4.0/tensor_attributes.html#torch.torch.device) and [`torch.layout`](https://pytorch.org/docs/0.4.0/tensor_attributes.html#torch.torch.layout) classes to allow better management of these properties via NumPy-style creation functions.
 
@@ -207,7 +207,7 @@ The dtype of a tensor can be access via its `dtype` attribute.
 
 ### [`torch.device`](https://pytorch.org/docs/0.4.0/tensor_attributes.html#torch.torch.device)
 
-A [`torch.device`](https://pytorch.org/docs/0.4.0/tensor_attributes.html#torch.torch.device) contains a device type (`'cpu'` or `'cuda'`) and optional device ordinal (id) for the device type. It can be initilized with `torch.device('{device_type}')` or `torch.device('{device_type}:{device_ordinal}')`.
+A [`torch.device`](https://pytorch.org/docs/0.4.0/tensor_attributes.html#torch.torch.device) contains a device type (`'cpu'` or `'cuda'`) and optional device ordinal (id) for the device type. It can be initialized with `torch.device('{device_type}')` or `torch.device('{device_type}:{device_ordinal}')`.
 
 If the device ordinal is not present, this represents the current device for the device type; e.g., `torch.device('cuda')` is equivalent to `torch.device('cuda:X')` where `X` is the result of `torch.cuda.current_device()`.
 
@@ -280,7 +280,7 @@ To specify the desired shape, you can either use a tuple (e.g., `torch.zeros((2,
 
 | Name | Returned `Tensor` | `torch.*_like` variant | `tensor.new_*` variant |
 |------|-----------------|----------------------|----------------------|
-| [`torch.empty`](https://pytorch.org/docs/0.4.0/torch.html#torch.empty) | unintialized memory | ✔ | ✔ |
+| [`torch.empty`](https://pytorch.org/docs/0.4.0/torch.html#torch.empty) | uninitialized memory | ✔ | ✔ |
 | [`torch.zeros`](https://pytorch.org/docs/0.4.0/torch.html#torch.zeros) | all zeros | ✔ | ✔ |
 | [`torch.ones`](https://pytorch.org/docs/0.4.0/torch.html#torch.ones) | all ones | ✔ | ✔ |
 | [`torch.full`](https://pytorch.org/docs/0.4.0/torch.html#torch.full) | filled with a given value | ✔ | ✔ |
