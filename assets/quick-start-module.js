@@ -17,6 +17,7 @@ var supportedCloudPlatforms = [
   'aws',
   'google-cloud',
   'microsoft-azure',
+  'floydhub'
 ];
 
 var os = $(".os > .option");
