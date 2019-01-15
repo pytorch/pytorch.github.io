@@ -5,7 +5,7 @@ summary: Translate is an open source project based on Facebook's machine transla
 link: https://github.com/pytorch/translate
 order: 6
 logo-class: language
-
+redirect_to: https://github.com/pytorch/translate
 ---
 
 ## Get Started
