@@ -22,7 +22,7 @@ FloydHub provides no setup required, pre-configured environment to help you buil
 ## FloydHub Workspace: GPU-based Virtual Machines
 {: #floydhub-workspace}
 
-Generally, you will be using [FloydHub Workspace](https://www.floydhub.com/product/build){:target="_blank"} to begin with PyTorch. FlodyHub Workspace is an interactive environment (Jupyter Lab) for developing and running code. You can run Jupyter notebooks, Python scripts and much more. All the files and data in your workspace will be preserved for you, across restarts. You can think of it as your persistent, on-demand machine on the cloud.
+Generally, you will be using [FloydHub Workspace](https://www.floydhub.com/product/build){:target="_blank"} to begin with PyTorch. FlodyHub Workspace is an interactive environment (Jupyter Lab) for developing and running code. You can run Jupyter notebooks, Python scripts and much more. All the files and data in your workspace will be preserved after shutdown.
 
 By clicking on the below button, you will create a new FloydHub Workspace with the notebook tutorial: [WHAT IS TORCH.NN REALLY?](https://pytorch.org/tutorials/beginner/nn_tutorial.html) created by Jeremy Howard and the [fast.ai](https://www.fast.ai/) Team.
 
