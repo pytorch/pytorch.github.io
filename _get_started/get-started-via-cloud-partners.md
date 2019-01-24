@@ -43,11 +43,20 @@ published: true
 {% include_relative installation/google-cloud.md %}
 {% endcapture %}
 
+{% capture floydhub %}
+<nav class="inline_toc" markdown="1">
+* TOC
+{:toc}
+</nav>
+{% include_relative installation/floydhub.md %}
+{% endcapture %}
+
 
 <div id="cloud">
   <div class="platform aws">{{aws | markdownify }}</div>
   <div class="platform google-cloud">{{google-cloud | markdownify }}</div>
   <div class="platform microsoft-azure">{{azure | markdownify }}</div>
+  <div class="platform floydhub">{{floydhub | markdownify }}</div>
 </div>
 
 <script type="text/javascript">
