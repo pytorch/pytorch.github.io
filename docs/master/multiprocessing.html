@@ -110,7 +110,7 @@
               
               
                 <div class="version">
-                  <a href='http://pytorch.org/docs/versions.html'>1.1.0a0+7d7855e &#x25BC</a>
+                  <a href='http://pytorch.org/docs/versions.html'>1.1.0a0+dff8165 &#x25BC</a>
                 </div>
               
             
@@ -316,15 +316,58 @@ the values returned by <a class="reference internal" href="#torch.multiprocessin
 a <code class="docutils literal notranslate"><span class="pre">spawn</span></code> or <code class="docutils literal notranslate"><span class="pre">forkserver</span></code> start methods. <a class="reference external" href="https://docs.python.org/3/library/multiprocessing.html#module-multiprocessing" title="(in Python v3.7)"><code class="docutils literal notranslate"><span class="pre">multiprocessing</span></code></a> in
 Python 2 can only create subprocesses using <code class="docutils literal notranslate"><span class="pre">fork</span></code>, and it’s not supported
 by the CUDA runtime.</p>
-<div class="admonition warning">
-<p class="first admonition-title">Warning</p>
-<p class="last">CUDA API requires that the allocation exported to other processes remains
-valid as long as it’s used by them. You should be careful and ensure that
-CUDA tensors you shared don’t go out of scope as long as it’s necessary.
-This shouldn’t be a problem for sharing model parameters, but passing other
-kinds of data should be done with care. Note that this restriction doesn’t
-apply to shared CPU memory.</p>
-</div>
+<p>Unlike CPU tensors, the sending process is required to keep the original tensor
+as long as the receiving process retains a copy of the tensor.
+This shouldn’t be a problem for sharing model parameters (which stay live
+for the entire execution of the model), but passing other
+kinds of data should be done with care.</p>
+<p>Here is an example program which handles these requirements correctly:</p>
+<dl class="docutils">
+<dt>::</dt>
+<dd><p class="first">import torch
+import torch.multiprocessing as mp</p>
+<p>torch.set_default_tensor_type(torch.cuda.FloatTensor)</p>
+<dl class="last docutils">
+<dt>def sender(q, e):</dt>
+<dd><dl class="first last docutils">
+<dt>for i in range(10):</dt>
+<dd>s_sample = [torch.zeros(1), torch.ones(1)]
+q.put(s_sample)
+e.wait()
+del s_sample
+e.clear()</dd>
+</dl>
+</dd>
+<dt>if __name__ == “__main__”:</dt>
+<dd><p class="first">ctx = mp.get_context(“spawn”)
+q = ctx.Queue()
+e = ctx.Event()
+p = ctx.Process(target=sender, args=(q, e))
+p.start()</p>
+<dl class="docutils">
+<dt>for i in range(10):</dt>
+<dd>print(‘=== ITER {} ===”.format(i))
+r_sample = q.get()
+del r_sample
+e.set()</dd>
+</dl>
+<p class="last">p.join()</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<p>In the example above, calling <cite>e.wait()</cite>
+on sender side ensures tensor <cite>s_sample</cite> doesn’t get deleted while
+receiver is working on it.  The receiver signals when it is done
+with the tensor using <cite>e.set()</cite>, being careful to <cite>del</cite> its reference
+to the received tensor first.  It is INSUFFICIENT to promise never to call
+<cite>r_sample</cite> again; while <cite>r_sample</cite> is live, it may be confused with
+any subsequent tensors allocated by the source process at the same address.</p>
+<p>If a receiver wants to save the data of <cite>r_sample</cite> for future use while
+letting the source process deallocate the original, it must
+<cite>clone()</cite> it.</p>
+<p>This behavior is very confusing, and we are tracking a fix for it
+at <a class="reference external" href="https://github.com/pytorch/pytorch/issues/16141">https://github.com/pytorch/pytorch/issues/16141</a></p>
 </div>
 <div class="section" id="sharing-strategies">
 <h2>Sharing strategies<a class="headerlink" href="#sharing-strategies" title="Permalink to this headline">¶</a></h2>
