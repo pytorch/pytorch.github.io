@@ -180,7 +180,7 @@ pip3 install torchvision
 
 ```bash
 # Python 3.7
-pip3 install https://download.pytorch.org/whl/cpu/torch-1.0.1.post2-cp37-cp37m-linux_x86_64.whl
+pip3 install https://download.pytorch.org/whl/cpu/torch-1.0.1-cp37-cp37m-linux_x86_64.whl
 pip3 install torchvision
 ```
 
@@ -224,7 +224,7 @@ pip3 install torchvision
 
 ```bash
 # Python 3.7
-pip3 install https://download.pytorch.org/whl/cu80/torch-1.0.1.post2-cp37-cp37m-linux_x86_64.whl
+pip3 install https://download.pytorch.org/whl/cu80/torch-1.0.1-cp37-cp37m-linux_x86_64.whl
 pip3 install torchvision
 ```
 
@@ -253,7 +253,7 @@ pip3 install torchvision
 
 ```bash
 # Python 3.7
-pip3 install https://download.pytorch.org/whl/cu100/torch-1.0.1.post2-cp37-cp37m-linux_x86_64.whl
+pip3 install https://download.pytorch.org/whl/cu100/torch-1.0.1-cp37-cp37m-linux_x86_64.whl
 pip3 install torchvision
 ```
 
