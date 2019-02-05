@@ -491,7 +491,7 @@ function commandMessage(key) {
       "conda install pytorch-nightly cudatoolkit=8.0 -c pytorch",
 
     "preview,conda,linux,cuda9.0,python2.7":
-      "conda install pytorch-nightly -c pytorch",
+      "conda install pytorch-nightly cudatoolkit=9.0 -c pytorch",
 
     "preview,conda,linux,cuda10.0,python2.7":
       "conda install pytorch-nightly cudatoolkit=10.0 -c pytorch",
@@ -503,7 +503,7 @@ function commandMessage(key) {
       "conda install pytorch-nightly cudatoolkit=8.0 -c pytorch",
 
     "preview,conda,linux,cuda9.0,python3.5":
-      "conda install pytorch-nightly -c pytorch",
+      "conda install pytorch-nightly cudatoolkit=9.0 -c pytorch",
 
     "preview,conda,linux,cuda10.0,python3.5":
       "conda install pytorch-nightly cudatoolkit=10.0 -c pytorch",
@@ -515,7 +515,7 @@ function commandMessage(key) {
       "conda install pytorch-nightly cudatoolkit=8.0 -c pytorch",
 
     "preview,conda,linux,cuda9.0,python3.6":
-      "conda install pytorch-nightly -c pytorch",
+      "conda install pytorch-nightly cudatoolkit=9.0 -c pytorch",
 
     "preview,conda,linux,cuda10.0,python3.6":
       "conda install pytorch-nightly cudatoolkit=10.0 -c pytorch",
@@ -527,7 +527,7 @@ function commandMessage(key) {
       "conda install pytorch-nightly cudatoolkit=8.0 -c pytorch",
 
     "preview,conda,linux,cuda9.0,python3.7":
-      "conda install pytorch-nightly -c pytorch",
+      "conda install pytorch-nightly cudatoolkit=9.0 -c pytorch",
 
     "preview,conda,linux,cuda10.0,python3.7":
       "conda install pytorch-nightly cudatoolkit=10.0 -c pytorch",
@@ -599,7 +599,7 @@ function commandMessage(key) {
       "conda install pytorch-nightly cudatoolkit=8.0 -c pytorch",
 
     "preview,conda,windows,cuda9.0,python3.5":
-      "conda install pytorch-nightly -c pytorch",
+      "conda install pytorch-nightly cudatoolkit=9.0 -c pytorch",
 
     "preview,conda,windows,cuda10.0,python3.5":
       "conda install pytorch-nightly cudatoolkit=10.0 -c pytorch",
@@ -611,7 +611,7 @@ function commandMessage(key) {
       "conda install pytorch-nightly cudatoolkit=8.0 -c pytorch",
 
     "preview,conda,windows,cuda9.0,python3.6":
-      "conda install pytorch-nightly -c pytorch",
+      "conda install pytorch-nightly cudatoolkit=9.0 -c pytorch",
 
     "preview,conda,windows,cuda10.0,python3.6":
       "conda install pytorch-nightly cudatoolkit=10.0 -c pytorch",
@@ -623,7 +623,7 @@ function commandMessage(key) {
       "conda install pytorch-nightly cudatoolkit=8.0 -c pytorch",
 
     "preview,conda,windows,cuda9.0,python3.7":
-      "conda install pytorch-nightly -c pytorch",
+      "conda install pytorch-nightly cudatoolkit=9.0 -c pytorch",
 
     "preview,conda,windows,cuda10.0,python3.7":
       "conda install pytorch-nightly cudatoolkit=10.0 -c pytorch",
