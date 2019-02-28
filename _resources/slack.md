@@ -1,9 +1,9 @@
 ---
 title: Slack
-summary-home: Discuss advanced topics. For access, fill https://goo.gl/forms/PP1AGvNHpSaJP8to1
-summary: Discuss advanced topics. For access, fill https://goo.gl/forms/PP1AGvNHpSaJP8to1
+summary-home: 'Discuss advanced topics. Request access: https://bit.ly/ptslack'
+summary: 'Discuss advanced topics. Request access: https://bit.ly/ptslack'
 class: slack
-link: https://goo.gl/forms/PP1AGvNHpSaJP8to1
+link: https://bit.ly/ptslack
 order: 5
 featured-home: true
 ---
