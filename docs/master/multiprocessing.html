@@ -110,7 +110,7 @@
               
               
                 <div class="version">
-                  <a href='http://pytorch.org/docs/versions.html'>1.1.0a0+f5ea528 &#x25BC</a>
+                  <a href='http://pytorch.org/docs/versions.html'>1.1.0a0+6c9b312 &#x25BC</a>
                 </div>
               
             
@@ -323,52 +323,55 @@ a <code class="docutils literal notranslate"><span class="pre">spawn</span></cod
 Python 2 can only create subprocesses using <code class="docutils literal notranslate"><span class="pre">fork</span></code>, and it’s not supported
 by the CUDA runtime.</p>
 <p>Unlike CPU tensors, the sending process is required to keep the original tensor
-as long as the receiving process retains a copy of the tensor.
-This shouldn’t be a problem for sharing model parameters (which stay live
-for the entire execution of the model), but passing other
-kinds of data should be done with care.</p>
-<p>Here is an example program which handles these requirements correctly:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">torch</span>
-<span class="kn">import</span> <span class="nn">torch.multiprocessing</span> <span class="k">as</span> <span class="nn">mp</span>
-
-<span class="n">torch</span><span class="o">.</span><span class="n">set_default_tensor_type</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">FloatTensor</span><span class="p">)</span>
-
-<span class="k">def</span> <span class="nf">sender</span><span class="p">(</span><span class="n">q</span><span class="p">,</span> <span class="n">e</span><span class="p">):</span>
-    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">10</span><span class="p">):</span>
-        <span class="n">s_sample</span> <span class="o">=</span> <span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">1</span><span class="p">),</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">1</span><span class="p">)]</span>
-        <span class="n">q</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">s_sample</span><span class="p">)</span>
-        <span class="n">e</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span>
-        <span class="k">del</span> <span class="n">s_sample</span>
-        <span class="n">e</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
-
-<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s2">&quot;__main__&quot;</span><span class="p">:</span>
-    <span class="n">ctx</span> <span class="o">=</span> <span class="n">mp</span><span class="o">.</span><span class="n">get_context</span><span class="p">(</span><span class="s2">&quot;spawn&quot;</span><span class="p">)</span>
-    <span class="n">q</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">Queue</span><span class="p">()</span>
-    <span class="n">e</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">Event</span><span class="p">()</span>
-    <span class="n">p</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">Process</span><span class="p">(</span><span class="n">target</span><span class="o">=</span><span class="n">sender</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="p">(</span><span class="n">q</span><span class="p">,</span> <span class="n">e</span><span class="p">))</span>
-    <span class="n">p</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
-
-    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">10</span><span class="p">):</span>
-        <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;=== ITER </span><span class="si">{}</span><span class="s1"> ===&quot;.format(i))</span>
-        <span class="n">r_sample</span> <span class="o">=</span> <span class="n">q</span><span class="o">.</span><span class="n">get</span><span class="p">()</span>
-        <span class="k">del</span> <span class="n">r_sample</span>
-        <span class="n">e</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
-
-    <span class="n">p</span><span class="o">.</span><span class="n">join</span><span class="p">()</span>
+as long as the receiving process retains a copy of the tensor. It is implemented
+under the hood but requires users to follow the next best practices.</p>
+<ol class="arabic simple">
+<li>Release memory ASAP in the consumer.</li>
+</ol>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="c1">## Good</span>
+<span class="n">x</span> <span class="o">=</span> <span class="n">queue</span><span class="o">.</span><span class="n">get</span><span class="p">()</span>
+<span class="c1"># do somethings with x</span>
+<span class="k">del</span> <span class="n">x</span>
 </pre></div>
 </div>
-<p>In the example above, calling <cite>e.wait()</cite>
-on sender side ensures tensor <cite>s_sample</cite> doesn’t get deleted while
-receiver is working on it.  The receiver signals when it is done
-with the tensor using <cite>e.set()</cite>, being careful to <cite>del</cite> its reference
-to the received tensor first.  It is INSUFFICIENT to promise never to call
-<cite>r_sample</cite> again; while <cite>r_sample</cite> is live, it may be confused with
-any subsequent tensors allocated by the source process at the same address.</p>
-<p>If a receiver wants to save the data of <cite>r_sample</cite> for future use while
-letting the source process deallocate the original, it must
-<cite>clone()</cite> it.</p>
-<p>This behavior is very confusing, and we are tracking a fix for it
-at <a class="reference external" href="https://github.com/pytorch/pytorch/issues/16141">https://github.com/pytorch/pytorch/issues/16141</a></p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="c1">## Bad</span>
+<span class="n">x</span> <span class="o">=</span> <span class="n">queue</span><span class="o">.</span><span class="n">get</span><span class="p">()</span>
+<span class="c1"># do somethings with x</span>
+<span class="c1"># do everything else (producer have to keep x in memory)</span>
+</pre></div>
+</div>
+<p>2. Keep producer process running until all consumers exits. This will prevent
+the situation when the producer process releasing memory which is still in use
+by the consumer.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="c1">## producer</span>
+<span class="c1"># send tensors, do something</span>
+<span class="n">event</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span>
+</pre></div>
+</div>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="c1">## consumer</span>
+<span class="c1"># receive tensors and use them</span>
+<span class="n">event</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
+</pre></div>
+</div>
+<ol class="arabic simple" start="3">
+<li>Don’t pass received tensors.</li>
+</ol>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="c1"># not going to work</span>
+<span class="n">x</span> <span class="o">=</span> <span class="n">queue</span><span class="o">.</span><span class="n">get</span><span class="p">()</span>
+<span class="n">queue_2</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="c1"># you need to create a process-local copy</span>
+<span class="n">x</span> <span class="o">=</span> <span class="n">queue</span><span class="o">.</span><span class="n">get</span><span class="p">()</span>
+<span class="n">x_clone</span> <span class="o">=</span> <span class="n">x</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+<span class="n">queue_2</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">x_clone</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="c1"># putting and getting from the same queue in the same process will likely end up with segfault</span>
+<span class="n">queue</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">tensor</span><span class="p">)</span>
+<span class="n">x</span> <span class="o">=</span> <span class="n">queue</span><span class="o">.</span><span class="n">get</span><span class="p">()</span>
+</pre></div>
+</div>
 </div>
 <div class="section" id="sharing-strategies">
 <h2>Sharing strategies<a class="headerlink" href="#sharing-strategies" title="Permalink to this headline">¶</a></h2>
