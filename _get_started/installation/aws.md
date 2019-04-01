@@ -60,6 +60,14 @@ import torch
 torch.cuda.is_available()
 ```
 
+<div>
+  <a href="javascript:void(0);" class="btn btn-lg btn-orange btn-demo show-screencast">Show Demo</a>
+  <div class="screencast">
+    <script src="https://asciinema.org/a/15dyZZvvakqbfKgfh2LByMkXz.js" id="asciicast-15dyZZvvakqbfKgfh2LByMkXz" data-speed="2" async></script>
+    <a href="javascript:void(0);" class="btn btn-lg btn-orange btn-demo show-info">Hide Demo</a>
+  </div>
+</div>
+
 ## AWS Primer
 {: #aws-primer}
 
