@@ -6,6 +6,6 @@ link: https://github.com/pytorch/elf
 logo-class: reasoning
 order: 2
 summary-home: ELF is a platform for game research that allows developers to train and test their algorithms in various game environments.
-featured-home: true
+featured-home: false
 redirect_to: https://github.com/pytorch/elf
 ---
