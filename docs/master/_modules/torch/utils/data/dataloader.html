@@ -108,7 +108,7 @@
               
               
                 <div class="version">
-                  <a href='http://pytorch.org/docs/versions.html'>1.1.0a0+c42f3f9 &#x25BC</a>
+                  <a href='http://pytorch.org/docs/versions.html'>1.1.0a0+5e62ee2 &#x25BC</a>
                 </div>
               
             
@@ -865,41 +865,50 @@
         <span class="c1"># See (1) and the second half of the note.</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">shutdown</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">shutdown</span> <span class="o">=</span> <span class="kc">True</span>
-            <span class="c1"># Removes pids from the C side data structure first so worker</span>
-            <span class="c1"># termination afterwards won&#39;t trigger false positive error report.</span>
-            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">worker_pids_set</span><span class="p">:</span>
-                <span class="n">_utils</span><span class="o">.</span><span class="n">signal_handling</span><span class="o">.</span><span class="n">_remove_worker_pids</span><span class="p">(</span><span class="nb">id</span><span class="p">(</span><span class="bp">self</span><span class="p">))</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">worker_pids_set</span> <span class="o">=</span> <span class="kc">False</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">done_event</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
 
-            <span class="bp">self</span><span class="o">.</span><span class="n">done_event</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
+                <span class="c1"># Exit `pin_memory_thread` first because exiting workers may leave</span>
+                <span class="c1"># corrupted data in `worker_result_queue` which `pin_memory_thread`</span>
+                <span class="c1"># reads from.</span>
+                <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s1">&#39;pin_memory_thread&#39;</span><span class="p">):</span>
+                    <span class="c1"># Use hasattr in case error happens before we set the attribute.</span>
+                    <span class="c1"># First time do `worker_result_queue.put` in this process.</span>
 
-            <span class="c1"># Exit `pin_memory_thread` first because exiting workers may leave</span>
-            <span class="c1"># corrupted data in `worker_result_queue` which `pin_memory_thread`</span>
-            <span class="c1"># reads from.</span>
-            <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s1">&#39;pin_memory_thread&#39;</span><span class="p">):</span>
-                <span class="c1"># Use hasattr in case error happens before we set the attribute.</span>
-                <span class="c1"># First time do `worker_result_queue.put` in this process.</span>
+                    <span class="c1"># `cancel_join_thread` in case that `pin_memory_thread` exited.</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">worker_result_queue</span><span class="o">.</span><span class="n">cancel_join_thread</span><span class="p">()</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">worker_result_queue</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">pin_memory_thread</span><span class="o">.</span><span class="n">join</span><span class="p">()</span>
+                    <span class="c1"># Indicate that no more data will be put on this queue by the</span>
+                    <span class="c1"># current process. This **must** be called after</span>
+                    <span class="c1"># `pin_memory_thread` is joined because that thread shares the</span>
+                    <span class="c1"># same pipe handles with this loader thread. If the handle is</span>
+                    <span class="c1"># closed, Py3 will error in this case, but Py2 will just time</span>
+                    <span class="c1"># out even if there is data in the queue.</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">worker_result_queue</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
 
-                <span class="c1"># `cancel_join_thread` in case that `pin_memory_thread` exited.</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">worker_result_queue</span><span class="o">.</span><span class="n">cancel_join_thread</span><span class="p">()</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">worker_result_queue</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">pin_memory_thread</span><span class="o">.</span><span class="n">join</span><span class="p">()</span>
-                <span class="c1"># Indicate that no more data will be put on this queue by the</span>
-                <span class="c1"># current process. This **must** be called after</span>
-                <span class="c1"># `pin_memory_thread` is joined because that thread shares the</span>
-                <span class="c1"># same pipe handles with this loader thread. If the handle is</span>
-                <span class="c1"># closed, Py3 will error in this case, but Py2 will just time</span>
-                <span class="c1"># out even if there is data in the queue.</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">worker_result_queue</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
-
-            <span class="c1"># Exit workers now.</span>
-            <span class="k">for</span> <span class="n">q</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">index_queues</span><span class="p">:</span>
-                <span class="n">q</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
-                <span class="c1"># Indicate that no more data will be put on this queue by the</span>
-                <span class="c1"># current process.</span>
-                <span class="n">q</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
-            <span class="k">for</span> <span class="n">w</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">workers</span><span class="p">:</span>
-                <span class="n">w</span><span class="o">.</span><span class="n">join</span><span class="p">()</span>
+                <span class="c1"># Exit workers now.</span>
+                <span class="k">for</span> <span class="n">q</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">index_queues</span><span class="p">:</span>
+                    <span class="n">q</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
+                    <span class="c1"># Indicate that no more data will be put on this queue by the</span>
+                    <span class="c1"># current process.</span>
+                    <span class="n">q</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+                <span class="k">for</span> <span class="n">w</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">workers</span><span class="p">:</span>
+                    <span class="n">w</span><span class="o">.</span><span class="n">join</span><span class="p">()</span>
+            <span class="k">finally</span><span class="p">:</span>
+                <span class="c1"># Even though all this function does is putting into queues that</span>
+                <span class="c1"># we have called `cancel_join_thread` on, weird things can</span>
+                <span class="c1"># happen when a worker is killed by a signal, e.g., hanging in</span>
+                <span class="c1"># `Event.set()`. So we need to guard this with SIGCHLD handler,</span>
+                <span class="c1"># and remove pids from the C side data structure only at the</span>
+                <span class="c1"># end.</span>
+                <span class="c1">#</span>
+                <span class="c1"># FIXME: Unfortunately, for Windows, we are missing a worker</span>
+                <span class="c1">#        error detection mechanism here in this function, as it</span>
+                <span class="c1">#        doesn&#39;t provide a SIGCHLD handler.</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">worker_pids_set</span><span class="p">:</span>
+                    <span class="n">_utils</span><span class="o">.</span><span class="n">signal_handling</span><span class="o">.</span><span class="n">_remove_worker_pids</span><span class="p">(</span><span class="nb">id</span><span class="p">(</span><span class="bp">self</span><span class="p">))</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">worker_pids_set</span> <span class="o">=</span> <span class="kc">False</span>
 
     <span class="k">def</span> <span class="nf">__del__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
