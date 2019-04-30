@@ -315,36 +315,36 @@ function commandMessage(key) {
     "stable,pip,macos,cudanone,python3.7": "pip3 install torch torchvision",
 
     "stable,pip,linux,cudanone,python2.7":
-      "pip install https://download.pytorch.org/whl/cpu/torch-1.1.0-cp27-cp27mu-linux_x86_64.whl<br/>pip install torchvision <br/><br/> # if the above command does not work, then you have python 2.7 UCS2, use this command<br/>pip install https://download.pytorch.org/whl/cpu/torch-1.1.0-cp27-cp27m-linux_x86_64.whl",
+      "pip install torch -f https://download.pytorch.org/whl/cpu/stable <br/>pip install torchvision",
 
     "stable,pip,linux,cuda9.0,python2.7": "pip install torch torchvision",
 
     "stable,pip,linux,cuda10.0,python2.7":
-      "pip install https://download.pytorch.org/whl/cu100/torch-1.1.0-cp27-cp27mu-linux_x86_64.whl<br/>pip install torchvision<br/><br/># if the above command does not work, then you have python 2.7 UCS2, use this command<br/>pip install https://download.pytorch.org/whl/cu100/torch-1.1.0-cp27-cp27m-linux_x86_64.whl",
+      "pip install torch -f https://download.pytorch.org/whl/cu100/stable <br/>pip install torchvision",
 
     "stable,pip,linux,cudanone,python3.5":
-      "pip3 install https://download.pytorch.org/whl/cpu/torch-1.1.0-cp35-cp35m-linux_x86_64.whl<br/>pip3 install torchvision",
+      "pip3 install torch -f https://download.pytorch.org/whl/cpu/stable<br/>pip3 install torchvision",
 
     "stable,pip,linux,cuda9.0,python3.5": "pip3 install torch torchvision",
 
     "stable,pip,linux,cuda10.0,python3.5":
-      "pip3 install https://download.pytorch.org/whl/cu100/torch-1.1.0-cp35-cp35m-linux_x86_64.whl<br/>pip3 install torchvision",
+      "pip3 install torch -f https://download.pytorch.org/whl/cu100/stable<br/>pip3 install torchvision",
 
     "stable,pip,linux,cudanone,python3.6":
-      "pip3 install https://download.pytorch.org/whl/cpu/torch-1.1.0-cp36-cp36m-linux_x86_64.whl<br/>pip3 install torchvision",
+      "pip3 install torch -f https://download.pytorch.org/whl/cpu/stable<br/>pip3 install torchvision",
 
     "stable,pip,linux,cuda9.0,python3.6": "pip3 install torch torchvision",
 
     "stable,pip,linux,cuda10.0,python3.6":
-      "pip3 install https://download.pytorch.org/whl/cu100/torch-1.1.0-cp36-cp36m-linux_x86_64.whl<br/>pip3 install torchvision",
+      "pip3 install torch -f https://download.pytorch.org/whl/cu100/stable<br/>pip3 install torchvision",
 
     "stable,pip,linux,cudanone,python3.7":
-      "pip3 install https://download.pytorch.org/whl/cpu/torch-1.1.0-cp37-cp37m-linux_x86_64.whl<br/>pip3 install torchvision",
+      "pip3 install torch -f https://download.pytorch.org/whl/cpu/stable<br/>pip3 install torchvision",
 
     "stable,pip,linux,cuda9.0,python3.7": "pip3 install torch torchvision",
 
     "stable,pip,linux,cuda10.0,python3.7":
-      "pip3 install https://download.pytorch.org/whl/cu100/torch-1.1.0-cp37-cp37m-linux_x86_64.whl<br/>pip3 install torchvision",
+      "pip3 install torch -f https://download.pytorch.org/whl/cu100/stable<br/>pip3 install torchvision",
 
     "stable,pip,windows,cudanone,python2.7":
       "# PyTorch does not support Python 2.7 on Windows. Please install with Python 3.",
@@ -356,31 +356,31 @@ function commandMessage(key) {
       "# PyTorch does not support Python 2.7 on Windows. Please install with Python 3.",
 
     "stable,pip,windows,cudanone,python3.5":
-      "pip3 install https://download.pytorch.org/whl/cpu/torch-1.1.0-cp35-cp35m-win_amd64.whl<br/>pip3 install torchvision",
+      "pip3 install torch -f https://download.pytorch.org/whl/cpu/stable<br/>pip3 install torchvision",
 
     "stable,pip,windows,cuda9.0,python3.5":
-      "pip3 install https://download.pytorch.org/whl/cu90/torch-1.1.0-cp35-cp35m-win_amd64.whl<br/>pip3 install torchvision",
+      "pip3 install torch -f https://download.pytorch.org/whl/cu90/stable<br/>pip3 install torchvision",
 
     "stable,pip,windows,cuda10.0,python3.5":
-      "pip3 install https://download.pytorch.org/whl/cu100/torch-1.1.0-cp35-cp35m-win_amd64.whl<br/>pip3 install torchvision",
+      "pip3 install torch -f https://download.pytorch.org/whl/cu100/stable<br/>pip3 install torchvision",
 
     "stable,pip,windows,cudanone,python3.6":
-      "pip3 install https://download.pytorch.org/whl/cpu/torch-1.1.0-cp36-cp36m-win_amd64.whl<br/>pip3 install torchvision",
+      "pip3 install torch -f https://download.pytorch.org/whl/cpu/stable<br/>pip3 install torchvision",
 
     "stable,pip,windows,cuda9.0,python3.6":
-      "pip3 install https://download.pytorch.org/whl/cu90/torch-1.1.0-cp36-cp36m-win_amd64.whl<br/>pip3 install torchvision",
+      "pip3 install torch -f https://download.pytorch.org/whl/cu90/stable<br/>pip3 install torchvision",
 
     "stable,pip,windows,cuda10.0,python3.6":
-      "pip3 install https://download.pytorch.org/whl/cu100/torch-1.1.0-cp36-cp36m-win_amd64.whl<br/>pip3 install torchvision",
+      "pip3 install torch -f https://download.pytorch.org/whl/cu100/stable<br/>pip3 install torchvision",
 
     "stable,pip,windows,cudanone,python3.7":
-      "pip3 install https://download.pytorch.org/whl/cpu/torch-1.1.0-cp37-cp37m-win_amd64.whl<br/>pip3 install torchvision",
+      "pip3 install torch -f https://download.pytorch.org/whl/cpu/stable<br/>pip3 install torchvision",
 
     "stable,pip,windows,cuda9.0,python3.7":
-      "pip3 install https://download.pytorch.org/whl/cu90/torch-1.1.0-cp37-cp37m-win_amd64.whl<br/>pip3 install torchvision",
+      "pip3 install torch -f https://download.pytorch.org/whl/cu90/stable<br/>pip3 install torchvision",
 
     "stable,pip,windows,cuda10.0,python3.7":
-      "pip3 install https://download.pytorch.org/whl/cu100/torch-1.1.0-cp37-cp37m-win_amd64.whl<br/>pip3 install torchvision",
+      "pip3 install torch -f https://download.pytorch.org/whl/cu100/stable<br/>pip3 install torchvision",
 
     "stable,libtorch,linux,cudanone,cplusplus":
       "Download here: <br/><a href='https://download.pytorch.org/libtorch/cpu/libtorch-shared-with-deps-latest.zip'>https://download.pytorch.org/libtorch/cpu/libtorch-shared-with-deps-latest.zip</a>",
@@ -395,10 +395,10 @@ function commandMessage(key) {
       "Download here: <br/><a href='https://download.pytorch.org/libtorch/cpu/libtorch-macos-latest.zip'> https://download.pytorch.org/libtorch/cpu/libtorch-macos-latest.zip </a>",
 
     "stable,libtorch,macos,cuda9.0,cplusplus":
-      "MacOS binaries do not support CUDA. Download CPU libtorch here: <br/><a href='https://download.pytorch.org/libtorch/cpu/libtorch-macos-1.1.0.zip'> https://download.pytorch.org/libtorch/cpu/libtorch-macos-1.1.0.zip </a>",
+      "MacOS binaries do not support CUDA. Download CPU libtorch here: <br/><a href='https://download.pytorch.org/libtorch/cpu/libtorch-macos-latest.zip'> https://download.pytorch.org/libtorch/cpu/libtorch-macos-latest.zip </a>",
 
     "stable,libtorch,macos,cuda10.0,cplusplus":
-      "MacOS binaries do not support CUDA. Download CPU libtorch here: <br/><a href='https://download.pytorch.org/libtorch/cpu/libtorch-macos-1.1.0.zip'> https://download.pytorch.org/libtorch/cpu/libtorch-macos-1.1.0.zip </a>",
+      "MacOS binaries do not support CUDA. Download CPU libtorch here: <br/><a href='https://download.pytorch.org/libtorch/cpu/libtorch-macos-latest.zip'> https://download.pytorch.org/libtorch/cpu/libtorch-macos-latest.zip </a>",
 
     "stable,libtorch,windows,cudanone,cplusplus":
       "Download here: <br/><a href='https://download.pytorch.org/libtorch/cpu/libtorch-win-shared-with-deps-latest.zip'>https://download.pytorch.org/libtorch/cpu/libtorch-win-shared-with-deps-latest.zip</a>",
