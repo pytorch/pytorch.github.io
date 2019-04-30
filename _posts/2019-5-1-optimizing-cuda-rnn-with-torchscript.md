@@ -202,9 +202,9 @@ By applying these techniques, we reduced our time in the forward pass by an addi
 ### LSTM Layer (backward)
 
 * “Tree” Batch Matrix Muplication: It is often the case that a single weight is reused multiple times in the LSTM backward graph, forming a tree where the leaves are matrix multiplies and nodes are adds.  These nodes can be combined together by concatenating the LHSs and RHSs in different dimensions, then computed as a single matrix multiplication. The formula of equivalence can be denoted as follows:
-    
-    $L1 * R1 + L2 * R2 = torch.cat((L1, L2), dim=1) * torch.cat((R1, R2), dim=0)$
-    
+    <div class="text-center">
+    <img src="{{ site.url }}/assets/images/custom-rnn-batchmm.png" width="40%">
+    </div>
 * Autograd is a critical component of what makes PyTorch such an elegant ML framework. As such, we carried this through to PyTorch JIT,  but using a new **Automatic Differentiation** (AD) mechanism that works on the IR level.  JIT automatic differentiation will slice the forward graph into symbolically differentiable subgraphs, and generate backwards nodes for those subgraphs.  Taking the above IR as an example, we group the graph nodes into a single `prim::DifferentiableGraph_0` for the operations that has AD formulas. For operations that have not been added to AD formulas, we will fall back to Autograd during execution. 
 
 * Optimizing the backwards path is hard, and the implicit broadcasting semantics make the optimization of automatic differentiation harder. PyTorch makes it convenient to write tensor operations without worrying about the shapes by broadcasting the tensors for you. For performance, the painful point in backward is that we need to have a summation for such kind of broadcastable operations. This results in the derivative of every broadcastable op being followed by a summation. Since we cannot currently fuse reduce operations, this causes FusionGroups to break into multiple small groups leading to bad performance. To deal with this, refer to this great [post](http://lernapparat.de/fast-lstm-pytorch/) written by Thomas Viehmann.
