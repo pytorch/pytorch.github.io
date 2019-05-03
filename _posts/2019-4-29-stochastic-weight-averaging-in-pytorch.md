@@ -39,7 +39,7 @@ for _ in range(100):
 opt.swap_swa_sgd()
 ```
 
-You can wrap any optimizer from `torch.optim` using the `SWA` class, and then train your model as usual. When training is complete you simply call `swap_swa_sgd()` to set the weights of your model to their SWA averages. Below we explain the SWA procedure and the parameters of the `SWA` class in detail.
+You can wrap any optimizer from `torch.optim` using the `SWA` class, and then train your model as usual. When training is complete you simply call `swap_swa_sgd()` to set the weights of your model to their SWA averages. Below we explain the SWA procedure and the parameters of the `SWA` class in detail. We emphasize that SWA can be combined with *any* optimization procedure, such as Adam, in the same way that it can be combined with SGD.
 
 ## Is this just Averaged SGD?
 
@@ -56,7 +56,7 @@ There are two important ingredients that make SWA work. First, SWA uses a modifi
 
 **Figure 2.** Illustration of the learning rate schedule adopted by SWA. Standard decaying schedule is used for the first 75% of the training and then a high constant value is used for the remaining 25%. The SWA averages are formed during the last 25% of training.
 
-In our implementation the auto mode of the `SWA` optimizer allows us to run the procedure described above. To run SWA in auto mode you just need to wrap your optimizer `base_opt` of choice (can be SGD, Adam, or any other `torch.optim.Optimizer`) with ` SWA(base_opt, swa_start, swa_freq, swa_lr)`. After `swa_start` optimization steps the learning rate will be switched to a constant value `swa_lr`, and in the end of every `swa_freq` optimization steps a snapshot of the weights will be added to the SWA running average. Once you run `opt.swap_swa_sgd()`, the weights of your model are replaced with their SWA running averages.
+In our implementation the auto mode of the `SWA` optimizer allows us to run the procedure described above. To run SWA in auto mode you just need to wrap your optimizer `base_opt` of choice (can be SGD, Adam, or any other `torch.optim.Optimizer`) with `SWA(base_opt, swa_start, swa_freq, swa_lr)`. After `swa_start` optimization steps the learning rate will be switched to a constant value `swa_lr`, and in the end of every `swa_freq` optimization steps a snapshot of the weights will be added to the SWA running average. Once you run `opt.swap_swa_sgd()`, the weights of your model are replaced with their SWA running averages.
 
 ## Batch Normalization
 
@@ -132,13 +132,17 @@ Empirically, SWAG performs on par or better than popular alternatives including 
 
 In another follow-up [paper](http://www.gatsby.ucl.ac.uk/~balaji/udl-camera-ready/UDL-24.pdf) SWA was shown to improve the performance of policy gradient methods A2C and DDPG on several Atari games and MuJoCo environments.
 
-<div class="text-center">
-<img src="{{ site.url }}/assets/images/swa/Figure_rl.png" width="50%">
-</div>
+| Environment   | A2C            | A2C + SWA      |
+|---------------|:----------------:|:----------------:|
+| Breakout      | 522 ± 34       | 703 ± 60       |
+| Qbert         | 18777 ± 778    | 21272 ± 655    |
+| SpaceInvaders | 7727 ± 1121    | 21676 ± 8897   |
+| Seaquest      | 1779 ± 4       | 1795 ± 4       |
+| CrazyClimber  | 147030 ± 10239 | 139752 ± 11618 |
+| BeamRider     | 9999 ± 402     | 11321 ± 1065   |
 
 ## Low Precision Training
-
-We can filter through quantization noise by combining weights that have been rounded down with weights have been rounded up. Moreover, by averaging weights to find a flat region of the loss surface, large perturbations of the weights will not affect the quality of the solution (Figures 7 and 8). Recent work shows that by adapting SWA to the low precision setting, in a method called SWALP, one can *match the performance of full-precision SGD even with all training in 8 bits* [5]. This is quite a practically important result, given that (1) SGD training in 8 bits performs notably worse than full precision SGD, and (2) low precision training is significantly harder than predictions in low precision after training (the usual setting). For example, a ResNet-164 trained on CIFAR-100 with float (16-bit) SGD achieves 22.2% error, while 8-bit SGD achieves 24.0% error. By contrast, SWALP with 8 bit training achieves 21.8% error.
+We can filter through quantization noise by combining weights that have been rounded down with weights that have been rounded up. Moreover, by averaging weights to find a flat region of the loss surface, large perturbations of the weights will not affect the quality of the solution (Figures 7 and 8). Recent work shows that by adapting SWA to the low precision setting, in a method called SWALP, one can *match the performance of full-precision SGD even with all training in 8 bits* [5]. This is quite a practically important result, given that (1) SGD training in 8 bits performs notably worse than full precision SGD, and (2) low precision training is significantly harder than predictions in low precision after training (the usual setting). For example, a ResNet-164 trained on CIFAR-100 with float (16-bit) SGD achieves 22.2% error, while 8-bit SGD achieves 24.0% error. By contrast, SWALP with 8 bit training achieves 21.8% error.
 <div class="text-center">
 <img src="{{ site.url }}/assets/images/swa/Figure7.png" width="90%">
 </div>
@@ -149,14 +153,13 @@ We can filter through quantization noise by combining weights that have been rou
 <img src="{{ site.url }}/assets/images/swa/Figure8.png" width="90%">
 </div>
 
-**Figure 8.** The difference between standard low precision training and SWALP.
+**Figure 8.** Low precision SGD training (with a modified learning rate schedule) and SWALP.
 
 ## Conclusion
 
 One of the greatest open questions in deep learning is why SGD manages to find good solutions, given that the training objectives are highly multimodal, and there are in principle many settings of parameters that achieve no training loss but poor generalization. By understanding geometric features such as flatness, which relate to generalization, we can begin to resolve these questions and build optimizers that provide even better generalization, and many other useful features, such as uncertainty representation. We have presented SWA, a simple drop-in replacement for standard SGD, which can in principle benefit anyone training a deep neural network. SWA has been demonstrated to have strong performance in a number of areas, including computer vision, semi-supervised learning, reinforcement learning, uncertainty representation, calibration, Bayesian model averaging, and low precision training.
 
-We encourage you try out SWA! Using SWA is now as easy as using any other optimizer in PyTorch. And even if you have already trained your model with SGD, it’s very easy to realize the benefits of SWA by running SWA for a small number of epochs starting with an SGD pre-trained model.
-
+We encourage you try out SWA! Using SWA is now as easy as using any other optimizer in PyTorch. And even if you have already trained your model with SGD (or any other optimizer), it’s very easy to realize the benefits of SWA by running SWA for a small number of epochs starting with a pre-trained model.
 
 - [1] Averaging Weights Leads to Wider Optima and Better Generalization; Pavel Izmailov, Dmitry Podoprikhin, Timur Garipov, Dmitry Vetrov, Andrew Gordon Wilson; Uncertainty in Artificial Intelligence (UAI), 2018
 - [2] There Are Many Consistent Explanations of Unlabeled Data: Why You Should Average; Ben Athiwaratkun, Marc Finzi, Pavel Izmailov, Andrew Gordon Wilson; International Conference on Learning Representations (ICLR), 2019
