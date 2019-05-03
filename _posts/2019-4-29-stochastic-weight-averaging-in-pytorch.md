@@ -51,7 +51,7 @@ By contrast, SWA is focused on an **equal average** of SGD iterates with a modif
 
 There are two important ingredients that make SWA work. First, SWA uses a modified learning rate schedule so that SGD continues to explore the set of high-performing networks instead of simply converging to a single solution. For example, we can use the standard decaying learning rate strategy for the first 75% of training time, and then set the learning rate to a reasonably high constant value for the remaining 25% of the time (see the Figure 2 below). The second ingredient is to average the weights of the networks traversed by SGD. For example, we can maintain a running average of the weights obtained in the end of every epoch within the last 25% of training time (see Figure 2).
 <div class="text-center">
-  <img src="{{ site.url }}/assets/images/swa/Figure2.png" width="70%">
+  <img src="{{ site.url }}/assets/images/swa/figure2-highres.png" width="70%">
 </div>
 
 **Figure 2.** Illustration of the learning rate schedule adopted by SWA. Standard decaying schedule is used for the first 75% of the training and then a high constant value is used for the remaining 25%. The SWA averages are formed during the last 25% of training.
@@ -67,7 +67,7 @@ One important detail to keep in mind is batch normalization. Batch normalization
 SWA can be used with any learning rate schedule that encourages exploration of the flat region of solutions. For example, you can use cyclical learning rates in the last 25% of the training time instead of a constant value, and average the weights of the networks corresponding to the lowest values of the learning rate within each cycle (see Figure 3).
 
 <div class="text-center">
-  <img src="{{ site.url }}/assets/images/swa/Figure3.png" width="70%">
+  <img src="{{ site.url }}/assets/images/swa/figure3-highres.png" width="70%">
 </div>
 
 **Figure 3.** Illustration of SWA with an alternative learning rate schedule. Cyclical learning rates are adopted in the last 25% of training, and models for averaging are collected in the end of each cycle.
