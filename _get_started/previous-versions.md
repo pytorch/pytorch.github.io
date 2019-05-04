@@ -60,11 +60,11 @@ checkout.
 Download the `whl` file with the desired version via this command (you can replace 1.0.1 with the version you choose):
 
 ```
-pip install torch=1.0.1 -f https://download.pytorch.org/whl/cpu/stable # CPU-only build
-pip install torch=1.0.1 -f https://download.pytorch.org/whl/cu80/stable # CUDA 8.0 build
-pip install torch=1.0.1 -f https://download.pytorch.org/whl/cu90/stable # CUDA 9.0 build
-pip install torch=1.0.1 -f https://download.pytorch.org/whl/cu92/stable # CUDA 9.2 build
-pip install torch=1.0.1 -f https://download.pytorch.org/whl/cu100/stable # CUDA 10.0 build
+pip install torch==1.0.1 -f https://download.pytorch.org/whl/cpu/stable # CPU-only build
+pip install torch==1.0.1 -f https://download.pytorch.org/whl/cu80/stable # CUDA 8.0 build
+pip install torch==1.0.1 -f https://download.pytorch.org/whl/cu90/stable # CUDA 9.0 build
+pip install torch==1.0.1 -f https://download.pytorch.org/whl/cu92/stable # CUDA 9.2 build
+pip install torch==1.0.1 -f https://download.pytorch.org/whl/cu100/stable # CUDA 10.0 build
 ```
 
 Note: most pytorch versions are available only for specific CUDA versions. For example pytorch=1.0.1 is not available for CUDA 9.2
