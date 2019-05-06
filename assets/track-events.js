@@ -1,11 +1,17 @@
 var trackEvents = {
   recordClick: function(eventCategory, eventLabel) {
     if (typeof ga == "function") {
-      ga('send', 'event', {
+      var gaEventObject = {
         eventCategory: eventCategory,
         eventAction: "click",
         eventLabel: eventLabel
-      });
+      };
+
+      ga('send', 'event', gaEventObject);
+
+      if (eventCategory == "Quick Start Module - Cloud Platforms") {
+        ga('newCampaignTracker.send', 'event', gaEventObject);
+      }
     }
 
     if (typeof fbq === "function") {
