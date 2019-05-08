@@ -4,6 +4,8 @@ title: 'PyTorch adds new dev tools as it hits production scale'
 author: The PyTorch Team
 ---
 
+*This is a partial re-post of the original blog post on the Facebook AI Blog. The full post can be [viewed here](https://ai.facebook.com/blog/pytorch-adds-new-dev-tools-as-it-hits-production-scale/)
+
 Since its release just a few months ago, [PyTorch 1.0](http://pytorch.org/) has been rapidly adopted as a powerful, flexible deep learning platform that enables engineers and researchers to move quickly from research to production. We are highlighting some of the ways the AI engineering and research community is using PyTorch 1.0. We’re also sharing new details about the latest release, PyTorch 1.1, and showcasing some of the new development tools created by the community.
 
 Building on the initial launch of PyTorch in 2017, we partnered with the AI community to ship the stable release of PyTorch 1.0 [last December](https://code.fb.com/ai-research/pytorch-developer-ecosystem-expands-1-0-stable-release/). Along with enhanced production-oriented capabilities and deep integration with leading cloud platforms, PyTorch 1.0 expands on the open source library’s core features, with the addition of PyTorch JIT (Just in time compilation) that seamlessly transitions between eager mode and graph mode to provide both flexibility and speed.
