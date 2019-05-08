@@ -5,9 +5,7 @@ author: Jeff Smith
 redirect_from: /2019/05/08/model-serving-in-pyorch.html
 ---
 
-# Model Serving in PyTorch
-
-PyTorch has a deservedly awesome reputation for use in research, but people can get confused about how well PyTorch models can be taken into production. This blog post is meant to clear up any confusion people might have about the road to production in PyTorch.
+PyTorch has seen a lot of adoption in research, but people can get confused about how well PyTorch models can be taken into production. This blog post is meant to clear up any confusion people might have about the road to production in PyTorch.
 Usually when people talk about taking a model “to production,” they usually mean performing **inference**, sometimes called model evaluation or prediction or serving. At the level of a function call, in PyTorch, inference looks something like this:
 
 * In Python
@@ -43,7 +41,10 @@ The above is a somewhat arbitrary breakdown of different approaches based on a s
 
 So, if you're a PyTorch user, what should you use if you want to take your models to production?
 
-If you're on mobile or working on an embedded system like a robot, direct embedding in your application is often the right choice. For mobile specifically, check out [this tutorial](https://pytorch.org/tutorials/advanced/super_resolution_with_caffe2.html) on deploying PyTorch models to mobile using ONNX. For other embedded systems like robots, running [inference on a PyTorch model from the C++ API](https://pytorch.org/tutorials/advanced/cpp_export.html) could be the right solution.
+If you're on mobile or working on an embedded system like a robot, direct embedding in your application is often the right choice. For mobile specifically, your use case might be served by the ONNX export functionality.
+You can check out [this tutorial](https://pytorch.org/tutorials/advanced/super_resolution_with_caffe2.html) on deploying PyTorch models to mobile using ONNX. 
+That said, we've heard that there's a lot more that PyTorch users want to do on mobile, so look for more mobile-specific functionality in the future.
+For other embedded systems, like robots, running [inference on a PyTorch model from the C++ API](https://pytorch.org/tutorials/advanced/cpp_export.html) could be the right solution.
 
 If can't use the cloud or prefer to manage all services using the same technology, you can follow [this example](https://medium.com/datadriveninvestor/deploy-your-pytorch-model-to-production-f69460192217) to build a simple model microservice using the Flask web framework.
 
