@@ -41,12 +41,14 @@ The above is a somewhat arbitrary breakdown of different approaches based on a s
 
 So, if you're a PyTorch user, what should you use if you want to take your models to production?
 
-If you're on mobile or working on an embedded system like a robot, direct embedding in your application is often the right choice. For mobile specifically, your use case might be served by the ONNX export functionality.
-You can check out [this tutorial](https://pytorch.org/tutorials/advanced/super_resolution_with_caffe2.html) on deploying PyTorch models to mobile using ONNX. 
-That said, we've heard that there's a lot more that PyTorch users want to do on mobile, so look for more mobile-specific functionality in the future.
+If you're on mobile or working on an embedded system like a robot, direct embedding in your application is often the right choice. 
+For mobile specifically, your use case might be served by the ONNX export functionality.
+Note that ONNX, by its very nature, has limitations and doesn't support all of the functionality provided by the larger PyTorch project.
+You can check out [this tutorial](https://pytorch.org/tutorials/advanced/super_resolution_with_caffe2.html) on deploying PyTorch models to mobile using ONNX to see if this path might suit your use case. 
+That said, we've heard that there's a lot more that PyTorch users want to do on mobile, so look for more mobile-specific functionality in PyTorch in the future.
 For other embedded systems, like robots, running [inference on a PyTorch model from the C++ API](https://pytorch.org/tutorials/advanced/cpp_export.html) could be the right solution.
 
-If can't use the cloud or prefer to manage all services using the same technology, you can follow [this example](https://medium.com/datadriveninvestor/deploy-your-pytorch-model-to-production-f69460192217) to build a simple model microservice using the Flask web framework.
+If you can't use the cloud or prefer to manage all services using the same technology, you can follow [this example](https://medium.com/datadriveninvestor/deploy-your-pytorch-model-to-production-f69460192217) to build a simple model microservice using the Flask web framework.
 
 If you want to manage multiple models within a non-cloud service solution, there are teams developing PyTorch support in model servers like [MLFlow](https://mlflow.org/), [Kubeflow](https://www.kubeflow.org/), and [RedisAI.](https://oss.redislabs.com/redisai/) We're excited to see innovation from multiple teams building OSS model servers, and we'll continue to highlight innovation in the PyTorch ecosystem in the future.
 
