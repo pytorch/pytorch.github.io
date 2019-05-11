@@ -13,7 +13,7 @@ Usually when people talk about taking a model “to production,” they usually 
 * In traced modules
     * `module(input)`
 * In C++
-    * `at**::**Tensor output **=** module**->**forward(inputs).toTensor();`
+    * `at::Tensor output = module->forward(inputs).toTensor();`
 
 Since we at Facebook perform inference operations using PyTorch hundreds of trillions of times per day, we've done a lot to make sure that inference runs as efficiently as possible.
 
