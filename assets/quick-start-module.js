@@ -315,36 +315,36 @@ function commandMessage(key) {
     "stable,pip,macos,cudanone,python3.7": "pip3 install torch torchvision",
 
     "stable,pip,linux,cudanone,python2.7":
-      "pip install https://download.pytorch.org/whl/cpu/torch-1.1.0-cp27-cp27mu-linux_x86_64.whl<br/>pip install torchvision <br/><br/> # if the above command does not work, then you have python 2.7 UCS2, use this command<br/>pip install https://download.pytorch.org/whl/cpu/torch-1.1.0-cp27-cp27m-linux_x86_64.whl",
+      "pip install https://download.pytorch.org/whl/cpu/torch-1.1.0-cp27-cp27mu-linux_x86_64.whl<br/>pip install https://download.pytorch.org/whl/cpu/torchvision-0.3.0-cp27-cp27mu-linux_x86_64.whl <br/><br/> # if the above command does not work, then you have python 2.7 UCS2, use this command<br/>pip install https://download.pytorch.org/whl/cpu/torch-1.1.0-cp27-cp27m-linux_x86_64.whl<br/>pip install https://download.pytorch.org/whl/cpu/torchvision-0.3.0-cp27-cp27m-linux_x86_64.whl",
 
     "stable,pip,linux,cuda9.0,python2.7": "pip install torch torchvision",
 
     "stable,pip,linux,cuda10.0,python2.7":
-      "pip install https://download.pytorch.org/whl/cu100/torch-1.1.0-cp27-cp27mu-linux_x86_64.whl<br/>pip install torchvision<br/><br/># if the above command does not work, then you have python 2.7 UCS2, use this command<br/>pip install https://download.pytorch.org/whl/cu100/torch-1.1.0-cp27-cp27m-linux_x86_64.whl",
+      "pip install https://download.pytorch.org/whl/cu100/torch-1.1.0-cp27-cp27mu-linux_x86_64.whl<br/>pip install https://download.pytorch.org/whl/cu100/torchvision-0.3.0-cp27-cp27mu-linux_x86_64.whl<br/><br/># if the above command does not work, then you have python 2.7 UCS2, use this command<br/>pip install https://download.pytorch.org/whl/cu100/torch-1.1.0-cp27-cp27m-linux_x86_64.whl<br/>pip install https://download.pytorch.org/whl/cu100/torchvision-0.3.0-cp27-cp27m-linux_x86_64.whl",
 
     "stable,pip,linux,cudanone,python3.5":
-      "pip3 install https://download.pytorch.org/whl/cpu/torch-1.1.0-cp35-cp35m-linux_x86_64.whl<br/>pip3 install torchvision",
+      "pip3 install https://download.pytorch.org/whl/cpu/torch-1.1.0-cp35-cp35m-linux_x86_64.whl<br/>pip3 install https://download.pytorch.org/whl/cpu/torchvision-0.3.0-cp35-cp35m-linux_x86_64.whl",
 
     "stable,pip,linux,cuda9.0,python3.5": "pip3 install torch torchvision",
 
     "stable,pip,linux,cuda10.0,python3.5":
-      "pip3 install https://download.pytorch.org/whl/cu100/torch-1.1.0-cp35-cp35m-linux_x86_64.whl<br/>pip3 install torchvision",
+      "pip3 install https://download.pytorch.org/whl/cu100/torch-1.1.0-cp35-cp35m-linux_x86_64.whl<br/>pip3 install https://download.pytorch.org/whl/cu100/torchvision-0.3.0-cp35-cp35m-linux_x86_64.whl",
 
     "stable,pip,linux,cudanone,python3.6":
-      "pip3 install https://download.pytorch.org/whl/cpu/torch-1.1.0-cp36-cp36m-linux_x86_64.whl<br/>pip3 install torchvision",
+      "pip3 install https://download.pytorch.org/whl/cpu/torch-1.1.0-cp36-cp36m-linux_x86_64.whl<br/>pip3 install https://download.pytorch.org/whl/cpu/torchvision-0.3.0-cp36-cp36m-linux_x86_64.whl",
 
     "stable,pip,linux,cuda9.0,python3.6": "pip3 install torch torchvision",
 
     "stable,pip,linux,cuda10.0,python3.6":
-      "pip3 install https://download.pytorch.org/whl/cu100/torch-1.1.0-cp36-cp36m-linux_x86_64.whl<br/>pip3 install torchvision",
+      "pip3 install https://download.pytorch.org/whl/cu100/torch-1.1.0-cp36-cp36m-linux_x86_64.whl<br/>pip3 install https://download.pytorch.org/whl/cu100/torchvision-0.3.0-cp36-cp36m-linux_x86_64.whl",
 
     "stable,pip,linux,cudanone,python3.7":
-      "pip3 install https://download.pytorch.org/whl/cpu/torch-1.1.0-cp37-cp37m-linux_x86_64.whl<br/>pip3 install torchvision",
+      "pip3 install https://download.pytorch.org/whl/cpu/torch-1.1.0-cp37-cp37m-linux_x86_64.whl<br/>pip3 install https://download.pytorch.org/whl/cpu/torchvision-0.3.0-cp37-cp37m-linux_x86_64.whl",
 
     "stable,pip,linux,cuda9.0,python3.7": "pip3 install torch torchvision",
 
     "stable,pip,linux,cuda10.0,python3.7":
-      "pip3 install https://download.pytorch.org/whl/cu100/torch-1.1.0-cp37-cp37m-linux_x86_64.whl<br/>pip3 install torchvision",
+      "pip3 install https://download.pytorch.org/whl/cu100/torch-1.1.0-cp37-cp37m-linux_x86_64.whl<br/>pip3 install https://download.pytorch.org/whl/cu100/torchvision-0.3.0-cp37-cp37m-linux_x86_64.whl",
 
     "stable,pip,windows,cudanone,python2.7":
       "# PyTorch does not support Python 2.7 on Windows. Please install with Python 3.",
@@ -518,76 +518,76 @@ function commandMessage(key) {
       "conda install pytorch-nightly-cpu -c pytorch",
 
     "preview,pip,macos,cuda9.0,python2.7":
-      "pip install numpy torchvision_nightly<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html<br /># On MacOS, we provide CPU-only packages, CUDA functionality is not provided",
+      "pip install numpy<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html<br /># On MacOS, we provide CPU-only packages, CUDA functionality is not provided",
 
     "preview,pip,macos,cuda10.0,python2.7":
-      "pip install numpy torchvision_nightly<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html<br /># On MacOS, we provide CPU-only packages, CUDA functionality is not provided",
+      "pip install numpy<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html<br /># On MacOS, we provide CPU-only packages, CUDA functionality is not provided",
 
     "preview,pip,macos,cudanone,python2.7":
       "pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html",
 
     "preview,pip,macos,cuda9.0,python3.5":
-      "pip install numpy torchvision_nightly<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html<br /># On MacOS, we provide CPU-only packages, CUDA functionality is not provided",
+      "pip install numpy<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html<br /># On MacOS, we provide CPU-only packages, CUDA functionality is not provided",
 
     "preview,pip,macos,cuda10.0,python3.5":
-      "pip install numpy torchvision_nightly<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html<br /># On MacOS, we provide CPU-only packages, CUDA functionality is not provided",
+      "pip install numpy<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html<br /># On MacOS, we provide CPU-only packages, CUDA functionality is not provided",
 
     "preview,pip,macos,cudanone,python3.5":
-      "pip install numpy torchvision_nightly<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html",
+      "pip install numpy<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html",
 
     "preview,pip,macos,cuda9.0,python3.6":
-      "pip install numpy torchvision_nightly<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html<br /># On MacOS, we provide CPU-only packages, CUDA functionality is not provided",
+      "pip install numpy<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html<br /># On MacOS, we provide CPU-only packages, CUDA functionality is not provided",
 
     "preview,pip,macos,cuda10.0,python3.6":
-      "pip install numpy torchvision_nightly<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html<br /># On MacOS, we provide CPU-only packages, CUDA functionality is not provided",
+      "pip install numpy<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html<br /># On MacOS, we provide CPU-only packages, CUDA functionality is not provided",
 
     "preview,pip,macos,cudanone,python3.6":
-      "pip install numpy torchvision_nightly<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html",
+      "pip install numpy<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html",
 
     "preview,pip,macos,cuda9.0,python3.7":
-      "pip install numpy torchvision_nightly<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html <br /># On MacOS, we provide CPU-only packages, CUDA functionality is not provided",
+      "pip install numpy<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html <br /># On MacOS, we provide CPU-only packages, CUDA functionality is not provided",
 
     "preview,pip,macos,cuda10.0,python3.7":
-      "pip install numpy torchvision_nightly<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html <br /># On MacOS, we provide CPU-only packages, CUDA functionality is not provided",
+      "pip install numpy<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html <br /># On MacOS, we provide CPU-only packages, CUDA functionality is not provided",
 
     "preview,pip,macos,cudanone,python3.7":
-      "pip install numpy torchvision_nightly<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html",
+      "pip install numpy<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html",
 
     "preview,pip,linux,cudanone,python2.7":
-      "pip install numpy torchvision_nightly<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html",
+      "pip install numpy<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html",
 
     "preview,pip,linux,cuda9.0,python2.7":
-      "pip install numpy torchvision_nightly<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cu90/torch_nightly.html",
+      "pip install numpy<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cu90/torch_nightly.html",
 
     "preview,pip,linux,cuda10.0,python2.7":
-      "pip install numpy torchvision_nightly<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cu100/torch_nightly.html",
+      "pip install numpy<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cu100/torch_nightly.html",
 
     "preview,pip,linux,cudanone,python3.5":
-      "pip install numpy torchvision_nightly<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html",
+      "pip install numpy<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html",
 
     "preview,pip,linux,cuda9.0,python3.5":
-      "pip install numpy torchvision_nightly<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cu90/torch_nightly.html",
+      "pip install numpy<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cu90/torch_nightly.html",
 
     "preview,pip,linux,cuda10.0,python3.5":
-      "pip install numpy torchvision_nightly<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cu100/torch_nightly.html",
+      "pip install numpy<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cu100/torch_nightly.html",
 
     "preview,pip,linux,cudanone,python3.6":
-      "pip install numpy torchvision_nightly<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html",
+      "pip install numpy<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html",
 
     "preview,pip,linux,cuda9.0,python3.6":
-      "pip install numpy torchvision_nightly<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cu90/torch_nightly.html",
+      "pip install numpy<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cu90/torch_nightly.html",
 
     "preview,pip,linux,cuda10.0,python3.6":
-      "pip install numpy torchvision_nightly<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cu100/torch_nightly.html",
+      "pip install numpy<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cu100/torch_nightly.html",
 
     "preview,pip,linux,cudanone,python3.7":
-      "pip install numpy torchvision_nightly<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html",
+      "pip install numpy<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html",
 
     "preview,pip,linux,cuda9.0,python3.7":
-      "pip install numpy torchvision_nightly<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cu90/torch_nightly.html",
+      "pip install numpy<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cu90/torch_nightly.html",
 
     "preview,pip,linux,cuda10.0,python3.7":
-      "pip install numpy torchvision_nightly<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cu100/torch_nightly.html",
+      "pip install numpy<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cu100/torch_nightly.html",
 
     "preview,pip,windows,cudanone,python2.7":
       "# Preview Build With Python 2.7 On Windows Not Supported.",
@@ -599,31 +599,31 @@ function commandMessage(key) {
       "# Preview Build With Python 2.7 On Windows Not Supported.",
 
     "preview,pip,windows,cudanone,python3.5":
-      "pip install numpy torchvision_nightly<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html",
+      "pip install numpy<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html",
 
     "preview,pip,windows,cuda9.0,python3.5":
-      "pip install numpy torchvision_nightly<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cu90/torch_nightly.html",
+      "pip install numpy<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cu90/torch_nightly.html",
 
     "preview,pip,windows,cuda10.0,python3.5":
-      "pip install numpy torchvision_nightly<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cu100/torch_nightly.html",
+      "pip install numpy<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cu100/torch_nightly.html",
 
     "preview,pip,windows,cudanone,python3.6":
-      "pip install numpy torchvision_nightly<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html",
+      "pip install numpy<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html",
 
     "preview,pip,windows,cuda9.0,python3.6":
-      "pip install numpy torchvision_nightly<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cu90/torch_nightly.html",
+      "pip install numpy<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cu90/torch_nightly.html",
 
     "preview,pip,windows,cuda10.0,python3.6":
-      "pip install numpy torchvision_nightly<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cu100/torch_nightly.html",
+      "pip install numpy<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cu100/torch_nightly.html",
 
     "preview,pip,windows,cudanone,python3.7":
-      "pip install numpy torchvision_nightly<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html",
+      "pip install numpy<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html",
 
     "preview,pip,windows,cuda9.0,python3.7":
-      "pip install numpy torchvision_nightly<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cu90/torch_nightly.html",
+      "pip install numpy<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cu90/torch_nightly.html",
 
     "preview,pip,windows,cuda10.0,python3.7":
-      "pip install numpy torchvision_nightly<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cu100/torch_nightly.html",
+      "pip install numpy<br />pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cu100/torch_nightly.html",
 
     "preview,libtorch,linux,cudanone,cplusplus":
       "Download here: <br/><a href='https://download.pytorch.org/libtorch/nightly/cpu/libtorch-shared-with-deps-latest.zip'>https://download.pytorch.org/libtorch/nightly/cpu/libtorch-shared-with-deps-latest.zip</a>",
