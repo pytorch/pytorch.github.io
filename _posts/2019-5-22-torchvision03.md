@@ -127,7 +127,7 @@ The following datasets were added:
 
 In addition, we've added more image transforms, general improvements and bug fixes, as well as improved documentation.
 
-**See the full release notes [here](https://github.com/pytorch/vision/releases) as well as this getting started tutorial [here](https://pytorch.org/tutorials/intermediate/torchvision_tutorial.html), which describes how to fine tune your own instance segmentation model on a custom dataset.**
+**See the full release notes [here](https://github.com/pytorch/vision/releases) as well as this getting started tutorial [on Google Colab here](https://colab.research.google.com/github/pytorch/vision/blob/temp-tutorial/tutorials/torchvision_finetuning_instance_segmentation.ipynb), which describes how to fine tune your own instance segmentation model on a custom dataset.**
 
 Cheers!
 
