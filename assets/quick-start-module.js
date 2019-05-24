@@ -356,31 +356,31 @@ function commandMessage(key) {
       "# PyTorch does not support Python 2.7 on Windows. Please install with Python 3.",
 
     "stable,pip,windows,cudanone,python3.5":
-      "pip3 install https://download.pytorch.org/whl/cpu/torch-1.1.0-cp35-cp35m-win_amd64.whl<br/>pip3 install torchvision",
+      "pip3 install https://download.pytorch.org/whl/cpu/torch-1.1.0-cp35-cp35m-win_amd64.whl<br/>pip3 install https://download.pytorch.org/whl/cpu/torchvision-0.3.0-cp35-cp35m-win_amd64.whl",
 
     "stable,pip,windows,cuda9.0,python3.5":
-      "pip3 install https://download.pytorch.org/whl/cu90/torch-1.1.0-cp35-cp35m-win_amd64.whl<br/>pip3 install torchvision",
+      "pip3 install https://download.pytorch.org/whl/cu90/torch-1.1.0-cp35-cp35m-win_amd64.whl<br/>pip3 install https://download.pytorch.org/whl/cu90/torchvision-0.3.0-cp35-cp35m-win_amd64.whl",
 
     "stable,pip,windows,cuda10.0,python3.5":
-      "pip3 install https://download.pytorch.org/whl/cu100/torch-1.1.0-cp35-cp35m-win_amd64.whl<br/>pip3 install torchvision",
+      "pip3 install https://download.pytorch.org/whl/cu100/torch-1.1.0-cp35-cp35m-win_amd64.whl<br/>pip3 install https://download.pytorch.org/whl/cu100/torchvision-0.3.0-cp35-cp35m-win_amd64.whl",
 
     "stable,pip,windows,cudanone,python3.6":
-      "pip3 install https://download.pytorch.org/whl/cpu/torch-1.1.0-cp36-cp36m-win_amd64.whl<br/>pip3 install torchvision",
+      "pip3 install https://download.pytorch.org/whl/cpu/torch-1.1.0-cp36-cp36m-win_amd64.whl<br/>pip3 install https://download.pytorch.org/whl/cpu/torchvision-0.3.0-cp36-cp36m-win_amd64.whl",
 
     "stable,pip,windows,cuda9.0,python3.6":
-      "pip3 install https://download.pytorch.org/whl/cu90/torch-1.1.0-cp36-cp36m-win_amd64.whl<br/>pip3 install torchvision",
+      "pip3 install https://download.pytorch.org/whl/cu90/torch-1.1.0-cp36-cp36m-win_amd64.whl<br/>pip3 install https://download.pytorch.org/whl/cu90/torchvision-0.3.0-cp36-cp36m-win_amd64.whl",
 
     "stable,pip,windows,cuda10.0,python3.6":
-      "pip3 install https://download.pytorch.org/whl/cu100/torch-1.1.0-cp36-cp36m-win_amd64.whl<br/>pip3 install torchvision",
+      "pip3 install https://download.pytorch.org/whl/cu100/torch-1.1.0-cp36-cp36m-win_amd64.whl<br/>pip3 install https://download.pytorch.org/whl/cu100/torchvision-0.3.0-cp36-cp36m-win_amd64.whl",
 
     "stable,pip,windows,cudanone,python3.7":
-      "pip3 install https://download.pytorch.org/whl/cpu/torch-1.1.0-cp37-cp37m-win_amd64.whl<br/>pip3 install torchvision",
+      "pip3 install https://download.pytorch.org/whl/cpu/torch-1.1.0-cp37-cp37m-win_amd64.whl<br/>pip3 install https://download.pytorch.org/whl/cpu/torchvision-0.3.0-cp37-cp37m-win_amd64.whl",
 
     "stable,pip,windows,cuda9.0,python3.7":
-      "pip3 install https://download.pytorch.org/whl/cu90/torch-1.1.0-cp37-cp37m-win_amd64.whl<br/>pip3 install torchvision",
+      "pip3 install https://download.pytorch.org/whl/cu90/torch-1.1.0-cp37-cp37m-win_amd64.whl<br/>pip3 install https://download.pytorch.org/whl/cu90/torchvision-0.3.0-cp37-cp37m-win_amd64.whl",
 
     "stable,pip,windows,cuda10.0,python3.7":
-      "pip3 install https://download.pytorch.org/whl/cu100/torch-1.1.0-cp37-cp37m-win_amd64.whl<br/>pip3 install torchvision",
+      "pip3 install https://download.pytorch.org/whl/cu100/torch-1.1.0-cp37-cp37m-win_amd64.whl<br/>pip3 install https://download.pytorch.org/whl/cu100/torchvision-0.3.0-cp37-cp37m-win_amd64.whl",
 
     "stable,libtorch,linux,cudanone,cplusplus":
       "Download here: <br/><a href='https://download.pytorch.org/libtorch/cpu/libtorch-shared-with-deps-latest.zip'>https://download.pytorch.org/libtorch/cpu/libtorch-shared-with-deps-latest.zip</a>",
