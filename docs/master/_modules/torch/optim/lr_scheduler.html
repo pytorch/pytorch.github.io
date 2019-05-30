@@ -108,7 +108,7 @@
               
               
                 <div class="version">
-                  <a href='http://pytorch.org/docs/versions.html'>1.2.0a0+fa8c132 &#x25BC</a>
+                  <a href='http://pytorch.org/docs/versions.html'>1.2.0a0+990e63f &#x25BC</a>
                 </div>
               
             
@@ -272,7 +272,8 @@
 <span class="kn">import</span> <span class="nn">math</span>
 <span class="kn">from</span> <span class="nn">torch._six</span> <span class="k">import</span> <span class="n">inf</span>
 <span class="kn">from</span> <span class="nn">collections</span> <span class="k">import</span> <span class="n">Counter</span>
-<span class="kn">from</span> <span class="nn">functools</span> <span class="k">import</span> <span class="n">partial</span>
+<span class="kn">from</span> <span class="nn">functools</span> <span class="k">import</span> <span class="n">partial</span><span class="p">,</span> <span class="n">wraps</span>
+<span class="kn">import</span> <span class="nn">warnings</span>
 
 <span class="kn">from</span> <span class="nn">.optimizer</span> <span class="k">import</span> <span class="n">Optimizer</span>
 
@@ -294,6 +295,19 @@
                                    <span class="s2">&quot;in param_groups[</span><span class="si">{}</span><span class="s2">] when resuming an optimizer&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">i</span><span class="p">))</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">base_lrs</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">map</span><span class="p">(</span><span class="k">lambda</span> <span class="n">group</span><span class="p">:</span> <span class="n">group</span><span class="p">[</span><span class="s1">&#39;initial_lr&#39;</span><span class="p">],</span> <span class="n">optimizer</span><span class="o">.</span><span class="n">param_groups</span><span class="p">))</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">last_epoch</span> <span class="o">=</span> <span class="n">last_epoch</span>
+
+        <span class="c1"># Following https://github.com/pytorch/pytorch/issues/20124</span>
+        <span class="c1"># We would like to ensure that `lr_scheduler.step()` is called after</span>
+        <span class="c1"># `optimizer.step()`</span>
+        <span class="k">def</span> <span class="nf">with_counter</span><span class="p">(</span><span class="n">func</span><span class="p">):</span>
+            <span class="nd">@wraps</span><span class="p">(</span><span class="n">func</span><span class="p">)</span>
+            <span class="k">def</span> <span class="nf">wrapper</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+                <span class="n">wrapper</span><span class="o">.</span><span class="n">called</span> <span class="o">+=</span> <span class="mi">1</span>
+                <span class="k">return</span> <span class="n">func</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+            <span class="n">wrapper</span><span class="o">.</span><span class="n">called</span> <span class="o">=</span> <span class="mi">0</span>
+            <span class="k">return</span> <span class="n">wrapper</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">optimizer</span><span class="o">.</span><span class="n">step</span> <span class="o">=</span> <span class="n">with_counter</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">optimizer</span><span class="o">.</span><span class="n">step</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">step</span><span class="p">(</span><span class="n">last_epoch</span><span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -317,6 +331,15 @@
         <span class="k">raise</span> <span class="ne">NotImplementedError</span>
 
     <span class="k">def</span> <span class="nf">step</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">epoch</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="c1"># Raise a warning if old pattern is detected</span>
+        <span class="c1"># https://github.com/pytorch/pytorch/issues/20124</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">optimizer</span><span class="o">.</span><span class="n">step</span><span class="o">.</span><span class="n">called</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="s2">&quot;Detected call of `lr_scheduler.step()` before `optimizer.step()`. &quot;</span>
+                          <span class="s2">&quot;In PyTorch 1.1.0 and later, you should call them in the opposite order: &quot;</span>
+                          <span class="s2">&quot;`optimizer.step()` before `lr_scheduler.step()`.  Failure to do this &quot;</span>
+                          <span class="s2">&quot;will result in PyTorch skipping the first value of the learning rate schedule.&quot;</span>
+                          <span class="s2">&quot;See more details at &quot;</span>
+                          <span class="s2">&quot;https://pytorch.org/docs/stable/optim.html#how-to-adjust-learning-rate&quot;</span><span class="p">,</span> <span class="ne">UserWarning</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">epoch</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">epoch</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">last_epoch</span> <span class="o">+</span> <span class="mi">1</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">last_epoch</span> <span class="o">=</span> <span class="n">epoch</span>
