@@ -33,6 +33,10 @@ include-yarn-deps:
 	cp node_modules/bootstrap/dist/js/bootstrap.min.js $(VENDOR_DIR)
 	cp node_modules/anchor-js/anchor.min.js $(VENDOR_DIR)
 
+update-hub:
+	git submodule update --remote _hub
+	cp _hub/images/* assets/images
+
 build: install include-yarn-deps
 	$(JEKYLL) build --config _config.yml
 
