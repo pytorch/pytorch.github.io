@@ -29,8 +29,12 @@ else
     git checkout --orphan master
 fi
 
+# Update submodule pytorch/hub to the latest master branch
+# Then copy over images to assets/images
+git submodule update --remote _hub
+cp _hub/images/* assets/images
+
 cd "../"
-make update-hub
 make build_deploy
 cd master-branch
 
