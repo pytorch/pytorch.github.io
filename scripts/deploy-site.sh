@@ -9,6 +9,11 @@ set -e
 
 # initialize hub submodule
 git submodule deinit -f . && git submodule update --init --recursive
+# Files not related to build should be deleted.
+pushd _hub
+rm -R `ls -1 -d */`
+rm -f README.md
+popd
 
 # show where we are on the machine
 pwd
