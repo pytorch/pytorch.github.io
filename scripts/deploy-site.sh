@@ -7,6 +7,9 @@
 # abort the script if there is a non-zero error
 set -e
 
+# initialize hub submodule
+git submodule deinit -f . && git submodule update --init --recursive
+
 # show where we are on the machine
 pwd
 remote=$(git config remote.origin.url)
