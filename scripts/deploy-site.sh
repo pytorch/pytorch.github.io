@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 # ideas used from https://gist.github.com/motemen/8595451
 
 # Based on https://github.com/eldarlabs/ghpages-deploy-script/blob/master/scripts/deploy-ghpages.sh
