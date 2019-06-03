@@ -2,7 +2,7 @@ var numberOfCardsToShow = 3;
 
 $(".cards-left > .col-md-12, .cards-right > .col-md-12")
   .filter(function() {
-    return $(this).attr("data-item-count") > numberOfCardsToShow.toString();
+    return $(this).attr("data-item-count") > numberOfCardsToShow;
   })
   .hide();
 
@@ -34,7 +34,7 @@ function hideCards(buttonToHide, buttonToShow, cardsWrapper) {
   $(buttonToShow).show();
   $(cardsWrapper)
     .filter(function() {
-      return $(this).attr("data-item-count") !== numberOfCardsToShow.toString();
+      return $(this).attr("data-item-count") > numberOfCardsToShow;
     })
     .hide();
 }
