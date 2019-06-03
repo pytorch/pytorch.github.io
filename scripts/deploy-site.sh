@@ -9,6 +9,10 @@ set -e
 
 # initialize hub submodule
 git submodule deinit -f . && git submodule update --init --recursive
+
+# use latest hub
+./_devel/update_hub_submodule.sh
+
 # Files not related to build should be deleted.
 pushd _hub
 rm -R `ls -1 -d */`
