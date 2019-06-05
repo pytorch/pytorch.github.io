@@ -102,7 +102,7 @@ We believe this will help to alleviate the burden of repetitive package releases
 Once you have a model from PyTorch Hub loaded, you can use the following workflow to find out the available methods that are supported as well as understand better what arguments are requires to run it.
 
 
-* ```dir(model)``` to see all available methods of the model. Let's take a look at bertForMaskedLM's available methods.
+```dir(model)``` to see all available methods of the model. Let's take a look at bertForMaskedLM's available methods.
 
 ```python
 >>> dir(model)
@@ -114,7 +114,7 @@ Once you have a model from PyTorch Hub loaded, you can use the following workflo
 ]
 ```
 
-* ```help(model.forward)``` provides a view into what arguments are required to make your loaded model run
+```help(model.forward)``` provides a view into what arguments are required to make your loaded model run
 
 ```python
 >>> help(model.forward)
