@@ -81,9 +81,10 @@ Note that PyTorch Hub also allows auxillary entrypoints (other than pretrained m
 
 ### Load a model
 
-Now that we know which models are available in the Hub, users can load a model entrypoint using the ```torch.hub.load()``` API. Because dependencies are taken care of by PyTorch Hub, this only requires a single command without the need to install a wheel.
+Now that we know which models are available in the Hub, users can load a model entrypoint using the ```torch.hub.load()``` API. This only requires a single command without the need to install a wheel. In addition the ```torch.hub.help()``` API can provide useful information about how to instantiate the model.
 
 ```python
+print(torch.hub.help('huggingface/pytorch-pretrained-BERT', 'bertForMaskedLM'))
 model = torch.hub.load('huggingface/pytorch-pretrained-BERT', 'bertForMaskedLM', 'bert-base-cased')
 ```
 
