@@ -88,7 +88,7 @@ print(torch.hub.help('huggingface/pytorch-pretrained-BERT', 'bertForMaskedLM'))
 model = torch.hub.load('huggingface/pytorch-pretrained-BERT', 'bertForMaskedLM', 'bert-base-cased')
 ```
 
-In addition, it is also common that repo owners will want to continually add bug fixes or performance improvements. PyTorch Hub makes it super simple for users to get the latest update by calling:
+It is also common that repo owners will want to continually add bug fixes or performance improvements. PyTorch Hub makes it super simple for users to get the latest update by calling:
 
 ```python
 model = torch.hub.load(..., force_reload=True)
