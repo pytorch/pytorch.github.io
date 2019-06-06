@@ -7,17 +7,42 @@ redirect_from: /2019/06/05/pytorch_hub.html
 
 Reproducibility is an essential requirement for many fields of research including those based on machine learning techniques. However, many machine learning publications are either not reproducible or are difficult to reproduce. With the continued growth in the number of research publications, including tens of thousands of papers now hosted on arXiv and submissions to conferences at an all time high, research reproducibility is more important than ever. While many of these publications are accompanied by code as well as trained models which is helpful but still leaves a number of steps for users to figure out for themselves.
 
-We are excited to announce the availability of PyTorch Hub, a simple API and workflow the provides the basic building blocks for improving machine learning research reproducibility. PyTorch Hub consists of a pre-trained model repository designed specifically to facilitate research reproducibility.
+We are excited to announce the availability of PyTorch Hub, a simple API and workflow the provides the basic building blocks for improving machine learning research reproducibility. PyTorch Hub consists of a pre-trained model repository designed specifically to facilitate research reproducibility and enable new research.
 
-To illustrate the steps of how repo owners publish a model and how users can easily load and use the model, we are going to use a pre-trained BertForMaskedLM model contributed by HuggingFace.
-
-<div class="text-center">
-  <img src="{{ site.url }}/assets/images/Bert_HF.png" width="100%">
-</div>
 
 ## [Owner] Publishing models
 
-PyTorch Hub supports the publication of pre-trained models (model definitions and pre-trained weights) to a GitHub repository by adding a simple ```hubconf.py``` file. This provides an enumeration of which models are to be supported and a list of dependencies needed to run the models. An example can be found [here](https://github.com/huggingface/pytorch-pretrained-BERT/blob/master/hubconf.py).
+PyTorch Hub supports the publication of pre-trained models (model definitions and pre-trained weights) to a GitHub repository by adding a simple ```hubconf.py``` file.
+This provides an enumeration of which models are to be supported and a list of dependencies needed to run the models.
+Examples can be found in the [torchvision](https://github.com/pytorch/vision/blob/master/hubconf.py), [huggingface-bert](https://github.com/huggingface/pytorch-pretrained-BERT/blob/master/hubconf.py) and [gan-model-zoo](https://github.com/facebookresearch/pytorch_GAN_zoo) repositories.
+
+Let us look at the simplest case: `torchvision`'s `hubconf.py`:
+
+```python
+# Optional list of dependencies required by the package
+dependencies = ['torch']
+
+from torchvision.models.alexnet import alexnet
+from torchvision.models.densenet import densenet121, densenet169, densenet201, densenet161
+from torchvision.models.inception import inception_v3
+from torchvision.models.resnet import resnet18, resnet34, resnet50, resnet101, resnet152,\
+resnext50_32x4d, resnext101_32x8d
+from torchvision.models.squeezenet import squeezenet1_0, squeezenet1_1
+from torchvision.models.vgg import vgg11, vgg13, vgg16, vgg19, vgg11_bn, vgg13_bn, vgg16_bn, vgg19_bn
+from torchvision.models.segmentation import fcn_resnet101, deeplabv3_resnet101
+from torchvision.models.googlenet import googlenet
+from torchvision.models.shufflenetv2 import shufflenet_v2_x0_5, shufflenet_v2_x1_0
+from torchvision.models.mobilenet import mobilenet_v2
+```
+
+In `torchvision`, the models have the following properties:
+- Each model file can function and be executed independently
+- They dont require any package other than PyTorch (encoded in `hubconf.py` as `dependencies['torch']`)
+- They dont need separate entry-points, because the models when created, work seamlessly out of the box
+
+Minimizing package dependencies reduces the friction for users to load your model for immediate experimentation.
+
+A more involved example is HuggingFace's BERT models. Here is their `hubconf.py`
 
 ```python
 dependencies = ['torch', 'tqdm', 'boto3', 'requests', 'regex']
@@ -33,12 +58,6 @@ from hubconfs.bert_hubconf import (
     bertForQuestionAnswering,
     bertForTokenClassification
 )
-from hubconfs.gpt_hubconf import (
-    openAIGPTTokenizer,
-    openAIGPTModel,
-    openAIGPTLMHeadModel,
-    openAIGPTDoubleHeadsModel
-)
 ```
 
 Each model then requires an entrypoint to be created. Here is a code snippet to specify an entrypoint of the ```bertForMaskedLM``` model, which returns the pre-trained model weights.
@@ -53,9 +72,14 @@ def bertForMaskedLM(*args, **kwargs):
     """
     model = BertForMaskedLM.from_pretrained(*args, **kwargs)
     return model
-```
+    ```
 
-With these in place and a pull request based on the template [here](https://github.com/pytorch/hub/blob/master/docs/template.md) you are all set to go. We may work with you to refine your code snippet but this is only because it is used as part of continuous integration (CI) and will help to identify any breaking changes in a timely manner. Your model will soon appear on [Pytorch hub webpage](https://pytorch.org/hub) for all users to explore.
+These entry-points can serve as wrappers around complex model factories. They can give a clean and consistent help docstring, have logic to support downloading of pretrained weights (for example via `pretrained=True`) or have additional hub-specific functionality such as visualization.
+
+With a `hubconf.py` in place, you can send a pull request based on the template [here](https://github.com/pytorch/hub/blob/master/docs/template.md).
+Our goal is to curate high-quality, easily-reproducible, maximally-beneficial models for research reproducibility.
+Hence, we may work with you to refine your pull request and in some cases reject some low-quality models to be published.
+Once we accept your pull request, your model will soon appear on [Pytorch hub webpage](https://pytorch.org/hub) for all users to explore.
 
 
 ## [User] Workflow
@@ -64,19 +88,22 @@ As a user, PyTorch Hub allows you to follow a few simple steps and do things lik
 
 ### Explore available entrypoints.
 
-Users can list all available entrypoints in a repo using the ```torch.hub.list()``` API. In this case, we are exploring the HuggingFace Bert models and we can see that there are several models available for us to try out.
+Users can list all available entrypoints in a repo using the ```torch.hub.list()``` API.
 
 ```python
->>> torch.hub.list('huggingface/pytorch-pretrained-BERT')
+>>> torch.hub.list('pytorch/vision')
 >>>
-['bertForMaskedLM',
- 'bertForNextSentencePrediction',
- ...
- 'openAIGPTModel',
- 'openAIGPTTokenizer']
+['alexnet',
+'deeplabv3_resnet101',
+'densenet121',
+...
+'vgg16',
+'vgg16_bn',
+'vgg19',
+ 'vgg19_bn']
  ```
 
-Note that PyTorch Hub also allows auxillary entrypoints (other than pretrained models), e.g. ```bertTokenizer``` for preprocessing, to make the user workflow smoother.
+Note that PyTorch Hub also allows auxillary entrypoints (other than pretrained models), e.g. ```bertTokenizer``` for preprocessing in the [BERT](https://pytorch.org/hub/huggingface_pytorch-pretrained-bert_bert/) models, to make the user workflow smoother.
 
 
 ### Load a model
@@ -84,8 +111,8 @@ Note that PyTorch Hub also allows auxillary entrypoints (other than pretrained m
 Now that we know which models are available in the Hub, users can load a model entrypoint using the ```torch.hub.load()``` API. This only requires a single command without the need to install a wheel. In addition the ```torch.hub.help()``` API can provide useful information about how to instantiate the model.
 
 ```python
-print(torch.hub.help('huggingface/pytorch-pretrained-BERT', 'bertForMaskedLM'))
-model = torch.hub.load('huggingface/pytorch-pretrained-BERT', 'bertForMaskedLM', 'bert-base-cased')
+print(torch.hub.help('pytorch/vision', 'deeplabv3_resnet101'))
+model = torch.hub.load('pytorch/vision', 'deeplabv3_resnet101', pretrained=True)
 ```
 
 It is also common that repo owners will want to continually add bug fixes or performance improvements. PyTorch Hub makes it super simple for users to get the latest update by calling:
@@ -94,7 +121,15 @@ It is also common that repo owners will want to continually add bug fixes or per
 model = torch.hub.load(..., force_reload=True)
 ```
 
-We believe this will help to alleviate the burden of repetitive package releases by repo owners and instead allow them to focus more on their research. It also ensures that, as a user, you are getting the freshest available models.
+We believe this will help to alleviate the burden of repetitive package releases by repo owners and instead allow them to focus more on their research.
+It also ensures that, as a user, you are getting the freshest available models.
+
+On the contrary, stability is important for users. Hence, some model owners serve them from a specificed branch or tag, rather than the `master` branch, to ensure stability of the code.
+For example, `pytorch_GAN_zoo` serves them from the `hub` branch:
+
+```python
+model = torch.hub.load('facebookresearch/pytorch_GAN_zoo:hub', 'DCGAN', pretrained=True, useGPU=False)
+```
 
 
 ### Explore a loaded model
@@ -126,8 +161,7 @@ forward(input_ids, token_type_ids=None, attention_mask=None, masked_lm_labels=No
 
 Note that the ```*args```, ```**kwargs``` passed to hub.load() are used to *instantiate* a model.
 
-
-You can find a full script for predicting a masked word using the Bert model from PyTorch Hub [here](https://github.com/pytorch/hub/blob/master/huggingface_pytorch-pretrained-bert_bert.md).
+Have a closer look at the [BERT](https://pytorch.org/hub/huggingface_pytorch-pretrained-bert_bert/) and [DeepLabV3](https://pytorch.org/hub/pytorch_vision_deeplabv3_resnet101/) pages, where you can see how these models can be used once loaded.
 
 ## Resources to get started
 
@@ -136,7 +170,7 @@ You can find a full script for predicting a masked word using the Bert model fro
 * Go to [https://pytorch.org/hub](https://pytorch.org/hub) to learn more about the available models.
 
 
-A BIG thanks to the folks at HuggingFace, fast.ai and Nvidia as well as Morgane Riviere (FAIR Paris) and lots of others for the help to bootstrap this effort!!
+A BIG thanks to the folks at HuggingFace, fast.ai and Nvidia as well as Morgane Riviere (FAIR Paris) and lots of others for helping bootstrap this effort!!
 
 
 ## FAQ:
@@ -145,12 +179,15 @@ A BIG thanks to the folks at HuggingFace, fast.ai and Nvidia as well as Morgane 
 A: Yes!! A next step for Hub is to implement an upvote/downvote system to surface the best models.
 
 **Q: Who hosts the model weights for PyTorch Hub?**
-A: You, as the contributor, are responsible to host the model weights. You can host your model in your favorite cloud storage or, if it fits within the limits, on GitHub.
+A: You, as the contributor, are responsible to host the model weights. You can host your model in your favorite cloud storage or, if it fits within the limits, on GitHub. If it is not within your means to host the weights, check with us via opening an issue on the hub repository.
 
 **Q: What if my model is trained on private data? Should I still contribute this model?**
 A: No! PyTorch Hub is centered around open research and that extends to the usage of open datasets to train these models on. If a pull request for a proprietary model is submitted, we will kindly ask that you resubmit a model trained on something open and available.
 
 **Q: Where are my downloaded models saved?**
+
+We follow the [XDG Base Directory Specification](https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html) and adhere to common standards around cached files and directories.
+
 A: The locations are used in the order of:
 
 * Calling ```hub.set_dir(<PATH_TO_HUB_DIR>)```
