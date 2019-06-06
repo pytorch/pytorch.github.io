@@ -72,7 +72,7 @@ def bertForMaskedLM(*args, **kwargs):
     """
     model = BertForMaskedLM.from_pretrained(*args, **kwargs)
     return model
-    ```
+```
 
 These entry-points can serve as wrappers around complex model factories. They can give a clean and consistent help docstring, have logic to support downloading of pretrained weights (for example via `pretrained=True`) or have additional hub-specific functionality such as visualization.
 
@@ -131,13 +131,15 @@ For example, `pytorch_GAN_zoo` serves them from the `hub` branch:
 model = torch.hub.load('facebookresearch/pytorch_GAN_zoo:hub', 'DCGAN', pretrained=True, useGPU=False)
 ```
 
+Note that the ```*args```, ```**kwargs``` passed to `hub.load()` are used to *instantiate* a model. In the above example, `pretrained=True` and `useGPU=False` are given to the model's entrypoint.
+
 
 ### Explore a loaded model
 
 Once you have a model from PyTorch Hub loaded, you can use the following workflow to find out the available methods that are supported as well as understand better what arguments are requires to run it.
 
 
-```dir(model)``` to see all available methods of the model. Let's take a look at bertForMaskedLM's available methods.
+```dir(model)``` to see all available methods of the model. Let's take a look at `bertForMaskedLM`'s available methods.
 
 ```python
 >>> dir(model)
@@ -159,8 +161,6 @@ forward(input_ids, token_type_ids=None, attention_mask=None, masked_lm_labels=No
 ...
 ```
 
-Note that the ```*args```, ```**kwargs``` passed to hub.load() are used to *instantiate* a model.
-
 Have a closer look at the [BERT](https://pytorch.org/hub/huggingface_pytorch-pretrained-bert_bert/) and [DeepLabV3](https://pytorch.org/hub/pytorch_vision_deeplabv3_resnet101/) pages, where you can see how these models can be used once loaded.
 
 ## Resources to get started
@@ -176,19 +176,22 @@ A BIG thanks to the folks at HuggingFace, fast.ai and Nvidia as well as Morgane 
 ## FAQ:
 
 **Q: If we would like to contribute a model that is already in the Hub but perhaps mine has better accuracy, should I still contribute?**
+
 A: Yes!! A next step for Hub is to implement an upvote/downvote system to surface the best models.
 
 **Q: Who hosts the model weights for PyTorch Hub?**
+
 A: You, as the contributor, are responsible to host the model weights. You can host your model in your favorite cloud storage or, if it fits within the limits, on GitHub. If it is not within your means to host the weights, check with us via opening an issue on the hub repository.
 
 **Q: What if my model is trained on private data? Should I still contribute this model?**
+
 A: No! PyTorch Hub is centered around open research and that extends to the usage of open datasets to train these models on. If a pull request for a proprietary model is submitted, we will kindly ask that you resubmit a model trained on something open and available.
 
 **Q: Where are my downloaded models saved?**
 
-We follow the [XDG Base Directory Specification](https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html) and adhere to common standards around cached files and directories.
+A: We follow the [XDG Base Directory Specification](https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html) and adhere to common standards around cached files and directories.
 
-A: The locations are used in the order of:
+The locations are used in the order of:
 
 * Calling ```hub.set_dir(<PATH_TO_HUB_DIR>)```
 * ```$TORCH_HOME/hub```, if environment variable ```TORCH_HOME``` is set.
