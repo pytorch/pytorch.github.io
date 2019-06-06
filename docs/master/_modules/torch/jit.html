@@ -108,7 +108,7 @@
               
               
                 <div class="version">
-                  <a href='http://pytorch.org/docs/versions.html'>1.2.0a0+f1adddd &#x25BC</a>
+                  <a href='http://pytorch.org/docs/versions.html'>1.2.0a0+8a2985e &#x25BC</a>
                 </div>
               
             
@@ -1210,17 +1210,47 @@
 
     <span class="k">return</span> <span class="n">env</span>
 
+<span class="k">def</span> <span class="nf">_create_constant_iterable_module</span><span class="p">(</span><span class="n">module</span><span class="p">):</span>
+    <span class="n">modules</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">()</span>
+
+    <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">submodule</span> <span class="ow">in</span> <span class="n">module</span><span class="o">.</span><span class="n">_modules</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">submodule</span><span class="p">,</span> <span class="p">(</span><span class="n">ModuleList</span><span class="p">,</span> <span class="n">Sequential</span><span class="p">)):</span>
+            <span class="c1"># Make each item in the module a constant</span>
+            <span class="n">modules</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">_create_constant_iterable_module</span><span class="p">(</span><span class="n">submodule</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">modules</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">_convert_to_script_module</span><span class="p">(</span><span class="n">submodule</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">Sequential</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">_ConstSequential</span><span class="p">(</span><span class="n">Sequential</span><span class="p">(</span><span class="n">modules</span><span class="p">))</span>
+    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">ModuleList</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">_ConstModuleList</span><span class="p">(</span><span class="n">modules</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Only nn.ModuleList and nn.Sequential can be made &quot;</span>
+                           <span class="s2">&quot;into constant modules, found </span><span class="si">{}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">module</span><span class="p">))</span>
+
 
 <span class="k">def</span> <span class="nf">_make_strong_submodule</span><span class="p">(</span><span class="n">field</span><span class="p">,</span> <span class="n">module</span><span class="p">,</span> <span class="n">parent</span><span class="p">):</span>
     <span class="k">if</span> <span class="n">field</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">parent</span><span class="o">.</span><span class="n">_modules</span><span class="p">:</span>
         <span class="c1"># It&#39;s not a submodule, don&#39;t do anything</span>
         <span class="k">return</span> <span class="kc">None</span>
-    <span class="k">return</span> <span class="n">_convert_to_script_module</span><span class="p">(</span><span class="n">module</span><span class="p">)</span>
+
+    <span class="c1"># Convert the module to a ScriptModule</span>
+    <span class="n">new_strong_submodule</span> <span class="o">=</span> <span class="n">_convert_to_script_module</span><span class="p">(</span><span class="n">module</span><span class="p">)</span>
+
+    <span class="c1"># Install the ScriptModule on the python side</span>
+    <span class="n">parent</span><span class="o">.</span><span class="n">_modules</span><span class="o">.</span><span class="n">_python_modules</span><span class="p">[</span><span class="n">field</span><span class="p">]</span> <span class="o">=</span> <span class="n">new_strong_submodule</span>
+
+    <span class="k">return</span> <span class="n">new_strong_submodule</span>
 
 
 <span class="k">def</span> <span class="nf">_try_compile_fn</span><span class="p">(</span><span class="n">fn</span><span class="p">):</span>
     <span class="k">if</span> <span class="n">_jit_internal</span><span class="o">.</span><span class="n">is_ignored_fn</span><span class="p">(</span><span class="n">fn</span><span class="p">):</span>
         <span class="c1"># Don&#39;t do anything for @ignore&#39;d functions</span>
+        <span class="k">return</span> <span class="kc">None</span>
+
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">fn</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+        <span class="c1"># Since modules are callable pybind recognizes them as functions, but</span>
+        <span class="c1"># don&#39;t do anything for them</span>
         <span class="k">return</span> <span class="kc">None</span>
 
     <span class="c1"># We don&#39;t have the actual scope where the function was defined, but we can</span>
@@ -1423,7 +1453,8 @@
 
     <span class="k">def</span> <span class="nf">__setitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span><span class="p">):</span>
         <span class="k">if</span> <span class="n">k</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_python_modules</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;cannot re-assign modules in a ScriptModule&quot;</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Cannot re-assign modules in a ScriptModule, &quot;</span>
+                               <span class="s2">&quot;tried to replace existing module &#39;</span><span class="si">{}</span><span class="s2">&#39;: </span><span class="si">{}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">k</span><span class="p">,</span> <span class="n">v</span><span class="p">))</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="n">ScriptModule</span><span class="p">):</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="o">.</span><span class="n">_register_module</span><span class="p">(</span><span class="n">k</span><span class="p">,</span> <span class="n">v</span><span class="o">.</span><span class="n">_c</span><span class="p">)</span>
 
@@ -1711,6 +1742,8 @@
         <span class="k">def</span> <span class="nf">__getattr__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">attr</span><span class="p">):</span>
             <span class="k">if</span> <span class="s1">&#39;_c&#39;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;ScriptModule has not been initialized, did you forget to call super&#39;s init?&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_c</span><span class="o">.</span><span class="n">_has_attribute</span><span class="p">(</span><span class="n">attr</span><span class="p">):</span>
+                <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_c</span><span class="o">.</span><span class="n">_get_attribute</span><span class="p">(</span><span class="n">attr</span><span class="p">)</span>
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_c</span><span class="o">.</span><span class="n">_has_method</span><span class="p">(</span><span class="n">attr</span><span class="p">):</span>
                 <span class="k">if</span> <span class="n">attr</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="n">_methods</span><span class="p">:</span>
                     <span class="n">original_method</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="n">_methods</span><span class="p">[</span><span class="n">attr</span><span class="p">]</span><span class="o">.</span><span class="n">original_method</span>
@@ -1722,9 +1755,6 @@
                 <span class="c1"># to improve invocation performance</span>
                 <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">[</span><span class="n">attr</span><span class="p">]</span> <span class="o">=</span> <span class="n">script_method</span>
                 <span class="k">return</span> <span class="n">script_method</span>
-
-            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_c</span><span class="o">.</span><span class="n">_has_attribute</span><span class="p">(</span><span class="n">attr</span><span class="p">):</span>
-                <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_c</span><span class="o">.</span><span class="n">_get_attribute</span><span class="p">(</span><span class="n">attr</span><span class="p">)</span>
             <span class="k">return</span> <span class="n">Module</span><span class="o">.</span><span class="fm">__getattr__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">attr</span><span class="p">)</span>
 
         <span class="k">def</span> <span class="nf">__setattr__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">attr</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
@@ -1733,9 +1763,9 @@
                     <span class="c1"># Compile weak script module</span>
                     <span class="n">value</span> <span class="o">=</span> <span class="n">_make_strong</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
                 <span class="k">if</span> <span class="n">attr</span> <span class="o">==</span> <span class="s1">&#39;training&#39;</span><span class="p">:</span>
-                    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_c</span><span class="o">.</span><span class="n">_has_buffer</span><span class="p">(</span><span class="s1">&#39;training&#39;</span><span class="p">):</span>
+                    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_c</span><span class="o">.</span><span class="n">_has_attribute</span><span class="p">(</span><span class="s1">&#39;training&#39;</span><span class="p">):</span>
                         <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">[</span><span class="s1">&#39;training&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
-                        <span class="bp">self</span><span class="o">.</span><span class="n">_c</span><span class="o">.</span><span class="n">_get_buffer</span><span class="p">(</span><span class="s1">&#39;training&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">fill_</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">value</span><span class="p">))</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">_c</span><span class="o">.</span><span class="n">_set_attribute</span><span class="p">(</span><span class="s1">&#39;training&#39;</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
                         <span class="k">return</span>
                 <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">Attribute</span><span class="p">):</span>
                     <span class="n">the_type</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">jit</span><span class="o">.</span><span class="n">annotations</span><span class="o">.</span><span class="n">ann_to_type</span><span class="p">(</span><span class="n">value</span><span class="o">.</span><span class="n">type</span><span class="p">)</span>
@@ -1807,6 +1837,11 @@
             <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">forward</span><span class="o">.</span><span class="n">graph_for</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 
     <span class="k">class</span> <span class="nc">WeakScriptModuleProxy</span><span class="p">(</span><span class="n">ScriptModule</span><span class="p">):</span>
+        <span class="c1"># TODO: [weak script refactor]</span>
+        <span class="c1"># WeakScriptModule proxy should be deleted since its functionality is</span>
+        <span class="c1"># subsumed by recursive scripting, and the copying code in init moved</span>
+        <span class="c1"># to a function to create a ScriptModule from an nn.Module without</span>
+        <span class="c1"># making a WeakScriptModuleProxy</span>
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Copies the parameters, buffers, constants, attributes, and submodules</span>
 <span class="sd">        of an nn.Module into itself.</span>
@@ -1838,7 +1873,13 @@
                 <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="p">(</span><span class="n">Parameter</span><span class="p">,</span> <span class="n">Module</span><span class="p">,</span> <span class="n">Attribute</span><span class="p">)):</span>
                     <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="p">(</span><span class="n">ModuleList</span><span class="p">,</span> <span class="n">Sequential</span><span class="p">)):</span>
                         <span class="c1"># These are in __constants__, so ignore them here</span>
-                        <span class="k">continue</span>
+
+                        <span class="k">if</span> <span class="ow">not</span> <span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">_jit_recursive_script</span><span class="p">():</span>
+                            <span class="c1"># For recursive script, these are constantified after</span>
+                            <span class="c1"># they are used, so they don&#39;t need to be in constants.</span>
+                            <span class="c1"># The `continue` here should be deleted along with</span>
+                            <span class="c1"># [weak script refactor]</span>
+                            <span class="k">continue</span>
                     <span class="n">ScriptModule</span><span class="o">.</span><span class="fm">__setattr__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">item</span><span class="p">)</span>
 
             <span class="c1"># Copy buffers</span>
@@ -1921,6 +1962,10 @@
 <span class="sd">    `(&#39;forward&#39;,)`. Methods accessed in forward are scripted on demand if</span>
 <span class="sd">    `_enable_recursive_script()` is used.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">mod</span><span class="p">,</span> <span class="p">(</span><span class="n">ModuleList</span><span class="p">,</span> <span class="n">Sequential</span><span class="p">)):</span>
+        <span class="c1"># Create constant versions for the iterable modules</span>
+        <span class="k">return</span> <span class="n">_create_constant_iterable_module</span><span class="p">(</span><span class="n">mod</span><span class="p">)</span>
+
     <span class="k">if</span> <span class="n">methods</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">methods</span> <span class="o">=</span> <span class="p">(</span><span class="s1">&#39;forward&#39;</span><span class="p">,)</span>
     <span class="n">exported</span> <span class="o">=</span> <span class="p">[]</span>
@@ -2055,6 +2100,7 @@
 <span class="k">class</span> <span class="nc">_ConstModuleList</span><span class="p">(</span><span class="n">ScriptModule</span><span class="p">):</span>
     <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">modules</span><span class="p">):</span>
         <span class="nb">super</span><span class="p">(</span><span class="n">_ConstModuleList</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">modules</span><span class="p">,</span> <span class="n">OrderedDict</span><span class="p">):</span>
             <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">module</span> <span class="ow">in</span> <span class="n">modules</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
                 <span class="k">if</span> <span class="n">_is_weak_type</span><span class="p">(</span><span class="nb">type</span><span class="p">(</span><span class="n">module</span><span class="p">)):</span>
