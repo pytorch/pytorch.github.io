@@ -108,7 +108,7 @@
               
               
                 <div class="version">
-                  <a href='http://pytorch.org/docs/versions.html'>1.2.0a0+78a3765 &#x25BC</a>
+                  <a href='http://pytorch.org/docs/versions.html'>1.2.0a0+d6af658 &#x25BC</a>
                 </div>
               
             
@@ -272,8 +272,10 @@
 <span class="kn">import</span> <span class="nn">torch</span>
 <span class="kn">import</span> <span class="nn">torch.nn</span> <span class="k">as</span> <span class="nn">nn</span>
 <span class="kn">import</span> <span class="nn">torch.nn.functional</span> <span class="k">as</span> <span class="nn">F</span>
-<span class="kn">from</span> <span class="nn">.utils</span> <span class="k">import</span> <span class="n">load_state_dict_from_url</span>
+<span class="kn">import</span> <span class="nn">torch.utils.checkpoint</span> <span class="k">as</span> <span class="nn">cp</span>
 <span class="kn">from</span> <span class="nn">collections</span> <span class="k">import</span> <span class="n">OrderedDict</span>
+<span class="kn">from</span> <span class="nn">.utils</span> <span class="k">import</span> <span class="n">load_state_dict_from_url</span>
+
 
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;DenseNet&#39;</span><span class="p">,</span> <span class="s1">&#39;densenet121&#39;</span><span class="p">,</span> <span class="s1">&#39;densenet169&#39;</span><span class="p">,</span> <span class="s1">&#39;densenet201&#39;</span><span class="p">,</span> <span class="s1">&#39;densenet161&#39;</span><span class="p">]</span>
 
@@ -285,8 +287,17 @@
 <span class="p">}</span>
 
 
+<span class="k">def</span> <span class="nf">_bn_function_factory</span><span class="p">(</span><span class="n">norm</span><span class="p">,</span> <span class="n">relu</span><span class="p">,</span> <span class="n">conv</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">bn_function</span><span class="p">(</span><span class="o">*</span><span class="n">inputs</span><span class="p">):</span>
+        <span class="n">concated_features</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">(</span><span class="n">inputs</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">bottleneck_output</span> <span class="o">=</span> <span class="n">conv</span><span class="p">(</span><span class="n">relu</span><span class="p">(</span><span class="n">norm</span><span class="p">(</span><span class="n">concated_features</span><span class="p">)))</span>
+        <span class="k">return</span> <span class="n">bottleneck_output</span>
+
+    <span class="k">return</span> <span class="n">bn_function</span>
+
+
 <span class="k">class</span> <span class="nc">_DenseLayer</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">):</span>
-    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">num_input_features</span><span class="p">,</span> <span class="n">growth_rate</span><span class="p">,</span> <span class="n">bn_size</span><span class="p">,</span> <span class="n">drop_rate</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">num_input_features</span><span class="p">,</span> <span class="n">growth_rate</span><span class="p">,</span> <span class="n">bn_size</span><span class="p">,</span> <span class="n">drop_rate</span><span class="p">,</span> <span class="n">memory_efficient</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
         <span class="nb">super</span><span class="p">(</span><span class="n">_DenseLayer</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">add_module</span><span class="p">(</span><span class="s1">&#39;norm1&#39;</span><span class="p">,</span> <span class="n">nn</span><span class="o">.</span><span class="n">BatchNorm2d</span><span class="p">(</span><span class="n">num_input_features</span><span class="p">)),</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">add_module</span><span class="p">(</span><span class="s1">&#39;relu1&#39;</span><span class="p">,</span> <span class="n">nn</span><span class="o">.</span><span class="n">ReLU</span><span class="p">(</span><span class="n">inplace</span><span class="o">=</span><span class="kc">True</span><span class="p">)),</span>
@@ -299,22 +310,40 @@
                                            <span class="n">kernel_size</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">stride</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">padding</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
                                            <span class="n">bias</span><span class="o">=</span><span class="kc">False</span><span class="p">)),</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">drop_rate</span> <span class="o">=</span> <span class="n">drop_rate</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">memory_efficient</span> <span class="o">=</span> <span class="n">memory_efficient</span>
 
-    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">):</span>
-        <span class="n">new_features</span> <span class="o">=</span> <span class="nb">super</span><span class="p">(</span><span class="n">_DenseLayer</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">forward</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">prev_features</span><span class="p">):</span>
+        <span class="n">bn_function</span> <span class="o">=</span> <span class="n">_bn_function_factory</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">norm1</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">relu1</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">conv1</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">memory_efficient</span> <span class="ow">and</span> <span class="nb">any</span><span class="p">(</span><span class="n">prev_feature</span><span class="o">.</span><span class="n">requires_grad</span> <span class="k">for</span> <span class="n">prev_feature</span> <span class="ow">in</span> <span class="n">prev_features</span><span class="p">):</span>
+            <span class="n">bottleneck_output</span> <span class="o">=</span> <span class="n">cp</span><span class="o">.</span><span class="n">checkpoint</span><span class="p">(</span><span class="n">bn_function</span><span class="p">,</span> <span class="o">*</span><span class="n">prev_features</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">bottleneck_output</span> <span class="o">=</span> <span class="n">bn_function</span><span class="p">(</span><span class="o">*</span><span class="n">prev_features</span><span class="p">)</span>
+        <span class="n">new_features</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">conv2</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">relu2</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">norm2</span><span class="p">(</span><span class="n">bottleneck_output</span><span class="p">)))</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">drop_rate</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
             <span class="n">new_features</span> <span class="o">=</span> <span class="n">F</span><span class="o">.</span><span class="n">dropout</span><span class="p">(</span><span class="n">new_features</span><span class="p">,</span> <span class="n">p</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">drop_rate</span><span class="p">,</span>
                                      <span class="n">training</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">training</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">x</span><span class="p">,</span> <span class="n">new_features</span><span class="p">],</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">new_features</span>
 
 
-<span class="k">class</span> <span class="nc">_DenseBlock</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">):</span>
-    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">num_layers</span><span class="p">,</span> <span class="n">num_input_features</span><span class="p">,</span> <span class="n">bn_size</span><span class="p">,</span> <span class="n">growth_rate</span><span class="p">,</span> <span class="n">drop_rate</span><span class="p">):</span>
+<span class="k">class</span> <span class="nc">_DenseBlock</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">num_layers</span><span class="p">,</span> <span class="n">num_input_features</span><span class="p">,</span> <span class="n">bn_size</span><span class="p">,</span> <span class="n">growth_rate</span><span class="p">,</span> <span class="n">drop_rate</span><span class="p">,</span> <span class="n">memory_efficient</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
         <span class="nb">super</span><span class="p">(</span><span class="n">_DenseBlock</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
         <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_layers</span><span class="p">):</span>
-            <span class="n">layer</span> <span class="o">=</span> <span class="n">_DenseLayer</span><span class="p">(</span><span class="n">num_input_features</span> <span class="o">+</span> <span class="n">i</span> <span class="o">*</span> <span class="n">growth_rate</span><span class="p">,</span> <span class="n">growth_rate</span><span class="p">,</span>
-                                <span class="n">bn_size</span><span class="p">,</span> <span class="n">drop_rate</span><span class="p">)</span>
+            <span class="n">layer</span> <span class="o">=</span> <span class="n">_DenseLayer</span><span class="p">(</span>
+                <span class="n">num_input_features</span> <span class="o">+</span> <span class="n">i</span> <span class="o">*</span> <span class="n">growth_rate</span><span class="p">,</span>
+                <span class="n">growth_rate</span><span class="o">=</span><span class="n">growth_rate</span><span class="p">,</span>
+                <span class="n">bn_size</span><span class="o">=</span><span class="n">bn_size</span><span class="p">,</span>
+                <span class="n">drop_rate</span><span class="o">=</span><span class="n">drop_rate</span><span class="p">,</span>
+                <span class="n">memory_efficient</span><span class="o">=</span><span class="n">memory_efficient</span><span class="p">,</span>
+            <span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">add_module</span><span class="p">(</span><span class="s1">&#39;denselayer</span><span class="si">%d</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">),</span> <span class="n">layer</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">init_features</span><span class="p">):</span>
+        <span class="n">features</span> <span class="o">=</span> <span class="p">[</span><span class="n">init_features</span><span class="p">]</span>
+        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">layer</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">named_children</span><span class="p">():</span>
+            <span class="n">new_features</span> <span class="o">=</span> <span class="n">layer</span><span class="p">(</span><span class="o">*</span><span class="n">features</span><span class="p">)</span>
+            <span class="n">features</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">new_features</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">(</span><span class="n">features</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
 
 
 <span class="k">class</span> <span class="nc">_Transition</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">):</span>
@@ -339,10 +368,12 @@
 <span class="sd">          (i.e. bn_size * k features in the bottleneck layer)</span>
 <span class="sd">        drop_rate (float) - dropout rate after each dense layer</span>
 <span class="sd">        num_classes (int) - number of classification classes</span>
+<span class="sd">        memory_efficient (bool) - set to True to use checkpointing. Much more memory efficient,</span>
+<span class="sd">          but slower. Default: *False*</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">growth_rate</span><span class="o">=</span><span class="mi">32</span><span class="p">,</span> <span class="n">block_config</span><span class="o">=</span><span class="p">(</span><span class="mi">6</span><span class="p">,</span> <span class="mi">12</span><span class="p">,</span> <span class="mi">24</span><span class="p">,</span> <span class="mi">16</span><span class="p">),</span>
-                 <span class="n">num_init_features</span><span class="o">=</span><span class="mi">64</span><span class="p">,</span> <span class="n">bn_size</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">drop_rate</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">num_classes</span><span class="o">=</span><span class="mi">1000</span><span class="p">):</span>
+                 <span class="n">num_init_features</span><span class="o">=</span><span class="mi">64</span><span class="p">,</span> <span class="n">bn_size</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">drop_rate</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">num_classes</span><span class="o">=</span><span class="mi">1000</span><span class="p">,</span> <span class="n">memory_efficient</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
 
         <span class="nb">super</span><span class="p">(</span><span class="n">DenseNet</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
 
@@ -358,9 +389,14 @@
         <span class="c1"># Each denseblock</span>
         <span class="n">num_features</span> <span class="o">=</span> <span class="n">num_init_features</span>
         <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">num_layers</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">block_config</span><span class="p">):</span>
-            <span class="n">block</span> <span class="o">=</span> <span class="n">_DenseBlock</span><span class="p">(</span><span class="n">num_layers</span><span class="o">=</span><span class="n">num_layers</span><span class="p">,</span> <span class="n">num_input_features</span><span class="o">=</span><span class="n">num_features</span><span class="p">,</span>
-                                <span class="n">bn_size</span><span class="o">=</span><span class="n">bn_size</span><span class="p">,</span> <span class="n">growth_rate</span><span class="o">=</span><span class="n">growth_rate</span><span class="p">,</span>
-                                <span class="n">drop_rate</span><span class="o">=</span><span class="n">drop_rate</span><span class="p">)</span>
+            <span class="n">block</span> <span class="o">=</span> <span class="n">_DenseBlock</span><span class="p">(</span>
+                <span class="n">num_layers</span><span class="o">=</span><span class="n">num_layers</span><span class="p">,</span>
+                <span class="n">num_input_features</span><span class="o">=</span><span class="n">num_features</span><span class="p">,</span>
+                <span class="n">bn_size</span><span class="o">=</span><span class="n">bn_size</span><span class="p">,</span>
+                <span class="n">growth_rate</span><span class="o">=</span><span class="n">growth_rate</span><span class="p">,</span>
+                <span class="n">drop_rate</span><span class="o">=</span><span class="n">drop_rate</span><span class="p">,</span>
+                <span class="n">memory_efficient</span><span class="o">=</span><span class="n">memory_efficient</span>
+            <span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">features</span><span class="o">.</span><span class="n">add_module</span><span class="p">(</span><span class="s1">&#39;denseblock</span><span class="si">%d</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">),</span> <span class="n">block</span><span class="p">)</span>
             <span class="n">num_features</span> <span class="o">=</span> <span class="n">num_features</span> <span class="o">+</span> <span class="n">num_layers</span> <span class="o">*</span> <span class="n">growth_rate</span>
             <span class="k">if</span> <span class="n">i</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">block_config</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">:</span>
