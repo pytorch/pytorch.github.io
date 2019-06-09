@@ -7,8 +7,7 @@ redirect_from: /2019/06/05/pytorch_hub.html
 
 Reproducibility is an essential requirement for many fields of research including those based on machine learning techniques. However, many machine learning publications are either not reproducible or are difficult to reproduce. With the continued growth in the number of research publications, including tens of thousands of papers now hosted on arXiv and submissions to conferences at an all time high, research reproducibility is more important than ever. While many of these publications are accompanied by code as well as trained models which is helpful but still leaves a number of steps for users to figure out for themselves.
 
-We are excited to announce the availability of PyTorch Hub, a simple API and workflow the provides the basic building blocks for improving machine learning research reproducibility. PyTorch Hub consists of a pre-trained model repository designed specifically to facilitate research reproducibility and enable new research.
-
+We are excited to announce the availability of PyTorch Hub, a simple API and workflow the provides the basic building blocks for improving machine learning research reproducibility. PyTorch Hub consists of a pre-trained model repository designed specifically to facilitate research reproducibility and enable new research. 
 
 ## [Owner] Publishing models
 
@@ -165,29 +164,36 @@ Have a closer look at the [BERT](https://pytorch.org/hub/huggingface_pytorch-pre
 
 ## Resources to get started
 
+PyTorch Hub models are available in both [Colab](https://colab.research.google.com/github/pytorch/pytorch.github.io/blob/master/assets/hub/facebookresearch_pytorch-gan-zoo_pgan.ipynb) and on [Paperswithcode](https://paperswithcode.com/) with a example to get you started [here](https://paperswithcode.com/paper/densely-connected-convolutional-networks).
+
 * PyTorch Hub API documentation can be found [here](https://pytorch.org/docs/stable/hub.html).
 * Submit a model [here](https://github.com/pytorch/hub) for publication in PyTorch Hub.
 * Go to [https://pytorch.org/hub](https://pytorch.org/hub) to learn more about the available models.
+* Look for more models to come on [paperswithcode.com](https://paperswithcode.com/).
 
 
-A BIG thanks to the folks at HuggingFace, fast.ai and Nvidia as well as Morgane Riviere (FAIR Paris) and lots of others for helping bootstrap this effort!!
+A BIG thanks to the folks at HuggingFace, The Paperswithcode team, fast.ai and Nvidia as well as Morgane Riviere (FAIR Paris) and lots of others for helping bootstrap this effort!!
 
 
 ## FAQ:
 
 **Q: If we would like to contribute a model that is already in the Hub but perhaps mine has better accuracy, should I still contribute?**
 
+
 A: Yes!! A next step for Hub is to implement an upvote/downvote system to surface the best models.
 
 **Q: Who hosts the model weights for PyTorch Hub?**
+
 
 A: You, as the contributor, are responsible to host the model weights. You can host your model in your favorite cloud storage or, if it fits within the limits, on GitHub. If it is not within your means to host the weights, check with us via opening an issue on the hub repository.
 
 **Q: What if my model is trained on private data? Should I still contribute this model?**
 
+
 A: No! PyTorch Hub is centered around open research and that extends to the usage of open datasets to train these models on. If a pull request for a proprietary model is submitted, we will kindly ask that you resubmit a model trained on something open and available.
 
 **Q: Where are my downloaded models saved?**
+
 
 A: We follow the [XDG Base Directory Specification](https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html) and adhere to common standards around cached files and directories.
 
