@@ -7,8 +7,7 @@ redirect_from: /2019/06/05/pytorch_hub.html
 
 Reproducibility is an essential requirement for many fields of research including those based on machine learning techniques. However, many machine learning publications are either not reproducible or are difficult to reproduce. With the continued growth in the number of research publications, including tens of thousands of papers now hosted on arXiv and submissions to conferences at an all time high, research reproducibility is more important than ever. While many of these publications are accompanied by code as well as trained models which is helpful but still leaves a number of steps for users to figure out for themselves.
 
-We are excited to announce the availability of PyTorch Hub, a simple API and workflow the provides the basic building blocks for improving machine learning research reproducibility. PyTorch Hub consists of a pre-trained model repository designed specifically to facilitate research reproducibility and enable new research. 
-
+We are excited to announce the availability of PyTorch Hub, a simple API and workflow the provides the basic building blocks for improving machine learning research reproducibility. PyTorch Hub consists of a pre-trained model repository designed specifically to facilitate research reproducibility and enable new research. It also has built-in support for [Colab](https://colab.research.google.com/), integration with [Paperswithcode](https://paperswithcode.com/) and currently contains a broad set of models such as CNNs, GANs and Bert.
 
 <div class="text-center">
   <img src="{{ site.url }}/assets/images/pwc1.png" width="100%">
@@ -167,7 +166,7 @@ forward(input_ids, token_type_ids=None, attention_mask=None, masked_lm_labels=No
 
 Have a closer look at the [BERT](https://pytorch.org/hub/huggingface_pytorch-pretrained-bert_bert/) and [DeepLabV3](https://pytorch.org/hub/pytorch_vision_deeplabv3_resnet101/) pages, where you can see how these models can be used once loaded.
 
-## Resources to get started
+### Other ways to explore
 
 The models available in PyTorch Hub support directly getting started in both [Colab](https://colab.research.google.com/github/pytorch/pytorch.github.io/blob/master/assets/hub/facebookresearch_pytorch-gan-zoo_pgan.ipynb) and on [Paperswithcode](https://paperswithcode.com/) with an example [here](https://paperswithcode.com/paper/densely-connected-convolutional-networks).
 
@@ -175,7 +174,7 @@ The models available in PyTorch Hub support directly getting started in both [Co
   <img src="{{ site.url }}/assets/images/pwc2.png" width="100%">
 </div>
 
-Some additional resources:
+## Additional resources:
 
 * PyTorch Hub API documentation can be found [here](https://pytorch.org/docs/stable/hub.html).
 * Submit a model [here](https://github.com/pytorch/hub) for publication in PyTorch Hub.
@@ -183,7 +182,7 @@ Some additional resources:
 * Look for more models to come on [paperswithcode.com](https://paperswithcode.com/).
 
 
-A BIG thanks to the folks at HuggingFace, The Paperswithcode team, fast.ai and Nvidia as well as Morgane Riviere (FAIR Paris) and lots of others for helping bootstrap this effort!!
+A BIG thanks to the folks at HuggingFace, the Paperswithcode team, fast.ai and Nvidia as well as Morgane Riviere (FAIR Paris) and lots of others for helping bootstrap this effort!!
 
 
 ## FAQ:
