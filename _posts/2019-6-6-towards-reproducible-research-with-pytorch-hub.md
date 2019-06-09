@@ -184,6 +184,12 @@ The models available in PyTorch Hub support directly getting started in both [Co
 
 A BIG thanks to the folks at HuggingFace, the Paperswithcode team, fast.ai and Nvidia as well as Morgane Riviere (FAIR Paris) and lots of others for helping bootstrap this effort!!
 
+Cheers!
+
+Team PyTorch
+
+
+
 
 ## FAQ:
 
@@ -215,6 +221,4 @@ The locations are used in the order of:
 * ```~/.cache/torch/hub```
 
 
-Cheers!
 
-Team PyTorch
