@@ -9,6 +9,11 @@ Reproducibility is an essential requirement for many fields of research includin
 
 We are excited to announce the availability of PyTorch Hub, a simple API and workflow the provides the basic building blocks for improving machine learning research reproducibility. PyTorch Hub consists of a pre-trained model repository designed specifically to facilitate research reproducibility and enable new research. 
 
+
+<div class="text-center">
+  <img src="{{ site.url }}/assets/images/pwc1.png" width="100%">
+</div>
+
 ## [Owner] Publishing models
 
 PyTorch Hub supports the publication of pre-trained models (model definitions and pre-trained weights) to a GitHub repository by adding a simple ```hubconf.py``` file.
@@ -164,11 +169,13 @@ Have a closer look at the [BERT](https://pytorch.org/hub/huggingface_pytorch-pre
 
 ## Resources to get started
 
-PyTorch Hub models are available in both [Colab](https://colab.research.google.com/github/pytorch/pytorch.github.io/blob/master/assets/hub/facebookresearch_pytorch-gan-zoo_pgan.ipynb) and on [Paperswithcode](https://paperswithcode.com/) with a example to get you started [here](https://paperswithcode.com/paper/densely-connected-convolutional-networks).
+The models available in PyTorch Hub support quickly getting started in both [Colab](https://colab.research.google.com/github/pytorch/pytorch.github.io/blob/master/assets/hub/facebookresearch_pytorch-gan-zoo_pgan.ipynb) and on [Paperswithcode](https://paperswithcode.com/) with a example [here](https://paperswithcode.com/paper/densely-connected-convolutional-networks).
 
 <div class="text-center">
-  <img src="{{ site.url }}/assets/images/pwc.png" width="100%">
+  <img src="{{ site.url }}/assets/images/pwc2.png" width="100%">
 </div>
+
+Some additional resources to get you started:
 
 * PyTorch Hub API documentation can be found [here](https://pytorch.org/docs/stable/hub.html).
 * Submit a model [here](https://github.com/pytorch/hub) for publication in PyTorch Hub.
