@@ -7,7 +7,7 @@ redirect_from: /2019/06/05/pytorch_hub.html
 
 Reproducibility is an essential requirement for many fields of research including those based on machine learning techniques. However, many machine learning publications are either not reproducible or are difficult to reproduce. With the continued growth in the number of research publications, including tens of thousands of papers now hosted on arXiv and submissions to conferences at an all time high, research reproducibility is more important than ever. While many of these publications are accompanied by code as well as trained models which is helpful but still leaves a number of steps for users to figure out for themselves.
 
-We are excited to announce the availability of PyTorch Hub, a simple API and workflow the provides the basic building blocks for improving machine learning research reproducibility. PyTorch Hub consists of a pre-trained model repository designed specifically to facilitate research reproducibility and enable new research. It also has built-in support for [Colab](https://colab.research.google.com/), integration with [Paperswithcode](https://paperswithcode.com/) and currently contains a broad set of models such as CNNs, GANs and Bert.
+We are excited to announce the availability of PyTorch Hub, a simple API and workflow that provides the basic building blocks for improving machine learning research reproducibility. PyTorch Hub consists of a pre-trained model repository designed specifically to facilitate research reproducibility and enable new research. It also has built-in support for [Colab](https://colab.research.google.com/), integration with [*Papers With Code*](https://paperswithcode.com/) and currently contains a broad set of models that include Classification and Segmentation, Generative, Transformers, etc.
 
 <div class="text-center">
   <img src="{{ site.url }}/assets/images/pwc1.png" width="100%">
@@ -168,7 +168,7 @@ Have a closer look at the [BERT](https://pytorch.org/hub/huggingface_pytorch-pre
 
 ### Other ways to explore
 
-Models available in PyTorch Hub also support both [Colab](https://colab.research.google.com/github/pytorch/pytorch.github.io/blob/master/assets/hub/facebookresearch_pytorch-gan-zoo_pgan.ipynb) and are directly linked on [Paperswithcode](https://paperswithcode.com/) and you can get started with a single click. [Here](https://paperswithcode.com/paper/densely-connected-convolutional-networks) is a good example to get started with (shown below).
+Models available in PyTorch Hub also support both [Colab](https://colab.research.google.com/github/pytorch/pytorch.github.io/blob/master/assets/hub/facebookresearch_pytorch-gan-zoo_pgan.ipynb) and are directly linked on [Papers With Code](https://paperswithcode.com/) and you can get started with a single click. [Here](https://paperswithcode.com/paper/densely-connected-convolutional-networks) is a good example to get started with (shown below).
 
 <div class="text-center">
   <img src="{{ site.url }}/assets/images/pwc2.png" width="100%">
@@ -182,7 +182,7 @@ Models available in PyTorch Hub also support both [Colab](https://colab.research
 * Look for more models to come on [paperswithcode.com](https://paperswithcode.com/).
 
 
-A BIG thanks to the folks at HuggingFace, the Paperswithcode team, fast.ai and Nvidia as well as Morgane Riviere (FAIR Paris) and lots of others for helping bootstrap this effort!!
+A BIG thanks to the folks at HuggingFace, the PapersWithCode team, fast.ai and Nvidia as well as Morgane Riviere (FAIR Paris) and lots of others for helping bootstrap this effort!!
 
 Cheers!
 
@@ -219,6 +219,3 @@ The locations are used in the order of:
 * ```$TORCH_HOME/hub```, if environment variable ```TORCH_HOME``` is set.
 * ```$XDG_CACHE_HOME/torch/hub```, if environment variable ```XDG_CACHE_HOME``` is set.
 * ```~/.cache/torch/hub```
-
-
-
