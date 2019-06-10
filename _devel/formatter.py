@@ -30,11 +30,15 @@ with open('/dev/stdin', 'r') as input, open('/dev/stdout', 'w') as output:
     if 'accelerator' in header.keys():
         acc = header['accelerator']
         if acc == 'cuda':
-            note = '**This notebook requires a GPU runtime to run.**\n **Please select the menu option "Runtime" -> "Change runtime type", select "Hardware Accelerator" -> "GPU" and click "SAVE"**\n\n'
-            pre += [note]
+            note = ['### This notebook requires a GPU runtime to run.\n',
+                    '### Please select the menu option "Runtime" -> "Change runtime type", select "Hardware Accelerator" -> "GPU" and click "SAVE"\n\n',
+                    '----------------------------------------------------------------------\n\n']
+            pre += note
         elif acc == 'cuda-optional':
-            note = '**This notebook is optionally accelerated with a GPU runtime.**\n **If you would like to use this acceleration, please select the menu option "Runtime" -> "Change runtime type", select "Hardware Accelerator" -> "GPU" and click "SAVE"**\n\n'
-            pre += [note]
+            note = ['### This notebook is optionally accelerated with a GPU runtime.\n',
+                    '### If you would like to use this acceleration, please select the menu option "Runtime" -> "Change runtime type", select "Hardware Accelerator" -> "GPU" and click "SAVE"\n\n',
+                    '----------------------------------------------------------------------\n\n']
+            pre += note
 
     pre += ['# ' + header['title'] + '\n\n']
     pre += ['*Author: ' + header['author'] + '*' + '\n\n']
