@@ -26,6 +26,16 @@ with open('/dev/stdin', 'r') as input, open('/dev/stdout', 'w') as output:
         images.append(header['featured_image_2'])
 
     pre = []
+
+    if 'accelerator' in header.keys():
+        acc = header['accelerator']
+        if acc == 'cuda':
+            note = '**This notebook requires a GPU runtime to run.**\n **Please select the menu option "Runtime" -> "Change runtime type", select "Hardware Accelerator" -> "GPU" and click "SAVE"**\n\n'
+            pre += [note]
+        elif acc == 'cuda-optional':
+            note = '**This notebook is optionally accelerated with a GPU runtime.**\n **If you would like to use this acceleration, please select the menu option "Runtime" -> "Change runtime type", select "Hardware Accelerator" -> "GPU" and click "SAVE"**\n\n'
+            pre += [note]
+
     pre += ['# ' + header['title'] + '\n\n']
     pre += ['*Author: ' + header['author'] + '*' + '\n\n']
     pre += ['**' + header['summary'] + '**' + '\n\n']
@@ -36,7 +46,7 @@ with open('/dev/stdin', 'r') as input, open('/dev/stdout', 'w') as output:
         pre += ['![alt](https://pytorch.org/assets/images/{}) | '
                 '![alt](https://pytorch.org/assets/images/{})\n\n'.format(*images)]
     elif len(images) == 1:
-        pre += ['![alt](https://pytorch.org/assets/images/{})\n\n'.format(*images)]
+        pre += ['<img src="https://pytorch.org/assets/images/{}" alt="alt" width="50%"/>\n\n'.format(*images)]
 
     markdown = pre + markdown
     output.write(''.join(markdown))
