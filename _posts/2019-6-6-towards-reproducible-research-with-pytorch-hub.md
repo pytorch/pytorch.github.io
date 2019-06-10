@@ -10,7 +10,7 @@ Reproducibility is an essential requirement for many fields of research includin
 We are excited to announce the availability of PyTorch Hub, a simple API and workflow that provides the basic building blocks for improving machine learning research reproducibility. PyTorch Hub consists of a pre-trained model repository designed specifically to facilitate research reproducibility and enable new research. It also has built-in support for [Colab](https://colab.research.google.com/), integration with [*Papers With Code*](https://paperswithcode.com/) and currently contains a broad set of models that include Classification and Segmentation, Generative, Transformers, etc.
 
 <div class="text-center">
-  <img src="{{ site.url }}/assets/images/pwc1.png" width="100%">
+  <img src="{{ site.url }}/assets/images/hub-blog-header-1.png" width="100%">
 </div>
 
 ## [Owner] Publishing models
@@ -171,7 +171,7 @@ Have a closer look at the [BERT](https://pytorch.org/hub/huggingface_pytorch-pre
 Models available in PyTorch Hub also support both [Colab](https://colab.research.google.com/github/pytorch/pytorch.github.io/blob/master/assets/hub/facebookresearch_pytorch-gan-zoo_pgan.ipynb) and are directly linked on [Papers With Code](https://paperswithcode.com/) and you can get started with a single click. [Here](https://paperswithcode.com/paper/densely-connected-convolutional-networks) is a good example to get started with (shown below).
 
 <div class="text-center">
-  <img src="{{ site.url }}/assets/images/pwc2.png" width="100%">
+  <img src="{{ site.url }}/assets/images/hub-blog-pwc.png" width="100%">
 </div>
 
 ## Additional resources:
