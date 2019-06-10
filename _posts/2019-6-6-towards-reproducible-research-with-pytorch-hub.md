@@ -168,7 +168,7 @@ Have a closer look at the [BERT](https://pytorch.org/hub/huggingface_pytorch-pre
 
 ### Other ways to explore
 
-The models available in PyTorch Hub support directly getting started in both [Colab](https://colab.research.google.com/github/pytorch/pytorch.github.io/blob/master/assets/hub/facebookresearch_pytorch-gan-zoo_pgan.ipynb) and on [Paperswithcode](https://paperswithcode.com/) with an example [here](https://paperswithcode.com/paper/densely-connected-convolutional-networks).
+Models available in PyTorch Hub also support both [Colab](https://colab.research.google.com/github/pytorch/pytorch.github.io/blob/master/assets/hub/facebookresearch_pytorch-gan-zoo_pgan.ipynb) and are directly linked on [Paperswithcode](https://paperswithcode.com/) and you can get started with a single click. [Here](https://paperswithcode.com/paper/densely-connected-convolutional-networks) is a good example to get started with (shown below).
 
 <div class="text-center">
   <img src="{{ site.url }}/assets/images/pwc2.png" width="100%">
