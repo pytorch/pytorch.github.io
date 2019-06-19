@@ -108,7 +108,7 @@
               
               
                 <div class="version">
-                  <a href='http://pytorch.org/docs/versions.html'>1.2.0a0+056a033 &#x25BC</a>
+                  <a href='http://pytorch.org/docs/versions.html'>1.2.0a0+6b97279 &#x25BC</a>
                 </div>
               
             
@@ -463,15 +463,44 @@
         <span class="k">for</span> <span class="n">module</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">children</span><span class="p">():</span>
             <span class="n">module</span><span class="o">.</span><span class="n">_apply</span><span class="p">(</span><span class="n">fn</span><span class="p">)</span>
 
-        <span class="k">for</span> <span class="n">param</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_parameters</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+        <span class="k">def</span> <span class="nf">compute_should_use_set_data</span><span class="p">(</span><span class="n">tensor</span><span class="p">,</span> <span class="n">tensor_applied</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">torch</span><span class="o">.</span><span class="n">_has_same_tensorimpl_type</span><span class="p">(</span><span class="n">tensor</span><span class="p">,</span> <span class="n">tensor_applied</span><span class="p">):</span>
+                <span class="c1"># If the new tensor has the same TensorImpl type as the existing tensor,</span>
+                <span class="c1"># the current behavior is to change the tensor in-place using `.data =`,</span>
+                <span class="c1"># and the future behavior is to overwrite the existing tensor. However,</span>
+                <span class="c1"># changing the current behavior is a BC-breaking change, and we want it</span>
+                <span class="c1"># to happen in future releases. So for now we introduce the</span>
+                <span class="c1"># `torch.__future__.get_overwrite_module_params_on_conversion()`</span>
+                <span class="c1"># global flag to let the user control whether they want the future</span>
+                <span class="c1"># behavior of overwriting the existing tensor or not.</span>
+                <span class="k">return</span> <span class="ow">not</span> <span class="n">torch</span><span class="o">.</span><span class="n">__future__</span><span class="o">.</span><span class="n">get_overwrite_module_params_on_conversion</span><span class="p">()</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">return</span> <span class="kc">False</span>
+
+        <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">param</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_parameters</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
             <span class="k">if</span> <span class="n">param</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="c1"># Tensors stored in modules are graph leaves, and we don&#39;t want to</span>
+                <span class="c1"># track autograd history of `param_applied`, so we have to use</span>
+                <span class="c1"># `with torch.no_grad():`</span>
                 <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>
                     <span class="n">param_applied</span> <span class="o">=</span> <span class="n">fn</span><span class="p">(</span><span class="n">param</span><span class="p">)</span>
-                <span class="n">param</span><span class="o">.</span><span class="n">data</span> <span class="o">=</span> <span class="n">param_applied</span>
-                <span class="k">if</span> <span class="n">param</span><span class="o">.</span><span class="n">_grad</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">should_use_set_data</span> <span class="o">=</span> <span class="n">compute_should_use_set_data</span><span class="p">(</span><span class="n">param</span><span class="p">,</span> <span class="n">param_applied</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">should_use_set_data</span><span class="p">:</span>
+                    <span class="n">param</span><span class="o">.</span><span class="n">data</span> <span class="o">=</span> <span class="n">param_applied</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">param</span><span class="p">,</span> <span class="n">Parameter</span><span class="p">)</span>
+                    <span class="k">assert</span> <span class="n">param</span><span class="o">.</span><span class="n">is_leaf</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_parameters</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">Parameter</span><span class="p">(</span><span class="n">param_applied</span><span class="p">,</span> <span class="n">param</span><span class="o">.</span><span class="n">requires_grad</span><span class="p">)</span>
+
+                <span class="k">if</span> <span class="n">param</span><span class="o">.</span><span class="n">grad</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                     <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>
-                        <span class="n">grad_applied</span> <span class="o">=</span> <span class="n">fn</span><span class="p">(</span><span class="n">param</span><span class="o">.</span><span class="n">_grad</span><span class="p">)</span>
-                    <span class="n">param</span><span class="o">.</span><span class="n">_grad</span><span class="o">.</span><span class="n">data</span> <span class="o">=</span> <span class="n">grad_applied</span>
+                        <span class="n">grad_applied</span> <span class="o">=</span> <span class="n">fn</span><span class="p">(</span><span class="n">param</span><span class="o">.</span><span class="n">grad</span><span class="p">)</span>
+                    <span class="n">should_use_set_data</span> <span class="o">=</span> <span class="n">compute_should_use_set_data</span><span class="p">(</span><span class="n">param</span><span class="o">.</span><span class="n">grad</span><span class="p">,</span> <span class="n">grad_applied</span><span class="p">)</span>
+                    <span class="k">if</span> <span class="n">should_use_set_data</span><span class="p">:</span>
+                        <span class="n">param</span><span class="o">.</span><span class="n">grad</span><span class="o">.</span><span class="n">data</span> <span class="o">=</span> <span class="n">grad_applied</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="k">assert</span> <span class="n">param</span><span class="o">.</span><span class="n">grad</span><span class="o">.</span><span class="n">is_leaf</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">_parameters</span><span class="p">[</span><span class="n">key</span><span class="p">]</span><span class="o">.</span><span class="n">grad</span> <span class="o">=</span> <span class="n">grad_applied</span><span class="o">.</span><span class="n">requires_grad_</span><span class="p">(</span><span class="n">param</span><span class="o">.</span><span class="n">grad</span><span class="o">.</span><span class="n">requires_grad</span><span class="p">)</span>
 
         <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">buf</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_buffers</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
             <span class="k">if</span> <span class="n">buf</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
