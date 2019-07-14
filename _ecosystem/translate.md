@@ -3,7 +3,7 @@ layout: ecosystem_detail
 title: Translate
 summary: Translate is an open source project based on Facebook's machine translation systems.
 link: https://github.com/pytorch/translate
-order: 17
+order: 18
 logo-class: language
 redirect_to: https://github.com/pytorch/translate
 ---
