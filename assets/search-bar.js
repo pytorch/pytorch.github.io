@@ -40,3 +40,29 @@ $("#close-search").on("click", function() {
   $(".main-menu-item").fadeIn("slow");
   $(".header-logo").removeClass("active-header");
 });
+//THis is going to be the start of the Hub search function. The functionality is there, just need to change class names to match Hub
+("#search-icon").on("click", function() {
+  $(this).hide();
+  $("#close-search").show();
+  $(".search-border")
+    .addClass("active-background")
+    .animate({ width: "100%" }, "slow");
+  $("#search-input")
+    .addClass("active-search-icon")
+    .focus();
+  $(".main-menu-item").hide();
+  $(".header-logo").addClass("active-header");
+});
+
+$("#close-search").on("click", function() {
+  $(this).hide();
+  $("#search-icon").show();
+  $(".search-border")
+    .attr("style", "")
+    .removeClass("active-background");
+  $("#search-input")
+    .removeClass("active-search-icon")
+    .val("");
+  $(".main-menu-item").fadeIn("slow");
+  $(".header-logo").removeClass("active-header");
+});
