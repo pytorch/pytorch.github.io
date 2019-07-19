@@ -15,6 +15,13 @@ docsearch({
   debug: false // Set debug to true if you want to inspect the dropdown
 });
 
+docsearch({
+  apiKey: "e3b73ac141dff0b0fd27bdae9055bc73",
+  indexName: "pytorch",
+  inputSelector: "#hub-search-input",
+  debug: false // Set debug to true if you want to inspect the dropdown
+});
+
 $("#search-icon").on("click", function() {
   $(this).hide();
   $("#close-search").show();
@@ -30,7 +37,7 @@ $("#search-icon").on("click", function() {
 
 $("#close-search").on("click", function() {
   $(this).hide();
-  $("#search-icon").show();
+  $("#search-icon").toggle();
   $(".search-border")
     .attr("style", "")
     .removeClass("active-background");
@@ -41,28 +48,28 @@ $("#close-search").on("click", function() {
   $(".header-logo").removeClass("active-header");
 });
 //THis is going to be the start of the Hub search function. The functionality is there, just need to change class names to match Hub
-("#search-icon").on("click", function() {
+$("#hub-search-icon").on("click", function() {
   $(this).hide();
-  $("#close-search").show();
-  $(".search-border")
-    .addClass("active-background")
-    .animate({ width: "100%" }, "slow");
-  $("#search-input")
-    .addClass("active-search-icon")
+  $("#hub-close-search").show();
+  $("#hub-divider")
+    .addClass("active-hub-divider")
+    .animate("fadeIn");
+  $("#hub-search-input")
+    .show()
     .focus();
-  $(".main-menu-item").hide();
-  $(".header-logo").addClass("active-header");
+  $("#dropdownFilter").hide();
 });
 
-$("#close-search").on("click", function() {
+$("#hub-close-search").on("click", function() {
   $(this).hide();
-  $("#search-icon").show();
-  $(".search-border")
+  $("#hub-search-icon").show();
+  $("#hub-search-input").hide();
+  $("#hub-divider")
     .attr("style", "")
-    .removeClass("active-background");
-  $("#search-input")
+    .removeClass("active-hub-search")
+    .removeClass("active-hub-divider");
+  $("#hub-search-input")
     .removeClass("active-search-icon")
     .val("");
-  $(".main-menu-item").fadeIn("slow");
-  $(".header-logo").removeClass("active-header");
+  $("#dropdownFilter").fadeIn("slow");
 });
