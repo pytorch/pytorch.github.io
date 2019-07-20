@@ -53,9 +53,10 @@ $("#hub-search-icon").on("click", function() {
   $("#hub-close-search").show();
   $("#hub-divider")
     .addClass("active-hub-divider")
-    .animate("fadeIn");
+    .fadeIn("slow");
   $("#hub-search-input")
     .show()
+    .fadeIn("slow")
     .focus();
   $("#dropdownFilter").hide();
 });
