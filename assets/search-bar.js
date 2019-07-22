@@ -50,21 +50,20 @@ $("#close-search").on("click", function() {
 //THis is going to be the start of the Hub search function. The functionality is there, just need to change class names to match Hub
 $("#hub-search-icon").on("click", function() {
   $(this).hide();
-  $("#hub-close-search").show();
+  $("#hub-close-search").show(200);
   $("#hub-divider")
     .addClass("active-hub-divider")
-    .fadeIn("slow");
+    .show(200);
   $("#hub-search-input")
     .show()
-    .fadeIn("slow")
     .focus();
   $("#dropdownFilter").hide();
 });
 
 $("#hub-close-search").on("click", function() {
   $(this).hide();
-  $("#hub-search-icon").show();
-  $("#hub-search-input").hide();
+  $("#hub-search-icon").show(200);
+  $("#hub-search-input").hide(200);
   $("#hub-divider")
     .attr("style", "")
     .removeClass("active-hub-search")
