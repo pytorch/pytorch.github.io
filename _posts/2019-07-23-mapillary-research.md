@@ -84,19 +84,19 @@ import torch
 import torch.distributed as distributed
 
 def active_group(active):
-	"""Initialize a distributed group where each process can independently decide whether to participate or not"""
-	world_size = distributed.get_world_size()
-	rank = distributed.get_rank()
+    """Initialize a distributed group where each process can independently decide whether to participate or not"""
+    world_size = distributed.get_world_size()
+    rank = distributed.get_rank()
 
-	# Gather active status from all workers
-	active = torch.tensor(rank if active else -1, dtype=torch.long, device=torch.cuda.current_device())
-	active_workers = torch.empty(world_size, dtype=torch.long, device=torch.cuda.current_device())
-	distributed.all_gather(list(active_workers.unbind(0)), active)
+    # Gather active status from all workers
+    active = torch.tensor(rank if active else -1, dtype=torch.long, device=torch.cuda.current_device())
+    active_workers = torch.empty(world_size, dtype=torch.long, device=torch.cuda.current_device())
+    distributed.all_gather(list(active_workers.unbind(0)), active)
 
-	# Create group
-	active_workers = [int(i) for i in active_workers.tolist() if i != -1]
-	group = distributed.new_group(active_workers)
-	return group
+    # Create group
+    active_workers = [int(i) for i in active_workers.tolist() if i != -1]
+    group = distributed.new_group(active_workers)
+    return group
 ```
 
 First each process, including inactive ones, communicates its status to all others through an `all_gather` call, then it creates the distributed group with the shared information. In the actual implementation we also include a caching mechanism for groups, since `new_group()` is usually too expensive to call at each batch.
