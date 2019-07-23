@@ -47,7 +47,7 @@ $("#close-search").on("click", function() {
   $(".main-menu-item").fadeIn("slow");
   $(".header-logo").removeClass("active-header");
 });
-//THis is going to be the start of the Hub search function. The functionality is there, just need to change class names to match Hub
+
 $("#hub-search-icon").on("click", function() {
   $(this).hide();
   $("#hub-close-search").show(200);
