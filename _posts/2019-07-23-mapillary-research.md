@@ -5,7 +5,7 @@ author: Lorenzo Porzi, Mapillary
 redirect_from: /2019/07/23/mapillary-research.html
 ---
 
-With roads in developed countries like the US changing up to 15% annually, [Mapillary](https://www.mapillary.com/) addresses a growing demand for keeping maps updated by combining images from any camera into a 3D visualization of the world. Mapillary’s independent and collaborative approach enables anyone to collect, share, and use street-level images for improving maps, developing cities, and advancing the automotive industry.
+With roads in developed countries like the US changing up to 15% annually, Mapillary addresses a growing demand for keeping maps updated by combining images from any camera into a 3D visualization of the world. [Mapillary's](https://www.mapillary.com/) independent and collaborative approach enables anyone to collect, share, and use street-level images for improving maps, developing cities, and advancing the automotive industry.
 
 Today, people and organizations all over the world have contributed more than 600 million images toward Mapillary's mission of helping people understand the world's places through images and making this data available, with clients and partners including the World Bank, HERE, and Toyota Research Institute.
 
