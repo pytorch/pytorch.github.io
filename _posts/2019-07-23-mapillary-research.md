@@ -36,7 +36,7 @@ Our solution to these issues is to wrap each batch of variable-sized tensors in 
 
 `PackedSequence`s also help us deal with the second problem highlighted above. We slightly modify `DistributedDataParallel` to recognize `PackedSequence` inputs, splitting them in equally sized chunks and distributing their contents across the GPUs.
 
-## Asymmetric computational graphs with DistributedDataParallel
+## Asymmetric computational graphs with Distributed Data Parallel
 
 Another, perhaps more subtle, peculiarity of our network is that it can generate asymmetric computational graphs across GPUs. In fact, some of the modules that compose the network are “optional”, in the sense that they are not always computed for all images. As an example, when the Proposal head doesn’t output any proposal, the Mask head is not traversed at all. If we are training on multiple GPUs with `DistributedDataParallel`, this results in one of the replicas not computing gradients for the Mask head parameters.
 
@@ -55,6 +55,9 @@ Here, we generate a batch of bogus data, pass it through the Mask head, and retu
 Starting from PyTorch 1.1 this workaround is no longer required: by setting `find_unused_parameters=True` in the constructor, `DistributedDataParallel` is told to identify parameters whose gradients have not been computed by all replicas and correctly handle them. This leads to some substantial simplifications in our code base!
 
 ## In-place Activated BatchNorm
+
+_Github project page: [https://github.com/mapillary/inplace_abn/](https://github.com/mapillary/inplace_abn/)_
+
 Most researchers would probably agree that there are always constraints in terms of available GPU resources, regardless if their research lab has access to only a few or multiple thousands of GPUs. In a time where at Mapillary we still worked at rather few and mostly 12GB Titan X - style prosumer GPUs, we were searching for a solution that virtually enhances the usable memory during training, so we would be able to obtain and push state-of-the-art results on dense labeling tasks like semantic segmentation. In-place activated BatchNorm is enabling us to use up to 50% more memory (at little computational overhead) and is therefore deeply integrated in all our current projects (including Seamless Scene Segmentation described above).
 
 <div class="text-center">
