@@ -9,7 +9,7 @@ With roads in developed countries like the US changing up to 15% annually, Mapil
 
 Today, people and organizations all over the world have contributed more than 600 million images toward Mapillary's mission of helping people understand the world's places through images and making this data available, with clients and partners including the World Bank, HERE, and Toyota Research Institute.
 
-Mapillary’s computer vision technology brings intelligence to maps in an unprecedented way, increasing our overall understanding of the world. [Mapillary's](https://www.mapillary.com/) runs state-of-the-art semantic image analysis and image-based 3d modeling at scale and on all its images. In this post we discuss two recent works from Mapillary Research and their implementations in PyTorch - Seamless Scene Segmentation [1] and In-Place Activated BatchNorm [2] - generating Panoptic segmentation results and saving up to 50% of GPU memory during training, respectively.
+Mapillary’s computer vision technology brings intelligence to maps in an unprecedented way, increasing our overall understanding of the world. [Mapillary](https://www.mapillary.com/) runs state-of-the-art semantic image analysis and image-based 3d modeling at scale and on all its images. In this post we discuss two recent works from Mapillary Research and their implementations in PyTorch - Seamless Scene Segmentation [1] and In-Place Activated BatchNorm [2] - generating Panoptic segmentation results and saving up to 50% of GPU memory during training, respectively.
 
 ## Seamless Scene Segmentation
 
