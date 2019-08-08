@@ -315,38 +315,37 @@ function commandMessage(key) {
     "stable,pip,macos,cudanone,python3.7": "pip3 install torch torchvision",
 
     "stable,pip,linux,cudanone,python2.7":
-      "pip install https://download.pytorch.org/whl/nightly/cpu/torch-1.2.0%2Bcpu-cp27-cp27mu-linux_x86_64.whl<br/>pip install https://download.pytorch.org/whl/nightly/cpu/torchvision-0.4.0%2Bcpu-cp27-cp27mu-linux_x86_64.whl <br/><br/> # if the above command does not work, then you have python 2.7 UCS2, use this command<br/>pip install https://download.pytorch.org/whl/nightly/cpu/torch-1.2.0%2Bcpu-cp27-cp27m-linux_x86_64.whl<br/>pip install https://download.pytorch.org/whl/nightly/cpu/torchvision-0.4.0%2Bcpu-cp27-cp27m-linux_x86_64.whl",
+      "pip install torch==1.2.0+cpu torchvision==0.4.0+cpu -f https://download.pytorch.org/whl/torch_stable.html",
 
     "stable,pip,linux,cuda9.2,python2.7":
-      "pip install https://download.pytorch.org/whl/nightly/cu92/torch-1.2.0%2Bcu92-cp27-cp27mu-linux_x86_64.whl<br/>pip install https://download.pytorch.org/whl/nightly/cu92/torchvision-0.4.0%2Bcu92-cp27-cp27mu-linux_x86_64.whl <br/><br/> # if the above command does not work, then you have python 2.7 UCS2, use this command<br/>pip install https://download.pytorch.org/whl/nightly/cu92/torch-1.2.0%2Bcu92-cp27-cp27m-linux_x86_64.whl<br/>pip install https://download.pytorch.org/whl/nightly/cu92/torchvision-0.4.0%2Bcu92-cp27-cp27m-linux_x86_64.whl",
+      "pip install torch==1.2.0+cu92 torchvision==0.4.0+cpu -f https://download.pytorch.org/whl/torch_stable.html",
 
     "stable,pip,linux,cuda10.0,python2.7":
        "pip install torch torchvision",
 
     "stable,pip,linux,cudanone,python3.5":
-      "pip3 install https://download.pytorch.org/whl/nightly/cpu/torch-1.2.0%2Bcpu-cp35-cp35m-linux_x86_64.whl<br/>pip3 install https://download.pytorch.org/whl/nightly/cpu/torchvision-0.4.0%2Bcpu-cp35-cp35m-linux_x86_64.whl",
+      "pip3 install torch==1.2.0+cpu torchvision==0.4.0+cpu -f https://download.pytorch.org/whl/torch_stable.html",
 
     "stable,pip,linux,cuda9.2,python3.5": 
-      "pip3 install https://download.pytorch.org/whl/nightly/cu92/torch-1.2.0%2Bcu92-cp35-cp35m-linux_x86_64.whl<br/>pip3 install https://download.pytorch.org/whl/nightly/cu92/torchvision-0.4.0%2Bcu92-cp35-cp35m-linux_x86_64.whl",
+      "pip3 install torch==1.2.0+cu92 torchvision==0.4.0+cpu -f https://download.pytorch.org/whl/torch_stable.html",
 
     "stable,pip,linux,cuda10.0,python3.5":
       "pip3 install torch torchvision",
 
     "stable,pip,linux,cudanone,python3.6":
-      "pip3 install https://download.pytorch.org/whl/nightly/cpu/torch-1.2.0%2Bcpu-cp36-cp36m-linux_x86_64.whl<br/>pip3 install https://download.pytorch.org/whl/nightly/cpu/torchvision-0.4.0%2B-cp36-cp36m-linux_x86_64.whl",
+      "pip3 install torch==1.2.0+cpu torchvision==0.4.0+cpu -f https://download.pytorch.org/whl/torch_stable.html",
 
     "stable,pip,linux,cuda9.2,python3.6": 
-      "pip3 install https://download.pytorch.org/whl/nightly/cu92/torch-1.2.0%2Bcu92-cp36-cp36m-linux_x86_64.whl<br/>pip3 install https://download.pytorch.org/whl/nightly/cu92/torchvision-0.4.0%2B-cp36-cp36m-linux_x86_64.whl",
-,
+      "pip3 install torch==1.2.0+cu9.2 torchvision==0.4.0+cpu -f https://download.pytorch.org/whl/torch_stable.html",
 
     "stable,pip,linux,cuda10.0,python3.6":
       "pip3 install torch torchvision",
 
     "stable,pip,linux,cudanone,python3.7":
-      "pip3 install https://download.pytorch.org/whl/nightly/cpu/torch-1.2.0%2Bcpu-cp37-cp37m-linux_x86_64.whl<br/>pip3 install https://download.pytorch.org/whl/nightly/cpu/torchvision-0.4.0%2B-cp37-cp37m-linux_x86_64.whl",
+      "pip3 install torch==1.2.0+cpu torchvision==0.4.0+cpu -f https://download.pytorch.org/whl/torch_stable.html",
 
     "stable,pip,linux,cuda9.2,python3.7":
-      "pip3 install https://download.pytorch.org/whl/nightly/cu92/torch-1.2.0%2Bcu92-cp37-cp37m-linux_x86_64.whl<br/>pip3 install https://download.pytorch.org/whl/nightly/cu92/torchvision-0.4.0%2B-cp37-cp37m-linux_x86_64.whl",
+      "pip3 install torch==1.2.0+cu9.2 torchvision==0.4.0+cpu -f https://download.pytorch.org/whl/torch_stable.html",
 
     "stable,pip,linux,cuda10.0,python3.7":
       "pip3 install torch torchvision",
