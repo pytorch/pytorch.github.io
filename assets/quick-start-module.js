@@ -318,7 +318,7 @@ function commandMessage(key) {
       "pip install torch==1.2.0+cpu torchvision==0.4.0+cpu -f https://download.pytorch.org/whl/torch_stable.html",
 
     "stable,pip,linux,cuda9.2,python2.7":
-      "pip install torch==1.2.0+cu92 torchvision==0.4.0+cpu -f https://download.pytorch.org/whl/torch_stable.html",
+      "pip install torch==1.2.0+cu92 torchvision==0.4.0+cu92 -f https://download.pytorch.org/whl/torch_stable.html",
 
     "stable,pip,linux,cuda10.0,python2.7":
        "pip install torch torchvision",
@@ -327,7 +327,7 @@ function commandMessage(key) {
       "pip3 install torch==1.2.0+cpu torchvision==0.4.0+cpu -f https://download.pytorch.org/whl/torch_stable.html",
 
     "stable,pip,linux,cuda9.2,python3.5": 
-      "pip3 install torch==1.2.0+cu92 torchvision==0.4.0+cpu -f https://download.pytorch.org/whl/torch_stable.html",
+      "pip3 install torch==1.2.0+cu92 torchvision==0.4.0+cu92 -f https://download.pytorch.org/whl/torch_stable.html",
 
     "stable,pip,linux,cuda10.0,python3.5":
       "pip3 install torch torchvision",
@@ -336,7 +336,7 @@ function commandMessage(key) {
       "pip3 install torch==1.2.0+cpu torchvision==0.4.0+cpu -f https://download.pytorch.org/whl/torch_stable.html",
 
     "stable,pip,linux,cuda9.2,python3.6": 
-      "pip3 install torch==1.2.0+cu9.2 torchvision==0.4.0+cpu -f https://download.pytorch.org/whl/torch_stable.html",
+      "pip3 install torch==1.2.0+cu92 torchvision==0.4.0+cu92 -f https://download.pytorch.org/whl/torch_stable.html",
 
     "stable,pip,linux,cuda10.0,python3.6":
       "pip3 install torch torchvision",
@@ -345,7 +345,7 @@ function commandMessage(key) {
       "pip3 install torch==1.2.0+cpu torchvision==0.4.0+cpu -f https://download.pytorch.org/whl/torch_stable.html",
 
     "stable,pip,linux,cuda9.2,python3.7":
-      "pip3 install torch==1.2.0+cu9.2 torchvision==0.4.0+cpu -f https://download.pytorch.org/whl/torch_stable.html",
+      "pip3 install torch==1.2.0+cu92 torchvision==0.4.0+cu92 -f https://download.pytorch.org/whl/torch_stable.html",
 
     "stable,pip,linux,cuda10.0,python3.7":
       "pip3 install torch torchvision",
