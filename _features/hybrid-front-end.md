@@ -1,5 +1,5 @@
 ---
-title: Hybrid Front-End
+title: TorchScript
 order: 1
 snippet: >
   ```python
@@ -14,9 +14,9 @@ snippet: >
       return torch.stack(y), h
   ```
 
-summary-home: A new hybrid front-end seamlessly transitions between eager mode and graph mode to provide both flexibility and speed.
+summary-home: TorchScript provides a seamless transition between eager mode and graph mode to accelerate the path to production.
 featured-home: true
 
 ---
 
-A new hybrid front-end provides ease-of-use and flexibility in eager mode, while seamlessly transitioning to graph mode for speed, optimization, and functionality in C++ runtime environments.
+With TorchScript, PyTorch provides ease-of-use and flexibility in eager mode, while seamlessly transitioning to graph mode for speed, optimization, and functionality in C++ runtime environments.
