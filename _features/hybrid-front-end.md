@@ -3,15 +3,25 @@ title: TorchScript
 order: 1
 snippet: >
   ```python
-    @torch.jit.script
-    def RNN(h, x, W_h, U_h, W_y, b_h, b_y):
-      y = []
-      for t in range(x.size(0)):
-        h = torch.tanh(x[t] @ W_h + h @ U_h + b_h)
-        y += [torch.tanh(h @ W_y + b_y)]
-        if t % 10 == 0:
-          print("stats: ", h.mean(), h.var())
-      return torch.stack(y), h
+    import torch
+    class MyModule(torch.rrnn.Module):
+
+      def __init__(self, N, M):
+        super(MyModule, self).__init__()
+        self.weight = torch.nn.Parameter(torch.rand(N, M))
+
+      def forward(self, input):
+        if input.sum() > 0:
+          output = self.weight.mv(input)
+        else:
+          output = self.weight + input
+        return output
+
+      # Compile the model code to a static representation
+      my_script_module = torch.jit.script(MyModule(3, 4))
+
+      # Save the compiled code and model data so it can be loaded elsewhere
+      my_script_module.save("my_script_module.pt")
   ```
 
 summary-home: TorchScript provides a seamless transition between eager mode and graph mode to accelerate the path to production.
