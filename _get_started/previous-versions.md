@@ -57,21 +57,22 @@ checkout.
 
 ### Via pip
 
-Download the `whl` file with the desired version via this command (you can replace 1.0.1 with the version you choose):
+Download the `whl` file with the desired version from the following html pages:
 
-```
-pip install torch==1.0.1 -f https://download.pytorch.org/whl/cpu/torch_stable.html # CPU-only build
-pip install torch==1.0.1 -f https://download.pytorch.org/whl/cu80/torch_stable.html # CUDA 8.0 build
-pip install torch==1.0.1 -f https://download.pytorch.org/whl/cu90/torch_stable.html # CUDA 9.0 build
-pip install torch==1.0.1 -f https://download.pytorch.org/whl/cu92/torch_stable.html # CUDA 9.2 build
-pip install torch==1.0.1 -f https://download.pytorch.org/whl/cu100/torch_stable.html # CUDA 10.0 build
-```
+- https://download.pytorch.org/whl/cpu/torch_stable.html # CPU-only build
+- https://download.pytorch.org/whl/cu80/torch_stable.html # CUDA 8.0 build
+- https://download.pytorch.org/whl/cu90/torch_stable.html # CUDA 9.0 build
+- https://download.pytorch.org/whl/cu92/torch_stable.html # CUDA 9.2 build
+- https://download.pytorch.org/whl/cu100/torch_stable.html # CUDA 10.0 build
+
+Then, install the file with `pip install [downloaded file]`
+
 
 Note: most pytorch versions are available only for specific CUDA versions. For example pytorch=1.0.1 is not available for CUDA 9.2
 
 ### (Old) PyTorch Linux binaries compiled with CUDA 7.5
 
-These predate the mechanism above with `pip install -f` and have to be manually installed by downloading the wheel file and `pip install downloaded_file`
+These predate the html page above and have to be manually installed by downloading the wheel file and `pip install downloaded_file`
 
 - [cu75/torch-0.3.0.post4-cp36-cp36m-linux_x86_64.whl](https://download.pytorch.org/whl/cu75/torch-0.3.0.post4-cp36-cp36m-linux_x86_64.whl)
 - [cu75/torch-0.3.0.post4-cp35-cp35m-linux_x86_64.whl](https://download.pytorch.org/whl/cu75/torch-0.3.0.post4-cp35-cp35m-linux_x86_64.whl)
