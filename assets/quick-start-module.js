@@ -256,7 +256,7 @@ function commandMessage(key) {
       "# PyTorch does not support Python 2.7 on Windows. Please install with Python 3.",
 
     "stable,conda,windows,cuda9.2,python3.5":
-      "conda install pytorch torchvision cudatoolkit=9.2 -c pytorch -c numba/label/dev ",
+      "conda install pytorch torchvision cudatoolkit=9.2 -c pytorch -c defaults -c numba/label/dev ",
 
     "stable,conda,windows,cuda10.0,python3.5":
       "conda install pytorch torchvision cudatoolkit=10.0 -c pytorch",
@@ -265,7 +265,7 @@ function commandMessage(key) {
       "conda install pytorch torchvision cpuonly -c pytorch",
 
     "stable,conda,windows,cuda9.2,python3.6":
-      "conda install pytorch torchvision cudatoolkit=9.2 -c pytorch -c numba/label/dev",
+      "conda install pytorch torchvision cudatoolkit=9.2 -c pytorch -c defaults -c numba/label/dev",
 
     "stable,conda,windows,cuda10.0,python3.6":
       "conda install pytorch torchvision cudatoolkit=10.0 -c pytorch",
@@ -274,7 +274,7 @@ function commandMessage(key) {
       "conda install pytorch torchvision cpuonly -c pytorch",
 
     "stable,conda,windows,cuda9.2,python3.7":
-      "conda install pytorch torchvision cudatoolkit=9.2 -c pytorch -c numba/label/dev",
+      "conda install pytorch torchvision cudatoolkit=9.2 -c pytorch -c defaults -c numba/label/dev",
 
     "stable,conda,windows,cuda10.0,python3.7":
       "conda install pytorch torchvision cudatoolkit=10.0 -c pytorch",
@@ -495,7 +495,7 @@ function commandMessage(key) {
       "# Preview Build With Python 2.7 On Windows Not Supported.",
 
     "preview,conda,windows,cuda9.2,python3.5":
-      "conda install pytorch cudatoolkit=9.2 -c pytorch-nightly",
+      "conda install pytorch cudatoolkit=9.2 -c pytorch-nightly -c defaults -c numba/label/dev",
 
     "preview,conda,windows,cuda10.0,python3.5":
       "conda install pytorch cudatoolkit=10.0 -c pytorch-nightly",
@@ -504,7 +504,7 @@ function commandMessage(key) {
       "conda install pytorch -c pytorch-nightly",
 
     "preview,conda,windows,cuda9.2,python3.6":
-      "conda install pytorch cudatoolkit=9.2 -c pytorch-nightly",
+      "conda install pytorch cudatoolkit=9.2 -c pytorch-nightly -c defaults -c numba/label/dev",
 
     "preview,conda,windows,cuda10.0,python3.6":
       "conda install pytorch cudatoolkit=10.0 -c pytorch-nightly",
@@ -513,7 +513,7 @@ function commandMessage(key) {
       "conda install pytorch -c pytorch-nightly",
 
     "preview,conda,windows,cuda9.2,python3.7":
-      "conda install pytorch cudatoolkit=9.2 -c pytorch-nightly",
+      "conda install pytorch cudatoolkit=9.2 -c pytorch-nightly -c defaults -c numba/label/dev",
 
     "preview,conda,windows,cuda10.0,python3.7":
       "conda install pytorch cudatoolkit=10.0 -c pytorch-nightly",
