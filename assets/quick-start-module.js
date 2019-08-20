@@ -417,76 +417,76 @@ function commandMessage(key) {
       "Download here (Release version): <br/><a href='https://download.pytorch.org/libtorch/cu100/libtorch-win-shared-with-deps-latest.zip'>https://download.pytorch.org/libtorch/cu100/libtorch-win-shared-with-deps-latest.zip</a><br/><br> Download here (Debug version): <br/><a href='https://download.pytorch.org/libtorch/cu100/libtorch-win-shared-with-deps-debug-latest.zip'>https://download.pytorch.org/libtorch/cu100/libtorch-win-shared-with-deps-debug-latest.zip</a>",
 
     "preview,conda,linux,cuda9.2,python2.7":
-      "conda install pytorch cudatoolkit=9.2 -c pytorch-nightly",
+      "conda install pytorch torchvision cudatoolkit=9.2 -c pytorch-nightly",
 
     "preview,conda,linux,cuda10.0,python2.7":
-      "conda install pytorch cudatoolkit=10.0 -c pytorch-nightly",
+      "conda install pytorch torchvision cudatoolkit=10.0 -c pytorch-nightly",
 
     "preview,conda,linux,cudanone,python2.7":
-      "conda install pytorch cpuonly -c pytorch-nightly",
+      "conda install pytorch torchvision cpuonly -c pytorch-nightly",
 
     "preview,conda,linux,cuda9.2,python3.5":
-      "conda install pytorch cudatoolkit=9.2 -c pytorch-nightly",
+      "conda install pytorch torchvision cudatoolkit=9.2 -c pytorch-nightly",
 
     "preview,conda,linux,cuda10.0,python3.5":
-      "conda install pytorch cudatoolkit=10.0 -c pytorch-nightly",
+      "conda install pytorch torchvision cudatoolkit=10.0 -c pytorch-nightly",
 
     "preview,conda,linux,cudanone,python3.5":
-      "conda install pytorch cpuonly -c pytorch-nightly",
+      "conda install pytorch torchvision cpuonly -c pytorch-nightly",
 
     "preview,conda,linux,cuda9.2,python3.6":
-      "conda install pytorch cudatoolkit=9.2 -c pytorch-nightly",
+      "conda install pytorch torchvision cudatoolkit=9.2 -c pytorch-nightly",
 
     "preview,conda,linux,cuda10.0,python3.6":
-      "conda install pytorch cudatoolkit=10.0 -c pytorch-nightly",
+      "conda install pytorch torchvision cudatoolkit=10.0 -c pytorch-nightly",
 
     "preview,conda,linux,cudanone,python3.6":
-      "conda install pytorch cpuonly -c pytorch-nightly",
+      "conda install pytorch torchvision cpuonly -c pytorch-nightly",
 
     "preview,conda,linux,cuda9.2,python3.7":
-      "conda install pytorch cudatoolkit=9.2 -c pytorch-nightly",
+      "conda install pytorch torchvision cudatoolkit=9.2 -c pytorch-nightly",
 
     "preview,conda,linux,cuda10.0,python3.7":
-      "conda install pytorch cudatoolkit=10.0 -c pytorch-nightly",
+      "conda install pytorch torchvision cudatoolkit=10.0 -c pytorch-nightly",
 
     "preview,conda,linux,cudanone,python3.7":
-      "conda install pytorch cpuonly -c pytorch-nightly",
+      "conda install pytorch torchvision cpuonly -c pytorch-nightly",
 
     "preview,conda,macos,cuda9.2,python2.7":
-      "conda install pytorch -c pytorch-nightly",
+      "conda install pytorch torchvision -c pytorch-nightly",
 
     "preview,conda,macos,cuda10.0,python2.7":
-      "conda install pytorch -c pytorch-nightly",
+      "conda install pytorch torchvision -c pytorch-nightly",
 
     "preview,conda,macos,cudanone,python2.7":
-      "conda install pytorch -c pytorch-nightly",
+      "conda install pytorch torchvision -c pytorch-nightly",
 
     "preview,conda,macos,cuda9.2,python3.5":
-      "conda install pytorch -c pytorch-nightly",
+      "conda install pytorch torchvision -c pytorch-nightly",
 
     "preview,conda,macos,cuda10.0,python3.5":
-      "conda install pytorch -c pytorch-nightly",
+      "conda install pytorch torchvision -c pytorch-nightly",
 
     "preview,conda,macos,cudanone,python3.5":
-      "conda install pytorch -c pytorch-nightly",
+      "conda install pytorch torchvision -c pytorch-nightly",
 
     "preview,conda,macos,cuda9.2,python3.6":
-      "conda install pytorch -c pytorch-nightly",
+      "conda install pytorch torchvision -c pytorch-nightly",
 
     "preview,conda,macos,cuda10.0,python3.6":
-      "conda install pytorch -c pytorch-nightly",
+      "conda install pytorch torchvision -c pytorch-nightly",
 
     "preview,conda,macos,cudanone,python3.6":
-      "conda install pytorch -c pytorch-nightly",
+      "conda install pytorch torchvision -c pytorch-nightly",
 
     "preview,conda,macos,cuda9.2,python3.7":
-      "conda install pytorch -c pytorch-nightly",
+      "conda install pytorch torchvision -c pytorch-nightly",
 
     "preview,conda,macos,cuda10.0,python3.7":
-      "conda install pytorch -c pytorch-nightly",
+      "conda install pytorch torchvision -c pytorch-nightly",
 
     "preview,conda,macos,cudanone,python3.7":
-      "conda install pytorch -c pytorch-nightly",
+      "conda install pytorch torchvision -c pytorch-nightly",
 
     "preview,conda,windows,cuda9.2,python2.7":
       "# Preview Build With Python 2.7 On Windows Not Supported.",
