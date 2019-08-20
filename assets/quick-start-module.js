@@ -422,7 +422,7 @@ function commandMessage(key) {
       "conda install pytorch cudatoolkit=10.0 -c pytorch-nightly",
 
     "preview,conda,linux,cudanone,python2.7":
-      "conda install pytorch -c pytorch-nightly",
+      "conda install pytorch cpuonly -c pytorch-nightly",
 
     "preview,conda,linux,cuda9.2,python3.5":
       "conda install pytorch cudatoolkit=9.2 -c pytorch-nightly",
@@ -431,7 +431,7 @@ function commandMessage(key) {
       "conda install pytorch cudatoolkit=10.0 -c pytorch-nightly",
 
     "preview,conda,linux,cudanone,python3.5":
-      "conda install pytorch -c pytorch-nightly",
+      "conda install pytorch cpuonly -c pytorch-nightly",
 
     "preview,conda,linux,cuda9.2,python3.6":
       "conda install pytorch cudatoolkit=9.2 -c pytorch-nightly",
@@ -440,7 +440,7 @@ function commandMessage(key) {
       "conda install pytorch cudatoolkit=10.0 -c pytorch-nightly",
 
     "preview,conda,linux,cudanone,python3.6":
-      "conda install pytorch -c pytorch-nightly",
+      "conda install pytorch cpuonly -c pytorch-nightly",
 
     "preview,conda,linux,cuda9.2,python3.7":
       "conda install pytorch cudatoolkit=9.2 -c pytorch-nightly",
@@ -449,7 +449,7 @@ function commandMessage(key) {
       "conda install pytorch cudatoolkit=10.0 -c pytorch-nightly",
 
     "preview,conda,linux,cudanone,python3.7":
-      "conda install pytorch -c pytorch-nightly",
+      "conda install pytorch cpuonly -c pytorch-nightly",
 
     "preview,conda,macos,cuda9.2,python2.7":
       "conda install pytorch -c pytorch-nightly",
@@ -503,7 +503,7 @@ function commandMessage(key) {
       "conda install pytorch cudatoolkit=10.0 -c pytorch-nightly",
 
     "preview,conda,windows,cudanone,python3.5":
-      "conda install pytorch -c pytorch-nightly",
+      "conda install pytorch cpuonly -c pytorch-nightly",
 
     "preview,conda,windows,cuda9.2,python3.6":
       "conda install pytorch cudatoolkit=9.2 -c pytorch-nightly -c defaults -c numba/label/dev",
@@ -512,7 +512,7 @@ function commandMessage(key) {
       "conda install pytorch cudatoolkit=10.0 -c pytorch-nightly",
 
     "preview,conda,windows,cudanone,python3.6":
-      "conda install pytorch -c pytorch-nightly",
+      "conda install pytorch cpuonly -c pytorch-nightly",
 
     "preview,conda,windows,cuda9.2,python3.7":
       "conda install pytorch cudatoolkit=9.2 -c pytorch-nightly -c defaults -c numba/label/dev",
@@ -521,7 +521,7 @@ function commandMessage(key) {
       "conda install pytorch cudatoolkit=10.0 -c pytorch-nightly",
 
     "preview,conda,windows,cudanone,python3.7":
-      "conda install pytorch -c pytorch-nightly",
+      "conda install pytorch cpuonly -c pytorch-nightly",
 
     "preview,pip,macos,cuda9.2,python2.7":
       "pip install numpy<br />pip install torch -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html<br /># On MacOS, we provide CPU-only packages, CUDA functionality is not provided",
