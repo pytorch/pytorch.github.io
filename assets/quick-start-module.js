@@ -387,31 +387,31 @@ function commandMessage(key) {
       "pip3 install torch==1.2.0 torchvision==0.4.0 -f https://download.pytorch.org/whl/torch_stable.html",
 
     "stable,libtorch,linux,cudanone,cplusplus":
-      "Download here: <br/><a href='https://download.pytorch.org/libtorch/nightly/cpu/libtorch-shared-with-deps-latest.zip'>https://download.pytorch.org/libtorch/nightly/cpu/libtorch-shared-with-deps-latest.zip</a>",
+      "Download here: <br/><a href='https://download.pytorch.org/libtorch/cpu/libtorch-shared-with-deps-1.2.0.zip'>https://download.pytorch.org/libtorch/cpu/libtorch-shared-with-deps-1.2.0.zip</a>",
 
     "stable,libtorch,linux,cuda9.2,cplusplus":
-      "Download here: <br/><a href='https://download.pytorch.org/libtorch/nightly/cu92/libtorch-shared-with-deps-latest.zip'>https://download.pytorch.org/libtorch/nightly/cu92/libtorch-shared-with-deps-latest.zip</a>",
+      "Download here: <br/><a href='https://download.pytorch.org/libtorch/cu92/libtorch-shared-with-deps-1.2.0.zip'>https://download.pytorch.org/libtorch/cu92/libtorch-shared-with-deps-1.2.0.zip</a>",
 
     "stable,libtorch,linux,cuda10.0,cplusplus":
-      "Download here: <br/><a href='https://download.pytorch.org/libtorch/nightly/cu100/libtorch-shared-with-deps-latest.zip'>https://download.pytorch.org/libtorch/nightly/cu100/libtorch-shared-with-deps-latest.zip</a>",
+      "Download here: <br/><a href='https://download.pytorch.org/libtorch/cu100/libtorch-shared-with-deps-1.2.0.zip'>https://download.pytorch.org/libtorch/cu100/libtorch-shared-with-deps-1.2.0.zip</a>",
 
     "stable,libtorch,macos,cudanone,cplusplus":
-      "Download here: <br/><a href='https://download.pytorch.org/libtorch/nightly/cpu/libtorch-macos-latest.zip'> https://download.pytorch.org/libtorch/nightly/cpu/libtorch-macos-latest.zip </a>",
+      "Download here: <br/><a href='https://download.pytorch.org/libtorch/cpu/libtorch-macos-1.2.0.zip'> https://download.pytorch.org/libtorch/cpu/libtorch-macos-1.2.0.zip </a>",
 
     "stable,libtorch,macos,cuda9.2,cplusplus":
-      "MacOS binaries do not support CUDA. Download CPU libtorch here: <br/><a href='https://download.pytorch.org/libtorch/nightly/cpu/libtorch-macos-1.2.0.zip'> https://download.pytorch.org/libtorch/nightly/cpu/libtorch-macos-1.2.0.zip </a>",
+      "MacOS binaries do not support CUDA. Download CPU libtorch here: <br/><a href='https://download.pytorch.org/libtorch/cpu/libtorch-macos-1.2.0.zip'> https://download.pytorch.org/libtorch/cpu/libtorch-macos-1.2.0.zip </a>",
 
     "stable,libtorch,macos,cuda10.0,cplusplus":
-      "MacOS binaries do not support CUDA. Download CPU libtorch here: <br/><a href='https://download.pytorch.org/libtorch/nightly/cpu/libtorch-macos-1.2.0.zip'> https://download.pytorch.org/libtorch/nightly/cpu/libtorch-macos-1.2.0.zip </a>",
+      "MacOS binaries do not support CUDA. Download CPU libtorch here: <br/><a href='https://download.pytorch.org/libtorch/cpu/libtorch-macos-1.2.0.zip'> https://download.pytorch.org/libtorch/cpu/libtorch-macos-1.2.0.zip </a>",
 
     "stable,libtorch,windows,cudanone,cplusplus":
-      "Download here (Release version): <br/><a href='https://download.pytorch.org/libtorch/cpu/libtorch-win-shared-with-deps-latest.zip'>https://download.pytorch.org/libtorch/cpu/libtorch-win-shared-with-deps-latest.zip</a><br/><br> Download here (Debug version): <br/><a href='https://download.pytorch.org/libtorch/cpu/libtorch-win-shared-with-deps-debug-latest.zip'>https://download.pytorch.org/libtorch/cpu/libtorch-win-shared-with-deps-debug-latest.zip</a>",
+      "Download here (Release version): <br/><a href='https://download.pytorch.org/libtorch/cpu/libtorch-win-shared-with-deps-1.2.0.zip'>https://download.pytorch.org/libtorch/cpu/libtorch-win-shared-with-deps-1.2.0.zip</a><br/><br> Download here (Debug version): <br/><a href='https://download.pytorch.org/libtorch/cpu/libtorch-win-shared-with-deps-debug-1.2.0.zip'>https://download.pytorch.org/libtorch/cpu/libtorch-win-shared-with-deps-debug-1.2.0.zip</a>",
 
     "stable,libtorch,windows,cuda9.2,cplusplus":
-      "Download here (Release version): <br/><a href='https://download.pytorch.org/libtorch/cu92/libtorch-win-shared-with-deps-latest.zip'>https://download.pytorch.org/libtorch/cu92/libtorch-win-shared-with-deps-latest.zip</a><br/><br> Download here (Debug version): <br/><a href='https://download.pytorch.org/libtorch/cu92/libtorch-win-shared-with-deps-debug-latest.zip'>https://download.pytorch.org/libtorch/cu92/libtorch-win-shared-with-deps-debug-latest.zip</a>",
+      "Download here (Release version): <br/><a href='https://download.pytorch.org/libtorch/cu92/libtorch-win-shared-with-deps-1.2.0.zip'>https://download.pytorch.org/libtorch/cu92/libtorch-win-shared-with-deps-1.2.0.zip</a><br/><br> Download here (Debug version): <br/><a href='https://download.pytorch.org/libtorch/cu92/libtorch-win-shared-with-deps-debug-1.2.0.zip'>https://download.pytorch.org/libtorch/cu92/libtorch-win-shared-with-deps-debug-1.2.0.zip</a>",
 
     "stable,libtorch,windows,cuda10.0,cplusplus":
-      "Download here (Release version): <br/><a href='https://download.pytorch.org/libtorch/cu100/libtorch-win-shared-with-deps-latest.zip'>https://download.pytorch.org/libtorch/cu100/libtorch-win-shared-with-deps-latest.zip</a><br/><br> Download here (Debug version): <br/><a href='https://download.pytorch.org/libtorch/cu100/libtorch-win-shared-with-deps-debug-latest.zip'>https://download.pytorch.org/libtorch/cu100/libtorch-win-shared-with-deps-debug-latest.zip</a>",
+      "Download here (Release version): <br/><a href='https://download.pytorch.org/libtorch/cu100/libtorch-win-shared-with-deps-1.2.0.zip'>https://download.pytorch.org/libtorch/cu100/libtorch-win-shared-with-deps-1.2.0.zip</a><br/><br> Download here (Debug version): <br/><a href='https://download.pytorch.org/libtorch/cu100/libtorch-win-shared-with-deps-debug-1.2.0.zip'>https://download.pytorch.org/libtorch/cu100/libtorch-win-shared-with-deps-debug-1.2.0.zip'/a>",
 
     "preview,conda,linux,cuda9.2,python2.7":
       "conda install pytorch cudatoolkit=9.2 -c pytorch-nightly",
