@@ -4,7 +4,7 @@ order: 1
 snippet: >
   ```python
     import torch
-    class MyModule(torch.rrnn.Module):
+    class MyModule(torch.nn.Module):
 
       def __init__(self, N, M):
         super(MyModule, self).__init__()
