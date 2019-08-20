@@ -8,6 +8,7 @@ docsearch({
 
 $("#hub-search-icon").on("click", function() {
   $(this).hide();
+  $("#hub-icons").hide();
   $("#hub-close-search").fadeIn("slow");
   $(".hub-divider").addClass("active-hub-divider");
   $("#hub-search-input")
@@ -20,7 +21,9 @@ $("#hub-search-icon").on("click", function() {
 
 function hideHubSearch(searchIcon) {
   $(searchIcon).hide();
+  
   $("#hub-search-icon, #dropdown-filter-tags").fadeIn("slow");
+  $("#hub-icons").fadeIn("slow");
   $("#hub-search-input")
     .fadeOut("slow")
     .css("background-color", "#f3f4f7");
