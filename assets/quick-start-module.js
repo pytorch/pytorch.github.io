@@ -24,9 +24,6 @@ var package = $(".package > .option");
 var language = $(".language > .option");
 var cuda = $(".cuda > .option");
 var ptbuild = $(".ptbuild > .option");
-var today = new Date().toJSON().slice(0,10).replace(/-/g,'');
-var torch_nightly_ver = '1.3.0.dev' + today
-var vision_nightly_ver = '0.5.0.dev' + today
 
 os.on("click", function() {
   selectedOption(os, this, "os");
