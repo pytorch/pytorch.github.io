@@ -387,13 +387,13 @@ function commandMessage(key) {
       "pip3 install torch==1.2.0 torchvision==0.4.0 -f https://download.pytorch.org/whl/torch_stable.html",
 
     "stable,libtorch,linux,cudanone,cplusplus":
-      "Download here: <br/><a href='https://download.pytorch.org/libtorch/cpu/libtorch-shared-with-deps-1.2.0.zip'>https://download.pytorch.org/libtorch/cpu/libtorch-shared-with-deps-1.2.0.zip</a>",
+      "Download here (Pre-cxx11 ABI): <br/><a href='https://download.pytorch.org/libtorch/cpu/libtorch-shared-with-deps-1.2.0.zip'>https://download.pytorch.org/libtorch/cpu/libtorch-shared-with-deps-1.2.0.zip</a><br/><br> Download here (cxx11 ABI): <br/><a href='https://download.pytorch.org/libtorch/cpu/libtorch-cxx11-abi-shared-with-deps-1.2.0.zip'>https://download.pytorch.org/libtorch/cpu/libtorch-cxx11-abi-shared-with-deps-1.2.0.zip</a>",
 
     "stable,libtorch,linux,cuda9.2,cplusplus":
-      "Download here: <br/><a href='https://download.pytorch.org/libtorch/cu92/libtorch-shared-with-deps-1.2.0.zip'>https://download.pytorch.org/libtorch/cu92/libtorch-shared-with-deps-1.2.0.zip</a>",
+      "Download here (Pre-cxx11 ABI): <br/><a href='https://download.pytorch.org/libtorch/cu92/libtorch-shared-with-deps-1.2.0.zip'>https://download.pytorch.org/libtorch/cu92/libtorch-shared-with-deps-1.2.0.zip</a><br/><br> Download here (cxx11 ABI): <br/><a href='https://download.pytorch.org/libtorch/cu92/libtorch-cxx11-abi-shared-with-deps-1.2.0.zip'>https://download.pytorch.org/libtorch/cu92/libtorch-cxx11-abi-shared-with-deps-1.2.0.zip</a>",
 
     "stable,libtorch,linux,cuda10.0,cplusplus":
-      "Download here: <br/><a href='https://download.pytorch.org/libtorch/cu100/libtorch-shared-with-deps-1.2.0.zip'>https://download.pytorch.org/libtorch/cu100/libtorch-shared-with-deps-1.2.0.zip</a>",
+      "Download here (Pre-cxx11 ABI): <br/><a href='https://download.pytorch.org/libtorch/cu100/libtorch-shared-with-deps-1.2.0.zip'>https://download.pytorch.org/libtorch/cu100/libtorch-shared-with-deps-1.2.0.zip</a><br/><br> Download here (cxx11 ABI): <br/><a href='https://download.pytorch.org/libtorch/cu100/libtorch-cxx11-abi-shared-with-deps-1.2.0.zip'>https://download.pytorch.org/libtorch/cu100/libtorch-cxx11-abi-shared-with-deps-1.2.0.zip</a>",
 
     "stable,libtorch,macos,cudanone,cplusplus":
       "Download here: <br/><a href='https://download.pytorch.org/libtorch/cpu/libtorch-macos-1.2.0.zip'> https://download.pytorch.org/libtorch/cpu/libtorch-macos-1.2.0.zip </a>",
@@ -630,13 +630,13 @@ function commandMessage(key) {
       "pip install numpy<br />pip install --pre torch -f https://download.pytorch.org/whl/nightly/cu100/torch_nightly.html",
 
     "preview,libtorch,linux,cudanone,cplusplus":
-      "Download here: <br/><a href='https://download.pytorch.org/libtorch/nightly/cpu/libtorch-shared-with-deps-latest.zip'>https://download.pytorch.org/libtorch/nightly/cpu/libtorch-shared-with-deps-latest.zip</a>",
+      "Download here (Pre-cxx11 ABI): <br/><a href='https://download.pytorch.org/libtorch/nightly/cpu/libtorch-shared-with-deps-latest.zip'>https://download.pytorch.org/libtorch/nightly/cpu/libtorch-shared-with-deps-latest.zip</a><br/><br> Download here (cxx11 ABI): <br/><a href='https://download.pytorch.org/libtorch/nightly/cpu/libtorch-cxx11-abi-shared-with-deps-latest.zip'>https://download.pytorch.org/libtorch/nightly/cpu/libtorch-cxx11-abi-shared-with-deps-latest.zip</a>",
 
     "preview,libtorch,linux,cuda9.2,cplusplus":
-      "Download here: <br/><a href='https://download.pytorch.org/libtorch/nightly/cu92/libtorch-shared-with-deps-latest.zip'>https://download.pytorch.org/libtorch/nightly/cu92/libtorch-shared-with-deps-latest.zip</a>",
+      "Download here (Pre-cxx11 ABI): <br/><a href='https://download.pytorch.org/libtorch/nightly/cu92/libtorch-shared-with-deps-latest.zip'>https://download.pytorch.org/libtorch/nightly/cu92/libtorch-shared-with-deps-latest.zip</a><br/><br> Download here (cxx11 ABI): <br/><a href='https://download.pytorch.org/libtorch/nightly/cu92/libtorch-cxx11-abi-shared-with-deps-latest.zip'>https://download.pytorch.org/libtorch/nightly/cu92/libtorch-cxx11-abi-shared-with-deps-latest.zip</a>",
 
     "preview,libtorch,linux,cuda10.0,cplusplus":
-      "Download here: <br/><a href='https://download.pytorch.org/libtorch/nightly/cu100/libtorch-shared-with-deps-latest.zip'>https://download.pytorch.org/libtorch/nightly/cu100/libtorch-shared-with-deps-latest.zip</a>",
+      "Download here (Pre-cxx11 ABI): <br/><a href='https://download.pytorch.org/libtorch/nightly/cu100/libtorch-shared-with-deps-latest.zip'>https://download.pytorch.org/libtorch/nightly/cu100/libtorch-shared-with-deps-latest.zip</a><br/><br> Download here (cxx11 ABI): <br/><a href='https://download.pytorch.org/libtorch/nightly/cu100/libtorch-cxx11-abi-shared-with-deps-latest.zip'>https://download.pytorch.org/libtorch/nightly/cu100/libtorch-cxx11-abi-shared-with-deps-latest.zip</a>",
 
     "preview,libtorch,macos,cudanone,cplusplus":
       "Download here: <br/><a href='https://download.pytorch.org/libtorch/nightly/cpu/libtorch-macos-latest.zip'> https://download.pytorch.org/libtorch/nightly/cpu/libtorch-macos-latest.zip </a>",
