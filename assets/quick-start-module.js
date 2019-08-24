@@ -6,7 +6,7 @@ var supportedOperatingSystems = new Map([
 ]);
 
 var opts = {
-  cuda: 'cuda9.2',
+  cuda: 'cuda10.0',
   os: getAnchorSelectedOS() || getDefaultSelectedOS(),
   pm: 'conda',
   language: 'python3.6',
@@ -326,7 +326,7 @@ function commandMessage(key) {
     "stable,pip,linux,cudanone,python3.5":
       "pip3 install torch==1.2.0+cpu torchvision==0.4.0+cpu -f https://download.pytorch.org/whl/torch_stable.html",
 
-    "stable,pip,linux,cuda9.2,python3.5": 
+    "stable,pip,linux,cuda9.2,python3.5":
       "pip3 install torch==1.2.0+cu92 torchvision==0.4.0+cu92 -f https://download.pytorch.org/whl/torch_stable.html",
 
     "stable,pip,linux,cuda10.0,python3.5":
@@ -335,7 +335,7 @@ function commandMessage(key) {
     "stable,pip,linux,cudanone,python3.6":
       "pip3 install torch==1.2.0+cpu torchvision==0.4.0+cpu -f https://download.pytorch.org/whl/torch_stable.html",
 
-    "stable,pip,linux,cuda9.2,python3.6": 
+    "stable,pip,linux,cuda9.2,python3.6":
       "pip3 install torch==1.2.0+cu92 torchvision==0.4.0+cu92 -f https://download.pytorch.org/whl/torch_stable.html",
 
     "stable,pip,linux,cuda10.0,python3.6":
