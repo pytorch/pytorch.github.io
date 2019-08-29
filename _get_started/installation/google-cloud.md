@@ -25,6 +25,10 @@ For custom virtual machines, generally you will want to use [Compute Engine Virt
 
 The expense of your virtual machine is directly correlated to the number of GPUs that it contains. One NVIDIA Tesla P100 virtual machine, for example, can actually be suitable for many use cases.
 
+### Deep Learning Containers
+
+Google Cloud also offers pre-configured and optimized Deep Learning Containers. They provide a consistent environment across Google Cloud services, making it easy to scale in the cloud or shift from on-premises. You have the flexibility to deploy on Google Kubernetes Engine (GKE), AI Platform, Cloud Run, Compute Engine, Kubernetes, and Docker Swarm.
+
 ## Installing PyTorch From Scratch
 {: #google-cloud-from-scratch}
 
