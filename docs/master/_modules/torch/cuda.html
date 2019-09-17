@@ -128,7 +128,7 @@
               
               
                 <div class="version">
-                  <a href='http://pytorch.org/docs/versions.html'>1.3.0a0+2ce8c83 &#x25BC</a>
+                  <a href='http://pytorch.org/docs/versions.html'>1.3.0a0+e5d9a5e &#x25BC</a>
                 </div>
               
             
@@ -307,12 +307,15 @@
 <span class="kn">import</span> <span class="nn">torch</span>
 <span class="kn">import</span> <span class="nn">traceback</span>
 <span class="kn">import</span> <span class="nn">warnings</span>
+<span class="kn">import</span> <span class="nn">threading</span>
 <span class="kn">from</span> <span class="nn">torch._six</span> <span class="k">import</span> <span class="n">raise_from</span>
 <span class="kn">from</span> <span class="nn">subprocess</span> <span class="k">import</span> <span class="n">Popen</span><span class="p">,</span> <span class="n">PIPE</span>
 <span class="kn">from</span> <span class="nn">multiprocessing.util</span> <span class="k">import</span> <span class="n">register_after_fork</span> <span class="k">as</span> <span class="n">_register_after_fork</span>
 <span class="kn">from</span> <span class="nn">._utils</span> <span class="k">import</span> <span class="n">_get_device_index</span>
 
 <span class="n">_initialized</span> <span class="o">=</span> <span class="kc">False</span>
+<span class="n">_tls</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">local</span><span class="p">()</span>
+<span class="n">_initialization_lock</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Lock</span><span class="p">()</span>
 <span class="n">_queued_calls</span> <span class="o">=</span> <span class="p">[]</span>  <span class="c1"># don&#39;t invoke these until initialization occurs</span>
 <span class="n">_in_bad_fork</span> <span class="o">=</span> <span class="kc">False</span>  <span class="c1"># this global is also used in torch.manual_seed</span>
 <span class="n">_original_pid</span> <span class="o">=</span> <span class="kc">False</span>
@@ -454,34 +457,50 @@
 
 <span class="k">def</span> <span class="nf">_lazy_init</span><span class="p">():</span>
     <span class="k">global</span> <span class="n">_initialized</span><span class="p">,</span> <span class="n">_cudart</span><span class="p">,</span> <span class="n">_original_pid</span><span class="p">,</span> <span class="n">_queued_calls</span>
-    <span class="k">if</span> <span class="n">_initialized</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">_initialized</span> <span class="ow">or</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">_tls</span><span class="p">,</span> <span class="s1">&#39;is_initializing&#39;</span><span class="p">):</span>
         <span class="k">return</span>
-    <span class="k">if</span> <span class="n">_in_bad_fork</span><span class="p">:</span>
-        <span class="kn">from</span> <span class="nn">sys</span> <span class="k">import</span> <span class="n">version_info</span>
-        <span class="k">if</span> <span class="n">version_info</span> <span class="o">&lt;</span> <span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">):</span>
-            <span class="n">msg</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;To use CUDA with multiprocessing, you must use Python &quot;</span>
-                   <span class="s2">&quot;3.4+ and the &#39;spawn&#39; start method&quot;</span><span class="p">)</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">msg</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;To use CUDA with multiprocessing, you must use the &quot;</span>
-                   <span class="s2">&quot;&#39;spawn&#39; start method&quot;</span><span class="p">)</span>
-        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
-            <span class="s2">&quot;Cannot re-initialize CUDA in forked subprocess. &quot;</span> <span class="o">+</span> <span class="n">msg</span><span class="p">)</span>
-    <span class="n">_check_driver</span><span class="p">()</span>
-    <span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">_cuda_init</span><span class="p">()</span>
-    <span class="n">_cudart</span> <span class="o">=</span> <span class="n">_load_cudart</span><span class="p">()</span>
-    <span class="n">_cudart</span><span class="o">.</span><span class="n">cudaGetErrorName</span><span class="o">.</span><span class="n">restype</span> <span class="o">=</span> <span class="n">ctypes</span><span class="o">.</span><span class="n">c_char_p</span>
-    <span class="n">_cudart</span><span class="o">.</span><span class="n">cudaGetErrorString</span><span class="o">.</span><span class="n">restype</span> <span class="o">=</span> <span class="n">ctypes</span><span class="o">.</span><span class="n">c_char_p</span>
-    <span class="n">_original_pid</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">getpid</span><span class="p">()</span>
-    <span class="n">_initialized</span> <span class="o">=</span> <span class="kc">True</span>
-    <span class="c1"># Important to do this after _initialized, since some queued calls</span>
-    <span class="c1"># may themselves call _lazy_init()</span>
-    <span class="k">for</span> <span class="n">queued_call</span><span class="p">,</span> <span class="n">orig_traceback</span> <span class="ow">in</span> <span class="n">_queued_calls</span><span class="p">:</span>
+    <span class="k">with</span> <span class="n">_initialization_lock</span><span class="p">:</span>
+        <span class="c1"># We be double-checked locking, boys!  This is OK because</span>
+        <span class="c1"># the above test was GIL protected anyway.  The inner test</span>
+        <span class="c1"># is for when a thread blocked on some other thread which was</span>
+        <span class="c1"># doing the initialization; when they get the lock, they will</span>
+        <span class="c1"># find there is nothing left to do.</span>
+        <span class="k">if</span> <span class="n">_initialized</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="c1"># It is important to prevent other threads from entering _lazy_init</span>
+        <span class="c1"># immediately, while we are still guaranteed to have the GIL, because some</span>
+        <span class="c1"># of the C calls we make below will release the GIL</span>
+        <span class="k">if</span> <span class="n">_in_bad_fork</span><span class="p">:</span>
+            <span class="kn">from</span> <span class="nn">sys</span> <span class="k">import</span> <span class="n">version_info</span>
+            <span class="k">if</span> <span class="n">version_info</span> <span class="o">&lt;</span> <span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">):</span>
+                <span class="n">msg</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;To use CUDA with multiprocessing, you must use Python &quot;</span>
+                       <span class="s2">&quot;3.4+ and the &#39;spawn&#39; start method&quot;</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">msg</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;To use CUDA with multiprocessing, you must use the &quot;</span>
+                       <span class="s2">&quot;&#39;spawn&#39; start method&quot;</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;Cannot re-initialize CUDA in forked subprocess. &quot;</span> <span class="o">+</span> <span class="n">msg</span><span class="p">)</span>
+        <span class="n">_check_driver</span><span class="p">()</span>
+        <span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">_cuda_init</span><span class="p">()</span>
+        <span class="n">_cudart</span> <span class="o">=</span> <span class="n">_load_cudart</span><span class="p">()</span>
+        <span class="n">_cudart</span><span class="o">.</span><span class="n">cudaGetErrorName</span><span class="o">.</span><span class="n">restype</span> <span class="o">=</span> <span class="n">ctypes</span><span class="o">.</span><span class="n">c_char_p</span>
+        <span class="n">_cudart</span><span class="o">.</span><span class="n">cudaGetErrorString</span><span class="o">.</span><span class="n">restype</span> <span class="o">=</span> <span class="n">ctypes</span><span class="o">.</span><span class="n">c_char_p</span>
+        <span class="n">_original_pid</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">getpid</span><span class="p">()</span>
+        <span class="c1"># Some of the queued calls may reentrantly call _lazy_init();</span>
+        <span class="c1"># we need to just return without initializing in that case.</span>
+        <span class="c1"># However, we must not let any *other* threads in!</span>
+        <span class="n">_tls</span><span class="o">.</span><span class="n">is_initializing</span> <span class="o">=</span> <span class="kc">True</span>
         <span class="k">try</span><span class="p">:</span>
-            <span class="n">queued_call</span><span class="p">()</span>
-        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-            <span class="n">msg</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;CUDA call failed lazily at initialization with error: </span><span class="si">{}</span><span class="se">\n\n</span><span class="s2">&quot;</span>
-                   <span class="s2">&quot;CUDA call was originally invoked at:</span><span class="se">\n\n</span><span class="si">{}</span><span class="s2">&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">),</span> <span class="n">orig_traceback</span><span class="p">)</span>
-            <span class="n">raise_from</span><span class="p">(</span><span class="n">DeferredCudaCallError</span><span class="p">(</span><span class="n">msg</span><span class="p">),</span> <span class="n">e</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">queued_call</span><span class="p">,</span> <span class="n">orig_traceback</span> <span class="ow">in</span> <span class="n">_queued_calls</span><span class="p">:</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="n">queued_call</span><span class="p">()</span>
+                <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                    <span class="n">msg</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;CUDA call failed lazily at initialization with error: </span><span class="si">{}</span><span class="se">\n\n</span><span class="s2">&quot;</span>
+                           <span class="s2">&quot;CUDA call was originally invoked at:</span><span class="se">\n\n</span><span class="si">{}</span><span class="s2">&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">),</span> <span class="n">orig_traceback</span><span class="p">)</span>
+                    <span class="n">raise_from</span><span class="p">(</span><span class="n">DeferredCudaCallError</span><span class="p">(</span><span class="n">msg</span><span class="p">),</span> <span class="n">e</span><span class="p">)</span>
+        <span class="k">finally</span><span class="p">:</span>
+            <span class="nb">delattr</span><span class="p">(</span><span class="n">_tls</span><span class="p">,</span> <span class="s1">&#39;is_initializing&#39;</span><span class="p">)</span>
+        <span class="n">_initialized</span> <span class="o">=</span> <span class="kc">True</span>
 
 
 <span class="k">def</span> <span class="nf">_after_fork</span><span class="p">(</span><span class="n">arg</span><span class="p">):</span>
