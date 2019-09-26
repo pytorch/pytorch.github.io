@@ -227,10 +227,6 @@ e.g.,
 - [torch_cuda80-0.1.6.post17-cp35-cp35m-linux_x86_64.whl](https://download.pytorch.org/whl/torch_cuda80-0.1.6.post17-cp35-cp35m-linux_x86_64.whl)
 - [torch_cuda80-0.1.6.post17-cp27-cp27mu-linux_x86_64.whl](https://download.pytorch.org/whl/torch_cuda80-0.1.6.post17-cp27-cp27mu-linux_x86_64.whl)
 
-<script type="text/javascript">
-  var pageId = "previous-versions"; // TBD: Make this programmatic
-  $(".main-content-menu .nav-item").removeClass("nav-select");
-  $(".main-content-menu .nav-link[data-id='" + pageId + "']").parent(".nav-item").addClass("nav-select");
-</script>
+<script page-id="previous-versions" src="{{ site.baseurl }}/assets/menu-tab-selection.js"></script>
 <script src="{{ site.baseurl }}/assets/quick-start-module.js"></script>
 <script src="{{ site.baseurl }}/assets/show-screencast.js"></script>
