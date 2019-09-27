@@ -59,11 +59,11 @@ checkout.
 
 Download the `whl` file with the desired version from the following html pages:
 
-- https://download.pytorch.org/whl/cpu/torch_stable.html # CPU-only build
-- https://download.pytorch.org/whl/cu80/torch_stable.html # CUDA 8.0 build
-- https://download.pytorch.org/whl/cu90/torch_stable.html # CUDA 9.0 build
-- https://download.pytorch.org/whl/cu92/torch_stable.html # CUDA 9.2 build
-- https://download.pytorch.org/whl/cu100/torch_stable.html # CUDA 10.0 build
+- <https://download.pytorch.org/whl/cpu/torch_stable.html> # CPU-only build
+- <https://download.pytorch.org/whl/cu80/torch_stable.html> # CUDA 8.0 build
+- <https://download.pytorch.org/whl/cu90/torch_stable.html> # CUDA 9.0 build
+- <https://download.pytorch.org/whl/cu92/torch_stable.html> # CUDA 9.2 build
+- <https://download.pytorch.org/whl/cu100/torch_stable.html> # CUDA 10.0 build
 
 Then, install the file with `pip install [downloaded file]`
 
