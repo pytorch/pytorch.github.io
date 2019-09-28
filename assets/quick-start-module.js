@@ -14,6 +14,7 @@ var opts = {
 };
 
 var supportedCloudPlatforms = [
+  'alibaba',
   'aws',
   'google-cloud',
   'microsoft-azure',
