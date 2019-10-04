@@ -450,11 +450,8 @@ Example (a type mismatch)
          ~~~~~...  <--- HERE
              r = torch.rand(1)
          else:
-     and was used here:
-         else:
              r = 4
          return r
-                ~ <--- HERE
      ...
 
 
