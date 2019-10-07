@@ -164,7 +164,6 @@ Currently, the iOS framework uses the raw Pytorch C++ APIs directly. The C++ doc
 
 If you have any questions or want to contribute to PyTorch, please feel free to drop issues or open pull request to get in touch.
 
+<!-- Do not remove the below script -->
 
-
-
-
+<script page-id="ios" src="{{ site.baseurl }}/assets/menu-tab-selection.js"></script>
