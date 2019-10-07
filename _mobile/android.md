@@ -323,3 +323,6 @@ Explicitly destructs native (C++) part of the Module, `torch::jit::script::Modul
 
 As fbjni library destructs native part automatically when current `org.pytorch.Module` instance will be collected by Java GC, the instance will not leak if this method is not called, but timing of deletion and the thread will be at the whim of the Java GC. If you want to control the thread and timing of the destructor, you should call this method explicitly.
 
+<!-- Do not remove the below script -->
+
+<script page-id="android" src="{{ site.baseurl }}/assets/menu-tab-selection.js"></script>

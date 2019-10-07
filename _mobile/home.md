@@ -27,4 +27,6 @@ Learn more or get started on [Android](http://pytorch.org/mobile/android) or [iO
   <img src="{{ site.url }}/assets/images/pytorchmobile.png" width="100%">
 </div>
 
+<!-- Do not remove the below script -->
+
 <script page-id="home" src="{{ site.baseurl }}/assets/menu-tab-selection.js"></script>
