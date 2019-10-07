@@ -8,9 +8,7 @@ order: 1
 published: true
 ---
 
-# Home
-
-## PyTorch Mobile
+# PyTorch Mobile
 
 Running ML on edge devices is growing in importance as applications continue to demand lower latency. It is also a foundational element for privacy-preserving techniques such as federated learning. As of PyTorch 1.3, PyTorch supports an end-to-end workflow from Python to deployment on iOS and Android. 
 
