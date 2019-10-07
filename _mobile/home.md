@@ -10,39 +10,21 @@ published: true
 
 # Home
 
-## Lorem Ipsum
+## PyTorch Mobile
 
-Lorem ipsum dolor sit amet, consectetur adipiscing elit. Quisque eu placerat odio, nec tristique sem. Ut sed vehicula tellus. Morbi facilisis rutrum quam. Suspendisse quis lacus finibus, lobortis justo in, aliquet velit. Vestibulum ultrices dignissim felis, in fermentum mauris ullamcorper molestie. Quisque faucibus ac enim eu dignissim. Nullam sit amet nibh eleifend, semper nisi et, scelerisque ex. Integer a mauris diam.
+Running ML on edge devices is growing in importance as applications continue to demand lower latency. It is also a foundational element for privacy-preserving techniques such as federated learning. As of PyTorch 1.3, PyTorch supports an end-to-end workflow from Python to deployment on iOS and Android. 
 
-Morbi luctus, metus non porttitor vestibulum, arcu dui rhoncus velit, sollicitudin efficitur augue augue ac neque. Vestibulum at nisl nec velit fermentum tristique. Sed pharetra sit amet justo vitae mattis. Sed dolor elit, rhoncus in eleifend convallis, facilisis vel mauris. Morbi mattis metus enim, in fermentum ipsum malesuada vel. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Aliquam quis lobortis felis. Nunc dignissim ipsum ante, nec finibus quam facilisis maximus. Donec fermentum consectetur elementum. Quisque ac maximus ex. Nunc rutrum orci sed felis viverra cursus.
+This is an early, experimental release that we will be building on in several areas over the coming months:
 
-Lorem ipsum dolor sit amet, consectetur adipiscing elit. Quisque eu placerat odio, nec tristique sem. Ut sed vehicula tellus. Morbi facilisis rutrum quam. Suspendisse quis lacus finibus, lobortis justo in, aliquet velit. Vestibulum ultrices dignissim felis, in fermentum mauris ullamcorper molestie. Quisque faucibus ac enim eu dignissim. Nullam sit amet nibh eleifend, semper nisi et, scelerisque ex. Integer a mauris diam.
+- Extends the PyTorch API to cover common preprocessing and integration tasks needed for incorporating ML in mobile applications
+- Support for FBGEMM and QNNPACK quantized kernel libraries support for x86 and ARM CPUs respectively
+- (Coming soon) Build level optimization and selective compilation depending on the operators needed for user applications (i.e., you pay binary size for only the operators you need)
+- (Coming soon) Further improvements to performance and coverage on mobile CPUs and GPUs
 
-## Binaries
+Learn more or get started on Android or iOS [here](http://pytorch.org/mobile).
 
-Morbi luctus, metus non porttitor vestibulum, arcu dui rhoncus velit, sollicitudin efficitur augue augue ac neque. Vestibulum at nisl nec velit fermentum tristique. Sed pharetra sit amet justo vitae mattis. Sed dolor elit, rhoncus in eleifend convallis, facilisis vel mauris. Morbi mattis metus enim, in fermentum ipsum malesuada vel. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Aliquam quis lobortis felis. Nunc dignissim ipsum ante, nec finibus quam facilisis maximus. Donec fermentum consectetur elementum. Quisque ac maximus ex. Nunc rutrum orci sed felis viverra cursus.
-
-Lorem ipsum dolor sit amet, consectetur adipiscing elit. Quisque eu placerat odio, nec tristique sem. Ut sed vehicula tellus. Morbi facilisis rutrum quam. Suspendisse quis lacus finibus, lobortis justo in, aliquet velit. Vestibulum ultrices dignissim felis, in fermentum mauris ullamcorper molestie. Quisque faucibus ac enim eu dignissim. Nullam sit amet nibh eleifend, semper nisi et, scelerisque ex. Integer a mauris diam.
-
-## Build Scripts
-
-Morbi luctus, metus non porttitor vestibulum, arcu dui rhoncus velit, sollicitudin efficitur augue augue ac neque. Vestibulum at nisl nec velit fermentum tristique. Sed pharetra sit amet justo vitae mattis. Sed dolor elit, rhoncus in eleifend convallis, facilisis vel mauris. Morbi mattis metus enim, in fermentum ipsum malesuada vel. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Aliquam quis lobortis felis. Nunc dignissim ipsum ante, nec finibus quam facilisis maximus. Donec fermentum consectetur elementum. Quisque ac maximus ex. Nunc rutrum orci sed felis viverra cursus.
-Lorem ipsum dolor sit amet, consectetur adipiscing elit. Quisque eu placerat odio, nec tristique sem. Ut sed vehicula tellus. Morbi facilisis rutrum quam. Suspendisse quis lacus finibus, lobortis justo in, aliquet velit. Vestibulum ultrices dignissim felis, in fermentum mauris ullamcorper molestie. Quisque faucibus ac enim eu dignissim. Nullam sit amet nibh eleifend, semper nisi et, scelerisque ex. Integer a mauris diam.
-
-Morbi luctus, metus non porttitor vestibulum, arcu dui rhoncus velit, sollicitudin efficitur augue augue ac neque. Vestibulum at nisl nec velit fermentum tristique. Sed pharetra sit amet justo vitae mattis. Sed dolor elit, rhoncus in eleifend convallis, facilisis vel mauris. Morbi mattis metus enim, in fermentum ipsum malesuada vel. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Aliquam quis lobortis felis. Nunc dignissim ipsum ante, nec finibus quam facilisis maximus. Donec fermentum consectetur elementum. Quisque ac maximus ex. Nunc rutrum orci sed felis viverra cursus.
-Lorem ipsum dolor sit amet, consectetur adipiscing elit. Quisque eu placerat odio, nec tristique sem. Ut sed vehicula tellus. Morbi facilisis rutrum quam. Suspendisse quis lacus finibus, lobortis justo in, aliquet velit. Vestibulum ultrices dignissim felis, in fermentum mauris ullamcorper molestie. Quisque faucibus ac enim eu dignissim. Nullam sit amet nibh eleifend, semper nisi et, scelerisque ex. Integer a mauris diam.
-
-## Objective C Walkthrough Cocopods Walkthrough Tutorials
-
-Morbi luctus, metus non porttitor vestibulum, arcu dui rhoncus velit, sollicitudin efficitur augue augue ac neque. Vestibulum at nisl nec velit fermentum tristique. Sed pharetra sit amet justo vitae mattis. Sed dolor elit, rhoncus in eleifend convallis, facilisis vel mauris. Morbi mattis metus enim, in fermentum ipsum malesuada vel. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Aliquam quis lobortis felis. Nunc dignissim ipsum ante, nec finibus quam facilisis maximus. Donec fermentum consectetur elementum. Quisque ac maximus ex. Nunc rutrum orci sed felis viverra cursus.
-Lorem ipsum dolor sit amet, consectetur adipiscing elit. Quisque eu placerat odio, nec tristique sem. Ut sed vehicula tellus. Morbi facilisis rutrum quam. Suspendisse quis lacus finibus, lobortis justo in, aliquet velit. Vestibulum ultrices dignissim felis, in fermentum mauris ullamcorper molestie. Quisque faucibus ac enim eu dignissim. Nullam sit amet nibh eleifend, semper nisi et, scelerisque ex. Integer a mauris diam.
-
-## How To
-
-Morbi luctus, metus non porttitor vestibulum, arcu dui rhoncus velit, sollicitudin efficitur augue augue ac neque. Vestibulum at nisl nec velit fermentum tristique. Sed pharetra sit amet justo vitae mattis. Sed dolor elit, rhoncus in eleifend convallis, facilisis vel mauris. Morbi mattis metus enim, in fermentum ipsum malesuada vel. Lorem ipsum dolor sit amet, consectetur adipiscing elit.
-
-## Dolor Sit Amet
-
-Aliquam quis lobortis felis. Nunc dignissim ipsum ante, nec finibus quam facilisis maximus. Donec fermentum consectetur elementum. Quisque ac maximus ex. Nunc rutrum orci sed felis viverra cursus.
+<div class="text-center">
+  <img src="{{ site.url }}/assets/images/pytorchmobile.png" width="100%">
+</div>
 
 <script page-id="home" src="{{ site.baseurl }}/assets/menu-tab-selection.js"></script>
