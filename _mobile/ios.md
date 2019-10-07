@@ -10,7 +10,7 @@ published: true
 
 # iOS
 
-To get started with PyTorch on iOS, we recommend exploring the following a HelloWorld example on Github [Hellow Word](https://github.com/pytorch/ios-demo-app/tree/master/HelloWorld). 
+To get started with PyTorch on iOS, we recommend exploring the following a HelloWorld example on Github [Hello Word](https://github.com/pytorch/ios-demo-app/tree/master/HelloWorld). 
 
 ## HelloWorld example
 
