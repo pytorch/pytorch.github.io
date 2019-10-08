@@ -16,38 +16,39 @@ To get started with PyTorch on iOS, we recommend exploring the following [HelloW
 
 HelloWorld is a simple image classification application that demonstrates how to use PyTorch C++ libraries on iOS. The code is written in Swift and uses Objective-C as a bridge.
 
-Before we jump into details, we highly recommend following the [Pytorch Github page](https://github.com/pytorch/pytorch) to set up the Python development environment on your local machine. 
-
 ### Model preparation
 
-Let's start with model preparation. If you are familiar with PyTorch, you probably should already know how to train and save your model. In case you don't, we are going to use a pre-trained image classification model(Resnet18), which is packaged in [TorchVision](https://pytorch.org/docs/stable/torchvision/index.html). To install it, run the command below.
+Let's start with model preparation. If you are familiar with PyTorch, you probably should already know how to train and save your model. In case you don't, we are going to use a pre-trained image classification model - Resnet18, which is already packaged in [TorchVision](https://pytorch.org/docs/stable/torchvision/index.html). To install it, run the command below.
+
+> Before running, we highly recommend following the [Pytorch Github page](https://github.com/pytorch/pytorch) to set up the Python development environment on your local machine. 
 
 ```shell
 pip install torchvision
 ```
 
-Once we have TorchVision installed successfully, let's navigate to the HelloWorld folder and run `trace_model.py` to generate our model. The script contains the code of tracing and saving a [torchscript model](https://pytorch.org/tutorials/beginner/Intro_to_TorchScript_tutorial.html) that can be run on mobile devices. Run the command below to get our model
+Once we have TorchVision installed successfully, let's navigate to the HelloWorld folder and run `trace_model.py`. The script contains the code of tracing and saving a [torchscript model](https://pytorch.org/tutorials/beginner/Intro_to_TorchScript_tutorial.html) that can be run on mobile devices.
 
 ```shell
 python trace_model.py
 ```
 
-If everything works well, we should have our model - `model.pt` generated in the same folder. Now copy the model file to our application folder `HelloWorld/model`.
+If everything works well, we should have our model - `model.pt` generated in the `HelloWorld` folder. Now copy the model file to our application folder `HelloWorld/model`.
 
-More details about TorchScript you can find in [tutorials on pytorch.org](https://pytorch.org/docs/stable/jit.html) 
+> To find out more details about TorchScript, please visit [tutorials on pytorch.org](https://pytorch.org/docs/stable/jit.html) 
 
 ### Install PyTorch C++ libraries via Cocoapods
 
-The PyTorch C++ library is available in [Cocoapods](https://cocoapods.org/), to integrate it to our project, we can run 
+The PyTorch C++ library is available in [Cocoapods](https://cocoapods.org/), to integrate it to our project, simply run
 
 ```ruby
 pod install
 ```
+
 Now it's time to open the `HelloWorld.xcworkspace` in XCode, select an iOS simulator and launch it (cmd + R). If everything works well, we should see a wolf picture on the simulator screen along with the prediction result.
 
 ### Code Walkthrough
 
-In this part, we are going to walk through the code step by step. All logic happens in `ViewController.swift`.
+In this part, we are going to walk through the code step by step.
 
 #### Image loading
 
@@ -141,7 +142,7 @@ let sortedResults = zippedResults.sorted { $0.1.floatValue > $1.1.floatValue }.p
 
 ### PyTorch demo app
 
-For more complex use cases, we recommend to check out the PyTorch demo application. The demo app contains two showcases. A camera app that runs a quantized model to predict the images coming from device’s rear-facing camera in real time. And a text-based app that uses a self-trained NLP model to predict the topic from the input string.
+For more complex use cases, we recommend to check out the PyTorch demo application. The demo app contains two showcases. A camera app that runs a quantized model to predict the images coming from device’s rear-facing camera in real time. And a text-based app that uses a text classififcation model to predict the topic from the input string.
 
 ## Build PyTorch iOS libraries from source
 
