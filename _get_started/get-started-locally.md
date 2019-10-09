@@ -54,10 +54,6 @@ published: true
   <div class="os windows">{{ windows | markdownify }}</div>
 </div>
 
-<script type="text/javascript">
-  var pageId = "get-started-locally"; // TBD: Make this programmatic
-  $(".main-content-menu .nav-item").removeClass("nav-select");
-  $(".main-content-menu .nav-link[data-id='" + pageId + "']").parent(".nav-item").addClass("nav-select");
-</script>
+<script page-id="get-started-locally" src="{{ site.baseurl }}/assets/menu-tab-selection.js"></script>
 <script src="{{ site.baseurl }}/assets/quick-start-module.js"></script>
 <script src="{{ site.baseurl }}/assets/show-screencast.js"></script>
