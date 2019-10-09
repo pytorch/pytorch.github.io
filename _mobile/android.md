@@ -166,6 +166,41 @@ It uses the aforementioned [`TensorImageUtils.imageYUV420CenterCropToFloat32Tens
 
 After getting predicted scores from the model it finds top K classes with the highest scores and shows on the UI.
 
+#### Language Processing Example
+
+Another example is natural language processing, based on an LSTM model, trained on a reddit comments dataset.
+The logic happens in [`TextClassificattionActivity`](https://github.com/pytorch/android-demo-app/blob/master/PyTorchDemoApp/app/src/main/java/org/pytorch/demo/nlp/TextClassificationActivity.java). 
+
+Result class names are packaged inside the TorchScript model and initialized just after initial module initialization.
+The module has a `get_classes` method that returns `List[str]`, which can be called using method `Module.runMethod(methodName)`:
+```
+    mModule = Module.load(moduleFileAbsoluteFilePath);
+    IValue getClassesOutput = mModule.runMethod("get_classes");
+```
+The returned `IValue` can be converted to java array of `IValue` using `IValue.toList()` and processed to an array of strings using `IValue.toStr()`:
+```
+    IValue[] classesListIValue = getClassesOutput.toList();
+    String[] moduleClasses = new String[classesListIValue.length];
+    int i = 0;
+    for (IValue iv : classesListIValue) {
+      moduleClasses[i++] = iv.toStr();
+    }
+```
+
+Entered text is converted to java array of bytes with `UTF-8` encoding. `Tensor.fromBlobUnsigned` creates tensor of `dtype=uint8` from that array of bytes.
+```
+    byte[] bytes = text.getBytes(Charset.forName("UTF-8"));
+    final long[] shape = new long[]{1, bytes.length};
+    final Tensor inputTensor = Tensor.fromBlobUnsigned(bytes, shape);
+```
+
+Running inference of the model is similar to previous examples:
+```
+Tensor outputTensor = mModule.forward(IValue.from(inputTensor)).toTensor()
+```
+
+After that, the code processes the output, finding classes with the highest scores. 
+
 ## Building PyTorch Android from Source
 
 In some cases you might want to use a local build of pytorch android, for example you may build custom libtorch binary with another set of operators or to make local changes.
@@ -238,108 +273,9 @@ packagingOptions {
 }
 ```
 
-## API Details
+## More Details
 
-Main part of java API includes 3 classes:
-```
-org.pytorch.Module
-org.pytorch.IValue
-org.pytorch.Tensor
-```
-
-If the reader is familiar with PyTorch Python API, we can think of `org.pytorch.Tensor` representing `torch.tensor`, `org.pytorch.Module` representing `torch.Module`, and `org.pytorch.IValue` representing the value of the TorchScript variable, supporting all its [types](https://pytorch.org/docs/stable/jit.html#types).
-
-### [`org.pytorch.Tensor`]((https://github.com/pytorch/pytorch/blob/master/android/pytorch_android/src/main/java/org/pytorch/Tensor.java))
-
-Tensor supports dtypes `uint8, int8, float32, int32, float64, int64`.
-Tensor holds data in DirectByteBuffer of proper type with native bit order. 
-
-To create a Tensor user can use one of the factory methods:
-```
-Tensor fromBlobUnsigned(ByteBuffer data, long[] shape)
-Tensor fromBlobUnsigned(byte[] data, long[] shape)
-
-Tensor fromBlob(ByteBuffer data, long[] shape)
-Tensor fromBlob(byte[] data, long[] shape)
-
-Tensor fromBlob(FloatBuffer data, long[] shape)
-Tensor fromBlob(float[] data, long[] shape)
-
-Tensor fromBlob(IntBuffer data, long[] shape)
-Tensor fromBlob(int[] data, long[] shape)
-
-Tensor fromBlob(DoubleBuffer data, long[] shape)
-Tensor fromBlob(double[] data, long[] shape)
-
-Tensor fromBlob(LongBuffer data, long[] shape)
-Tensor fromBlob(long[] data, long[] shape)
-```
-Where the first parameter `long[] shape` is shape of the Tensor as array of longs.
-
-Content of the Tensor can be provided either as (a) java array  or (b) as `java.nio.DirectByteBuffer` of proper type with native bit order.
-
-In case of (a) proper `DirectByteBuffer` will be created internally. (b) case has an advantage that user can keep the reference to DirectByteBuffer and change its content in future for the next run, avoiding allocation of DirectByteBuffer for repeated runs.
-
-Java’s primitive type byte is signed and java does not have unsigned 8 bit type. For dtype=uint8 java API uses java primitive `byte` that will be reinterpreted as uint8 on native side. On java side unsigned value of byte can be read as `byte & 0xFF`.
-
-#### Tensor Content Layout
-
-Tensor content is represented as a one dimensional array (buffer),
-where the first element has all zero indexes T\[0, ... 0\].
-
-Lets assume tensor shape is {d<sub>0</sub>, ... d<sub>n-1</sub>} and d<sub>n-1</sub> > 0.
-
-The second element will be T\[0, ... 1\] and the last one T\[d<sub>0</sub>-1, ... d<sub>n-1</sub> - 1\]
-
-Tensor has methods to check its dtype:
-```
-int dtype()
-```
-That returns one of the `DType` enum element:
-```
-DType.UINT8
-DType.INT8
-DType.INT32
-DType.FLOAT32
-DType.INT64
-DType.FLOAT64
-```
-
-The data of Tensor can be read as a java array:
-```
-byte[] getDataAsUnsignedByteArray()
-byte[] getDataAsByteArray()
-int[] getDataAsIntArray()
-long[] getDataAsLongArray()
-float[] getDataAsFloatArray()
-double[] getDataAsDoubleArray() 
-```
-These methods throw `IllegalStateException` if called for inappropriate dtype.
-
-### [`org.pytorch.IValue`](https://github.com/pytorch/pytorch/blob/master/android/pytorch_android/src/main/java/org/pytorch/IValue.java)
-
-IValue represents a TorchScript variable that can be one of the supported (by TorchScript) [types](https://pytorch.org/docs/stable/jit.html#types). 
-`IValue` is a tagged union. For every supported type it has a factory method, method to check the type and a getter method to retrieve a value.
-Getters throw `IllegalStateException` if called for inappropriate type.
-
-### [`org.pytorch.Module`](https://github.com/pytorch/pytorch/blob/master/android/pytorch_android/src/main/java/org/pytorch/Module.java)
-
-Module is a wrapper of torch.jit.ScriptModule (`torch::jit::script::Module` in PyTorch C++ API) which can be constructed with the factory method `load` providing absolute path to the file with serialized TorchScript.
-```
-IValue IValue.runMethod(String methodName, IValue... inputs)
-```
-for running a particular method of the script module.
-```
-IValue IValue.forward(IValue... inputs)
-```
-Shortcut to run 'forward' method.
-
-```
-IValue IValue.destroy()
-```
-Explicitly destructs native (C++) part of the Module, `torch::jit::script::Module`.
-
-As fbjni library destructs native part automatically when current `org.pytorch.Module` instance will be collected by Java GC, the instance will not leak if this method is not called, but timing of deletion and the thread will be at the whim of the Java GC. If you want to control the thread and timing of the destructor, you should call this method explicitly.
+You can find more details about the PyTorch Android API in the [Javadoc](https://pytorch.org/docs/stable/packages.html).
 
 <!-- Do not remove the below script -->
 
