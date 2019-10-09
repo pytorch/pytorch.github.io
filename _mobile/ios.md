@@ -12,11 +12,11 @@ published: true
 
 To get started with PyTorch on iOS, we recommend exploring the following [HelloWorld](https://github.com/pytorch/ios-demo-app/tree/master/HelloWorld). 
 
-## Quickstart with a Hello World example
+## Quickstart with a Hello World Example
 
 HelloWorld is a simple image classification application that demonstrates how to use PyTorch C++ libraries on iOS. The code is written in Swift and uses Objective-C as a bridge.
 
-### Model preparation
+### Model Preparation
 
 Let's start with model preparation. If you are familiar with PyTorch, you probably should already know how to train and save your model. In case you don't, we are going to use a pre-trained image classification model - Resnet18, which is already packaged in [TorchVision](https://pytorch.org/docs/stable/torchvision/index.html). To install it, run the command below.
 
@@ -34,7 +34,7 @@ python trace_model.py
 
 If everything works well, we should have our model - `model.pt` generated in the `HelloWorld` folder. Now copy the model file to our application folder `HelloWorld/model`.
 
-> To find out more details about TorchScript, please visit [tutorials on pytorch.org](https://pytorch.org/docs/stable/jit.html) 
+> To find out more details about TorchScript, please visit [tutorials on pytorch.org](https://pytorch.org/tutorials/advanced/cpp_export.html) 
 
 ### Install PyTorch C++ libraries via Cocoapods
 
@@ -46,11 +46,13 @@ pod install
 
 Now it's time to open the `HelloWorld.xcworkspace` in XCode, select an iOS simulator and launch it (cmd + R). If everything works well, we should see a wolf picture on the simulator screen along with the prediction result.
 
+![](https://github.com/pytorch/ios-demo-app/blob/master/HelloWorld/HelloWorld/HelloWorld/image.jpg?raw=true)
+
 ### Code Walkthrough
 
 In this part, we are going to walk through the code step by step.
 
-#### Image loading
+#### Image Loading
 
 Let's begin with image loading.
 
@@ -76,9 +78,9 @@ for i in 0 ..< w * h {
 }
 ```
 
-The code might look weird at first glance, but it’ll make sense once we understand our model. The input data of our model is a 3-channel RGB image of shape (3 x H x W), where H and W are expected to be at least 224. The image have to be loaded in to a range of [0, 1] and then normalized using mean = [0.485, 0.456, 0.406] and std = [0.229, 0.224, 0.225].
+The code might look weird at first glance, but it’ll make sense once we understand our model. The input data is a 3-channel RGB image of shape (3 x H x W), where H and W are expected to be at least 224. The image has to be loaded in to a range of [0, 1] and then normalized using mean = [0.485, 0.456, 0.406] and std = [0.229, 0.224, 0.225].
 
-####  TorchScript module
+####  TorchScript Module
 
 Now that we have preprocessed our input data and we have a pre-trained TorchScript model, the next step is to use them to run predication. To do that, we'll first load our model into the application.
 
@@ -97,11 +99,11 @@ Note that the `TorchModule` Class is an Objective-C wrapper of `torch::jit::scri
 ```cpp
 torch::jit::script::Module module = torch::jit::load(filePath.UTF8String);
 ```
-Since Swift can not talk to C++ directly, we have to either use an Objective-C class as a bride, or create a C wrapper for the C++ library. For the demo purpose, we're going to wrap everything in this Objective-C class, but we are working on bringing the Swift wrapper to PyTorch.
+Since Swift can not talk to C++ directly, we have to either use an Objective-C class as a bridge, or create a C wrapper for the C++ library. For demo purpose, we're going to wrap everything in this Objective-C class. However, we're working on providing the Swift/Objective-C API wrappers to PyTorch. Stay tuned!
 
 #### Run Inference
 
-Now it's time to run the inference and get the results. 
+Now it's time to run inference and get the results. 
 
 ```swift
 guard let outputs = module.predict(image: UnsafeMutableRawPointer(&pixelBuffer)) else {
@@ -115,23 +117,24 @@ at::Tensor tensor = torch::from_blob(imageBuffer, {1, 3, 224, 224}, at::kFloat);
 torch::autograd::AutoGradMode guard(false);
 at::AutoNonVariableTypeMode non_var_type_mode(true);
 auto outputTensor = _impl.forward({tensor}).toTensor();
-void* tensorBuffer = outputTensor.storage().data();
+float* floatBuffer = outputTensor.data_ptr<float>();
 ```
-The C++ function `torch::from_blob` will create an input tensor from the pixel buffer. Note that the shpae of the tensor is `{1,3,224,224}` which represents `NxCxWxH` as we discuessed in above section. 
+The C++ function `torch::from_blob` will create an input tensor from the pixel buffer. Note that the shape of the tensor is `{1,3,224,224}` which represents `NxCxWxH` as we discussed in above section. 
 
 ```cpp
 torch::autograd::AutoGradMode guard(false);
 at::AutoNonVariableTypeMode non_var_type_mode(true);
 ```
-The above two lines tells the PyTorch engine to do inference only. This is beacuse By default, PyTorch has built-in support for doing auto-differentiation, which is also known as autograd. Since we don't do training on mobile, we can just disable the autograd mode. 
+The above two lines tells the PyTorch engine to do inference only. This is because by default, PyTorch has built-in support for doing auto-differentiation, which is also known as [autograd](https://pytorch.org/docs/stable/notes/autograd.html). Since we don't do training on mobile, we can just disable the autograd mode. 
 
-Finally, we can call this `forward` function to get the output tensor as the results.
+Finally, we can call this `forward` function to get the output tensor and convert it to a `float` buffer.
 
 ```cpp
 auto outputTensor = _impl.forward({tensor}).toTensor();
+float* floatBuffer = outputTensor.data_ptr<float>();
 ```
 
-### Collect results
+### Collect Results
 
 The output tensor is a one-dimensional float array of shape 1x1000, where each value represents the confidence that a label is predicted from the image. The code below sorts the array and retrieves the top three results.
 
@@ -140,28 +143,28 @@ let zippedResults = zip(labels.indices, outputs)
 let sortedResults = zippedResults.sorted { $0.1.floatValue > $1.1.floatValue }.prefix(3)
 ```
 
-### PyTorch demo app
+### PyTorch Demo App
 
-For more complex use cases, we recommend to check out the PyTorch demo application. The demo app contains two showcases. A camera app that runs a quantized model to predict the images coming from device’s rear-facing camera in real time. And a text-based app that uses a text classififcation model to predict the topic from the input string.
+For more complex use cases, we recommend to check out the [PyTorch demo application](https://github.com/pytorch/ios-demo-app). The demo app contains two showcases. A camera app that runs a quantized model to predict the images coming from device’s rear-facing camera in real time. And a text-based app that uses a text classififcation model to predict the topic from the input string.
 
-## Build PyTorch iOS libraries from source
+## Build PyTorch iOS Libraries from Source
 
 To track the latest progress on mobile, we can always build the PyTorch iOS libraries from the source. Follow the steps below.
 
-### Setup local Python development environment
+### Setup Local Python Development Environment
 
 Follow the PyTorch Github page to set up the Python environment. Make sure you have `cmake` and Python installed correctly on your local machine.
 
-### Build LibTorch.a for iOS simulator
+### Build LibTorch for iOS Simulators
 
 Open terminal and navigate to the PyTorch root directory. Run the following command
 
 ```
 BUILD_PYTORCH_MOBILE=1 IOS_PLATFORM=SIMULATOR ./scripts/build_ios.sh
 ```
-After the build succeed, all static libraries and header files will be generated under `build_ios/install`
+After the build succeeds, all static libraries and header files will be generated under `build_ios/install`
 
-### Build LibTorch.a for arm64 devices
+### Build LibTorch for arm64 Devices
 
 Open terminal and navigate to the PyTorch root directory. Run the following command
 
@@ -170,7 +173,7 @@ BUILD_PYTORCH_MOBILE=1 IOS_ARCH=arm64 ./scripts/build_ios.sh
 ```
 After the build succeed, all static libraries and header files will be generated under `build_ios/install`
 
-### XCode setup
+### XCode Setup
 
 Open your project in XCode, copy all the static libraries as well as header files to your project. Navigate to the project settings, set the value **Header Search Paths** to the path of header files you just copied in the first step.
 
@@ -183,7 +186,7 @@ In the build settings, search for **other linker flags**.  Add a custom linker f
 
 ## API Docs
 
-Currently, the iOS framework uses raw Pytorch C++ APIs directly. The C++ document can be found here https://pytorch.org/cppdocs/. To learn how to use them, we recommend exploring the [C++ front-end tutorials](https://pytorch.org/tutorials/advanced/cpp_frontend.html) on PyTorch webpage. In the meantime, we're working on providing the Swift/Objective-C API wrappers to PyTorch.
+Currently, the iOS framework uses raw Pytorch C++ APIs directly. The C++ document can be found here https://pytorch.org/cppdocs/. To learn more about it, we recommend exploring the [C++ front-end tutorials](https://pytorch.org/tutorials/advanced/cpp_frontend.html) on PyTorch webpage. In the meantime, we're working on providing the Swift/Objective-C API wrappers to PyTorch.
 
 ## Issues and Contribution
 
