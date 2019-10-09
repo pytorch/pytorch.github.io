@@ -3,18 +3,18 @@ title: Mobile (Experimental)
 order: 3
 snippet: >
   ```python
-    ## Author your model in PyTorch
-
-    ## Optional Optimization
-    qmodel = quantization.convert(my_mobile_model)
-
-    ## Serialize and save your model
-    torch.jit.script(qmodel).save("my_mobile_model.pt")
+    ## Save your model
+    torch.jit.script(model).save("my_mobile_model.pt")
 
     ## iOS prebuilt binary
     pod ‘LibTorch’
     ## Android prebuilt binary
     implementation 'org.pytorch:pytorch_android:1.3.0'
+
+    ## Run your model (Android example)
+    Tensor input = Tensor.fromBlob(data, new long[]{1, data.length});
+    IValue output = module.forward(IValue.tensor(input));
+    float[] scores = output.getTensor().getDataAsFloatArray();
 
   ```
 
