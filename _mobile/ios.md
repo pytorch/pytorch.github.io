@@ -18,9 +18,9 @@ HelloWorld is a simple image classification application that demonstrates how to
 
 ### Model Preparation
 
-Let's start with model preparation. If you are familiar with PyTorch, you probably should already know how to train and save your model. In case you don't, we are going to use a pre-trained image classification model - Resnet18, which is already packaged in [TorchVision](https://pytorch.org/docs/stable/torchvision/index.html). To install it, run the command below.
+Let's start with model preparation. If you are familiar with PyTorch, you probably should already know how to train and save your model. In case you don't, we are going to use a pre-trained image classification model - [Resnet18](https://pytorch.org/hub/pytorch_vision_resnet/), which is already packaged in [TorchVision](https://pytorch.org/docs/stable/torchvision/index.html). To install it, run the command below.
 
-> Before running, we highly recommend following the [Pytorch Github page](https://github.com/pytorch/pytorch) to set up the Python development environment on your local machine. 
+> We highly recommend following the [Pytorch Github page](https://github.com/pytorch/pytorch) to set up the Python development environment on your local machine. 
 
 ```shell
 pip install torchvision
@@ -36,7 +36,7 @@ If everything works well, we should have our model - `model.pt` generated in the
 
 > To find out more details about TorchScript, please visit [tutorials on pytorch.org](https://pytorch.org/tutorials/advanced/cpp_export.html) 
 
-### Install PyTorch C++ libraries via Cocoapods
+### Install LibTorch via Cocoapods
 
 The PyTorch C++ library is available in [Cocoapods](https://cocoapods.org/), to integrate it to our project, simply run
 
@@ -46,7 +46,7 @@ pod install
 
 Now it's time to open the `HelloWorld.xcworkspace` in XCode, select an iOS simulator and launch it (cmd + R). If everything works well, we should see a wolf picture on the simulator screen along with the prediction result.
 
-![](https://github.com/pytorch/ios-demo-app/blob/master/HelloWorld/HelloWorld/HelloWorld/image.jpg?raw=true)
+<img src="https://github.com/pytorch/ios-demo-app/blob/master/HelloWorld/screenshot.png?raw=true", width="50%">
 
 ### Code Walkthrough
 
