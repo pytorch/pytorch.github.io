@@ -19,7 +19,7 @@ This is an early, experimental release that we will be building on in several ar
 - Build level optimization and selective compilation depending on the operators needed for user applications (i.e., you pay binary size for only the operators you need)
 - Further improvements to performance and coverage on mobile CPUs and GPUs
 
-Learn more or get started on [Android](http://pytorch.org/mobile/android) or [iOS](http://pytorch.org/mobile/ios).
+Learn more or get started on [Android]({{site.baseurl}}/mobile/android) or [iOS]({{site.baseurl}}/mobile/ios).
 
 <div class="text-center">
   <img src="{{ site.baseurl }}/assets/images/pytorch-mobile.png" width="100%">
