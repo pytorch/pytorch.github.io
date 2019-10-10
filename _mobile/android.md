@@ -17,7 +17,7 @@ This application runs TorchScript serialized TorchVision pretrained resnet18 mod
 
 #### 1. Model Preparation
 
-Let’s start with model preparation. If you are familiar with PyTorch, you probably should already know how to train and save your model. In case you don’t, we are going to use a pre-trained image classification model(Resnet18), which is packaged in [TorchVision](https://pytorch.org/docs/stable/torchvision/index.html).
+Let’s start with model preparation. If you are familiar with PyTorch, you probably should already know how to train and save your model. In case you don’t, we are going to use a pre-trained image classification model ([Resnet18](https://pytorch.org/hub/pytorch_vision_resnet/)), which is packaged in [TorchVision](https://pytorch.org/docs/stable/torchvision/index.html).
 To install it, run the command below:
 ```
 pip install torchvision
