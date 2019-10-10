@@ -81,7 +81,7 @@ _ = viz.visualize_image_attr_multiple(["original_image", "heat_map"],
   <img src="{{ site.url }}/assets/images/Captum 2.jpg" width="100%">
 </div>
 
-Learn more about Captum at captum.ai.
+Learn more about Captum at [captum.ai](https://www.captum.ai/).
 
 ## CrypTen
 
