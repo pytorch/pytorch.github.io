@@ -14,10 +14,10 @@ Running ML on edge devices is growing in importance as applications continue to 
 
 This is an early, experimental release that we will be building on in several areas over the coming months:
 
-- Extends the PyTorch API to cover common preprocessing and integration tasks needed for incorporating ML in mobile applications
-- Support for FBGEMM and QNNPACK quantized kernel libraries support for x86 and ARM CPUs respectively
-- (Coming soon) Build level optimization and selective compilation depending on the operators needed for user applications (i.e., you pay binary size for only the operators you need)
-- (Coming soon) Further improvements to performance and coverage on mobile CPUs and GPUs
+- Provide APIs that cover common preprocessing and integration tasks needed for incorporating ML in mobile applications
+- Support for QNNPACK quantized kernel libraries and support for ARM CPUs
+- Build level optimization and selective compilation depending on the operators needed for user applications (i.e., you pay binary size for only the operators you need)
+- Further improvements to performance and coverage on mobile CPUs and GPUs
 
 Learn more or get started on [Android](http://pytorch.org/mobile/android) or [iOS](http://pytorch.org/mobile/ios).
 
