@@ -8,6 +8,14 @@ var options = {
   page: displayCount
 };
 
+$(".next-news-item").on("click" , function(){
+  $(".pagination").find(".active").next().trigger( "click" );
+});
+
+$(".previous-news-item").on("click" , function(){
+  $(".pagination").find(".active").prev().trigger( "click" );
+});
+
 // Only the hub index page should have pagination
 
 if (pagination == "true") {
