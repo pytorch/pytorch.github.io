@@ -74,7 +74,12 @@ _ = viz.visualize_image_attr_multiple(["original_image", "heat_map"],
                                       show_colorbar=True)
 ```
 
-
+<div class="text-center">
+  <img src="{{ site.url }}/assets/images/Captum 1.jpg" width="100%">
+</div>
+<div class="text-center">
+  <img src="{{ site.url }}/assets/images/Captum 2.jpg" width="100%">
+</div>
 
 Learn more about Captum at captum.ai.
 
