@@ -22,7 +22,7 @@ This is an early, experimental release that we will be building on in several ar
 Learn more or get started on [Android](http://pytorch.org/mobile/android) or [iOS](http://pytorch.org/mobile/ios).
 
 <div class="text-center">
-  <img src="{{ site.baseurl }}/assets/images/pytorchmobile.png" width="100%">
+  <img src="{{ site.baseurl }}/assets/images/pytorch-mobile.png" width="100%">
 </div>
 
 <!-- Do not remove the below script -->
