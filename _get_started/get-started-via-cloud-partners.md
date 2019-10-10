@@ -50,10 +50,6 @@ published: true
   <div class="platform microsoft-azure">{{azure | markdownify }}</div>
 </div>
 
-<script type="text/javascript">
-  var pageId = "get-started-via-cloud-partners"; // TBD: Make this programmatic
-  $(".main-content-menu .nav-item").removeClass("nav-select");
-  $(".main-content-menu .nav-link[data-id='" + pageId + "']").parent(".nav-item").addClass("nav-select");
-</script>
+<script page-id="get-started-via-cloud-partners" src="{{ site.baseurl }}/assets/menu-tab-selection.js"></script>
 <script src="{{ site.baseurl }}/assets/quick-start-module.js"></script>
 <script src="{{ site.baseurl }}/assets/show-screencast.js"></script>
