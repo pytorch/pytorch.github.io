@@ -13,8 +13,8 @@ published: true
 As of PyTorch 1.3, PyTorch supports an end-to-end workflow from Python to deployment on iOS and Android. 
 This is an early, experimental release that we will be building on in several areas over the coming months.
 
-Get started on [Android](https://pytorch.org/mobile/android)
+Get started on [Android]({{ site.baseurl }}/mobile/android)
 
-Get started on [iOS](https://pytorch.org/mobile/ios)
+Get started on [iOS]({{ site.baseurl }}/mobile/ios)
 
 <script page-id="mobile" src="{{ site.baseurl }}/assets/menu-tab-selection.js"></script>
