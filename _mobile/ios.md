@@ -78,7 +78,7 @@ for i in 0 ..< w * h {
 }
 ```
 
-The code might look weird at first glance, but it’ll make sense once we understand our model. The input data is a 3-channel RGB image of shape (3 x H x W), where H and W are expected to be at least 224. The image has to be loaded in to a range of [0, 1] and then normalized using mean = [0.485, 0.456, 0.406] and std = [0.229, 0.224, 0.225].
+The code might look weird at first glance, but it’ll make sense once we understand our model. The input data is a 3-channel RGB image of shape (3 x H x W), where H and W are expected to be at least 224. The image has to be loaded in to a range of `[0, 1]` and then normalized using `mean = [0.485, 0.456, 0.406]` and `std = [0.229, 0.224, 0.225]`.
 
 ####  TorchScript Module
 
@@ -119,7 +119,7 @@ at::AutoNonVariableTypeMode non_var_type_mode(true);
 auto outputTensor = _impl.forward({tensor}).toTensor();
 float* floatBuffer = outputTensor.data_ptr<float>();
 ```
-The C++ function `torch::from_blob` will create an input tensor from the pixel buffer. Note that the shape of the tensor is `{1,3,224,224}` which represents `NxCxWxH` as we discussed in above section. 
+The C++ function `torch::from_blob` will create an input tensor from the pixel buffer. Note that the shape of the tensor is `{1,3,224,224}` which represents `NxCxWxH` as we discussed in the above section. 
 
 ```cpp
 torch::autograd::AutoGradMode guard(false);
@@ -149,11 +149,17 @@ For more complex use cases, we recommend to check out the [PyTorch demo applicat
 
 ## Build PyTorch iOS Libraries from Source
 
-To track the latest progress on mobile, we can always build the PyTorch iOS libraries from the source. Follow the steps below.
+To track the latest updates for iOS, you can build the PyTorch iOS libraries from the source code.
 
-### Setup Local Python Development Environment
+```
+git clone --recursive https://github.com/pytorch/pytorch
+cd pytorch
+# if you are updating an existing checkout
+git submodule sync
+git submodule update --init --recursive
+```
 
-Follow the PyTorch Github page to set up the Python environment. Make sure you have `cmake` and Python installed correctly on your local machine.
+> Make sure you have `cmake` and Python installed correctly on your local machine. We recommend following the [Pytorch Github page](https://github.com/pytorch/pytorch) to set up the Python development environment
 
 ### Build LibTorch for iOS Simulators
 
@@ -171,22 +177,22 @@ Open terminal and navigate to the PyTorch root directory. Run the following comm
 ```
 BUILD_PYTORCH_MOBILE=1 IOS_ARCH=arm64 ./scripts/build_ios.sh
 ```
-After the build succeed, all static libraries and header files will be generated under `build_ios/install`
+After the build succeeds, all static libraries and header files will be generated under `build_ios/install`
 
 ### XCode Setup
 
-Open your project in XCode, copy all the static libraries as well as header files to your project. Navigate to the project settings, set the value **Header Search Paths** to the path of header files you just copied in the first step.
+Open your project in XCode, copy all the static libraries as well as header files to your project. Navigate to the project settings, set the value **Header Search Paths** to the path of header files you just copied.
 
 In the build settings, search for **other linker flags**.  Add a custom linker flag below 
 
 ```
--force_load $(PROJECT_DIR)/path-to-libtorch.a
+-force_load $(PROJECT_DIR)/${path-to-libtorch.a}
 ```
  Finally, disable bitcode for your target by selecting the Build Settings, searching for **Enable Bitcode**, and set the value to **No**.
 
 ## API Docs
 
-Currently, the iOS framework uses raw Pytorch C++ APIs directly. The C++ document can be found here https://pytorch.org/cppdocs/. To learn more about it, we recommend exploring the [C++ front-end tutorials](https://pytorch.org/tutorials/advanced/cpp_frontend.html) on PyTorch webpage. In the meantime, we're working on providing the Swift/Objective-C API wrappers to PyTorch.
+Currently, the iOS framework uses the Pytorch C++ front-end APIs directly. The C++ document can be found here https://pytorch.org/cppdocs/. To learn more about it, we recommend exploring the [C++ front-end tutorials](https://pytorch.org/tutorials/advanced/cpp_frontend.html) on PyTorch webpage. In the meantime, we're working on providing the Swift/Objective-C API wrappers to PyTorch.
 
 ## Issues and Contribution
 
