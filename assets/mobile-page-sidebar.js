@@ -9,7 +9,6 @@ $(".mobile-page-sidebar li").on("click", function() {
   addActiveClass(this);
 });
 
-
 function removeActiveClass() {
   $(".mobile-page-sidebar li a").each(function() {
     $(this).removeClass("active");
@@ -20,4 +19,8 @@ function addActiveClass(element) {
   $(element)
     .find("a")
     .addClass("active");
+}
+
+if ($("#mobile-page-sidebar-list").text() == "") {
+  $("#shortcuts-menu").hide();
 }
