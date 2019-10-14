@@ -496,31 +496,31 @@ function commandMessage(key) {
       "# Preview Build With Python 2.7 On Windows Not Supported.",
 
     "preview,conda,windows,cuda9.2,python3.5":
-      "conda install pytorch torchvision cudatoolkit=9.2 -c pytorch-nightly -c defaults -c numba/label/dev",
+      "conda install pytorch torchvision cudatoolkit=9.2 -c pytorch-nightly -c defaults -c conda-forge -c numba/label/dev",
 
     "preview,conda,windows,cuda10.1,python3.5":
-      "conda install pytorch torchvision cudatoolkit=10.1 -c pytorch-nightly",
+      "conda install pytorch torchvision cudatoolkit=10.1 -c pytorch-nightly -c defaults -c conda-forge",
 
     "preview,conda,windows,cudanone,python3.5":
-      "conda install pytorch torchvision cpuonly -c pytorch-nightly",
+      "conda install pytorch torchvision cpuonly -c pytorch-nightly -c defaults -c conda-forge",
 
     "preview,conda,windows,cuda9.2,python3.6":
-      "conda install pytorch torchvision cudatoolkit=9.2 -c pytorch-nightly -c defaults -c numba/label/dev",
+      "conda install pytorch torchvision cudatoolkit=9.2 -c pytorch-nightly -c defaults -c conda-forge -c numba/label/dev",
 
     "preview,conda,windows,cuda10.1,python3.6":
-      "conda install pytorch torchvision cudatoolkit=10.1 -c pytorch-nightly",
+      "conda install pytorch torchvision cudatoolkit=10.1 -c pytorch-nightly -c defaults -c conda-forge",
 
     "preview,conda,windows,cudanone,python3.6":
-      "conda install pytorch torchvision cpuonly -c pytorch-nightly",
+      "conda install pytorch torchvision cpuonly -c pytorch-nightly -c defaults -c conda-forge",
 
     "preview,conda,windows,cuda9.2,python3.7":
-      "conda install pytorch torchvision cudatoolkit=9.2 -c pytorch-nightly -c defaults -c numba/label/dev",
+      "conda install pytorch torchvision cudatoolkit=9.2 -c pytorch-nightly -c defaults -c defaults -c numba/label/dev",
 
     "preview,conda,windows,cuda10.1,python3.7":
-      "conda install pytorch torchvision cudatoolkit=10.1 -c pytorch-nightly",
+      "conda install pytorch torchvision cudatoolkit=10.1 -c pytorch-nightly -c defaults -c defaults",
 
     "preview,conda,windows,cudanone,python3.7":
-      "conda install pytorch torchvision cpuonly -c pytorch-nightly",
+      "conda install pytorch torchvision cpuonly -c pytorch-nightly -c defaults -c defaults",
 
     "preview,pip,macos,cuda9.2,python2.7":
       "pip install numpy<br />pip install --pre torch torchvision -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html<br /># On MacOS, we provide CPU-only packages, CUDA functionality is not provided",
