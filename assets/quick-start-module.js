@@ -257,31 +257,31 @@ function commandMessage(key) {
       "# PyTorch does not support Python 2.7 on Windows. Please install with Python 3.",
 
     "stable,conda,windows,cuda9.2,python3.5":
-      "conda install pytorch torchvision cudatoolkit=9.2 -c pytorch -c defaults -c numba/label/dev -c conda-forge",
+      "conda install pytorch torchvision cudatoolkit=9.2 -c pytorch -c defaults -c numba/label/dev ",
 
     "stable,conda,windows,cuda10.1,python3.5":
-      "conda install pytorch torchvision cudatoolkit=10.1 -c pytorch -c conda-forge",
+      "conda install pytorch torchvision cudatoolkit=10.1 -c pytorch",
 
     "stable,conda,windows,cudanone,python3.5":
-      "conda install pytorch torchvision cpuonly -c pytorch -c conda-forge",
+      "conda install pytorch torchvision cpuonly -c pytorch",
 
     "stable,conda,windows,cuda9.2,python3.6":
-      "conda install pytorch torchvision cudatoolkit=9.2 -c pytorch -c defaults -c numba/label/dev -c conda-forge",
+      "conda install pytorch torchvision cudatoolkit=9.2 -c pytorch -c defaults -c numba/label/dev",
 
     "stable,conda,windows,cuda10.1,python3.6":
-      "conda install pytorch torchvision cudatoolkit=10.1 -c pytorch -c conda-forge",
+      "conda install pytorch torchvision cudatoolkit=10.1 -c pytorch",
 
     "stable,conda,windows,cudanone,python3.6":
-      "conda install pytorch torchvision cpuonly -c pytorch -c conda-forge",
+      "conda install pytorch torchvision cpuonly -c pytorch",
 
     "stable,conda,windows,cuda9.2,python3.7":
-      "conda install pytorch torchvision cudatoolkit=9.2 -c pytorch -c defaults -c numba/label/dev -c conda-forge",
+      "conda install pytorch torchvision cudatoolkit=9.2 -c pytorch -c defaults -c numba/label/dev",
 
     "stable,conda,windows,cuda10.1,python3.7":
-      "conda install pytorch torchvision cudatoolkit=10.1 -c pytorch -c conda-forge",
+      "conda install pytorch torchvision cudatoolkit=10.1 -c pytorch",
 
     "stable,conda,windows,cudanone,python3.7":
-      "conda install pytorch torchvision cpuonly -c pytorch -c conda-forge",
+      "conda install pytorch torchvision cpuonly -c pytorch",
 
     "stable,pip,macos,cuda9.2,python2.7":
       "pip install torch torchvision<br /># MacOS Binaries dont support CUDA, install from source if CUDA is needed",
