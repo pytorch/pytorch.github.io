@@ -14,6 +14,7 @@ snippet: >
   ```
 
 summary-home: PyTorch is well supported on major cloud platforms, providing frictionless development and easy scaling.
+featured-home: true
 
 ---
 
