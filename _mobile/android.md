@@ -44,13 +44,13 @@ More details about TorchScript you can find in [tutorials on pytorch.org](https:
 git clone https://github.com/pytorch/android-demo-app.git
 cd HelloWorldApp
 ```
-If [Android SDK]() and [Android NDK]() are already installed you can install this application to the connected android device or emulator with:
+If [Android SDK](https://developer.android.com/studio/index.html#command-tools) and [Android NDK](https://developer.android.com/ndk/downloads) are already installed you can install this application to the connected android device or emulator with:
 ```
 ./gradlew installDebug
 ```
 
-We recommend you to open this project in [Android Studio](https://developer.android.com/studio),
-in that case you will be able to install Android NDK and Android SDK using Android Studio UI.
+We recommend you to open this project in [Android Studio 3.5.1+](https://developer.android.com/studio). At the moment PyTorch Android and demo applications use [android gradle plugin of version 3.5.0](https://developer.android.com/studio/releases/gradle-plugin#3-5-0), which is supported only by Android Studio version 3.5.1 and higher.
+Using Android Studio you will be able to install Android NDK and Android SDK with Android Studio UI.
 
 #### 3. Gradle dependencies
 
