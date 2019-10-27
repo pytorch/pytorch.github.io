@@ -15,6 +15,196 @@ We'd prefer you install the [latest version](https://pytorch.org/get-started/loc
 but old binaries and installation instructions are provided below for
 your convenience.
 
+## Commands for Versions >= 1.0.0
+
+### v1.2.0
+
+#### Conda
+
+##### OSX
+
+```
+# conda
+conda install pytorch==1.2.0 torchvision==0.4.0 -c pytorch
+```
+
+#####  Linux and Windows
+
+```
+# CUDA 9.2
+conda install pytorch==1.2.0 torchvision==0.4.0 cudatoolkit==9.2 -c pytorch
+
+# CUDA 10.0
+conda install pytorch==1.2.0 torchvision==0.4.0 cudatoolkit==10.0 -c pytorch
+
+# CPU Only
+conda install pytorch==1.2.0 torchvision==0.4.0 cpuonly -c pytorch
+```
+
+#### Wheel
+
+##### OSX
+
+```
+pip install torch==1.2.0 torchvision==0.4.0
+```
+
+##### Linux and Windows
+
+```
+# CUDA 10.0
+pip install torch==1.2.0 torchvision==0.4.0 -f https://download.pytorch.org/whl/torch_stable.html
+
+# CUDA 9.2
+pip install torch==1.2.0+cu92 torchvision==0.4.0+cu92 -f https://download.pytorch.org/whl/torch_stable.html
+
+# CPU only
+pip install torch==1.2.0+cpu torchvision==0.4.0+cpu -f https://download.pytorch.org/whl/torch_stable.html
+```
+
+### v1.1.0
+
+#### Conda
+
+##### OSX
+
+```
+# conda
+conda install pytorch==1.1.0 torchvision==0.3.0 -c pytorch
+```
+
+#####  Linux and Windows
+
+```
+# CUDA 9.0
+conda install pytorch==1.1.0 torchvision==0.3.0 cudatoolkit==9.0 -c pytorch
+
+# CUDA 10.0
+conda install pytorch==1.1.0 torchvision==0.3.0 cudatoolkit==10.0 -c pytorch
+
+# CPU Only
+conda install pytorch-cpu==1.1.0 torchvision-cpu==0.3.0 cpuonly -c pytorch
+```
+
+#### Wheel
+
+##### OSX
+
+```
+pip install torch==1.1.0 torchvision==0.3.0
+```
+
+##### Linux and Windows
+
+```
+# CUDA 10.0
+Download and install wheel from https://download.pytorch.org/whl/cu100/torch_stable.html
+
+# CUDA 9.0
+Download and install wheel from https://download.pytorch.org/whl/cu90/torch_stable.html
+
+# CPU only
+Download and install wheel from https://download.pytorch.org/whl/cpu/torch_stable.html
+```
+
+### v1.0.1
+
+#### Conda
+
+##### OSX
+
+```
+# conda
+conda install pytorch==1.0.1 torchvision==0.2.2 -c pytorch
+```
+
+#####  Linux and Windows
+
+```
+# CUDA 9.0
+conda install pytorch==1.0.1 torchvision==0.2.2 cudatoolkit==9.0 -c pytorch
+
+# CUDA 10.0
+conda install pytorch==1.0.1 torchvision==0.2.2 cudatoolkit==10.0 -c pytorch
+
+# CPU Only
+conda install pytorch-cpu==1.0.1 torchvision-cpu==0.2.2 cpuonly -c pytorch
+```
+
+#### Wheel
+
+##### OSX
+
+```
+pip install torch==1.0.1 torchvision==0.2.2
+```
+
+##### Linux and Windows
+
+```
+# CUDA 10.0
+Download and install wheel from https://download.pytorch.org/whl/cu100/torch_stable.html
+
+# CUDA 9.0
+Download and install wheel from https://download.pytorch.org/whl/cu90/torch_stable.html
+
+# CPU only
+Download and install wheel from https://download.pytorch.org/whl/cpu/torch_stable.html
+```
+
+### v1.0.0
+
+#### Conda
+
+##### OSX
+
+```
+# conda
+conda install pytorch==1.0.0 torchvision==0.2.1 -c pytorch
+```
+
+#####  Linux and Windows
+
+```
+# CUDA 10.0
+conda install pytorch==1.0.0 torchvision==0.2.1 cuda100 -c pytorch
+
+# CUDA 9.0
+conda install pytorch==1.0.0 torchvision==0.2.1 cuda90 -c pytorch
+
+# CUDA 8.0
+conda install pytorch==1.0.0 torchvision==0.2.1 cuda80 -c pytorch
+
+# CPU Only
+conda install pytorch-cpu==1.0.0 torchvision-cpu==0.2.1 cpuonly -c pytorch
+```
+
+#### Wheel
+
+##### OSX
+
+```
+pip install torch==1.0.0 torchvision==0.2.1
+```
+
+##### Linux and Windows
+
+```
+# CUDA 10.0
+Download and install wheel from https://download.pytorch.org/whl/cu100/torch_stable.html
+
+# CUDA 9.0
+Download and install wheel from https://download.pytorch.org/whl/cu90/torch_stable.html
+
+# CUDA 8.0
+Download and install wheel from https://download.pytorch.org/whl/cu80/torch_stable.html
+
+# CPU only
+Download and install wheel from https://download.pytorch.org/whl/cpu/torch_stable.html
+```
+
+## Commands for Versions < 1.0.0
+
 ### Via conda
 
 > This should be used for most previous macOS version installs.
