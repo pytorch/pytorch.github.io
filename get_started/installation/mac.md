@@ -26,18 +26,10 @@ To install Anaconda, you can [download graphical installer](https://www.anaconda
 
 ```bash
 # The version of Anaconda may be different depending on when you are installing`
-curl -O https://repo.anaconda.com/archive/Anaconda3-5.2.0-MacOSX-x86_64.sh
-sh Anaconda3-5.2.0-MacOSX-x86_64.sh
+curl -O https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-x86_64.sh
+sh Miniconda3-latest-MacOSX-x86_64.sh
 # and follow the prompts. The defaults are generally good.`
 ```
-
-<div>
-  <a href="javascript:void(0);" class="btn btn-lg btn-orange btn-demo show-screencast">Show Demo</a>
-  <div class="screencast">
-    <script src="https://asciinema.org/a/PS2oOMynjw5YR96WcgVLJDXqf.js" id="asciicast-PS2oOMynjw5YR96WcgVLJDXqf" data-speed="4" async></script>
-    <a href="javascript:void(0);" class="btn btn-lg btn-orange btn-demo show-info">Hide Demo</a>
-  </div>
-</div>
 
 #### pip
 
@@ -55,20 +47,6 @@ If you are using the default installed Python 2.7, you will need to install `pip
 sudo easy_install pip
 ```
 
-#### numpy
-
-If you are installing via `pip`, you will need to install `numpy` before installing PyTorch.
-
-```bash
-# Python 3.x
-pip3 install numpy
-```
-
-```bash
-# Python 2.x`
-pip install numpy
-```
-
 ## Installation
 {: #mac-installation}
 
@@ -79,14 +57,6 @@ To install PyTorch via Anaconda, use the following conda command:
 ```bash
 conda install pytorch torchvision -c pytorch
 ```
-
-<div>
-  <a href="javascript:void(0);" class="btn btn-lg btn-orange btn-demo show-screencast">Show Demo</a>
-  <div class="screencast">
-    <script src="https://asciinema.org/a/iLaHS145GyJtwyJ3MswYaSOSC.js" id="asciicast-iLaHS145GyJtwyJ3MswYaSOSC" data-speed="2" async></script>
-    <a href="javascript:void(0);" class="btn btn-lg btn-orange btn-demo show-info">Hide Demo</a>
-  </div>
-</div>
 
 ### pip
 
@@ -124,21 +94,6 @@ tensor([[0.3380, 0.3845, 0.3217],
         [0.4675, 0.3947, 0.1426]])
 ```
 
-Additionally, to check if your GPU driver and CUDA is enabled and accessible by PyTorch, run the following commands to return whether or not the CUDA driver is enabled:
-
-```python
-import torch
-torch.cuda.is_available()
-```
-
-<div>
-  <a href="javascript:void(0);" class="btn btn-lg btn-orange btn-demo show-screencast">Show Demo</a>
-  <div class="screencast">
-    <script src="https://asciinema.org/a/byF9rotzbaW0jzFnwWfAeW4ak.js" id="asciicast-byF9rotzbaW0jzFnwWfAeW4ak" data-speed="2" async></script>
-    <a href="javascript:void(0);" class="btn btn-lg btn-orange btn-demo show-info">Hide Demo</a>
-  </div>
-</div>
-
 ## Building from source
 {: #mac-from-source}
 
@@ -150,19 +105,6 @@ For the majority of PyTorch users, installing from a pre-built binary via a pack
 
 1. Install [Anaconda](#anaconda)
 2. Install [CUDA](https://developer.nvidia.com/cuda-downloads), if your machine has a [CUDA-enabled GPU](https://developer.nvidia.com/cuda-gpus).
-3. Install optional dependencies:
-
-```bash
-export CMAKE_PREFIX_PATH=[anaconda root directory]
-conda install numpy pyyaml mkl mkl-include setuptools cmake cffi typing
-```
-
-### Build
-
-```bash
-git clone --recursive https://github.com/pytorch/pytorch
-cd pytorch
-MACOSX_DEPLOYMENT_TARGET=10.9 CC=clang CXX=clang++ python setup.py install
-```
+3. Follow the steps described here: https://github.com/pytorch/pytorch#from-source
 
 You can verify the installation as described [above](#mac-verification).

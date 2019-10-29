@@ -53,20 +53,12 @@ To install Anaconda, you will use the [command-line installer](https://www.anaco
 
 ```bash
 # The version of Anaconda may be different depending on when you are installing`
-curl -O https://repo.anaconda.com/archive/Anaconda3-5.2.0-Linux-x86_64.sh
-sh Anaconda3-5.2.0-Linux-x86_64.sh
+curl -O https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
+sh Miniconda3-latest-Linux-x86_64.sh
 # and follow the prompts. The defaults are generally good.`
 ```
 
 > You may have to open a new terminal or re-source your `~/.bashrc `to get access to the `conda` command.
-
-<div>
-  <a href="javascript:void(0);" class="btn btn-lg btn-orange btn-demo show-screencast">Show Demo</a>
-  <div class="screencast">
-    <script src="https://asciinema.org/a/SRbIn2nFnsUiYtlIcUsDVXN4n.js" id="asciicast-SRbIn2nFnsUiYtlIcUsDVXN4n" data-speed="3" async></script>
-    <a href="javascript:void(0);" class="btn btn-lg btn-orange btn-demo show-info">Hide Demo</a>
-  </div>
-</div>
 
 #### pip
 
@@ -88,20 +80,6 @@ If you are using Python 2.7, you will need to use this command
 sudo apt install python-pip
 ```
 
-#### numpy
-
-If you are installing via `pip`, you will need to install `numpy` before installing PyTorch.
-
-```bash
-# Python 3.x
-pip3 install numpy
-```
-
-```bash
-# Python 2.x`
-pip install numpy
-```
-
 ## Installation
 {: #linux-installation}
 
@@ -109,153 +87,26 @@ pip install numpy
 
 #### No CUDA
 
-To install PyTorch via Anaconda, and do not have a [CUDA-capable](https://developer.nvidia.com/cuda-zone) system or do not require CUDA, use the following `conda` command.
+To install PyTorch via Anaconda, and do not have a [CUDA-capable](https://developer.nvidia.com/cuda-zone) system or do not require CUDA, in the above selector, choose OS: Linux, Package: Conda and CUDA: None.
+Then, run the command that is presented to you.
 
-```bash
-conda install pytorch-cpu torchvision-cpu -c pytorch
-```
+#### With CUDA
 
-<div>
-  <a href="javascript:void(0);" class="btn btn-lg btn-orange btn-demo show-screencast">Show Demo</a>
-  <div class="screencast">
-    <script src="https://asciinema.org/a/wtojk0bqpUDIb3yIHUsZqD9Ha.js" id="asciicast-wtojk0bqpUDIb3yIHUsZqD9Ha" data-speed="3" async></script>
-    <a href="javascript:void(0);" class="btn btn-lg btn-orange btn-demo show-info">Hide Demo</a>
-  </div>
-</div>
+To install PyTorch via Anaconda, and you do have a [CUDA-capable](https://developer.nvidia.com/cuda-zone) system, in the above selector, choose OS: Linux, Package: Conda and the CUDA version suited to your machine. Often, the latest CUDA version is better.
+Then, run the command that is presented to you.
 
-#### CUDA 9.0
-
-To install PyTorch via Anaconda, and you are using CUDA 9.0, use the following `conda` command:
-
-```bash
-conda install pytorch torchvision cudatoolkit=9.0 -c pytorch
-```
-
-<div>
-  <a href="javascript:void(0);" class="btn btn-lg btn-orange btn-demo show-screencast">Show Demo</a>
-  <div class="screencast">
-    <script src="https://asciinema.org/a/HaCIxmYVEd8xGRAKsDu9hv9up.js" id="asciicast-HaCIxmYVEd8xGRAKsDu9hv9up" data-speed="5" async></script>
-    <a href="javascript:void(0);" class="btn btn-lg btn-orange btn-demo show-info ">Hide Demo</a>
-  </div>
-</div>
-
-#### CUDA 8.x
-
-```bash
-conda install pytorch torchvision cudatoolkit=8.0 -c pytorch
-```
-
-#### CUDA 10.0
-
-```bash
-conda install pytorch torchvision cudatoolkit=10.0 -c pytorch
-```
 
 ### pip
 
 #### No CUDA
 
-To install PyTorch via pip, and do not have a [CUDA-capable](https://developer.nvidia.com/cuda-zone) system or do not require CUDA, use the following command, depending on your Python version:
+To install PyTorch via pip, and do not have a [CUDA-capable](https://developer.nvidia.com/cuda-zone) system or do not require CUDA, in the above selector, choose OS: Linux, Package: Pip and CUDA: None.
+Then, run the command that is presented to you.
 
-```bash
-# Python 2.7
-pip install https://download.pytorch.org/whl/cpu/torch-1.0.1.post2-cp27-cp27mu-linux_x86_64.whl
-pip install torchvision
+#### With CUDA
 
-# if the above command does not work, then you have python 2.7 UCS2, use this command
-pip install https://download.pytorch.org/whl/cpu/torch-1.0.1.post2-cp27-cp27m-linux_x86_64.whl
-```
-
-```bash
-# Python 3.5
-pip3 install https://download.pytorch.org/whl/cpu/torch-1.0.1.post2-cp35-cp35m-linux_x86_64.whl
-pip3 install torchvision
-```
-
-```bash
-# Python 3.6
-pip3 install https://download.pytorch.org/whl/cpu/torch-1.0.1.post2-cp36-cp36m-linux_x86_64.whl
-pip3 install torchvision
-```
-
-```bash
-# Python 3.7
-pip3 install https://download.pytorch.org/whl/cpu/torch-1.0.1.post2-cp37-cp37m-linux_x86_64.whl
-pip3 install torchvision
-```
-
-
-#### CUDA 9.0
-
-To install PyTorch via pip, and you are using CUDA 9.0 or do not require CUDA, use the following command, depending on your Python version:
-
-```bash
-# Python 3.x
-pip3 install torch torchvision
-```
-
-```bash
-# Python 2.7`
-pip install torch torchvision
-```
-
-#### CUDA 8.x
-
-```bash
-# Python 2.7
-pip install https://download.pytorch.org/whl/cu80/torch-1.0.1.post2-cp27-cp27mu-linux_x86_64.whl
-pip install torchvision
-
-# if the above command does not work, then you have python 2.7 UCS2, use this command
-pip install https://download.pytorch.org/whl/cu80/torch-1.0.1.post2-cp27-cp27m-linux_x86_64.whl
-```
-
-```bash
-# Python 3.5
-pip3 install https://download.pytorch.org/whl/cu80/torch-1.0.1.post2-cp35-cp35m-linux_x86_64.whl
-pip3 install torchvision
-```
-
-```bash
-# Python 3.6
-pip3 install https://download.pytorch.org/whl/cu80/torch-1.0.1.post2-cp36-cp36m-linux_x86_64.whl
-pip3 install torchvision
-```
-
-```bash
-# Python 3.7
-pip3 install https://download.pytorch.org/whl/cu80/torch-1.0.1.post2-cp37-cp37m-linux_x86_64.whl
-pip3 install torchvision
-```
-
-#### CUDA 10.0
-
-```bash
-# Python 2.7
-pip install https://download.pytorch.org/whl/cu100/torch-1.0.1.post2-cp27-cp27mu-linux_x86_64.whl
-pip install torchvision
-
-# if the above command does not work, then you have python 2.7 UCS2, use this command
-pip install https://download.pytorch.org/whl/cu80/torch-1.0.1.post2-cp27-cp27m-linux_x86_64.whl
-```
-
-```bash
-# Python 3.5
-pip3 install https://download.pytorch.org/whl/cu100/torch-1.0.1.post2-cp35-cp35m-linux_x86_64.whl
-pip3 install torchvision
-```
-
-```bash
-# Python 3.6
-pip3 install https://download.pytorch.org/whl/cu100/torch-1.0.1.post2-cp36-cp36m-linux_x86_64.whl
-pip3 install torchvision
-```
-
-```bash
-# Python 3.7
-pip3 install https://download.pytorch.org/whl/cu100/torch-1.0.1.post2-cp37-cp37m-linux_x86_64.whl
-pip3 install torchvision
-```
+To install PyTorch via pip, and do have a [CUDA-capable](https://developer.nvidia.com/cuda-zone) system, in the above selector, choose OS: Linux, Package: Pip and the CUDA version suited to your machine. Often, the latest CUDA version is better.
+Then, run the command that is presented to you.
 
 ## Verification
 {: #linux-verification}
@@ -287,14 +138,6 @@ import torch
 torch.cuda.is_available()
 ```
 
-<div>
-  <a href="javascript:void(0);" class="btn btn-lg btn-orange btn-demo show-screencast">Show Demo</a>
-  <div class="screencast">
-    <script src="https://asciinema.org/a/15dyZZvvakqbfKgfh2LByMkXz.js" id="asciicast-15dyZZvvakqbfKgfh2LByMkXz" data-speed="2" async></script>
-    <a href="javascript:void(0);" class="btn btn-lg btn-orange btn-demo show-info">Hide Demo</a>
-  </div>
-</div>
-
 ## Building from source
 {: #linux-from-source}
 
@@ -306,24 +149,6 @@ For the majority of PyTorch users, installing from a pre-built binary via a pack
 
 1. Install Anaconda[#anaconda]
 2. Install [CUDA](https://developer.nvidia.com/cuda-downloads), if your machine has a [CUDA-enabled GPU](https://developer.nvidia.com/cuda-gpus).
-3. Install optional dependencies:
-
-```bash
-export CMAKE_PREFIX_PATH="$(dirname $(which conda))/../" # [anaconda root directory]
-
-# Install basic dependencies
-conda install numpy pyyaml mkl mkl-include setuptools cmake cffi typing
-
-# Add LAPACK support for the GPU
-conda install -c pytorch magma-cuda80 # or magma-cuda90 if CUDA 9
-```
-
-### Build
-
-```bash
-git clone --recursive https://github.com/pytorch/pytorch
-cd pytorch
-python setup.py install
-```
+3. Follow the steps described here: https://github.com/pytorch/pytorch#from-source
 
 You can verify the installation as described [above](#linux-verification).

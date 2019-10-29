@@ -47,15 +47,6 @@ To install Anaconda, you will use the [64-bit graphical installer](https://www.a
 
 If you installed Python by any of the recommended ways above[LINK], `[pip](https://pypi.org/project/pip/)` will have already been installed for you.
 
-#### numpy
-
-If you are installing via `pip`, you will need to install `numpy` before installing PyTorch.
-
-```bash
-# Python 3.x
-pip3 install numpy
-```
-
 ## Installation
 {: #windows-installation}
 
@@ -65,139 +56,27 @@ To install PyTorch with Anaconda, you will need to open an Anaconda prompt via `
 
 #### No CUDA
 
-To install PyTorch via Anaconda, and do not have a CUDA-capable[LINK] system or do not require CUDA, use the following `conda` command.
+To install PyTorch via Anaconda, and do not have a [CUDA-capable](https://developer.nvidia.com/cuda-zone) system or do not require CUDA, in the above selector, choose OS: Windows, Package: Conda and CUDA: None.
+Then, run the command that is presented to you.
 
-```bash
-conda install pytorch-cpu torchvision-cpu -c pytorch
-```
+#### With CUDA
 
-#### CUDA 9.0
+To install PyTorch via Anaconda, and you do have a [CUDA-capable](https://developer.nvidia.com/cuda-zone) system, in the above selector, choose OS: Windows, Package: Conda and the CUDA version suited to your machine. Often, the latest CUDA version is better.
+Then, run the command that is presented to you.
 
-To install PyTorch via Anaconda, and you are using CUDA 9.0, use the following `conda` command:
-
-```bash
-conda install pytorch torchvision cudatoolkit=9.0 -c pytorch
-```
-
-#### CUDA 8.x
-
-```bash
-conda install pytorch torchvision cudatoolkit=8.0 -c pytorch
-```
-
-#### CUDA 10.0
-
-```bash
-conda install pytorch torchvision cudatoolkit=10.0 -c pytorch
-```
 
 ### pip
 
 #### No CUDA
 
-To install PyTorch via pip, and do not have a [CUDA-capable](https://developer.nvidia.com/cuda-zone) system or do not require CUDA, use the following command, depending on your Python version:
+To install PyTorch via pip, and do not have a [CUDA-capable](https://developer.nvidia.com/cuda-zone) system or do not require CUDA, in the above selector, choose OS: Windows, Package: Pip and CUDA: None.
+Then, run the command that is presented to you.
 
-```bash
-# Python 2.7
-pip install https://download.pytorch.org/whl/cpu/torch-1.0.1-cp27-cp27mu-linux_x86_64.whl
-pip install torchvision
+#### With CUDA
 
-# if the above command does not work, then you have python 2.7 UCS2, use this command
-pip install https://download.pytorch.org/whl/cpu/torch-1.0.1-cp27-cp27m-linux_x86_64.whl
-```
+To install PyTorch via pip, and do have a [CUDA-capable](https://developer.nvidia.com/cuda-zone) system, in the above selector, choose OS: Windows, Package: Pip and the CUDA version suited to your machine. Often, the latest CUDA version is better.
+Then, run the command that is presented to you.
 
-```bash
-# Python 3.5
-pip3 install https://download.pytorch.org/whl/cpu/torch-1.0.1-cp35-cp35m-win_amd64.whl
-pip3 install torchvision
-```
-
-```bash
-# Python 3.6
-pip3 install https://download.pytorch.org/whl/cpu/torch-1.0.1-cp36-cp36m-win_amd64.whl
-pip3 install torchvision
-```
-
-```bash
-# Python 3.7
-pip3 install https://download.pytorch.org/whl/cpu/torch-1.0.1-cp37-cp37m-win_amd64.whl
-pip3 install torchvision
-```
-
-
-_CUDA 9.0_
-
-To install PyTorch via pip, and you are using CUDA 9.0, use the following command, depending on your Python version:
-
-
-```
-# Python 3.5
-pip3 install https://download.pytorch.org/whl/cu90/torch-1.0.1-cp35-cp35m-win_amd64.whl
-pip3 install torchvision
-```
-
-```
-# Python 3.6
-pip3 install https://download.pytorch.org/whl/cu90/torch-1.0.1-cp36-cp36m-win_amd64.whl
-pip3 install torchvision
-```
-
-```
-# Python 3.7
-pip3 install https://download.pytorch.org/whl/cu90/torch-1.0.1-cp37-cp37m-win_amd64.whl
-pip3 install torchvision
-```
-
-```
-`# Python 3.x`
-`pip3 install torch torchvision`
-```
-
-```
-`# Python 2.7`
-`pip install torch torchvision `
-```
-
-_CUDA 8.x_
-
-```
-# Python 3.5
-pip3 install https://download.pytorch.org/whl/cu80/torch-1.0.1-cp35-cp35m-win_amd64.whl
-pip3 install torchvision
-```
-
-```
-# Python 3.6
-pip3 install https://download.pytorch.org/whl/cu80/torch-1.0.1-cp36-cp36m-win_amd64.whl
-pip3 install torchvision
-```
-
-```
-# Python 3.7
-pip3 install https://download.pytorch.org/whl/cu80/torch-1.0.1-cp37-cp37m-win_amd64.whl
-pip3 install torchvision
-```
-
-_CUDA 10.0_
-
-
-```
-# Python 3.5
-pip3 install https://download.pytorch.org/whl/cu100/torch-1.0.1-cp35-cp35m-win_amd64.whl
-pip3 install torchvision
-```
-
-```
-# Python 3.6
-pip3 install https://download.pytorch.org/whl/cu100/torch-1.0.1-cp36-cp36m-win_amd64.whl
-pip3 install torchvision
-```
-
-```
-# Python 3.7
-pip3 install https://download.pytorch.org/whl/cu100/torch-1.0.1-cp37-cp37m-win_amd64.whl
-pip3 install torchvision
-```
 
 ## Verification
 {: #windows-verification}
@@ -246,29 +125,6 @@ For the majority of PyTorch users, installing from a pre-built binary via a pack
 1. Install [Anaconda](#anaconda)
 2. Install [CUDA](https://developer.nvidia.com/cuda-downloads), if your machine has a [CUDA-enabled GPU](https://developer.nvidia.com/cuda-gpus).
 3. If you want to build on Windows, Visual Studio 2017 14.11 toolset and NVTX are also needed. Especially, for CUDA 8 build on Windows, there will be an additional requirement for VS 2015 Update 3 and a patch for it. The details of the patch can be found out [here](https://support.microsoft.com/en-gb/help/4020481/fix-link-exe-crashes-with-a-fatal-lnk1000-error-when-you-use-wholearch).
-4. Install optional dependencies:
-
-```bash
-conda install numpy pyyaml mkl mkl-include setuptools cmake cffi typing
-```
-
-### Build
-
-```bash
-git clone --recursive https://github.com/pytorch/pytorch
-cd pytorch
-set "VS150COMNTOOLS=C:\Program Files (x86)\Microsoft Visual Studio\2017\Enterprise\VC\Auxiliary\Build"
-set CMAKE_GENERATOR=Visual Studio 15 2017 Win64
-set DISTUTILS_USE_SDK=1
-REM The following two lines are needed for Python 2.7, but the support for it is very experimental.
-set MSSdk=1
-set FORCE_PY27_BUILD=1
-REM As for CUDA 8, VS2015 Update 3 is also required to build PyTorch. Use the following two lines.
-set "PREBUILD_COMMAND=%VS140COMNTOOLS%\..\..\VC\vcvarsall.bat"
-set PREBUILD_COMMAND_ARGS=x64
-
-call "%VS150COMNTOOLS%\vcvarsall.bat" x64 -vcvars_ver=14.11
-python setup.py install
-```
+4. Follow the steps described here: https://github.com/pytorch/pytorch#from-source
 
 You can verify the installation as described [above](#windows-verification).
