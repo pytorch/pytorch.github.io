@@ -20,10 +20,13 @@ with open('/dev/stdin', 'r') as input, open('/dev/stdout', 'w') as output:
     header = yaml.load(''.join(header))
 
     images = []
-    if header['featured_image_1'] != 'no-image':
-        images.append(header['featured_image_1'])
-    if header['featured_image_2'] != 'no-image':
-        images.append(header['featured_image_2'])
+    try:
+        if header['featured_image_1'] != 'no-image':
+            images.append(header['featured_image_1'])
+        if header['featured_image_2'] != 'no-image':
+            images.append(header['featured_image_2'])
+    except:
+        pass
 
     pre = []
 
