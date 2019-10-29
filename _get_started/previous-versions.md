@@ -32,10 +32,10 @@ conda install pytorch==1.2.0 torchvision==0.4.0 -c pytorch
 
 ```
 # CUDA 9.2
-conda install pytorch==1.2.0 torchvision==0.4.0 cudatoolkit==9.2 -c pytorch
+conda install pytorch==1.2.0 torchvision==0.4.0 cudatoolkit=9.2 -c pytorch
 
 # CUDA 10.0
-conda install pytorch==1.2.0 torchvision==0.4.0 cudatoolkit==10.0 -c pytorch
+conda install pytorch==1.2.0 torchvision==0.4.0 cudatoolkit=10.0 -c pytorch
 
 # CPU Only
 conda install pytorch==1.2.0 torchvision==0.4.0 cpuonly -c pytorch
@@ -77,10 +77,10 @@ conda install pytorch==1.1.0 torchvision==0.3.0 -c pytorch
 
 ```
 # CUDA 9.0
-conda install pytorch==1.1.0 torchvision==0.3.0 cudatoolkit==9.0 -c pytorch
+conda install pytorch==1.1.0 torchvision==0.3.0 cudatoolkit=9.0 -c pytorch
 
 # CUDA 10.0
-conda install pytorch==1.1.0 torchvision==0.3.0 cudatoolkit==10.0 -c pytorch
+conda install pytorch==1.1.0 torchvision==0.3.0 cudatoolkit=10.0 -c pytorch
 
 # CPU Only
 conda install pytorch-cpu==1.1.0 torchvision-cpu==0.3.0 cpuonly -c pytorch
@@ -122,10 +122,10 @@ conda install pytorch==1.0.1 torchvision==0.2.2 -c pytorch
 
 ```
 # CUDA 9.0
-conda install pytorch==1.0.1 torchvision==0.2.2 cudatoolkit==9.0 -c pytorch
+conda install pytorch==1.0.1 torchvision==0.2.2 cudatoolkit=9.0 -c pytorch
 
 # CUDA 10.0
-conda install pytorch==1.0.1 torchvision==0.2.2 cudatoolkit==10.0 -c pytorch
+conda install pytorch==1.0.1 torchvision==0.2.2 cudatoolkit=10.0 -c pytorch
 
 # CPU Only
 conda install pytorch-cpu==1.0.1 torchvision-cpu==0.2.2 cpuonly -c pytorch
