@@ -28,6 +28,15 @@ var trackEvents = {
       return true;
     });
 
+    // Clicks on GitHub link in main or mobile menu
+    $("#github-main-menu-link, #github-mobile-menu-link").on(
+      "click",
+      function() {
+        trackEvents.recordClick("Link", $(this).text());
+        return true;
+      }
+    );
+
     // Clicks on Resource cards
     $(".resource-card a").on("click", function() {
       trackEvents.recordClick("Resource Card", $(this).find("h4").text());
