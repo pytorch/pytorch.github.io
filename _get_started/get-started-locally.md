@@ -6,6 +6,7 @@ background-class: get-started-background
 body-class: get-started
 order: 1
 published: true
+get-started-locally: true
 ---
 
 ## Start Locally
@@ -21,29 +22,14 @@ published: true
 ---
 
 {% capture mac %}
-<nav class="inline_toc" markdown="1">
-* TOC
-{:toc}
-{::options toc_levels="1..3" /}
-</nav>
 {% include_relative installation/mac.md %}
 {% endcapture %}
 
 {% capture linux %}
-<nav class="inline_toc" markdown="1">
-* TOC
-{:toc}
-{::options toc_levels="1..3" /}
-</nav>
 {% include_relative installation/linux.md %}
 {% endcapture %}
 
 {% capture windows %}
-<nav class="inline_toc" markdown="1">
-* TOC
-{:toc}
-{::options toc_levels="1..3" /}
-</nav>
 {% include_relative installation/windows.md %}
 {% endcapture %}
 

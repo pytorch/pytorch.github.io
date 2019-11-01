@@ -23,6 +23,7 @@ PyTorch is supported on Linux distributions that use [glibc](https://www.gnu.org
 > The install instructions here will generally apply to all supported Linux distributions. An example difference is that your distribution may support `yum` instead of `apt`. The specific examples shown were run on an Ubuntu 18.04 machine.
 
 ### Python
+{: #linux-python}
 
 Python 3.6 or greater is generally installed by default on any of our supported Linux distributions, which meets our recommendation.
 
@@ -44,6 +45,7 @@ sudo apt install python
 > If you use [Anaconda](#anaconda) to install PyTorch, it will install a sandboxed version of Python that will be used for running PyTorch applications.
 
 ### Package Manager
+{: #linux-package-manager}
 
 To install the PyTorch binaries, you will need to use one of two supported package managers: [Anaconda](https://www.anaconda.com/download/#linux) or [pip](https://pypi.org/project/pip/). Anaconda is the recommended package manager as it will provide you all of the PyTorch dependencies in one, sandboxed install, including Python.
 
@@ -84,6 +86,7 @@ sudo apt install python-pip
 {: #linux-installation}
 
 ### Anaconda
+{: #linux-anaconda}
 
 #### No CUDA
 
@@ -97,6 +100,7 @@ Then, run the command that is presented to you.
 
 
 ### pip
+{: #linux-pip}
 
 #### No CUDA
 
@@ -146,6 +150,7 @@ For the majority of PyTorch users, installing from a pre-built binary via a pack
 > You will also need to build from source if you want CUDA support.
 
 ### Prerequisites
+{: #linux-prerequisites-2}
 
 1. Install Anaconda[#anaconda]
 2. Install [CUDA](https://developer.nvidia.com/cuda-downloads), if your machine has a [CUDA-enabled GPU](https://developer.nvidia.com/cuda-gpus).

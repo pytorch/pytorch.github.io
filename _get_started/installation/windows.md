@@ -16,6 +16,7 @@ PyTorch is supported on the following Windows distributions:
 > The install instructions here will generally apply to all supported Windows distributions. The specific examples shown will be run on a Windows 10 Enterprise machine
 
 ### Python
+{: #windows-python}
 
 Currently, PyTorch on Windows only supports Python 3.x; Python 2.x is not supported.
 
@@ -36,6 +37,7 @@ choco install python
 ```
 
 ### Package Manager
+{: #windows-package-manager}
 
 To install the PyTorch binaries, you will need to use at least one of two supported package managers: [Anaconda](https://www.anaconda.com/download/#windows) and [pip](https://pypi.org/project/pip/). Anaconda is the recommended package manager as it will provide you all of the PyTorch dependencies in one, sandboxed install, including Python and `pip.`
 
@@ -51,6 +53,7 @@ If you installed Python by any of the recommended ways above[LINK], `[pip](https
 {: #windows-installation}
 
 ### Anaconda
+{: #windows-anaconda}
 
 To install PyTorch with Anaconda, you will need to open an Anaconda prompt via `Start | Anaconda3 | Anaconda Prompt`.
 
@@ -66,6 +69,7 @@ Then, run the command that is presented to you.
 
 
 ### pip
+{: #windows-pip}
 
 #### No CUDA
 
@@ -121,6 +125,7 @@ torch.cuda.is_available()
 For the majority of PyTorch users, installing from a pre-built binary via a package manager will provide the best experience. However, there are times when you may want to install the bleeding edge PyTorch code, whether for testing or actual development on the PyTorch core. To install the latest PyTorch code, you will need to [build PyTorch from source](https://github.com/pytorch/pytorch#from-source).
 
 ### Prerequisites
+{: #windows-prerequisites-2}
 
 1. Install [Anaconda](#anaconda)
 2. Install [CUDA](https://developer.nvidia.com/cuda-downloads), if your machine has a [CUDA-enabled GPU](https://developer.nvidia.com/cuda-gpus).
