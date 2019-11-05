@@ -14,10 +14,15 @@ var trackEvents = {
       }
     }
 
-    if (typeof fbq === "function") {
+    if (typeof fbq === "function" && eventLabel !== "Download") {
       fbq("trackCustom", eventCategory, {
         target: eventLabel
       });
+    }
+    else {
+      // Only call the lead event code when a user signs up
+      // to download the deep learning book
+      fbq('track', 'Lead');
     }
   },
 
@@ -94,5 +99,14 @@ var trackEvents = {
         selectedCategory + ": " + selectedOption
       )
     })
+
+    // Clicks on Deep Learning Download button
+    $("#deep-learning-button").on(
+      "click",
+      function() {
+        trackEvents.recordClick("Link", "Download");
+        return true;
+      }
+    );
   }
 };
