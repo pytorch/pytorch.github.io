@@ -156,7 +156,7 @@
               
               
                 <div class="version">
-                  <a href='http://pytorch.org/docs/versions.html'>1.4.0a0+528a0cf &#x25BC</a>
+                  <a href='http://pytorch.org/docs/versions.html'>1.4.0a0+43d4d01 &#x25BC</a>
                 </div>
               
             
@@ -438,6 +438,25 @@
     <span class="s1">&#39;--expt-relaxed-constexpr&#39;</span>
 <span class="p">]</span>
 
+<span class="c1"># See comment in load_inline for more information</span>
+<span class="c1"># The goal is to be able to call the safe version of the</span>
+<span class="c1"># function exactely as if it was the original one.</span>
+<span class="c1"># We need to create a pointer to this new function to give</span>
+<span class="c1"># it to pybind later.</span>
+
+<span class="n">SAFE_FUNCTION_DEFINITION</span> <span class="o">=</span> <span class="s1">&#39;&#39;&#39;</span>
+<span class="s1">#include &lt;functional&gt;</span>
+
+<span class="s1">template &lt;typename Ret, typename ...Args&gt;</span>
+<span class="s1">auto _get_safe_version(Ret (*f)(Args...)) -&gt; std::function&lt;Ret(Args...)&gt; {{</span>
+<span class="s1">    return [f](Args&amp;&amp; ...args) -&gt; Ret {{</span>
+<span class="s1">        HANDLE_TH_ERRORS</span>
+<span class="s1">        return f(std::forward&lt;Args&gt;(args)...);</span>
+<span class="s1">        END_HANDLE_TH_ERRORS_PYBIND</span>
+<span class="s1">    }};</span>
+<span class="s1">}}</span>
+
+<span class="s1">&#39;&#39;&#39;</span>
 
 <span class="n">JIT_EXTENSION_VERSIONER</span> <span class="o">=</span> <span class="n">ExtensionVersioner</span><span class="p">()</span>
 
@@ -1008,7 +1027,8 @@
                 <span class="n">build_directory</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
                 <span class="n">verbose</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
                 <span class="n">with_cuda</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-                <span class="n">is_python_module</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+                <span class="n">is_python_module</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                <span class="n">with_pytorch_error_handling</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
     <span class="sd">&#39;&#39;&#39;</span>
 <span class="sd">    Loads a PyTorch C++ extension just-in-time (JIT) from string sources.</span>
 
@@ -1053,8 +1073,14 @@
 <span class="sd">        with_cuda: Determines whether CUDA headers and libraries are added to</span>
 <span class="sd">            the build. If set to ``None`` (default), this value is</span>
 <span class="sd">            automatically determined based on whether ``cuda_sources`` is</span>
-<span class="sd">            provided. Set it to `True`` to force CUDA headers</span>
+<span class="sd">            provided. Set it to ``True`` to force CUDA headers</span>
 <span class="sd">            and libraries to be included.</span>
+<span class="sd">        with_pytorch_error_handling: Determines whether pytorch error and</span>
+<span class="sd">            warning macros are handled by pytorch instead of pybind. To do</span>
+<span class="sd">            this, each function ``foo`` is called via an intermediary ``_safe_foo``</span>
+<span class="sd">            function. This redirection might cause issues in obscure cases</span>
+<span class="sd">            of cpp. This flag should be set to ``False`` when this redirect</span>
+<span class="sd">            causes issues.</span>
 
 <span class="sd">    Example:</span>
 <span class="sd">        &gt;&gt;&gt; from torch.utils.cpp_extension import load_inline</span>
@@ -1077,11 +1103,17 @@
 
     <span class="n">cpp_sources</span><span class="o">.</span><span class="n">insert</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="s1">&#39;#include &lt;torch/extension.h&gt;&#39;</span><span class="p">)</span>
 
+    <span class="c1"># Adds a new `_get_safe_version(foo)` function that returns a new function</span>
+    <span class="c1"># that performs the same operation as `foo` but with pytorch error handling</span>
+    <span class="c1"># macros.</span>
+    <span class="n">cpp_sources</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">SAFE_FUNCTION_DEFINITION</span><span class="p">)</span>
+
     <span class="c1"># If `functions` is supplied, we create the pybind11 bindings for the user.</span>
     <span class="c1"># Here, `functions` is (or becomes, after some processing) a map from</span>
     <span class="c1"># function names to function docstrings.</span>
     <span class="k">if</span> <span class="n">functions</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">cpp_sources</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s1">&#39;PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {&#39;</span><span class="p">)</span>
+        <span class="n">module_def</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">module_def</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s1">&#39;PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {&#39;</span><span class="p">)</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">functions</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
             <span class="n">functions</span> <span class="o">=</span> <span class="p">[</span><span class="n">functions</span><span class="p">]</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">functions</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
@@ -1092,9 +1124,13 @@
                 <span class="s2">&quot;Expected &#39;functions&#39; to be a list or dict, but was </span><span class="si">{}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
                     <span class="nb">type</span><span class="p">(</span><span class="n">functions</span><span class="p">)))</span>
         <span class="k">for</span> <span class="n">function_name</span><span class="p">,</span> <span class="n">docstring</span> <span class="ow">in</span> <span class="n">functions</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-            <span class="n">cpp_sources</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s1">&#39;m.def(&quot;</span><span class="si">{0}</span><span class="s1">&quot;, &amp;</span><span class="si">{0}</span><span class="s1">, &quot;</span><span class="si">{1}</span><span class="s1">&quot;);&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
-                <span class="n">function_name</span><span class="p">,</span> <span class="n">docstring</span><span class="p">))</span>
-        <span class="n">cpp_sources</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s1">&#39;}&#39;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">with_pytorch_error_handling</span><span class="p">:</span>
+                <span class="n">module_def</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s1">&#39;m.def(&quot;</span><span class="si">{0}</span><span class="s1">&quot;, _get_safe_version(</span><span class="si">{0}</span><span class="s1">), &quot;</span><span class="si">{1}</span><span class="s1">&quot;);&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                    <span class="n">function_name</span><span class="p">,</span> <span class="n">docstring</span><span class="p">))</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">module_def</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s1">&#39;m.def(&quot;</span><span class="si">{0}</span><span class="s1">&quot;, </span><span class="si">{0}</span><span class="s1">, &quot;</span><span class="si">{1}</span><span class="s1">&quot;);&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">function_name</span><span class="p">,</span> <span class="n">docstring</span><span class="p">))</span>
+        <span class="n">module_def</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s1">&#39;}&#39;</span><span class="p">)</span>
+        <span class="n">cpp_sources</span> <span class="o">+=</span> <span class="n">module_def</span>
 
     <span class="n">cpp_source_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">build_directory</span><span class="p">,</span> <span class="s1">&#39;main.cpp&#39;</span><span class="p">)</span>
     <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">cpp_source_path</span><span class="p">,</span> <span class="s1">&#39;w&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">cpp_source_file</span><span class="p">:</span>
