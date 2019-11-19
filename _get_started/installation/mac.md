@@ -13,10 +13,12 @@ PyTorch can be installed and used on macOS. Depending on your system and compute
 PyTorch is supported on macOS 10.10 (Yosemite) or above.
 
 ### Python
+{: #mac-python}
 
 By default, macOS is installed with Python 2.7. PyTorch can be installed with Python 2.7, but it is recommended that you use Python 3.6 or greater, which can be installed either through the Anaconda package manager (see [below](#anaconda)), [Homebrew](https://brew.sh/), or the [Python website](https://www.python.org/downloads/mac-osx/).
 
 ### Package Manager
+{: #mac-package-manager}
 
 To install the PyTorch binaries, you will need to use one of two supported package managers: [Anaconda](https://www.anaconda.com/download/#macos) or [pip](https://pypi.org/project/pip/). Anaconda is the recommended package manager as it will provide you all of the PyTorch dependencies in one, sandboxed install, including Python.
 
@@ -51,6 +53,7 @@ sudo easy_install pip
 {: #mac-installation}
 
 ### Anaconda
+{: #mac-anaconda}
 
 To install PyTorch via Anaconda, use the following conda command:
 
@@ -59,6 +62,7 @@ conda install pytorch torchvision -c pytorch
 ```
 
 ### pip
+{: #mac-anaconda}
 
 To install PyTorch via pip, use one of the following two commands, depending on your Python version:
 
@@ -102,6 +106,7 @@ For the majority of PyTorch users, installing from a pre-built binary via a pack
 > You will also need to build from source if you want CUDA support.
 
 ### Prerequisites
+{: #mac-prerequisites-2}
 
 1. Install [Anaconda](#anaconda)
 2. Install [CUDA](https://developer.nvidia.com/cuda-downloads), if your machine has a [CUDA-enabled GPU](https://developer.nvidia.com/cuda-gpus).
