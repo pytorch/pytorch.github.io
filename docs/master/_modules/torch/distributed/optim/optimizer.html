@@ -9,14 +9,14 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>torch.nn.utils.clip_grad &mdash; PyTorch master documentation</title>
+  <title>torch.distributed.optim.optimizer &mdash; PyTorch master documentation</title>
   
 
   
   
   
   
-    <link rel="canonical" href="https://pytorch.org/docs/stable/_modules/torch/nn/utils/clip_grad.html"/>
+    <link rel="canonical" href="https://pytorch.org/docs/stable/_modules/torch/distributed/optim/optimizer.html"/>
   
 
   
@@ -180,7 +180,7 @@
 
           
 <div>
-  <a style="color:#F05732" href="https://pytorch.org/docs/stable/_modules/torch/nn/utils/clip_grad.html">
+  <a style="color:#F05732" href="https://pytorch.org/docs/stable/_modules/torch/distributed/optim/optimizer.html">
     You are viewing unstable developer preview docs.
     Click here to view docs for latest stable release.
   </a>
@@ -307,7 +307,9 @@
         
           <li><a href="../../../torch.html">torch</a> &gt;</li>
         
-      <li>torch.nn.utils.clip_grad</li>
+          <li><a href="../../distributed.html">torch.distributed</a> &gt;</li>
+        
+      <li>torch.distributed.optim.optimizer</li>
     
     
       <li class="pytorch-breadcrumbs-aside">
@@ -335,77 +337,132 @@
             <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
              <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
               
-  <h1>Source code for torch.nn.utils.clip_grad</h1><div class="highlight"><pre>
-<span></span><span class="kn">import</span> <span class="nn">warnings</span>
-<span class="kn">import</span> <span class="nn">torch</span>
-<span class="kn">from</span> <span class="nn">torch._six</span> <span class="k">import</span> <span class="n">inf</span>
+  <h1>Source code for torch.distributed.optim.optimizer</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span> <span class="nn">torch.distributed.rpc</span> <span class="k">as</span> <span class="nn">rpc</span>
+<span class="kn">import</span> <span class="nn">torch.distributed.autograd</span> <span class="k">as</span> <span class="nn">dist_autograd</span>
+
+<span class="kn">from</span> <span class="nn">collections</span> <span class="k">import</span> <span class="n">defaultdict</span>
+<span class="kn">from</span> <span class="nn">threading</span> <span class="k">import</span> <span class="n">Lock</span>
 
 
-<div class="viewcode-block" id="clip_grad_norm_"><a class="viewcode-back" href="../../../../nn.html#torch.nn.utils.clip_grad_norm_">[docs]</a><span class="k">def</span> <span class="nf">clip_grad_norm_</span><span class="p">(</span><span class="n">parameters</span><span class="p">,</span> <span class="n">max_norm</span><span class="p">,</span> <span class="n">norm_type</span><span class="o">=</span><span class="mi">2</span><span class="p">):</span>
-    <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Clips gradient norm of an iterable of parameters.</span>
+<span class="k">class</span> <span class="nc">_LocalOptimizer</span><span class="p">:</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">optim_cls</span><span class="p">,</span> <span class="n">local_params_rref</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">optim</span> <span class="o">=</span> <span class="n">optim_cls</span><span class="p">(</span>
+            <span class="p">[</span><span class="n">rref</span><span class="o">.</span><span class="n">local_value</span><span class="p">()</span> <span class="k">for</span> <span class="n">rref</span> <span class="ow">in</span> <span class="n">local_params_rref</span><span class="p">],</span>
+            <span class="o">*</span><span class="n">args</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">lock</span> <span class="o">=</span> <span class="n">Lock</span><span class="p">()</span>
 
-<span class="sd">    The norm is computed over all gradients together, as if they were</span>
-<span class="sd">    concatenated into a single vector. Gradients are modified in-place.</span>
+    <span class="k">def</span> <span class="nf">step</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">autograd_ctx_id</span><span class="p">):</span>
+        <span class="n">all_local_grads</span> <span class="o">=</span> <span class="n">dist_autograd</span><span class="o">.</span><span class="n">get_gradients</span><span class="p">(</span><span class="n">autograd_ctx_id</span><span class="p">)</span>
 
-<span class="sd">    Arguments:</span>
-<span class="sd">        parameters (Iterable[Tensor] or Tensor): an iterable of Tensors or a</span>
-<span class="sd">            single Tensor that will have gradients normalized</span>
-<span class="sd">        max_norm (float or int): max norm of the gradients</span>
-<span class="sd">        norm_type (float or int): type of the used p-norm. Can be ``&#39;inf&#39;`` for</span>
-<span class="sd">            infinity norm.</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">lock</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">param</span><span class="p">,</span> <span class="n">grad</span> <span class="ow">in</span> <span class="n">all_local_grads</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="n">param</span><span class="o">.</span><span class="n">grad</span> <span class="o">=</span> <span class="n">grad</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">optim</span><span class="o">.</span><span class="n">step</span><span class="p">()</span>
 
-<span class="sd">    Returns:</span>
-<span class="sd">        Total norm of the parameters (viewed as a single vector).</span>
+
+<span class="k">def</span> <span class="nf">_local_optimizer_step</span><span class="p">(</span><span class="n">local_optim_rref</span><span class="p">,</span> <span class="n">autograd_ctx_id</span><span class="p">):</span>
+    <span class="n">local_optim</span> <span class="o">=</span> <span class="n">local_optim_rref</span><span class="o">.</span><span class="n">local_value</span><span class="p">()</span>
+    <span class="n">local_optim</span><span class="o">.</span><span class="n">step</span><span class="p">(</span><span class="n">autograd_ctx_id</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">_wait_for_all</span><span class="p">(</span><span class="n">rpc_futs</span><span class="p">):</span>
+    <span class="c1"># TODO: improve error propagation</span>
+    <span class="n">exception</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="k">for</span> <span class="n">fut</span> <span class="ow">in</span> <span class="n">rpc_futs</span><span class="p">:</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">fut</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="n">exception</span> <span class="o">=</span> <span class="n">e</span>
+    <span class="k">if</span> <span class="n">exception</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">exception</span>
+
+
+<div class="viewcode-block" id="DistributedOptimizer"><a class="viewcode-back" href="../../../../rpc.html#torch.distributed.optim.DistributedOptimizer">[docs]</a><span class="k">class</span> <span class="nc">DistributedOptimizer</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    DistributedOptimizer takes remote references to parameters scattered</span>
+<span class="sd">    across workers and applies the given optimizer locally for each parameter.</span>
+
+<span class="sd">    This class uses :meth:`~torch.distributed.autograd.get_gradients` in order</span>
+<span class="sd">    to retrieve the gradients for specific parameters.</span>
+
+<span class="sd">    Concurrent calls to</span>
+<span class="sd">    :meth:`~torch.distributed.optim.DistributedOptimizer.step`,</span>
+<span class="sd">    either from the same or different clients, will</span>
+<span class="sd">    be serialized on each worker -- as each worker&#39;s optimizer can only work</span>
+<span class="sd">    on one set of gradients at a time. However, there is no guarantee that</span>
+<span class="sd">    the full forward-backward-optimizer sequence will execute for one client</span>
+<span class="sd">    at a time. This means that the gradients being applied may not correspond</span>
+<span class="sd">    to the latest forward pass executed on a given worker. Also, there is no</span>
+<span class="sd">    guaranteed ordering across workers.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        optimizer_class (optim.Optimizer): the class of optimizer to</span>
+<span class="sd">            instantiate on each worker.</span>
+<span class="sd">        params_rref (list[RRef]): list of RRefs to local or remote parameters</span>
+<span class="sd">            to optimize.</span>
+<span class="sd">        args: arguments to pass to the optimizer constructor on each worker.</span>
+<span class="sd">        kwargs: arguments to pass to the optimizer constructor on each worker.</span>
+
+<span class="sd">    Example::</span>
+
+<span class="sd">        &gt;&gt; import torch.distributed.autograd as dist_autograd</span>
+<span class="sd">        &gt;&gt; import torch.distributed.rpc as rpc</span>
+<span class="sd">        &gt;&gt; from torch import optim</span>
+<span class="sd">        &gt;&gt; from torch.distributed.optim import DistributedOptimizer</span>
+<span class="sd">        &gt;&gt;</span>
+<span class="sd">        &gt;&gt; with dist_autograd.context() as context_id:</span>
+<span class="sd">        &gt;&gt;   # Forward pass.</span>
+<span class="sd">        &gt;&gt;   rref1 = rpc.remote(&quot;worker1&quot;, torch.add, args=(torch.ones(2), 3))</span>
+<span class="sd">        &gt;&gt;   rref2 = rpc.remote(&quot;worker1&quot;, torch.add, args=(torch.ones(2), 1))</span>
+<span class="sd">        &gt;&gt;   loss = rref1.to_here() + rref2.to_here()</span>
+<span class="sd">        &gt;&gt;</span>
+<span class="sd">        &gt;&gt;   # Backward pass.</span>
+<span class="sd">        &gt;&gt;   dist_autograd.backward([loss.sum()])</span>
+<span class="sd">        &gt;&gt;</span>
+<span class="sd">        &gt;&gt;   # Optimizer.</span>
+<span class="sd">        &gt;&gt;   dist_optim = DistributedOptimizer(</span>
+<span class="sd">        &gt;&gt;      optim.SGD,</span>
+<span class="sd">        &gt;&gt;      [rref1, rref2],</span>
+<span class="sd">        &gt;&gt;      lr=0.05,</span>
+<span class="sd">        &gt;&gt;   )</span>
+<span class="sd">        &gt;&gt;   dist_optim.step()</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">parameters</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
-        <span class="n">parameters</span> <span class="o">=</span> <span class="p">[</span><span class="n">parameters</span><span class="p">]</span>
-    <span class="n">parameters</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">filter</span><span class="p">(</span><span class="k">lambda</span> <span class="n">p</span><span class="p">:</span> <span class="n">p</span><span class="o">.</span><span class="n">grad</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">,</span> <span class="n">parameters</span><span class="p">))</span>
-    <span class="n">max_norm</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">max_norm</span><span class="p">)</span>
-    <span class="n">norm_type</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">norm_type</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">norm_type</span> <span class="o">==</span> <span class="n">inf</span><span class="p">:</span>
-        <span class="n">total_norm</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">grad</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">abs</span><span class="p">()</span><span class="o">.</span><span class="n">max</span><span class="p">()</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">parameters</span><span class="p">)</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="n">total_norm</span> <span class="o">=</span> <span class="mi">0</span>
-        <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">parameters</span><span class="p">:</span>
-            <span class="n">param_norm</span> <span class="o">=</span> <span class="n">p</span><span class="o">.</span><span class="n">grad</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">norm_type</span><span class="p">)</span>
-            <span class="n">total_norm</span> <span class="o">+=</span> <span class="n">param_norm</span><span class="o">.</span><span class="n">item</span><span class="p">()</span> <span class="o">**</span> <span class="n">norm_type</span>
-        <span class="n">total_norm</span> <span class="o">=</span> <span class="n">total_norm</span> <span class="o">**</span> <span class="p">(</span><span class="mf">1.</span> <span class="o">/</span> <span class="n">norm_type</span><span class="p">)</span>
-    <span class="n">clip_coef</span> <span class="o">=</span> <span class="n">max_norm</span> <span class="o">/</span> <span class="p">(</span><span class="n">total_norm</span> <span class="o">+</span> <span class="mf">1e-6</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">clip_coef</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
-        <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">parameters</span><span class="p">:</span>
-            <span class="n">p</span><span class="o">.</span><span class="n">grad</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">mul_</span><span class="p">(</span><span class="n">clip_coef</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">total_norm</span></div>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">optimizer_class</span><span class="p">,</span> <span class="n">params_rref</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="n">per_worker_params_rref</span> <span class="o">=</span> <span class="n">defaultdict</span><span class="p">(</span><span class="nb">list</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">param</span> <span class="ow">in</span> <span class="n">params_rref</span><span class="p">:</span>
+            <span class="n">per_worker_params_rref</span><span class="p">[</span><span class="n">param</span><span class="o">.</span><span class="n">owner</span><span class="p">()]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">param</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">remote_optimizers</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">worker</span><span class="p">,</span> <span class="n">param_rrefs</span> <span class="ow">in</span> <span class="n">per_worker_params_rref</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">remote_optim_rref</span> <span class="o">=</span> <span class="n">rpc</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span>
+                <span class="n">worker</span><span class="p">,</span>
+                <span class="n">_LocalOptimizer</span><span class="p">,</span>
+                <span class="n">args</span><span class="o">=</span><span class="p">[</span><span class="n">optimizer_class</span><span class="p">,</span> <span class="n">param_rrefs</span><span class="p">]</span> <span class="o">+</span> <span class="nb">list</span><span class="p">(</span><span class="n">args</span><span class="p">),</span>
+                <span class="n">kwargs</span><span class="o">=</span><span class="n">kwargs</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">remote_optimizers</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">remote_optim_rref</span><span class="p">)</span>
 
 
-<span class="k">def</span> <span class="nf">clip_grad_norm</span><span class="p">(</span><span class="n">parameters</span><span class="p">,</span> <span class="n">max_norm</span><span class="p">,</span> <span class="n">norm_type</span><span class="o">=</span><span class="mi">2</span><span class="p">):</span>
-    <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Clips gradient norm of an iterable of parameters.</span>
+<div class="viewcode-block" id="DistributedOptimizer.step"><a class="viewcode-back" href="../../../../rpc.html#torch.distributed.optim.DistributedOptimizer.step">[docs]</a>    <span class="k">def</span> <span class="nf">step</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Performs a single optimization step.</span>
 
-<span class="sd">    .. warning::</span>
-<span class="sd">        This method is now deprecated in favor of</span>
-<span class="sd">        :func:`torch.nn.utils.clip_grad_norm_`.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="s2">&quot;torch.nn.utils.clip_grad_norm is now deprecated in favor &quot;</span>
-                  <span class="s2">&quot;of torch.nn.utils.clip_grad_norm_.&quot;</span><span class="p">,</span> <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">clip_grad_norm_</span><span class="p">(</span><span class="n">parameters</span><span class="p">,</span> <span class="n">max_norm</span><span class="p">,</span> <span class="n">norm_type</span><span class="p">)</span>
-
-
-<div class="viewcode-block" id="clip_grad_value_"><a class="viewcode-back" href="../../../../nn.html#torch.nn.utils.clip_grad_value_">[docs]</a><span class="k">def</span> <span class="nf">clip_grad_value_</span><span class="p">(</span><span class="n">parameters</span><span class="p">,</span> <span class="n">clip_value</span><span class="p">):</span>
-    <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Clips gradient of an iterable of parameters at specified value.</span>
-
-<span class="sd">    Gradients are modified in-place.</span>
-
-<span class="sd">    Arguments:</span>
-<span class="sd">        parameters (Iterable[Tensor] or Tensor): an iterable of Tensors or a</span>
-<span class="sd">            single Tensor that will have gradients normalized</span>
-<span class="sd">        clip_value (float or int): maximum allowed value of the gradients.</span>
-<span class="sd">            The gradients are clipped in the range</span>
-<span class="sd">            :math:`\left[\text{-clip\_value}, \text{clip\_value}\right]`</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">parameters</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
-        <span class="n">parameters</span> <span class="o">=</span> <span class="p">[</span><span class="n">parameters</span><span class="p">]</span>
-    <span class="n">clip_value</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">clip_value</span><span class="p">)</span>
-    <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="nb">filter</span><span class="p">(</span><span class="k">lambda</span> <span class="n">p</span><span class="p">:</span> <span class="n">p</span><span class="o">.</span><span class="n">grad</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">,</span> <span class="n">parameters</span><span class="p">):</span>
-        <span class="n">p</span><span class="o">.</span><span class="n">grad</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">clamp_</span><span class="p">(</span><span class="nb">min</span><span class="o">=-</span><span class="n">clip_value</span><span class="p">,</span> <span class="nb">max</span><span class="o">=</span><span class="n">clip_value</span><span class="p">)</span></div>
+<span class="sd">        This will call :meth:`torch.optim.Optimizer.step` on each worker</span>
+<span class="sd">        containing parameters to be optimized, and will block until all workers</span>
+<span class="sd">        return. The current distributed autograd</span>
+<span class="sd">        :class:`~torch.distributed.autograd.context` will be used globally.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">autograd_ctx_id</span> <span class="o">=</span> <span class="n">dist_autograd</span><span class="o">.</span><span class="n">_current_context</span><span class="p">()</span><span class="o">.</span><span class="n">_context_id</span><span class="p">()</span>
+        <span class="n">rpc_futs</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">optim</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">remote_optimizers</span><span class="p">:</span>
+            <span class="n">rpc_futs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">rpc</span><span class="o">.</span><span class="n">rpc_async</span><span class="p">(</span>
+                <span class="n">optim</span><span class="o">.</span><span class="n">owner</span><span class="p">(),</span>
+                <span class="n">_local_optimizer_step</span><span class="p">,</span>
+                <span class="n">args</span><span class="o">=</span><span class="p">(</span><span class="n">optim</span><span class="p">,</span> <span class="n">autograd_ctx_id</span><span class="p">),</span>
+            <span class="p">))</span>
+        <span class="n">_wait_for_all</span><span class="p">(</span><span class="n">rpc_futs</span><span class="p">)</span></div></div>
 </pre></div>
 
              </article>
