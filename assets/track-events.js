@@ -1,6 +1,6 @@
 var trackEvents = {
   recordClick: function(eventCategory, eventLabel) {
-    if (typeof ga == "function") {
+    if (typeof ga == "function" && eventLabel !== "Lead") {
       var gaEventObject = {
         eventCategory: eventCategory,
         eventAction: "click",
@@ -14,7 +14,7 @@ var trackEvents = {
       }
     }
 
-    if (typeof fbq === "function" && eventLabel !== "Download") {
+    if (typeof fbq === "function" && eventLabel !== "Lead") {
       fbq("trackCustom", eventCategory, {
         target: eventLabel
       });
@@ -100,11 +100,22 @@ var trackEvents = {
       )
     })
 
-    // Clicks on Deep Learning Download button
-    $("#deep-learning-button").on(
+    // Clicks on link to download Deep Learning book
+    // on Thank You page
+    $("#download-pdf").on(
       "click",
       function() {
         trackEvents.recordClick("Link", "Download");
+        return true;
+      }
+    );
+
+    // Enters email and clicks download book button
+    // on Deep Learning landing page
+    $("#deep-learning-button").on(
+      "click",
+      function() {
+        trackEvents.recordClick("Link", "Lead");
         return true;
       }
     );
