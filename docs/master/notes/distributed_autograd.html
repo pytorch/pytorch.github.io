@@ -158,7 +158,7 @@
               
               
                 <div class="version">
-                  <a href='http://pytorch.org/docs/versions.html'>1.4.0a0+cc81769 &#x25BC</a>
+                  <a href='http://pytorch.org/docs/versions.html'>1.4.0a0+88ef402 &#x25BC</a>
                 </div>
               
             
@@ -337,12 +337,12 @@
             <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
              <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
               
-  <div class="admonition warning" id="distributed-autograd-design">
+  <div class="admonition warning">
 <p class="admonition-title">Warning</p>
 <p>The <a class="reference internal" href="../rpc.html#distributed-rpc-framework"><span class="std std-ref">Distributed RPC Framework</span></a> is experimental and subject to change.</p>
 </div>
-<div class="section" id="id1">
-<h1>Distributed Autograd Design<a class="headerlink" href="#id1" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="distributed-autograd-design">
+<span id="id1"></span><h1>Distributed Autograd Design<a class="headerlink" href="#distributed-autograd-design" title="Permalink to this headline">¶</a></h1>
 <p>This note will present the detailed design for distributed autograd and walk
 through the internals of the same. Make sure you’re familiar with
 <a class="reference internal" href="autograd.html#autograd-mechanics"><span class="std std-ref">Autograd mechanics</span></a> and the <a class="reference internal" href="../rpc.html#distributed-rpc-framework"><span class="std std-ref">Distributed RPC Framework</span></a> before
@@ -599,7 +599,86 @@ you can refer to <strong>Distributed Autograd Algorithm Smart mode</strong> sect
 </div>
 <div class="section" id="distributed-optimizer">
 <h2>Distributed Optimizer<a class="headerlink" href="#distributed-optimizer" title="Permalink to this headline">¶</a></h2>
-<p>Coming soon…</p>
+<p>The <a class="reference internal" href="../rpc.html#torch.distributed.optim.DistributedOptimizer" title="torch.distributed.optim.DistributedOptimizer"><code class="xref py py-class docutils literal notranslate"><span class="pre">DistributedOptimizer</span></code></a> operates as follows:</p>
+<ol class="arabic simple">
+<li><p>Takes a list of remote parameters (<a class="reference internal" href="../rpc.html#torch.distributed.rpc.RRef" title="torch.distributed.rpc.RRef"><code class="xref py py-class docutils literal notranslate"><span class="pre">RRef</span></code></a>) to
+optimize. These could also be local parameters wrapped within a local
+<code class="docutils literal notranslate"><span class="pre">RRef</span></code>.</p></li>
+<li><p>Takes a <a class="reference internal" href="../optim.html#torch.optim.Optimizer" title="torch.optim.Optimizer"><code class="xref py py-class docutils literal notranslate"><span class="pre">Optimizer</span></code></a> class as the local
+optimizer to run on all distinct <code class="docutils literal notranslate"><span class="pre">RRef</span></code> owners.</p></li>
+<li><p>The distributed optimizer creates an instance of the local <code class="docutils literal notranslate"><span class="pre">Optimizer</span></code> on
+each of the worker nodes and holds an <code class="docutils literal notranslate"><span class="pre">RRef</span></code> to them.</p></li>
+<li><p>When <a class="reference internal" href="../rpc.html#torch.distributed.optim.DistributedOptimizer.step" title="torch.distributed.optim.DistributedOptimizer.step"><code class="xref py py-meth docutils literal notranslate"><span class="pre">torch.distributed.optim.DistributedOptimizer.step()</span></code></a> is invoked,
+the distributed optimizer uses RPC to remotely execute all the local
+optimizers on the appropriate remote workers.</p></li>
+<li><p>If multiple concurrent distributed optimizers are updating the same
+parameters on a worker, these updates are serialized via a lock.</p></li>
+</ol>
+</div>
+<div class="section" id="simple-end-to-end-example">
+<h2>Simple end to end example<a class="headerlink" href="#simple-end-to-end-example" title="Permalink to this headline">¶</a></h2>
+<p>Putting it all together, a very simple end to end example using distributed
+autograd and distributed optimizer is as follows:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">multiprocessing</span> <span class="k">as</span> <span class="nn">mp</span>
+<span class="kn">from</span> <span class="nn">tempfile</span> <span class="k">import</span> <span class="n">NamedTemporaryFile</span>
+<span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">import</span> <span class="nn">torch.distributed.autograd</span> <span class="k">as</span> <span class="nn">dist_autograd</span>
+<span class="kn">from</span> <span class="nn">torch.distributed</span> <span class="k">import</span> <span class="n">rpc</span>
+<span class="kn">from</span> <span class="nn">torch</span> <span class="k">import</span> <span class="n">optim</span>
+<span class="kn">from</span> <span class="nn">torch.distributed.optim</span> <span class="k">import</span> <span class="n">DistributedOptimizer</span>
+
+<span class="k">def</span> <span class="nf">random_tensor</span><span class="p">():</span>
+    <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">rand</span><span class="p">((</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="n">requires_grad</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+<span class="k">def</span> <span class="nf">_run_process</span><span class="p">(</span><span class="n">self_rank</span><span class="p">,</span> <span class="n">dst_rank</span><span class="p">,</span> <span class="n">file_name</span><span class="p">):</span>
+    <span class="n">self_name</span> <span class="o">=</span> <span class="s2">&quot;worker</span><span class="si">{}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">self_rank</span><span class="p">)</span>
+    <span class="n">dst_name</span> <span class="o">=</span> <span class="s2">&quot;worker</span><span class="si">{}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">dst_rank</span><span class="p">)</span>
+
+    <span class="c1"># Initialize RPC.</span>
+    <span class="n">rpc</span><span class="o">.</span><span class="n">init_rpc</span><span class="p">(</span>
+        <span class="n">self_name</span><span class="o">=</span><span class="n">self_name</span><span class="p">,</span>
+        <span class="n">self_rank</span><span class="o">=</span><span class="n">self_rank</span><span class="p">,</span>
+        <span class="n">worker_name_to_id</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;worker0&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;worker1&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">},</span>
+        <span class="n">init_method</span><span class="o">=</span><span class="s2">&quot;file://</span><span class="si">{}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">file_name</span><span class="p">),</span>
+    <span class="p">)</span>
+
+    <span class="c1"># Use a distributed autograd context.</span>
+    <span class="k">with</span> <span class="n">dist_autograd</span><span class="o">.</span><span class="n">context</span><span class="p">()</span> <span class="k">as</span> <span class="n">context_id</span><span class="p">:</span>
+       <span class="c1"># Forward pass (create references on remote nodes).</span>
+       <span class="n">rref1</span> <span class="o">=</span> <span class="n">rpc</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="n">dst_name</span><span class="p">,</span> <span class="n">random_tensor</span><span class="p">)</span>
+       <span class="n">rref2</span> <span class="o">=</span> <span class="n">rpc</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="n">dst_name</span><span class="p">,</span> <span class="n">random_tensor</span><span class="p">)</span>
+       <span class="n">loss</span> <span class="o">=</span> <span class="n">rref1</span><span class="o">.</span><span class="n">to_here</span><span class="p">()</span> <span class="o">+</span> <span class="n">rref2</span><span class="o">.</span><span class="n">to_here</span><span class="p">()</span>
+
+       <span class="c1"># Backward pass (run distributed autograd).</span>
+       <span class="n">dist_autograd</span><span class="o">.</span><span class="n">backward</span><span class="p">([</span><span class="n">loss</span><span class="o">.</span><span class="n">sum</span><span class="p">()])</span>
+
+       <span class="c1"># Build DistributedOptimizer.</span>
+       <span class="n">dist_optim</span> <span class="o">=</span> <span class="n">DistributedOptimizer</span><span class="p">(</span>
+         <span class="n">optim</span><span class="o">.</span><span class="n">SGD</span><span class="p">,</span>
+         <span class="p">[</span><span class="n">rref1</span><span class="p">,</span> <span class="n">rref2</span><span class="p">],</span>
+         <span class="n">lr</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>
+       <span class="p">)</span>
+
+       <span class="c1"># Run the distributed optimizer step.</span>
+       <span class="n">dist_optim</span><span class="o">.</span><span class="n">step</span><span class="p">()</span>
+
+<span class="k">def</span> <span class="nf">run_process</span><span class="p">(</span><span class="n">self_rank</span><span class="p">,</span> <span class="n">dst_rank</span><span class="p">,</span> <span class="n">file_name</span><span class="p">):</span>
+    <span class="n">_run_process</span><span class="p">(</span><span class="n">self_rank</span><span class="p">,</span> <span class="n">dst_rank</span><span class="p">,</span> <span class="n">file_name</span><span class="p">)</span>
+    <span class="n">rpc</span><span class="o">.</span><span class="n">join_rpc</span><span class="p">()</span>
+
+<span class="n">file_name</span> <span class="o">=</span> <span class="n">NamedTemporaryFile</span><span class="p">()</span><span class="o">.</span><span class="n">name</span>
+<span class="n">processes</span> <span class="o">=</span> <span class="p">[]</span>
+
+<span class="c1"># Run two workers.</span>
+<span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">2</span><span class="p">):</span>
+    <span class="n">p</span> <span class="o">=</span> <span class="n">mp</span><span class="o">.</span><span class="n">Process</span><span class="p">(</span><span class="n">target</span><span class="o">=</span><span class="n">run_process</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="p">(</span><span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="o">%</span> <span class="mi">2</span><span class="p">,</span> <span class="n">file_name</span><span class="p">))</span>
+    <span class="n">p</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+    <span class="n">processes</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">p</span><span class="p">)</span>
+
+<span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">processes</span><span class="p">:</span>
+    <span class="n">p</span><span class="o">.</span><span class="n">join</span><span class="p">()</span>
+</pre></div>
+</div>
 </div>
 </div>
 
@@ -657,6 +736,7 @@ you can refer to <strong>Distributed Autograd Algorithm Smart mode</strong> sect
 </ul>
 </li>
 <li><a class="reference internal" href="#distributed-optimizer">Distributed Optimizer</a></li>
+<li><a class="reference internal" href="#simple-end-to-end-example">Simple end to end example</a></li>
 </ul>
 </li>
 </ul>
