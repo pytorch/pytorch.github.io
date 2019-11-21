@@ -12,6 +12,10 @@ var trackEvents = {
       if (eventCategory == "Quick Start Module - Cloud Platforms") {
         ga('newCampaignTracker.send', 'event', gaEventObject);
       }
+
+      if (eventLabel == "Download") {
+        ga('newCampaignTracker.send', 'event', gaEventObject);
+      }
     }
 
     if (typeof fbq === "function" && eventLabel !== "Download") {
