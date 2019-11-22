@@ -6,6 +6,7 @@ background-class: mobile-background
 body-class: mobile
 order: 1
 published: true
+redirect_from: "/mobile/"
 ---
 
 # PyTorch Mobile
