@@ -20,6 +20,7 @@ Once you are logged in, you will be brought to your [Google Cloud console](https
 Google Cloud provides no setup required, pre-configured virtual machines to help you build your deep learning projects. [Cloud Deep Learning VM Image](https://cloud.google.com/deep-learning-vm-image/){:target="_blank"} is a set of Debian-based virtual machines that allow you to [build and run](https://cloud.google.com/deep-learning-vm/docs/) machine PyTorch learning based applications.
 
 ### GPU-based Virtual Machines
+{: #google-cloud-gpu-based-virtual-machines}
 
 For custom virtual machines, generally you will want to use [Compute Engine Virtual Machine instances](https://cloud.google.com/compute/){:target="_blank"}), with GPU enabled, to build with PyTorch. Google has [various virtual machine types](https://console.cloud.google.com/compute/instances) and pricing options, with both [Linux](https://cloud.google.com/compute/docs/quickstart-linux){:target="_blank"} and [Windows](https://cloud.google.com/compute/docs/quickstart-windows){:target="_blank"}, all of which can be configured for specific use cases. For PyTorch, it is highly recommended that you use a [GPU-enabled](https://cloud.google.com/compute/docs/gpus/add-gpus){:target="_blank"} virtual machines. They are tailored for the high compute needs of machine learning.
 
