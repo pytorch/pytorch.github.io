@@ -158,7 +158,7 @@
               
               
                 <div class="version">
-                  <a href='http://pytorch.org/docs/versions.html'>1.4.0a0+f4e7e90 &#x25BC</a>
+                  <a href='http://pytorch.org/docs/versions.html'>1.4.0a0+dd52f50 &#x25BC</a>
                 </div>
               
             
@@ -348,8 +348,63 @@ machines.</p>
 <p class="admonition-title">Warning</p>
 <p>The RPC API is experimental and subject to change.</p>
 </div>
-<div class="section" id="rpc-and-rref-framework">
-<h2>RPC and RRef Framework<a class="headerlink" href="#rpc-and-rref-framework" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="basics">
+<h2>Basics<a class="headerlink" href="#basics" title="Permalink to this headline">¶</a></h2>
+<p>The distributed RPC framework makes it easy to run functions remotely, supports
+referencing remote objects without copying the real data around, and provides
+autograd and optimizer APIs to transparently run backward and update parameters
+across RPC boundaries. These features can be categorized into four sets of APIs.</p>
+<ol class="arabic simple">
+<li><p><strong>Remote Procedure Call (RPC)</strong> supports running a function on the specified
+destination worker with the given arguments and getting the return value back
+or creating a reference to the return value. There are three main RPC APIs:
+<a class="reference internal" href="#torch.distributed.rpc.rpc_sync" title="torch.distributed.rpc.rpc_sync"><code class="xref py py-meth docutils literal notranslate"><span class="pre">rpc_sync()</span></code></a> (synchronous),
+<a class="reference internal" href="#torch.distributed.rpc.rpc_async" title="torch.distributed.rpc.rpc_async"><code class="xref py py-meth docutils literal notranslate"><span class="pre">rpc_async()</span></code></a> (asynchronous), and
+<a class="reference internal" href="#torch.distributed.rpc.remote" title="torch.distributed.rpc.remote"><code class="xref py py-meth docutils literal notranslate"><span class="pre">remote()</span></code></a> (asynchronous and returns a reference
+to the remote return value). Use the synchronous API if the user code cannot
+proceed without the return value. Otherwise, use the asynchronous API to get
+a future, and wait on the future when the return value is needed on the
+caller. The <a class="reference internal" href="#torch.distributed.rpc.remote" title="torch.distributed.rpc.remote"><code class="xref py py-meth docutils literal notranslate"><span class="pre">remote()</span></code></a> API is useful when the
+requirement is to create something remotely but never need to fetch it to
+the caller. Imagine the case that a driver process is setting up a parameter
+server and a trainer. The driver can create an embedding table on the
+parameter server and then share the reference to the embedding table with the
+trainer, but itself will never use the embedding table locally. In this case,
+<a class="reference internal" href="#torch.distributed.rpc.rpc_sync" title="torch.distributed.rpc.rpc_sync"><code class="xref py py-meth docutils literal notranslate"><span class="pre">rpc_sync()</span></code></a> and
+<a class="reference internal" href="#torch.distributed.rpc.rpc_async" title="torch.distributed.rpc.rpc_async"><code class="xref py py-meth docutils literal notranslate"><span class="pre">rpc_async()</span></code></a> are no longer appropriate, as they
+always imply that the return value will be returned to the caller
+immediately or in the future.</p></li>
+<li><p><strong>Remote Reference (RRef)</strong> serves as a distributed shared pointer to a local
+or remote object. It can be shared with other workers and reference counting
+will be handled transparently. Each RRef only has one owner and the object
+only lives on that owner. Non-owner workers holding RRefs can get copies of
+the object from the owner by explicitly requesting it. This is useful when
+a worker needs to access some data object, but itself is neither the creator
+(the caller of <a class="reference internal" href="#torch.distributed.rpc.remote" title="torch.distributed.rpc.remote"><code class="xref py py-meth docutils literal notranslate"><span class="pre">remote()</span></code></a>) or the owner of the
+object. The distributed optimizer, as we will discuss below, is one example
+of such use cases.</p></li>
+<li><p><strong>Distributed Autograd</strong> stitches together local autograd engines on all the
+workers involved in the forward pass, and automatically reach out to them
+during the backward pass to compute gradients. This is especially helpful if
+the forward pass needs to span multiple machines when conducting, e.g.,
+distributed model parallel training, parameter-server training, etc. With
+this feature, user code no longer needs to worry about how to send gradients
+across RPC boundaries and in which order should the local autograd engines
+be launched, which can become quite complicated where there are nested and
+inter-dependent RPC calls in the forward pass.</p></li>
+<li><p><strong>Distributed Optimizer</strong>’s constructor takes a
+<a class="reference internal" href="optim.html#torch.optim.Optimizer" title="torch.optim.Optimizer"><code class="xref py py-meth docutils literal notranslate"><span class="pre">Optimizer()</span></code></a> (e.g., <a class="reference internal" href="optim.html#torch.optim.SGD" title="torch.optim.SGD"><code class="xref py py-meth docutils literal notranslate"><span class="pre">SGD()</span></code></a>,
+<a class="reference internal" href="optim.html#torch.optim.Adagrad" title="torch.optim.Adagrad"><code class="xref py py-meth docutils literal notranslate"><span class="pre">Adagrad()</span></code></a>, etc.) and a list of parameter RRefs, creates an
+<a class="reference internal" href="optim.html#torch.optim.Optimizer" title="torch.optim.Optimizer"><code class="xref py py-meth docutils literal notranslate"><span class="pre">Optimizer()</span></code></a> instance on each distinct RRef owner, and
+updates parameters accordingly when running <cite>step()</cite>. When you have
+distributed forward and backward passes, parameters and gradients will be
+scattered across multiple workers, and hence it requires an optimizer on each
+of the involved workers. Distributed Optimizer wraps all those local
+optimizers into one, and provides a concise constructor and <cite>step()</cite> API.</p></li>
+</ol>
+</div>
+<div class="section" id="rpc">
+<span id="id2"></span><h2>RPC<a class="headerlink" href="#rpc" title="Permalink to this headline">¶</a></h2>
 <p>Before using RPC and distributed autograd primitives, initialization must take
 place. To initialize the RPC framework we need to use
 <a class="reference internal" href="#torch.distributed.rpc.init_rpc" title="torch.distributed.rpc.init_rpc"><code class="xref py py-meth docutils literal notranslate"><span class="pre">init_rpc()</span></code></a> which would initialize the RPC
@@ -387,57 +442,9 @@ consturctor.</p></li>
 </dl>
 </dd></dl>
 
-</div>
-<div class="section" id="rref">
-<span id="id2"></span><h2>RRef<a class="headerlink" href="#rref" title="Permalink to this headline">¶</a></h2>
-<p>An <cite>RRef</cite> (Remote REFerence) is a reference to a value of some type <cite>T</cite>
-(e.g. <cite>Tensor</cite>) on a remote worker. This handle keeps the referenced remote
-value alive on the owner, but there is no implication that the value will be
-transferred to the local worker in the future. RRefs can be used in
-multi-machine training by holding references to <a class="reference external" href="https://pytorch.org/docs/stable/nn.html#torch.nn.Module">nn.Modules</a> that exist on
-other workers, and calling the appropriate functions to retrieve or modify their
-parameters during training. See <a class="reference internal" href="notes/rref.html#remote-reference-protocol"><span class="std std-ref">Remote Reference Protocol</span></a> for more
-details.</p>
-<dl class="class">
-<dt id="torch.distributed.rpc.RRef">
-<em class="property">class </em><code class="sig-prename descclassname">torch.distributed.rpc.</code><code class="sig-name descname">RRef</code><a class="headerlink" href="#torch.distributed.rpc.RRef" title="Permalink to this definition">¶</a></dt>
-<dd><p>A class encapsulating a reference to a value of some type on a remote worker.
-This handle will keep the referenced remote value alive on the worker.</p>
-<dl class="method">
-<dt id="torch.distributed.rpc.RRef.is_owner">
-<code class="sig-name descname">is_owner</code><span class="sig-paren">(</span><em class="sig-param">self: torch.distributed.rpc.RRef</em><span class="sig-paren">)</span> &#x2192; bool<a class="headerlink" href="#torch.distributed.rpc.RRef.is_owner" title="Permalink to this definition">¶</a></dt>
-<dd><p>Returns whether or not the current node is the owner of this <code class="docutils literal notranslate"><span class="pre">RRef</span></code>.</p>
-</dd></dl>
-
-<dl class="method">
-<dt id="torch.distributed.rpc.RRef.local_value">
-<code class="sig-name descname">local_value</code><span class="sig-paren">(</span><em class="sig-param">self: torch.distributed.rpc.RRef</em><span class="sig-paren">)</span> &#x2192; object<a class="headerlink" href="#torch.distributed.rpc.RRef.local_value" title="Permalink to this definition">¶</a></dt>
-<dd><p>If the current node is the owner, returns a reference to the local value.
-Otherwise, throws an exception.</p>
-</dd></dl>
-
-<dl class="method">
-<dt id="torch.distributed.rpc.RRef.owner">
-<code class="sig-name descname">owner</code><span class="sig-paren">(</span><em class="sig-param">self: torch.distributed.rpc.RRef</em><span class="sig-paren">)</span> &#x2192; torch.distributed.rpc.WorkerInfo<a class="headerlink" href="#torch.distributed.rpc.RRef.owner" title="Permalink to this definition">¶</a></dt>
-<dd><p>Returns worker information of the node that owns this <code class="docutils literal notranslate"><span class="pre">RRef</span></code>.</p>
-</dd></dl>
-
-<dl class="method">
-<dt id="torch.distributed.rpc.RRef.to_here">
-<code class="sig-name descname">to_here</code><span class="sig-paren">(</span><em class="sig-param">self: torch.distributed.rpc.RRef</em><span class="sig-paren">)</span> &#x2192; object<a class="headerlink" href="#torch.distributed.rpc.RRef.to_here" title="Permalink to this definition">¶</a></dt>
-<dd><p>Blocking call that copies the value of the RRef from the owner to the local node
-and returns it. If the current node is the owner, returns a reference to the
-local value.</p>
-</dd></dl>
-
-</dd></dl>
-
-</div>
-<div class="section" id="rpc-and-rref-primitives">
-<h2>RPC and RRef primitives<a class="headerlink" href="#rpc-and-rref-primitives" title="Permalink to this headline">¶</a></h2>
-<p>This library provides primitives allowing users to create and modify references
-(RRefs) to remote data as well as remotely execute functions.</p>
-<span class="target" id="module-torch.distributed.rpc"></span><dl class="function">
+<p>The following APIs provide primitives allowing users to remotely execute
+functions as well as create (RRefs) to remote data objects.</p>
+<dl class="function">
 <dt id="torch.distributed.rpc.rpc_sync">
 <code class="sig-prename descclassname">torch.distributed.rpc.</code><code class="sig-name descname">rpc_sync</code><span class="sig-paren">(</span><em class="sig-param">to</em>, <em class="sig-param">func</em>, <em class="sig-param">args=None</em>, <em class="sig-param">kwargs=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/torch/distributed/rpc/api.html#rpc_sync"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#torch.distributed.rpc.rpc_sync" title="Permalink to this definition">¶</a></dt>
 <dd><p>Make a blocking RPC call to run function <code class="docutils literal notranslate"><span class="pre">func</span></code> on worker <code class="docutils literal notranslate"><span class="pre">to</span></code>. RPC
@@ -611,6 +618,83 @@ outstanding work to complete.</p>
 <span class="o">&gt;&gt;&gt;</span> <span class="n">rpc</span><span class="o">.</span><span class="n">shutdown</span><span class="p">()</span>
 </pre></div>
 </div>
+</dd></dl>
+
+</div>
+<div class="section" id="rref">
+<span id="id3"></span><h2>RRef<a class="headerlink" href="#rref" title="Permalink to this headline">¶</a></h2>
+<p>An <cite>RRef</cite> (Remote REFerence) is a reference to a value of some type <cite>T</cite>
+(e.g. <cite>Tensor</cite>) on a remote worker. This handle keeps the referenced remote
+value alive on the owner, but there is no implication that the value will be
+transferred to the local worker in the future. RRefs can be used in
+multi-machine training by holding references to <a class="reference external" href="https://pytorch.org/docs/stable/nn.html#torch.nn.Module">nn.Modules</a> that exist on
+other workers, and calling the appropriate functions to retrieve or modify their
+parameters during training. See <a class="reference internal" href="notes/rref.html#remote-reference-protocol"><span class="std std-ref">Remote Reference Protocol</span></a> for more
+details.</p>
+<dl class="class">
+<dt id="torch.distributed.rpc.RRef">
+<em class="property">class </em><code class="sig-prename descclassname">torch.distributed.rpc.</code><code class="sig-name descname">RRef</code><a class="headerlink" href="#torch.distributed.rpc.RRef" title="Permalink to this definition">¶</a></dt>
+<dd><p>A class encapsulating a reference to a value of some type on a remote
+worker. This handle will keep the referenced remote value alive on the
+worker.</p>
+<p>Example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">Following</span> <span class="n">examples</span> <span class="n">skip</span> <span class="n">RPC</span> <span class="n">initialization</span> <span class="ow">and</span> <span class="n">shutdown</span> <span class="n">code</span>
+<span class="k">for</span> <span class="n">simplicity</span><span class="o">.</span> <span class="n">Refer</span> <span class="n">to</span> <span class="n">RPC</span> <span class="n">docs</span> <span class="k">for</span> <span class="n">those</span> <span class="n">details</span><span class="o">.</span>
+
+<span class="mf">1.</span> <span class="n">Create</span> <span class="n">an</span> <span class="n">RRef</span> <span class="n">using</span> <span class="n">rpc</span><span class="o">.</span><span class="n">remote</span>
+
+<span class="o">&gt;&gt;&gt;</span> <span class="kn">import</span> <span class="nn">torch.distributed.rpc</span> <span class="k">as</span> <span class="nn">rpc</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="n">rref</span> <span class="o">=</span> <span class="n">rpc</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="s2">&quot;worker1&quot;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">add</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">2</span><span class="p">),</span> <span class="mi">3</span><span class="p">))</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="c1"># get a copy of value from the RRef</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="n">x</span> <span class="o">=</span> <span class="n">rref</span><span class="o">.</span><span class="n">to_here</span><span class="p">()</span>
+
+<span class="mf">2.</span> <span class="n">Create</span> <span class="n">an</span> <span class="n">RRef</span> <span class="kn">from</span> <span class="nn">a</span> <span class="n">local</span> <span class="nb">object</span>
+
+<span class="o">&gt;&gt;&gt;</span> <span class="kn">from</span> <span class="nn">torch.distributed.rpc</span> <span class="kn">import</span> <span class="n">RRef</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="n">x</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="n">rref</span> <span class="o">=</span> <span class="n">RRef</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+
+<span class="mf">3.</span> <span class="n">Share</span> <span class="n">an</span> <span class="n">RRef</span> <span class="k">with</span> <span class="n">other</span> <span class="n">workers</span>
+
+<span class="n">On</span> <span class="n">both</span> <span class="n">worker0</span> <span class="ow">and</span> <span class="n">worker1</span><span class="p">:</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="k">def</span> <span class="nf">f</span><span class="p">(</span><span class="n">rref</span><span class="p">):</span>
+<span class="o">&gt;&gt;&gt;</span>   <span class="k">return</span> <span class="n">rref</span><span class="o">.</span><span class="n">to_here</span><span class="p">()</span> <span class="o">+</span> <span class="mi">1</span>
+
+<span class="n">On</span> <span class="n">worker0</span><span class="p">:</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="n">rref</span> <span class="o">=</span> <span class="n">RRef</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">))</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="c1"># the following RPC shares the rref with worker1, reference</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="c1"># count is automatically updated.</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="n">rpc</span><span class="o">.</span><span class="n">rpc_sync</span><span class="p">(</span><span class="s2">&quot;worker1&quot;</span><span class="p">,</span> <span class="n">f</span><span class="p">,</span> <span class="n">args</span><span class="p">(</span><span class="n">rref</span><span class="p">,))</span>
+</pre></div>
+</div>
+<dl class="method">
+<dt id="torch.distributed.rpc.RRef.is_owner">
+<code class="sig-name descname">is_owner</code><span class="sig-paren">(</span><em class="sig-param">self: torch.distributed.rpc.RRef</em><span class="sig-paren">)</span> &#x2192; bool<a class="headerlink" href="#torch.distributed.rpc.RRef.is_owner" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns whether or not the current node is the owner of this
+<code class="docutils literal notranslate"><span class="pre">RRef</span></code>.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="torch.distributed.rpc.RRef.local_value">
+<code class="sig-name descname">local_value</code><span class="sig-paren">(</span><em class="sig-param">self: torch.distributed.rpc.RRef</em><span class="sig-paren">)</span> &#x2192; object<a class="headerlink" href="#torch.distributed.rpc.RRef.local_value" title="Permalink to this definition">¶</a></dt>
+<dd><p>If the current node is the owner, returns a reference to the
+local value. Otherwise, throws an exception.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="torch.distributed.rpc.RRef.owner">
+<code class="sig-name descname">owner</code><span class="sig-paren">(</span><em class="sig-param">self: torch.distributed.rpc.RRef</em><span class="sig-paren">)</span> &#x2192; torch.distributed.rpc.WorkerInfo<a class="headerlink" href="#torch.distributed.rpc.RRef.owner" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns worker information of the node that owns this <code class="docutils literal notranslate"><span class="pre">RRef</span></code>.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="torch.distributed.rpc.RRef.to_here">
+<code class="sig-name descname">to_here</code><span class="sig-paren">(</span><em class="sig-param">self: torch.distributed.rpc.RRef</em><span class="sig-paren">)</span> &#x2192; object<a class="headerlink" href="#torch.distributed.rpc.RRef.to_here" title="Permalink to this definition">¶</a></dt>
+<dd><p>Blocking call that copies the value of the RRef from the owner
+to the local node and returns it. If the current node is the
+owner, returns a reference to the local value.</p>
+</dd></dl>
+
 </dd></dl>
 
 </div>
@@ -822,9 +906,9 @@ return. The current distributed autograd
             <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
               <ul>
 <li><a class="reference internal" href="#">Distributed RPC Framework</a><ul>
-<li><a class="reference internal" href="#rpc-and-rref-framework">RPC and RRef Framework</a></li>
+<li><a class="reference internal" href="#basics">Basics</a></li>
+<li><a class="reference internal" href="#rpc">RPC</a></li>
 <li><a class="reference internal" href="#rref">RRef</a></li>
-<li><a class="reference internal" href="#rpc-and-rref-primitives">RPC and RRef primitives</a></li>
 <li><a class="reference internal" href="#distributed-autograd-framework">Distributed Autograd Framework</a></li>
 <li><a class="reference internal" href="#module-torch.distributed.optim">Distributed Optimizer</a></li>
 </ul>
