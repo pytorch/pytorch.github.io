@@ -156,7 +156,7 @@
               
               
                 <div class="version">
-                  <a href='http://pytorch.org/docs/versions.html'>1.4.0a0+786de33 &#x25BC</a>
+                  <a href='http://pytorch.org/docs/versions.html'>1.4.0a0+d38f911 &#x25BC</a>
                 </div>
               
             
@@ -367,6 +367,7 @@
 <span class="kn">import</span> <span class="nn">sys</span>
 <span class="kn">import</span> <span class="nn">textwrap</span>
 <span class="kn">import</span> <span class="nn">warnings</span>
+<span class="kn">import</span> <span class="nn">weakref</span>
 
 <span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">OrderedDict</span>
 
@@ -1614,12 +1615,16 @@
         <span class="k">return</span> <span class="n">obj</span>
     <span class="k">else</span><span class="p">:</span>
         <span class="n">_check_directly_compile_overloaded</span><span class="p">(</span><span class="n">obj</span><span class="p">)</span>
+        <span class="n">maybe_already_compiled_fn</span> <span class="o">=</span> <span class="n">_try_get_jit_cached_key</span><span class="p">(</span><span class="n">obj</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">maybe_already_compiled_fn</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">maybe_already_compiled_fn</span>
         <span class="n">ast</span> <span class="o">=</span> <span class="n">get_jit_def</span><span class="p">(</span><span class="n">obj</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">_rcb</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">_rcb</span> <span class="o">=</span> <span class="n">_jit_internal</span><span class="o">.</span><span class="n">createResolutionCallbackFromClosure</span><span class="p">(</span><span class="n">obj</span><span class="p">)</span>
         <span class="n">fn</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">_jit_script_compile</span><span class="p">(</span><span class="n">qualified_name</span><span class="p">,</span> <span class="n">ast</span><span class="p">,</span> <span class="n">_rcb</span><span class="p">,</span> <span class="n">get_default_args</span><span class="p">(</span><span class="n">obj</span><span class="p">))</span>
         <span class="c1"># Forward docstrings</span>
         <span class="n">fn</span><span class="o">.</span><span class="vm">__doc__</span> <span class="o">=</span> <span class="n">obj</span><span class="o">.</span><span class="vm">__doc__</span>
+        <span class="n">_set_jit_cache</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="n">fn</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">fn</span></div>
 
 <span class="k">def</span> <span class="nf">interface</span><span class="p">(</span><span class="n">obj</span><span class="p">):</span>
@@ -2308,6 +2313,28 @@
     <span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">_get_tracing_state</span><span class="p">,</span> <span class="s2">&quot;aten::_get_tracing_state&quot;</span><span class="p">),</span>
     <span class="p">(</span><span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">,</span> <span class="s2">&quot;aten::warn&quot;</span><span class="p">),</span>
 <span class="p">]</span>
+
+
+
+<span class="c1"># Caching: we currently cache compilation of free functions.</span>
+<span class="c1"># To cache free functions we hold a weak ref to the function object and</span>
+<span class="c1"># map to the compiled fn&#39;s qualified name.</span>
+<span class="c1"># In the future we could consider caching more types of objects so that</span>
+<span class="c1"># aliasing is preserved across separate compilations of the same object.</span>
+
+<span class="n">_jit_caching_layer</span> <span class="o">=</span> <span class="n">weakref</span><span class="o">.</span><span class="n">WeakKeyDictionary</span><span class="p">()</span>
+
+<span class="k">def</span> <span class="nf">_try_get_jit_cached_key</span><span class="p">(</span><span class="n">key</span><span class="p">):</span>
+    <span class="n">qual_name</span> <span class="o">=</span> <span class="n">_jit_caching_layer</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">qual_name</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">_python_cu</span><span class="o">.</span><span class="n">find_function</span><span class="p">(</span><span class="n">qual_name</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+
+<span class="k">def</span> <span class="nf">_set_jit_cache</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+    <span class="c1"># only free functions currently supported</span>
+    <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">jit</span><span class="o">.</span><span class="n">ScriptFunction</span><span class="p">)</span>
+    <span class="n">_jit_caching_layer</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">qualified_name</span>
 
 
 <span class="c1"># lazily built to ensure the correct initialization order</span>
