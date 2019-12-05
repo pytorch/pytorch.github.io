@@ -14,7 +14,7 @@ There are many techniques attempting to solve the problem of privacy in ML, each
 
 Additionally, to bolster this ecosystem and take the field of privacy preserving ML forward, we are also calling for contributions and supporting research efforts on this combined platform by providing funding to support the OpenMined community and the researchers that contribute, build proofs of concepts and desire to be on the cutting edge of how privacy-preserving technology is applied. We will provide funding through the [RAAIS Foundation](https://www.raais.org/), a non-profit organization with a mission to advance education and research in artificial intelligence for the common good. We encourage interested parties to apply to one or more of the fellowships listed below.
 
-# Tools Powering the Future of Privacy-Preserving ML
+## Tools Powering the Future of Privacy-Preserving ML
 
 The next generation of privacy-preserving open source tools enable ML researchers to easily experiment with ML models using secure computing techniques without needing to be cryptography experts. By integrating with PyTorch, PySyft and CrypTen offer familiar environments for ML developers to research and apply these techniques as part of their work.
 
@@ -29,23 +29,23 @@ The focus areas for CrypTen and PySyft are naturally aligned and complement each
 
 Working together will enable PySyft to use CrypTen as a backend for encrypted tensors. This can lead to an increase in performance for PySyft and the adoption of CrypTen as a runtime by PySyft’s userbase. In addition to this, PyTorch is also adding cryptography friendly features such as support for cryptographically secure random number generation. Over the long run, this allows each library to focus exclusively on its core competencies while enjoying the benefits of the synergistic relationship.
 
-# New Funding for OpenMined Contributors
+## New Funding for OpenMined Contributors
 
 We are especially excited to announce that the PyTorch team has invested $250,000 to support OpenMined in furthering the development and proliferation of privacy-preserving ML. This gift will be facilitated via the [RAAIS Foundation](https://www.raais.org/) and will be available immediately to support paid fellowship grants for the OpenMined community.
 
-# How to get involved
+## How to get involved
 
 Thanks to the support from the PyTorch team, OpenMined is able to offer three different opportunities for you to participate in the project’s development. Each of these fellowships furthers our shared mission to lower the barrier-to-entry for privacy-preserving ML and to create a more privacy-preserving world.
 
-## Core PySyft CrypTen Integration Fellowships
+### Core PySyft CrypTen Integration Fellowships
 
 During these fellowships, we will integrate CrypTen as a supported backend for encrypted computation in PySyft. This will allow for the high-performance, secure multi-party computation capabilities of CrypTen to be used alongside other important tools in PySyft such as differential privacy and federated learning. For more information on the roadmap and how to apply for a paid fellowship, check out the project’s [call for contributors](https://blog.openmined.org/openmined-pytorch-fellowship-crypten-project).
 
-## Federated Learning on Mobile, Web, and IoT Devices
+### Federated Learning on Mobile, Web, and IoT Devices
 
 During these fellowships, we will be extending PyTorch with the ability to perform federated learning across mobile, web, and IoT devices. To this end, a PyTorch front-end will be able to coordinate across federated learning backends that run in Javascript, Kotlin, Swift, and Python. Furthermore, we will also extend PySyft with the ability to coordinate these backends using peer-to-peer connections, providing low latency and the ability to run secure aggregation as a part of the protocol. For more information on the roadmap and how to apply for a paid fellowship, check out the project’s [call for contributors](https://blog.openmined.org/announcing-the-pytorch-openmined-federated-learning-fellowships).
 
-## Development Challenges
+### Development Challenges
 
 Over the coming months, we will issue regular open competitions for increasing the performance and security of the PySyft and PyGrid codebases. For performance-related challenges, contestants will compete (for a cash prize) to make a specific PySyft demo (such as federated learning) as fast as possible. For security-related challenges, contestants will compete to hack into a PyGrid server. The first to demonstrate their ability will win the cash bounty! For more information on the challenges and to sign up to receive emails when each challenge is opened, [sign up here](http://blog.openmined.org/announcing-the-openmined-pytorch-development-challenges).
 
