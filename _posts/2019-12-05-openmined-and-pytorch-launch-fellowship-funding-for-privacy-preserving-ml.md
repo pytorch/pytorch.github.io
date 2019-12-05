@@ -52,4 +52,5 @@ Over the coming months, we will issue regular open competitions for increasing t
 To apply, select one of the above projects and identify a role that matches your strengths!
 
 Cheers,
+
 Andrew, Laurens, Joe, and Shubho
