@@ -26,7 +26,7 @@ Large scale model training is becoming commonplace with architectures like BERT 
 
 The current PyTorch Distributed Data Parallel (DDP) module enables data parallel training where each process trains the same model but on different shards of data. It enables bulk synchronous, multi-host, multi-GPU/CPU execution of ML training. However, DDP has several shortcomings; e.g. jobs cannot start without acquiring all the requested nodes; jobs cannot continue after a node fails due to error or transient issue; jobs cannot incorporate a node that joined later; and lastly; progress cannot be made with the presence of a slow/stuck node.
 
-The focus of PyTorch Elastic, which uses Elastic Distributed Data Parallelism, is to address these issues and build a generic framework/APIs for PyTorch to enable reliable and elastic execution of these data parallel training workloads. It will provide better programmability, higher resilience to failures of all kinds, higher-efficiency and larger-scale training compared with pure DDP.
+The focus of [PyTorch Elastic](https://github.com/pytorch/elastic), which uses Elastic Distributed Data Parallelism, is to address these issues and build a generic framework/APIs for PyTorch to enable reliable and elastic execution of these data parallel training workloads. It will provide better programmability, higher resilience to failures of all kinds, higher-efficiency and larger-scale training compared with pure DDP.
 
 Elasticity, in this case, means both: 1) the ability for a job to continue after node failure (by running with fewer nodes and/or by incorporating a new host and transferring state to it); and 2) the ability to add/remove nodes dynamically due to resource availability changes or bottlenecks.
 
@@ -39,7 +39,7 @@ Image and video classification are at the core of content understanding. To that
 * Ease of use - This framework features a modular, flexible design that allows anyone to train machine learning models on top of PyTorch using very simple abstractions. The system also has out-of-the-box integration with AWS on PyTorch Elastic, facilitating research at scale and making it simple to move between research and production.
 * High performance - Researchers can use the framework to train models such as Resnet50 on ImageNet in as little as 15 minutes.
 
-You can learn more at the [NeurIPS Expo workshop](https://nips.cc/ExpoConferences/2019/schedule?workshop_id=16) on Multi-Modal research to production or get started with the PyTorch Elastic Imagenet example.
+You can learn more at the [NeurIPS Expo workshop](https://nips.cc/ExpoConferences/2019/schedule?workshop_id=16) on Multi-Modal research to production or get started with the PyTorch Elastic Imagenet example [here](https://github.com/pytorch/elastic/blob/master/examples/imagenet/main.py).
 
 ## Come see us at NeurIPS
 
