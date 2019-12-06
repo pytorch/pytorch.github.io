@@ -6,7 +6,7 @@ author: Team PyTorch
 
 PyTorch continues to be used for the latest state-of-the-art research on display at the NeurIPS conference next week, making up nearly [70% of papers](https://chillee.github.io/pytorch-vs-tensorflow/) that cite a framework. In addition, we’re excited to welcome Preferred Networks, the maintainers of the Chainer framework, to the PyTorch community. Their teams are moving fully over to PyTorch for developing their ML capabilities and services.
 
-This growth underpins PyTorch’s focus on building for the needs of the research community, and increasingly, supporting the full workflow from research to production deployment. To further support researchers and developers we’re launching a number of new tools and libraries for large scale computer vision and elastic fault tolerant training. Learn more on GitHub and at our NeurIPS booth.
+This growth underpins PyTorch’s focus on building for the needs of the research community, and increasingly, supporting the full workflow from research to production deployment. To further support researchers and developers, we’re launching a number of new tools and libraries for large scale computer vision and elastic fault tolerant training. Learn more on GitHub and at our NeurIPS booth.
 
 ## Preferred Networks joins the PyTorch community
 
