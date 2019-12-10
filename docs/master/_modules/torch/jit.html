@@ -157,7 +157,7 @@
               
               
                 <div class="version">
-                  <a href='http://pytorch.org/docs/versions.html'>1.4.0a0+e9ca13d &#x25BC</a>
+                  <a href='http://pytorch.org/docs/versions.html'>1.4.0a0+4464889 &#x25BC</a>
                 </div>
               
             
@@ -1616,7 +1616,7 @@
         <span class="k">return</span> <span class="n">obj</span>
     <span class="k">else</span><span class="p">:</span>
         <span class="n">_check_directly_compile_overloaded</span><span class="p">(</span><span class="n">obj</span><span class="p">)</span>
-        <span class="n">maybe_already_compiled_fn</span> <span class="o">=</span> <span class="n">_try_get_jit_cached_key</span><span class="p">(</span><span class="n">obj</span><span class="p">)</span>
+        <span class="n">maybe_already_compiled_fn</span> <span class="o">=</span> <span class="n">_try_get_jit_cached_function</span><span class="p">(</span><span class="n">obj</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">maybe_already_compiled_fn</span><span class="p">:</span>
             <span class="k">return</span> <span class="n">maybe_already_compiled_fn</span>
         <span class="n">ast</span> <span class="o">=</span> <span class="n">get_jit_def</span><span class="p">(</span><span class="n">obj</span><span class="p">)</span>
@@ -1625,7 +1625,7 @@
         <span class="n">fn</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">_jit_script_compile</span><span class="p">(</span><span class="n">qualified_name</span><span class="p">,</span> <span class="n">ast</span><span class="p">,</span> <span class="n">_rcb</span><span class="p">,</span> <span class="n">get_default_args</span><span class="p">(</span><span class="n">obj</span><span class="p">))</span>
         <span class="c1"># Forward docstrings</span>
         <span class="n">fn</span><span class="o">.</span><span class="vm">__doc__</span> <span class="o">=</span> <span class="n">obj</span><span class="o">.</span><span class="vm">__doc__</span>
-        <span class="n">_set_jit_cache</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="n">fn</span><span class="p">)</span>
+        <span class="n">_set_jit_function_cache</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="n">fn</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">fn</span></div>
 
 <span class="k">def</span> <span class="nf">interface</span><span class="p">(</span><span class="n">obj</span><span class="p">):</span>
@@ -2317,25 +2317,39 @@
 
 
 
-<span class="c1"># Caching: we currently cache compilation of free functions.</span>
+<span class="c1"># Caching: we currently cache compilation of free functions and overloaded functions.</span>
 <span class="c1"># To cache free functions we hold a weak ref to the function object and</span>
 <span class="c1"># map to the compiled fn&#39;s qualified name.</span>
+<span class="c1"># To cache overloaded functions we hold a weak ref to the function obj and</span>
+<span class="c1"># map to all of its overloaded compiled fns.</span>
 <span class="c1"># In the future we could consider caching more types of objects so that</span>
 <span class="c1"># aliasing is preserved across separate compilations of the same object.</span>
 
 <span class="n">_jit_caching_layer</span> <span class="o">=</span> <span class="n">weakref</span><span class="o">.</span><span class="n">WeakKeyDictionary</span><span class="p">()</span>
+<span class="n">_jit_function_overload_caching</span> <span class="o">=</span> <span class="n">weakref</span><span class="o">.</span><span class="n">WeakKeyDictionary</span><span class="p">()</span>
 
-<span class="k">def</span> <span class="nf">_try_get_jit_cached_key</span><span class="p">(</span><span class="n">key</span><span class="p">):</span>
+<span class="k">def</span> <span class="nf">_try_get_jit_cached_overloads</span><span class="p">(</span><span class="n">key</span><span class="p">):</span>
+    <span class="n">qual_names</span> <span class="o">=</span> <span class="n">_jit_function_overload_caching</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">qual_names</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">[</span><span class="n">_python_cu</span><span class="o">.</span><span class="n">find_function</span><span class="p">(</span><span class="n">qual_name</span><span class="p">)</span> <span class="k">for</span> <span class="n">qual_name</span> <span class="ow">in</span> <span class="n">qual_names</span><span class="p">]</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+
+<span class="k">def</span> <span class="nf">_set_jit_overload_cache</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">compiled_fns</span><span class="p">):</span>
+    <span class="n">_jit_function_overload_caching</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="n">fn</span><span class="o">.</span><span class="n">qualified_name</span> <span class="k">for</span> <span class="n">fn</span> <span class="ow">in</span> <span class="n">compiled_fns</span><span class="p">]</span>
+
+<span class="k">def</span> <span class="nf">_try_get_jit_cached_function</span><span class="p">(</span><span class="n">key</span><span class="p">):</span>
     <span class="n">qual_name</span> <span class="o">=</span> <span class="n">_jit_caching_layer</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">qual_name</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">_python_cu</span><span class="o">.</span><span class="n">find_function</span><span class="p">(</span><span class="n">qual_name</span><span class="p">)</span>
     <span class="k">else</span><span class="p">:</span>
         <span class="k">return</span> <span class="kc">None</span>
 
-<span class="k">def</span> <span class="nf">_set_jit_cache</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+<span class="k">def</span> <span class="nf">_set_jit_function_cache</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
     <span class="c1"># only free functions currently supported</span>
     <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">jit</span><span class="o">.</span><span class="n">ScriptFunction</span><span class="p">)</span>
     <span class="n">_jit_caching_layer</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">qualified_name</span>
+
 
 
 <span class="c1"># lazily built to ensure the correct initialization order</span>
@@ -2391,57 +2405,40 @@
 <span class="c1"># overloads are registered in _jit_internal and compiled here so that _overload</span>
 <span class="c1"># can be used in nn/functional.py without an import cycle</span>
 
-<span class="c1"># qualified name =&gt; list[compiled fns]</span>
-<span class="n">_compiled_overloaded_fns</span> <span class="o">=</span> <span class="p">{}</span>
-
-<span class="k">def</span> <span class="nf">_compile_function_with_overload</span><span class="p">(</span><span class="n">qual_name</span><span class="p">,</span> <span class="n">impl_fn</span><span class="p">,</span> <span class="n">overload_decl</span><span class="p">,</span> <span class="n">overload_defaults</span><span class="p">):</span>
+<span class="k">def</span> <span class="nf">_compile_function_with_overload</span><span class="p">(</span><span class="n">overload_fn</span><span class="p">,</span> <span class="n">qual_name</span><span class="p">,</span> <span class="n">impl_fn</span><span class="p">):</span>
+    <span class="n">overload_decl</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">jit</span><span class="o">.</span><span class="n">get_jit_def</span><span class="p">(</span><span class="n">overload_fn</span><span class="p">)</span><span class="o">.</span><span class="n">decl</span><span class="p">()</span>
+    <span class="n">overload_signature</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">jit</span><span class="o">.</span><span class="n">annotations</span><span class="o">.</span><span class="n">get_signature</span><span class="p">(</span><span class="n">overload_fn</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
     <span class="n">impl_ast</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">jit</span><span class="o">.</span><span class="n">get_jit_def</span><span class="p">(</span><span class="n">impl_fn</span><span class="p">)</span>
+    <span class="n">overload_defaults</span> <span class="o">=</span> <span class="n">get_default_args</span><span class="p">(</span><span class="n">overload_fn</span><span class="p">)</span>
+    <span class="n">implementation_defaults</span> <span class="o">=</span> <span class="n">get_default_args</span><span class="p">(</span><span class="n">impl_fn</span><span class="p">)</span>
     <span class="n">_rcb</span> <span class="o">=</span> <span class="n">_jit_internal</span><span class="o">.</span><span class="n">createResolutionCallbackFromClosure</span><span class="p">(</span><span class="n">impl_fn</span><span class="p">)</span>
-    <span class="n">fn</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">_jit_script_compile_overload</span><span class="p">(</span><span class="n">qual_name</span><span class="p">,</span> <span class="n">overload_decl</span><span class="p">,</span> <span class="n">impl_ast</span><span class="p">,</span> <span class="n">_rcb</span><span class="p">,</span> <span class="n">overload_defaults</span><span class="p">)</span>
+    <span class="n">fn</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">_jit_script_compile_overload</span><span class="p">(</span><span class="n">qual_name</span><span class="p">,</span> <span class="n">overload_decl</span><span class="p">,</span> <span class="n">impl_ast</span><span class="p">,</span> <span class="n">_rcb</span><span class="p">,</span>
+                                               <span class="n">implementation_defaults</span><span class="p">,</span> <span class="n">overload_defaults</span><span class="p">,</span> <span class="n">overload_signature</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">fn</span>
-
-<span class="k">def</span> <span class="nf">_check_no_signature</span><span class="p">(</span><span class="n">func</span><span class="p">):</span>
-    <span class="n">signature</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">jit</span><span class="o">.</span><span class="n">annotations</span><span class="o">.</span><span class="n">get_signature</span><span class="p">(</span><span class="n">func</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">signature</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">qual_name</span> <span class="o">=</span> <span class="n">_qualified_name</span><span class="p">(</span><span class="n">func</span><span class="p">)</span>
-        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Must explicitly add type annotations to overloaded functions: </span><span class="si">{}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">qual_name</span><span class="p">))</span>
-
-<span class="k">def</span> <span class="nf">_get_overload_decl_and_defaults</span><span class="p">(</span><span class="n">func</span><span class="p">):</span>
-    <span class="n">_check_no_signature</span><span class="p">(</span><span class="n">func</span><span class="p">)</span>
-    <span class="k">return</span> <span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">jit</span><span class="o">.</span><span class="n">get_jit_def</span><span class="p">(</span><span class="n">func</span><span class="p">)</span><span class="o">.</span><span class="n">decl</span><span class="p">(),</span> <span class="n">get_default_args</span><span class="p">(</span><span class="n">func</span><span class="p">))</span>
 
 <span class="k">def</span> <span class="nf">_get_overloads</span><span class="p">(</span><span class="n">obj</span><span class="p">):</span>
     <span class="c1"># check for cached compiled fns</span>
+    <span class="n">existing_compiled_fns</span> <span class="o">=</span> <span class="n">_try_get_jit_cached_overloads</span><span class="p">(</span><span class="n">obj</span><span class="p">)</span>
     <span class="n">qual_name</span> <span class="o">=</span> <span class="n">_qualified_name</span><span class="p">(</span><span class="n">obj</span><span class="p">)</span>
-    <span class="k">global</span> <span class="n">_compiled_overloaded_fns</span>
-    <span class="n">compiled_overloads</span> <span class="o">=</span> <span class="n">_compiled_overloaded_fns</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">qual_name</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">compiled_overloads</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">compiled_overloads</span>
+    <span class="n">uncompiled_overloads</span> <span class="o">=</span> <span class="n">_jit_internal</span><span class="o">.</span><span class="n">_get_fn_overloads</span><span class="p">(</span><span class="n">qual_name</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">uncompiled_overloads</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">existing_compiled_fns</span>
 
-    <span class="c1"># check for not yet compiled overloads</span>
-    <span class="n">overloads</span> <span class="o">=</span> <span class="n">_jit_internal</span><span class="o">.</span><span class="n">_get_fn_overloads</span><span class="p">(</span><span class="n">qual_name</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">overloads</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="k">return</span> <span class="kc">None</span>
     <span class="n">compiled_fns</span> <span class="o">=</span> <span class="p">[]</span>
-    <span class="c1"># TODO: use default args from the implementation, not from the overload</span>
-    <span class="c1"># This is more complicated because you can have a default arg with a type</span>
-    <span class="c1"># incompatible with a type of parameter in an overload, and other validation.</span>
-    <span class="c1"># This is still an internal api so for now use defaults from overload</span>
-    <span class="k">for</span> <span class="n">overload_fn</span> <span class="ow">in</span> <span class="n">overloads</span><span class="p">:</span>
-        <span class="n">overload_decl</span><span class="p">,</span> <span class="n">overload_defaults</span> <span class="o">=</span> <span class="n">_get_overload_decl_and_defaults</span><span class="p">(</span><span class="n">overload_fn</span><span class="p">)</span>
-        <span class="n">compiled_fn</span> <span class="o">=</span> <span class="n">_compile_function_with_overload</span><span class="p">(</span><span class="n">qual_name</span><span class="p">,</span> <span class="n">obj</span><span class="p">,</span> <span class="n">overload_decl</span><span class="p">,</span> <span class="n">overload_defaults</span><span class="p">)</span>
-        <span class="n">compiled_fns</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">compiled_fn</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">overload_fn</span> <span class="ow">in</span> <span class="n">uncompiled_overloads</span><span class="p">:</span>
+        <span class="n">compiled_fns</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">_compile_function_with_overload</span><span class="p">(</span><span class="n">overload_fn</span><span class="p">,</span> <span class="n">qual_name</span><span class="p">,</span> <span class="n">obj</span><span class="p">))</span>
+
+    <span class="k">if</span> <span class="n">existing_compiled_fns</span><span class="p">:</span>
+        <span class="n">compiled_fns</span> <span class="o">=</span> <span class="n">existing_compiled_fns</span> <span class="o">+</span> <span class="n">compiled_fns</span>
 
     <span class="c1"># cache compilation, remove information stored to do compilation</span>
-    <span class="n">_compiled_overloaded_fns</span><span class="p">[</span><span class="n">qual_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">compiled_fns</span>
+    <span class="n">_set_jit_overload_cache</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="n">compiled_fns</span><span class="p">)</span>
     <span class="n">_jit_internal</span><span class="o">.</span><span class="n">_clear_fn_overloads</span><span class="p">(</span><span class="n">qual_name</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">compiled_fns</span>
 
 <span class="k">def</span> <span class="nf">_check_directly_compile_overloaded</span><span class="p">(</span><span class="n">obj</span><span class="p">):</span>
     <span class="n">qual_name</span> <span class="o">=</span> <span class="n">_qualified_name</span><span class="p">(</span><span class="n">obj</span><span class="p">)</span>
-    <span class="k">global</span> <span class="n">_compiled_overloaded_fns</span>
-    <span class="k">global</span> <span class="n">_overloaded_fns</span>
-    <span class="k">if</span> <span class="n">qual_name</span> <span class="ow">in</span> <span class="n">_compiled_overloaded_fns</span> <span class="ow">or</span> <span class="n">_jit_internal</span><span class="o">.</span><span class="n">_get_fn_overloads</span><span class="p">(</span><span class="n">qual_name</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">_jit_internal</span><span class="o">.</span><span class="n">_get_fn_overloads</span><span class="p">(</span><span class="n">qual_name</span><span class="p">)</span> <span class="ow">or</span> <span class="n">_try_get_jit_cached_overloads</span><span class="p">(</span><span class="n">obj</span><span class="p">):</span>
         <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Function </span><span class="si">{}</span><span class="s2"> cannot be directly compiled because it&quot;</span>
                            <span class="s2">&quot; is overloaded. It must be used in a context of a function&quot;</span>
                            <span class="s2">&quot; where its inputs can determine which overload to call.&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">qual_name</span><span class="p">))</span>
