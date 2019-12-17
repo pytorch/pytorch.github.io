@@ -18,7 +18,7 @@ HelloWorld is a simple image classification application that demonstrates how to
 
 ### Model Preparation
 
-Let's start with model preparation. If you are familiar with PyTorch, you probably should already know how to train and save your model. In case you don't, we are going to use a pre-trained image classification model - [Resnet18](https://pytorch.org/hub/pytorch_vision_resnet/), which is already packaged in [TorchVision](https://pytorch.org/docs/stable/torchvision/index.html). To install it, run the command below.
+Let's start with model preparation. If you are familiar with PyTorch, you probably should already know how to train and save your model. In case you don't, we are going to use a pre-trained image classification model - [MobileNet v2](https://pytorch.org/hub/pytorch_vision_mobilenet_v2/), which is already packaged in [TorchVision](https://pytorch.org/docs/stable/torchvision/index.html). To install it, run the command below.
 
 > We highly recommend following the [Pytorch Github page](https://github.com/pytorch/pytorch) to set up the Python development environment on your local machine. 
 
@@ -115,7 +115,6 @@ Again, the `predict` method is just an Objective-C wrapper. Under the hood, it c
 ```cpp
 at::Tensor tensor = torch::from_blob(imageBuffer, {1, 3, 224, 224}, at::kFloat);
 torch::autograd::AutoGradMode guard(false);
-at::AutoNonVariableTypeMode non_var_type_mode(true);
 auto outputTensor = _impl.forward({tensor}).toTensor();
 float* floatBuffer = outputTensor.data_ptr<float>();
 ```
@@ -193,6 +192,37 @@ In the build settings, search for **other linker flags**.  Add a custom linker f
 ## API Docs
 
 Currently, the iOS framework uses the Pytorch C++ front-end APIs directly. The C++ document can be found here https://pytorch.org/cppdocs/. To learn more about it, we recommend exploring the [C++ front-end tutorials](https://pytorch.org/tutorials/advanced/cpp_frontend.html) on PyTorch webpage. In the meantime, we're working on providing the Swift/Objective-C API wrappers to PyTorch.
+
+
+### Custom build
+
+Starting from 1.4.0, PyTorch supports custom build. You can now build the PyTorch library that only contains the operators needed by your model. To do that, follow the steps below
+
+1. Verify your PyTorch version is 1.4.0 or above. You can do that by checking the value of `torch.__version__`.
+2. To dump the operators in your model, we need to run a few lines of Python code
+
+    ```python
+    import torch, yaml
+    model = torch.jit.load("example.pt")
+    ops = torch.jit.export_opnames(m)
+    f = open('example.yaml', 'w')
+    yaml.dump(ops, f)
+    ```
+The `export_opnames` API is available in `torch.jit` module, and we need to save the result to a yaml file.
+
+3. Run the iOS build script locally and pass in the yaml file generated from last step
+
+    ```
+    SELECTED_OP_LIST=example.yaml BUILD_PYTORCH_MOBILE=1 IOS_ARCH=arm64 ./scripts/build_ios.sh
+    ```
+
+4. After the build succeeds, you can integrate the result libraries to your project by following the **XCode Setup** section above.
+
+5. The last step is to add a single line of C++ code before running `forward`
+
+    ```cpp
+    torch::jit::GraphOptimizerEnabledGurad gard(false);
+    ```
 
 ## Issues and Contribution
 
