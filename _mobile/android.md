@@ -263,6 +263,9 @@ dependencies {
     implementation(name:'pytorch_android', ext:'aar')
     implementation(name:'pytorch_android_torchvision', ext:'aar')
     implementation(name:'pytorch_android_fbjni', ext:'aar')
+    ...
+    implementation 'com.android.support:appcompat-v7:28.0.0'
+    implementation 'com.facebook.soloader:nativeloader:0.8.0'
 }
 ```
 
@@ -273,7 +276,35 @@ packagingOptions {
 }
 ```
 
-## More Details
+Also we have to add all transitive dependencies of our aars. As `pytorch_android` depends on `com.android.support:appcompat-v7:28.0.0` and `com.facebook.soloader:nativeloader:0.8.0`, we need to add them. (In case of using maven dependencies they are added automatically from `pom.xml`).
+
+
+## Custom Build
+
+To reduce the size of binaries you can do custom build of PyTorch Android with only set of operators required by your model.
+This includes two steps: preparing the list of operators from your model, rebuilding pytorch android with specified list.
+
+1\. Preparation of the list of operators
+
+List of operators of your serialized torchscript model can be prepared in yaml format using python api function `torch.jit.export_opnames()`:
+```
+import torch, yaml
+m = torch.jit.load("example.pt")
+ops = torch.jit.export_opnames(m)
+f = open('test.yaml', 'w')
+yaml.dump(ops, f)
+```
+2\. Building PyTorch Android with prepared operators list.
+
+To build PyTorch Android with the prepared yaml list of operators, specify it in the environment variable `SELECTED_OP_LIST`. Also in the arguments, specify which Android ABIs it should build; by default it builds all 4 Android ABIs.
+
+```
+SELECTED_OP_LIST=test.yaml sh scripts/build_pytorch_android.sh x86
+```
+
+After successful build you can integrate the result aar files to your android gradle project, following the steps from previous section of this tutorial (Building PyTorch Android from Source).
+
+## API Docs
 
 You can find more details about the PyTorch Android API in the [Javadoc](https://pytorch.org/docs/stable/packages.html).
 
