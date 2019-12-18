@@ -191,7 +191,7 @@ In the build settings, search for **other linker flags**.  Add a custom linker f
 
 ## API Docs
 
-Currently, the iOS framework uses the Pytorch C++ front-end APIs directly. The C++ document can be found here https://pytorch.org/cppdocs/. To learn more about it, we recommend exploring the [C++ front-end tutorials](https://pytorch.org/tutorials/advanced/cpp_frontend.html) on PyTorch webpage. In the meantime, we're working on providing the Swift/Objective-C API wrappers to PyTorch.
+Currently, the iOS framework uses the Pytorch C++ front-end APIs directly. The C++ document can be found here [https://pytorch.org/cppdocs/](https://pytorch.org/cppdocs/). To learn more about it, we recommend exploring the [C++ front-end tutorials](https://pytorch.org/tutorials/advanced/cpp_frontend.html) on PyTorch webpage. In the meantime, we're working on providing the Swift/Objective-C API wrappers to PyTorch.
 
 
 ### Custom Build
