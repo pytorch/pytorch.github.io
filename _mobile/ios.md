@@ -194,35 +194,32 @@ In the build settings, search for **other linker flags**.  Add a custom linker f
 Currently, the iOS framework uses the Pytorch C++ front-end APIs directly. The C++ document can be found here https://pytorch.org/cppdocs/. To learn more about it, we recommend exploring the [C++ front-end tutorials](https://pytorch.org/tutorials/advanced/cpp_frontend.html) on PyTorch webpage. In the meantime, we're working on providing the Swift/Objective-C API wrappers to PyTorch.
 
 
-### Custom build
+### Custom Build
 
 Starting from 1.4.0, PyTorch supports custom build. You can now build the PyTorch library that only contains the operators needed by your model. To do that, follow the steps below
 
-1. Verify your PyTorch version is 1.4.0 or above. You can do that by checking the value of `torch.__version__`.
-2. To dump the operators in your model, we need to run a few lines of Python code
+(1) Verify your PyTorch version is 1.4.0 or above. You can do that by checking the value of `torch.__version__`.
+(2) To dump the operators in your model, run the following lines of Python code:
 
-    ```python
-    import torch, yaml
-    model = torch.jit.load("example.pt")
-    ops = torch.jit.export_opnames(m)
-    f = open('example.yaml', 'w')
-    yaml.dump(ops, f)
-    ```
-The `export_opnames` API is available in `torch.jit` module, and we need to save the result to a yaml file.
+```python
+import torch, yaml
+model = torch.jit.load("example.pt")
+ops = torch.jit.export_opnames(m)
+f = open('example.yaml', 'w')
+yaml.dump(ops, f)
+```
+In the snippet above, you first need to load the ScriptModule. Then, use `export_opnames` to return a list of operator names of the ScriptModule and its submodules. Lastly, save the result in a yaml file.
 
-3. Run the iOS build script locally and pass in the yaml file generated from last step
+(3) To run the iOS build script locally with the prepared yaml list of operators, pass in the yaml file generate from the last step into the environment variable `SELECTED_OP_LIST`. Also in the arguments, specify `BUILD_PYTORCH_MOBILE=1` as well as the platform. Take the arm64 build for example, the script should be:
+```
+SELECTED_OP_LIST=example.yaml BUILD_PYTORCH_MOBILE=1 IOS_ARCH=arm64 ./scripts/build_ios.sh
+```
+(4) After the build succeeds, you can integrate the result libraries to your project by following the [XCode Setup](#xcode-setup) section above.
+(5) The last step is to add a single line of C++ code before running `forward`. This is because by default JIT will do some optimizations on operators (fusion for example), which might break the consistency with the ops we dumped from the model.
 
-    ```
-    SELECTED_OP_LIST=example.yaml BUILD_PYTORCH_MOBILE=1 IOS_ARCH=arm64 ./scripts/build_ios.sh
-    ```
-
-4. After the build succeeds, you can integrate the result libraries to your project by following the **XCode Setup** section above.
-
-5. The last step is to add a single line of C++ code before running `forward`
-
-    ```cpp
-    torch::jit::GraphOptimizerEnabledGurad gard(false);
-    ```
+```cpp
+torch::jit::GraphOptimizerEnabledGurad gard(false);
+```
 
 ## Issues and Contribution
 
