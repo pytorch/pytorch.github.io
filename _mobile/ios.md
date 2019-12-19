@@ -189,9 +189,9 @@ In the build settings, search for **other linker flags**.  Add a custom linker f
 ```
  Finally, disable bitcode for your target by selecting the Build Settings, searching for **Enable Bitcode**, and set the value to **No**.
 
-## API Docs
+### API Docs
 
-Currently, the iOS framework uses the Pytorch C++ front-end APIs directly. The C++ document can be found here [https://pytorch.org/cppdocs/](https://pytorch.org/cppdocs/). To learn more about it, we recommend exploring the [C++ front-end tutorials](https://pytorch.org/tutorials/advanced/cpp_frontend.html) on PyTorch webpage. In the meantime, we're working on providing the Swift/Objective-C API wrappers to PyTorch.
+Currently, the iOS framework uses the Pytorch C++ front-end APIs directly. The C++ document can be found [here](https://pytorch.org/cppdocs/). To learn more about it, we recommend exploring the [C++ front-end tutorials](https://pytorch.org/tutorials/advanced/cpp_frontend.html) on PyTorch webpage. In the meantime, we're working on providing the Swift/Objective-C API wrappers to PyTorch.
 
 
 ### Custom Build
@@ -221,7 +221,7 @@ SELECTED_OP_LIST=example.yaml BUILD_PYTORCH_MOBILE=1 IOS_ARCH=arm64 ./scripts/bu
 5\. The last step is to add a single line of C++ code before running `forward`. This is because by default JIT will do some optimizations on operators (fusion for example), which might break the consistency with the ops we dumped from the model.
 
 ```cpp
-torch::jit::GraphOptimizerEnabledGurad gard(false);
+torch::jit::GraphOptimizerEnabledGuard guard(false);
 ```
 
 ## Issues and Contribution
