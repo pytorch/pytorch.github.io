@@ -1,5 +1,5 @@
 ---
-title: 파이토치(PYTORCH) 튜토리얼에 오신 것을 환영합니다
+title: 파이토치 (PyTorch) 튜토리얼
 summary: Tutorials in Korean, translated by the community.
 class: pytorch-resource
 link: https://tutorials.pytorch.kr/
