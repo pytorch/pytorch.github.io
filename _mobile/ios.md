@@ -200,14 +200,14 @@ Starting from 1.4.0, PyTorch supports custom build. You can now build the PyTorc
 
 1\. Verify your PyTorch version is 1.4.0 or above. You can do that by checking the value of `torch.__version__`.
 
-2\. To dump the operators in your model, run the following lines of Python code:
+2\. To dump the operators in your model, say `MobileNetV2`, run the following lines of Python code:
 
 ```python
 import torch, yaml
-model = torch.jit.load("example.pt")
-ops = torch.jit.export_opnames(m)
-f = open('example.yaml', 'w')
-yaml.dump(ops, f)
+model = torch.jit.load('MobileNetV2.pt')
+ops = torch.jit.export_opnames(model)
+with open('MobileNetV2.yaml', 'w') as output:
+    yaml.dump(ops, output)
 ```
 In the snippet above, you first need to load the ScriptModule. Then, use `export_opnames` to return a list of operator names of the ScriptModule and its submodules. Lastly, save the result in a yaml file.
 
