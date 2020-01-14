@@ -1,4 +1,4 @@
-\---
+---
 layout: mobile
 title: iOS
 permalink: /mobile/ios/
