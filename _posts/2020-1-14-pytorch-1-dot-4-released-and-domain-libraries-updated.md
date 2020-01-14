@@ -23,7 +23,9 @@ model = torch.jit.load('MobileNetV2.pt')
 ops = torch.jit.export_opnames(model)
 with open('MobileNetV2.yaml', 'w') as output:
     yaml.dump(ops, output)
+```
 
+```console
 # Build PyTorch Android library customized for MobileNetV2:
 SELECTED_OP_LIST=MobileNetV2.yaml scripts/build_pytorch_android.sh arm64-v8a
 
