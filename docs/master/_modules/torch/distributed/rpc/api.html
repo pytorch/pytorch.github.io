@@ -158,7 +158,7 @@
               
               
                 <div class="version">
-                  <a href='http://pytorch.org/docs/versions.html'>1.5.0a0+8d472ba &#x25BC</a>
+                  <a href='http://pytorch.org/docs/versions.html'>1.5.0a0+dbd7371 &#x25BC</a>
                 </div>
               
             
@@ -352,6 +352,7 @@
     <span class="n">_invoke_remote_python_udf</span><span class="p">,</span>
     <span class="n">_invoke_rpc_builtin</span><span class="p">,</span>
     <span class="n">_invoke_rpc_python_udf</span><span class="p">,</span>
+    <span class="n">_invoke_rpc_script</span><span class="p">,</span>
     <span class="n">_start_rpc_agent</span><span class="p">,</span>
     <span class="n">backend_registry</span><span class="p">,</span>
 <span class="p">)</span>
@@ -369,6 +370,7 @@
 <span class="kn">import</span> <span class="nn">torch</span>
 <span class="kn">import</span> <span class="nn">torch.distributed</span> <span class="k">as</span> <span class="nn">dist</span>
 
+<span class="kn">from</span> <span class="nn">torch._jit_internal</span> <span class="kn">import</span> <span class="n">_qualified_name</span>
 
 <span class="n">_agent</span> <span class="o">=</span> <span class="kc">None</span>
 <span class="c1"># NB: Ignoring RRef leaks during shutdown. Without this, applications have to</span>
@@ -671,8 +673,8 @@
 
 <span class="sd">    Arguments:</span>
 <span class="sd">        to (str or WorkerInfo): id or name of the destination worker.</span>
-<span class="sd">        func (callable): any callable function. builtin functions (like</span>
-<span class="sd">                         :meth:`torch.add`) can be sent over RPC more efficiently.</span>
+<span class="sd">        func (callable): any callable function. builtin or annotated TorchScript</span>
+<span class="sd">                         functions (like meth:`torch.add`) can be sent over RPC more efficiently.</span>
 <span class="sd">        args (tuple): the argument tuple for the ``func`` invocation.</span>
 <span class="sd">        kwargs (dict): is a dictionary of keyword arguments for the ``func``</span>
 <span class="sd">                       invocation.</span>
@@ -701,9 +703,32 @@
 <span class="sd">        &gt;&gt;&gt; import torch.distributed.rpc as rpc</span>
 <span class="sd">        &gt;&gt;&gt; rpc.init_rpc(&quot;worker1&quot;, rank=1, world_size=2)</span>
 <span class="sd">        &gt;&gt;&gt; rpc.shutdown()</span>
+
+<span class="sd">        If invoking an annotated TorchScript function, then run the following</span>
+<span class="sd">        code in two different processes:</span>
+
+<span class="sd">        &gt;&gt;&gt; # On worker 0:</span>
+<span class="sd">        &gt;&gt;&gt; @torch.jit.script</span>
+<span class="sd">        &gt;&gt;&gt; def my_script_add(t1, t2):</span>
+<span class="sd">        &gt;&gt;&gt;    return torch.add(t1, t2)</span>
+<span class="sd">        &gt;&gt;&gt; import torch.distributed.rpc as rpc</span>
+<span class="sd">        &gt;&gt;&gt; rpc.init_rpc(&quot;worker0&quot;, rank=0, world_size=2)</span>
+<span class="sd">        &gt;&gt;&gt; ret = rpc.rpc_sync(&quot;worker1&quot;, my_script_add, args=(torch.ones(2), 3))</span>
+<span class="sd">        &gt;&gt;&gt; rpc.shutdown()</span>
+
+<span class="sd">        &gt;&gt;&gt; # On worker 1:</span>
+<span class="sd">        &gt;&gt;&gt; import torch.distributed.rpc as rpc</span>
+<span class="sd">        &gt;&gt;&gt; rpc.init_rpc(&quot;worker1&quot;, rank=1, world_size=2)</span>
+<span class="sd">        &gt;&gt;&gt; rpc.shutdown()</span>
+
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">fut</span> <span class="o">=</span> <span class="n">_invoke_rpc</span><span class="p">(</span><span class="n">to</span><span class="p">,</span> <span class="n">func</span><span class="p">,</span> <span class="n">RPCExecMode</span><span class="o">.</span><span class="n">SYNC</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">fut</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span></div>
+    <span class="c1"># If invoking an annotated TorchScript function,</span>
+    <span class="c1"># call the internal API _rpc_sync_torchscript()</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">func</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">jit</span><span class="o">.</span><span class="n">ScriptFunction</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">_rpc_sync_torchscript</span><span class="p">(</span><span class="n">to</span><span class="p">,</span> <span class="n">_qualified_name</span><span class="p">(</span><span class="n">func</span><span class="p">),</span> <span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">fut</span> <span class="o">=</span> <span class="n">_invoke_rpc</span><span class="p">(</span><span class="n">to</span><span class="p">,</span> <span class="n">func</span><span class="p">,</span> <span class="n">RPCExecMode</span><span class="o">.</span><span class="n">SYNC</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">fut</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span></div>
 
 
 <div class="viewcode-block" id="rpc_async"><a class="viewcode-back" href="../../../../rpc.html#torch.distributed.rpc.rpc_async">[docs]</a><span class="nd">@_require_initialized</span>
@@ -716,8 +741,8 @@
 
 <span class="sd">    Arguments:</span>
 <span class="sd">        to (str or WorkerInfo): id or name of the destination worker.</span>
-<span class="sd">        func (callable): any callable function. builtin functions (like</span>
-<span class="sd">                         :meth:`torch.add`) can be sent over RPC more efficiently.</span>
+<span class="sd">        func (callable): any callable function. builtin or annotated TorchScript</span>
+<span class="sd">                         functions (like meth:`torch.add`) can be sent over RPC more efficiently.</span>
 <span class="sd">        args (tuple): the argument tuple for the ``func`` invocation.</span>
 <span class="sd">        kwargs (dict): is a dictionary of keyword arguments for the ``func``</span>
 <span class="sd">                       invocation.</span>
@@ -750,9 +775,149 @@
 <span class="sd">        &gt;&gt;&gt; import torch.distributed.rpc as rpc</span>
 <span class="sd">        &gt;&gt;&gt; rpc.init_rpc(&quot;worker1&quot;, rank=1, world_size=2)</span>
 <span class="sd">        &gt;&gt;&gt; rpc.shutdown()</span>
+
+<span class="sd">        If invoking an annotated TorchScript function, then run the following</span>
+<span class="sd">        code in two different processes:</span>
+
+<span class="sd">        &gt;&gt;&gt; # On worker 0:</span>
+<span class="sd">        &gt;&gt;&gt; @torch.jit.script</span>
+<span class="sd">        &gt;&gt;&gt; def my_script_add(t1, t2):</span>
+<span class="sd">        &gt;&gt;&gt;    return torch.add(t1, t2)</span>
+<span class="sd">        &gt;&gt;&gt; import torch.distributed.rpc as rpc</span>
+<span class="sd">        &gt;&gt;&gt; rpc.init_rpc(&quot;worker0&quot;, rank=0, world_size=2)</span>
+<span class="sd">        &gt;&gt;&gt; fut = rpc.rpc_async(&quot;worker1&quot;, my_script_add, args=(torch.ones(2), 3))</span>
+<span class="sd">        &gt;&gt;&gt; ret = fut.wait()</span>
+<span class="sd">        &gt;&gt;&gt; rpc.shutdown()</span>
+
+<span class="sd">        &gt;&gt;&gt; # On worker 1:</span>
+<span class="sd">        &gt;&gt;&gt; import torch.distributed.rpc as rpc</span>
+<span class="sd">        &gt;&gt;&gt; rpc.init_rpc(&quot;worker1&quot;, rank=1, world_size=2)</span>
+<span class="sd">        &gt;&gt;&gt; rpc.shutdown()</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">fut</span> <span class="o">=</span> <span class="n">_invoke_rpc</span><span class="p">(</span><span class="n">to</span><span class="p">,</span> <span class="n">func</span><span class="p">,</span> <span class="n">RPCExecMode</span><span class="o">.</span><span class="n">ASYNC</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">)</span>
+    <span class="c1"># If invoking an annotated TorchScript function,</span>
+    <span class="c1"># call the internal API _rpc_async_torchscript()</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">func</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">jit</span><span class="o">.</span><span class="n">ScriptFunction</span><span class="p">):</span>
+        <span class="n">fut</span> <span class="o">=</span> <span class="n">_rpc_async_torchscript</span><span class="p">(</span><span class="n">to</span><span class="p">,</span> <span class="n">_qualified_name</span><span class="p">(</span><span class="n">func</span><span class="p">),</span> <span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">fut</span> <span class="o">=</span> <span class="n">_invoke_rpc</span><span class="p">(</span><span class="n">to</span><span class="p">,</span> <span class="n">func</span><span class="p">,</span> <span class="n">RPCExecMode</span><span class="o">.</span><span class="n">ASYNC</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">fut</span></div>
+
+
+<span class="c1"># All below private APIs are for making rpc torch script call that can be</span>
+<span class="c1"># serialized, deserialized and exectued in C++ without GIL.</span>
+<span class="c1"># These APIs will be binded to JIT and can be called in torch script</span>
+<span class="c1"># function/class/module in the future. But since JIT does not support torch</span>
+<span class="c1"># script function to be a jit type yet, the future binded APIs can only accept</span>
+<span class="c1"># qualified_name of the function as arg, that is why these APIs are made</span>
+<span class="c1"># to be private and different from above public rpc APIs.</span>
+<span class="c1"># Because JIT does not support torch script function to be a jit type, right now</span>
+<span class="c1"># these APIs can only accept torch script call to only be user annotated</span>
+<span class="c1"># torchscript function, they do not accept annotated torchscript class name or</span>
+<span class="c1"># script module class name or their class method name right now.</span>
+<span class="nd">@_require_initialized</span>
+<span class="k">def</span> <span class="nf">_rpc_sync_torchscript</span><span class="p">(</span><span class="n">to</span><span class="p">,</span> <span class="n">qualified_name</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">kwargs</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+    <span class="sa">r</span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Make a blocking RPC call to run TorchScript function ``func`` on worker ``to``.</span>
+<span class="sd">    RPC messages are sent and received in parallel to execution of Python code. This</span>
+<span class="sd">    method is thread-safe.</span>
+
+<span class="sd">    Arguments:</span>
+<span class="sd">        to (str): name of the destination worker.</span>
+<span class="sd">        qualified_name (str): qualifited name of python function annotated with</span>
+<span class="sd">                              @torch.jit.script</span>
+<span class="sd">                              (like ``moduleName::torchScriptFuncName``)</span>
+<span class="sd">                              can be sent over RPC more efficiently.</span>
+<span class="sd">        args (tuple): the argument tuple for the ``func`` invocation.</span>
+<span class="sd">        kwargs (dict): is a dictionary of keyword arguments for the ``func``</span>
+<span class="sd">                       invocation.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Returns the result of running ``func`` on ``args`` and ``kwargs``.</span>
+
+<span class="sd">    Example::</span>
+<span class="sd">        Make sure that ``MASTER_ADDRESS`` and ``MASTER_PORT`` are set properly</span>
+<span class="sd">        on both workers. Refer to :meth:`~torch.distributed.init_process_group`</span>
+<span class="sd">        API for more details. For example,</span>
+
+<span class="sd">        &gt;&gt;&gt; export MASTER_ADDRESS=localhost</span>
+<span class="sd">        &gt;&gt;&gt; export MASTER_port=5678</span>
+
+<span class="sd">        Then run the following code in two different processes:</span>
+
+<span class="sd">        &gt;&gt;&gt; # On worker 0:</span>
+<span class="sd">        &gt;&gt;&gt; @torch.jit.script</span>
+<span class="sd">        &gt;&gt;&gt; def my_script_add(t1, t2):</span>
+<span class="sd">        &gt;&gt;&gt;    return torch.add(t1, t2)</span>
+<span class="sd">        &gt;&gt;&gt; import torch.distributed.rpc as rpc</span>
+<span class="sd">        &gt;&gt;&gt; from torch._jit_internal import _qualified_name</span>
+<span class="sd">        &gt;&gt;&gt; rpc.init_rpc(&quot;worker0&quot;, rank=0, world_size=2)</span>
+<span class="sd">        &gt;&gt;&gt; ret = rpc._rpc_sync_torchscript(&quot;worker1&quot;, _qualified_name(my_script_add), args=(torch.ones(2), 3))</span>
+<span class="sd">        &gt;&gt;&gt; rpc.shutdown()</span>
+
+<span class="sd">        &gt;&gt;&gt; # On worker 1:</span>
+<span class="sd">        &gt;&gt;&gt; import torch.distributed.rpc as rpc</span>
+<span class="sd">        &gt;&gt;&gt; rpc.init_rpc(&quot;worker1&quot;, rank=1, world_size=2)</span>
+<span class="sd">        &gt;&gt;&gt; rpc.shutdown()</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">args</span> <span class="o">=</span> <span class="n">args</span> <span class="k">if</span> <span class="n">args</span> <span class="k">else</span> <span class="p">()</span>
+    <span class="n">kwargs</span> <span class="o">=</span> <span class="n">kwargs</span> <span class="k">if</span> <span class="n">kwargs</span> <span class="k">else</span> <span class="p">{}</span>
+    <span class="n">fut</span> <span class="o">=</span> <span class="n">_invoke_rpc_script</span><span class="p">(</span><span class="n">to</span><span class="p">,</span> <span class="n">qualified_name</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">fut</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span>
+
+
+<span class="nd">@_require_initialized</span>
+<span class="k">def</span> <span class="nf">_rpc_async_torchscript</span><span class="p">(</span><span class="n">to</span><span class="p">,</span> <span class="n">qualified_name</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">kwargs</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+    <span class="sa">r</span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Make a non-blocking RPC call to run TorchScript function ``func`` on worker ``to``.</span>
+<span class="sd">    RPC messages are sent and received in parallel to execution of Python code. This</span>
+<span class="sd">    method is thread-safe. This method will immediately return a</span>
+<span class="sd">    _pyFuture that can be awaited on.</span>
+
+<span class="sd">    Arguments:</span>
+<span class="sd">        to (str): name of the destination worker.</span>
+<span class="sd">        qualified_name (str): qualifited name of python function annotated with</span>
+<span class="sd">                              @torch.jit.script</span>
+<span class="sd">                              (like ``moduleName::torchScriptFuncName``)</span>
+<span class="sd">                              can be sent over RPC more efficiently.</span>
+<span class="sd">        args (tuple): the argument tuple for the ``func`` invocation.</span>
+<span class="sd">        kwargs (dict): is a dictionary of keyword arguments for the ``func``</span>
+<span class="sd">                       invocation.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Returns a _pyFuture object that can be waited</span>
+<span class="sd">        on. When completed, the return value of ``func`` on ``args`` and</span>
+<span class="sd">        ``kwargs`` can be retrieved from the _pyFuture object.</span>
+
+<span class="sd">    Example::</span>
+<span class="sd">        Make sure that ``MASTER_ADDRESS`` and ``MASTER_PORT`` are set properly</span>
+<span class="sd">        on both workers. Refer to :meth:`~torch.distributed.init_process_group`</span>
+<span class="sd">        API for more details. For example,</span>
+
+<span class="sd">        &gt;&gt;&gt; export MASTER_ADDRESS=localhost</span>
+<span class="sd">        &gt;&gt;&gt; export MASTER_port=5678</span>
+
+<span class="sd">        Then run the following code in two different processes:</span>
+
+<span class="sd">        &gt;&gt;&gt; # On worker 0:</span>
+<span class="sd">        &gt;&gt;&gt; @torch.jit.script</span>
+<span class="sd">        &gt;&gt;&gt; def my_script_add(t1, t2):</span>
+<span class="sd">        &gt;&gt;&gt;    return torch.add(t1, t2)</span>
+<span class="sd">        &gt;&gt;&gt; import torch.distributed.rpc as rpc</span>
+<span class="sd">        &gt;&gt;&gt; from torch._jit_internal import _qualified_name</span>
+<span class="sd">        &gt;&gt;&gt; rpc.init_rpc(&quot;worker0&quot;, rank=0, world_size=2)</span>
+<span class="sd">        &gt;&gt;&gt; fut = rpc._rpc_async_torchscript(&quot;worker1&quot;, _qualified_name(my_script_add), args=(torch.ones(2), 3))</span>
+<span class="sd">        &gt;&gt;&gt; ret = fut.wait()</span>
+<span class="sd">        &gt;&gt;&gt; rpc.shutdown()</span>
+
+<span class="sd">        &gt;&gt;&gt; # On worker 1:</span>
+<span class="sd">        &gt;&gt;&gt; import torch.distributed.rpc as rpc</span>
+<span class="sd">        &gt;&gt;&gt; rpc.init_rpc(&quot;worker1&quot;, rank=1, world_size=2)</span>
+<span class="sd">        &gt;&gt;&gt; rpc.shutdown()</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">args</span> <span class="o">=</span> <span class="n">args</span> <span class="k">if</span> <span class="n">args</span> <span class="k">else</span> <span class="p">()</span>
+    <span class="n">kwargs</span> <span class="o">=</span> <span class="n">kwargs</span> <span class="k">if</span> <span class="n">kwargs</span> <span class="k">else</span> <span class="p">{}</span>
+    <span class="n">fut</span> <span class="o">=</span> <span class="n">_invoke_rpc_script</span><span class="p">(</span><span class="n">to</span><span class="p">,</span> <span class="n">qualified_name</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">fut</span>
 </pre></div>
 
              </article>
