@@ -93,7 +93,7 @@ Improvements in torchaudio 0.4 focus on enhancing the currently available transf
 * Transformations now support batches and are jitable.
 * An interactive speech recognition demo with voice activity detection is available for experimentation.
 
-Learn more about torchvision 0.4 [here](https://github.com/pytorch/audio/releases).
+Learn more about torchaudio 0.4 [here](https://github.com/pytorch/audio/releases).
 
 ### torchtext 0.5
 
