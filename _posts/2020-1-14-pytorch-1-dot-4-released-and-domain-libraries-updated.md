@@ -65,7 +65,7 @@ System.out.println("shape: " + Arrays.toString(output.shape()));
 System.out.println("data: " + Arrays.toString(output.getDataAsFloatArray()));
 ```
 
-Learn more about how to use PyTorch from Java [here](https://github.com/pytorch/java-demo), and see the full Javadocs API documentation [here](https://pytorch.org/javadocs/).
+Learn more about how to use PyTorch from Java [here](https://github.com/pytorch/java-demo), and see the full Javadocs API documentation [here](https://pytorch.org/javadoc/).
 
 For the full 1.4 release notes, see [here](https://github.com/pytorch/pytorch/releases).
 
