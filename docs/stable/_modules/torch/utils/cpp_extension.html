@@ -5,7 +5,6 @@
 <!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
 <!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
 <head>
-  <meta name="robots" content="noindex">
   <meta charset="utf-8">
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -157,7 +156,7 @@
               
               
                 <div class="version">
-                  <a href='http://pytorch.org/docs/versions.html'>1.3.1 &#x25BC</a>
+                  <a href='http://pytorch.org/docs/versions.html'>1.4.0 &#x25BC</a>
                 </div>
               
             
@@ -191,11 +190,13 @@
 <li class="toctree-l1"><a class="reference internal" href="../../../notes/broadcasting.html">Broadcasting semantics</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../notes/cpu_threading_torchscript_inference.html">CPU threading and TorchScript inference</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../notes/cuda.html">CUDA semantics</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../notes/distributed_autograd.html">Distributed Autograd Design</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../notes/extending.html">Extending PyTorch</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../notes/faq.html">Frequently Asked Questions</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../notes/large_scale_deployments.html">Features for large-scale deployments</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../notes/multiprocessing.html">Multiprocessing best practices</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../notes/randomness.html">Reproducibility</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../notes/rref.html">Remote Reference Protocol</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../notes/serialization.html">Serialization semantics</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../notes/windows.html">Windows FAQ</a></li>
 <li class="toctree-l1"><a class="reference external" href="http://pytorch.org/xla/">PyTorch on XLA Devices</a></li>
@@ -223,6 +224,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../../../onnx.html">torch.onnx</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../optim.html">torch.optim</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../quantization.html">Quantization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../rpc.html">Distributed RPC Framework</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../random.html">torch.random</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../sparse.html">torch.sparse</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../storage.html">torch.Storage</a></li>
@@ -327,7 +329,7 @@
              <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
               
   <h1>Source code for torch.utils.cpp_extension</h1><div class="highlight"><pre>
-<span></span><span class="kn">from</span> <span class="nn">__future__</span> <span class="k">import</span> <span class="n">absolute_import</span><span class="p">,</span> <span class="n">division</span><span class="p">,</span> <span class="n">print_function</span><span class="p">,</span> <span class="n">unicode_literals</span>
+<span></span><span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">absolute_import</span><span class="p">,</span> <span class="n">division</span><span class="p">,</span> <span class="n">print_function</span><span class="p">,</span> <span class="n">unicode_literals</span>
 <span class="kn">import</span> <span class="nn">copy</span>
 <span class="kn">import</span> <span class="nn">glob</span>
 <span class="kn">import</span> <span class="nn">imp</span>
@@ -342,10 +344,10 @@
 <span class="kn">import</span> <span class="nn">collections</span>
 
 <span class="kn">import</span> <span class="nn">torch</span>
-<span class="kn">from</span> <span class="nn">.file_baton</span> <span class="k">import</span> <span class="n">FileBaton</span>
-<span class="kn">from</span> <span class="nn">._cpp_extension_versioner</span> <span class="k">import</span> <span class="n">ExtensionVersioner</span>
+<span class="kn">from</span> <span class="nn">.file_baton</span> <span class="kn">import</span> <span class="n">FileBaton</span>
+<span class="kn">from</span> <span class="nn">._cpp_extension_versioner</span> <span class="kn">import</span> <span class="n">ExtensionVersioner</span>
 
-<span class="kn">from</span> <span class="nn">setuptools.command.build_ext</span> <span class="k">import</span> <span class="n">build_ext</span>
+<span class="kn">from</span> <span class="nn">setuptools.command.build_ext</span> <span class="kn">import</span> <span class="n">build_ext</span>
 
 
 <span class="n">IS_WINDOWS</span> <span class="o">=</span> <span class="n">sys</span><span class="o">.</span><span class="n">platform</span> <span class="o">==</span> <span class="s1">&#39;win32&#39;</span>
@@ -431,6 +433,25 @@
     <span class="s1">&#39;--expt-relaxed-constexpr&#39;</span>
 <span class="p">]</span>
 
+<span class="c1"># See comment in load_inline for more information</span>
+<span class="c1"># The goal is to be able to call the safe version of the</span>
+<span class="c1"># function exactly as if it was the original one.</span>
+<span class="c1"># We need to create a pointer to this new function to give</span>
+<span class="c1"># it to pybind later.</span>
+
+<span class="n">SAFE_FUNCTION_DEFINITION</span> <span class="o">=</span> <span class="s1">&#39;&#39;&#39;</span>
+<span class="s1">#include &lt;functional&gt;</span>
+
+<span class="s1">template &lt;typename Ret, typename ...Args&gt;</span>
+<span class="s1">auto _get_safe_version(Ret (*f)(Args...)) -&gt; std::function&lt;Ret(Args...)&gt; {{</span>
+<span class="s1">    return [f](Args&amp;&amp; ...args) -&gt; Ret {{</span>
+<span class="s1">        HANDLE_TH_ERRORS</span>
+<span class="s1">        return f(std::forward&lt;Args&gt;(args)...);</span>
+<span class="s1">        END_HANDLE_TH_ERRORS_PYBIND</span>
+<span class="s1">    }};</span>
+<span class="s1">}}</span>
+
+<span class="s1">&#39;&#39;&#39;</span>
 
 <span class="n">JIT_EXTENSION_VERSIONER</span> <span class="o">=</span> <span class="n">ExtensionVersioner</span><span class="p">()</span>
 
@@ -559,7 +580,7 @@
             <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">init_with_options</span>
 
-    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
         <span class="nb">super</span><span class="p">(</span><span class="n">BuildExtension</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">no_python_abi_suffix</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;no_python_abi_suffix&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
 
@@ -1001,7 +1022,8 @@
                 <span class="n">build_directory</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
                 <span class="n">verbose</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
                 <span class="n">with_cuda</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-                <span class="n">is_python_module</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+                <span class="n">is_python_module</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                <span class="n">with_pytorch_error_handling</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
     <span class="sd">&#39;&#39;&#39;</span>
 <span class="sd">    Loads a PyTorch C++ extension just-in-time (JIT) from string sources.</span>
 
@@ -1046,8 +1068,14 @@
 <span class="sd">        with_cuda: Determines whether CUDA headers and libraries are added to</span>
 <span class="sd">            the build. If set to ``None`` (default), this value is</span>
 <span class="sd">            automatically determined based on whether ``cuda_sources`` is</span>
-<span class="sd">            provided. Set it to `True`` to force CUDA headers</span>
+<span class="sd">            provided. Set it to ``True`` to force CUDA headers</span>
 <span class="sd">            and libraries to be included.</span>
+<span class="sd">        with_pytorch_error_handling: Determines whether pytorch error and</span>
+<span class="sd">            warning macros are handled by pytorch instead of pybind. To do</span>
+<span class="sd">            this, each function ``foo`` is called via an intermediary ``_safe_foo``</span>
+<span class="sd">            function. This redirection might cause issues in obscure cases</span>
+<span class="sd">            of cpp. This flag should be set to ``False`` when this redirect</span>
+<span class="sd">            causes issues.</span>
 
 <span class="sd">    Example:</span>
 <span class="sd">        &gt;&gt;&gt; from torch.utils.cpp_extension import load_inline</span>
@@ -1070,11 +1098,17 @@
 
     <span class="n">cpp_sources</span><span class="o">.</span><span class="n">insert</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="s1">&#39;#include &lt;torch/extension.h&gt;&#39;</span><span class="p">)</span>
 
+    <span class="c1"># Adds a new `_get_safe_version(foo)` function that returns a new function</span>
+    <span class="c1"># that performs the same operation as `foo` but with pytorch error handling</span>
+    <span class="c1"># macros.</span>
+    <span class="n">cpp_sources</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">SAFE_FUNCTION_DEFINITION</span><span class="p">)</span>
+
     <span class="c1"># If `functions` is supplied, we create the pybind11 bindings for the user.</span>
     <span class="c1"># Here, `functions` is (or becomes, after some processing) a map from</span>
     <span class="c1"># function names to function docstrings.</span>
     <span class="k">if</span> <span class="n">functions</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">cpp_sources</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s1">&#39;PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {&#39;</span><span class="p">)</span>
+        <span class="n">module_def</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">module_def</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s1">&#39;PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {&#39;</span><span class="p">)</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">functions</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
             <span class="n">functions</span> <span class="o">=</span> <span class="p">[</span><span class="n">functions</span><span class="p">]</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">functions</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
@@ -1085,9 +1119,13 @@
                 <span class="s2">&quot;Expected &#39;functions&#39; to be a list or dict, but was </span><span class="si">{}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
                     <span class="nb">type</span><span class="p">(</span><span class="n">functions</span><span class="p">)))</span>
         <span class="k">for</span> <span class="n">function_name</span><span class="p">,</span> <span class="n">docstring</span> <span class="ow">in</span> <span class="n">functions</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-            <span class="n">cpp_sources</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s1">&#39;m.def(&quot;</span><span class="si">{0}</span><span class="s1">&quot;, &amp;</span><span class="si">{0}</span><span class="s1">, &quot;</span><span class="si">{1}</span><span class="s1">&quot;);&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
-                <span class="n">function_name</span><span class="p">,</span> <span class="n">docstring</span><span class="p">))</span>
-        <span class="n">cpp_sources</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s1">&#39;}&#39;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">with_pytorch_error_handling</span><span class="p">:</span>
+                <span class="n">module_def</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s1">&#39;m.def(&quot;</span><span class="si">{0}</span><span class="s1">&quot;, _get_safe_version(</span><span class="si">{0}</span><span class="s1">), &quot;</span><span class="si">{1}</span><span class="s1">&quot;);&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                    <span class="n">function_name</span><span class="p">,</span> <span class="n">docstring</span><span class="p">))</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">module_def</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s1">&#39;m.def(&quot;</span><span class="si">{0}</span><span class="s1">&quot;, </span><span class="si">{0}</span><span class="s1">, &quot;</span><span class="si">{1}</span><span class="s1">&quot;);&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">function_name</span><span class="p">,</span> <span class="n">docstring</span><span class="p">))</span>
+        <span class="n">module_def</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s1">&#39;}&#39;</span><span class="p">)</span>
+        <span class="n">cpp_sources</span> <span class="o">+=</span> <span class="n">module_def</span>
 
     <span class="n">cpp_source_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">build_directory</span><span class="p">,</span> <span class="s1">&#39;main.cpp&#39;</span><span class="p">)</span>
     <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">cpp_source_path</span><span class="p">,</span> <span class="s1">&#39;w&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">cpp_source_file</span><span class="p">:</span>
@@ -1433,7 +1471,7 @@
 
     <span class="k">if</span> <span class="n">IS_WINDOWS</span><span class="p">:</span>
         <span class="n">cflags</span> <span class="o">=</span> <span class="n">common_cflags</span> <span class="o">+</span> <span class="n">COMMON_MSVC_FLAGS</span> <span class="o">+</span> <span class="n">extra_cflags</span>
-        <span class="kn">from</span> <span class="nn">distutils.spawn</span> <span class="k">import</span> <span class="n">_nt_quote_args</span>
+        <span class="kn">from</span> <span class="nn">distutils.spawn</span> <span class="kn">import</span> <span class="n">_nt_quote_args</span>
         <span class="n">cflags</span> <span class="o">=</span> <span class="n">_nt_quote_args</span><span class="p">(</span><span class="n">cflags</span><span class="p">)</span>
     <span class="k">else</span><span class="p">:</span>
         <span class="n">cflags</span> <span class="o">=</span> <span class="n">common_cflags</span> <span class="o">+</span> <span class="p">[</span><span class="s1">&#39;-fPIC&#39;</span><span class="p">,</span> <span class="s1">&#39;-std=c++11&#39;</span><span class="p">]</span> <span class="o">+</span> <span class="n">extra_cflags</span>

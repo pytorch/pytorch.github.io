@@ -5,7 +5,6 @@
 <!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
 <!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
 <head>
-  <meta name="robots" content="noindex">
   <meta charset="utf-8">
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -157,7 +156,7 @@
               
               
                 <div class="version">
-                  <a href='http://pytorch.org/docs/versions.html'>1.3.1 &#x25BC</a>
+                  <a href='http://pytorch.org/docs/versions.html'>1.4.0 &#x25BC</a>
                 </div>
               
             
@@ -191,11 +190,13 @@
 <li class="toctree-l1"><a class="reference internal" href="../../notes/broadcasting.html">Broadcasting semantics</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../notes/cpu_threading_torchscript_inference.html">CPU threading and TorchScript inference</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../notes/cuda.html">CUDA semantics</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../notes/distributed_autograd.html">Distributed Autograd Design</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../notes/extending.html">Extending PyTorch</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../notes/faq.html">Frequently Asked Questions</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../notes/large_scale_deployments.html">Features for large-scale deployments</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../notes/multiprocessing.html">Multiprocessing best practices</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../notes/randomness.html">Reproducibility</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../notes/rref.html">Remote Reference Protocol</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../notes/serialization.html">Serialization semantics</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../notes/windows.html">Windows FAQ</a></li>
 <li class="toctree-l1"><a class="reference external" href="http://pytorch.org/xla/">PyTorch on XLA Devices</a></li>
@@ -223,6 +224,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../../onnx.html">torch.onnx</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../optim.html">torch.optim</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../quantization.html">Quantization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../rpc.html">Distributed RPC Framework</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../random.html">torch.random</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../sparse.html">torch.sparse</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../storage.html">torch.Storage</a></li>
@@ -346,17 +348,16 @@
 <span class="kn">import</span> <span class="nn">traceback</span>
 <span class="kn">import</span> <span class="nn">warnings</span>
 <span class="kn">import</span> <span class="nn">threading</span>
-<span class="kn">from</span> <span class="nn">torch._six</span> <span class="k">import</span> <span class="n">raise_from</span>
-<span class="kn">from</span> <span class="nn">subprocess</span> <span class="k">import</span> <span class="n">Popen</span><span class="p">,</span> <span class="n">PIPE</span>
-<span class="kn">from</span> <span class="nn">multiprocessing.util</span> <span class="k">import</span> <span class="n">register_after_fork</span> <span class="k">as</span> <span class="n">_register_after_fork</span>
-<span class="kn">from</span> <span class="nn">._utils</span> <span class="k">import</span> <span class="n">_get_device_index</span>
+<span class="kn">from</span> <span class="nn">torch._six</span> <span class="kn">import</span> <span class="n">raise_from</span>
+<span class="kn">from</span> <span class="nn">subprocess</span> <span class="kn">import</span> <span class="n">Popen</span><span class="p">,</span> <span class="n">PIPE</span>
+<span class="kn">from</span> <span class="nn">._utils</span> <span class="kn">import</span> <span class="n">_get_device_index</span>
+<span class="kn">import</span> <span class="nn">torch._C</span>
 
 <span class="n">_initialized</span> <span class="o">=</span> <span class="kc">False</span>
 <span class="n">_tls</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">local</span><span class="p">()</span>
 <span class="n">_initialization_lock</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Lock</span><span class="p">()</span>
 <span class="n">_queued_calls</span> <span class="o">=</span> <span class="p">[]</span>  <span class="c1"># don&#39;t invoke these until initialization occurs</span>
-<span class="n">_in_bad_fork</span> <span class="o">=</span> <span class="kc">False</span>  <span class="c1"># this global is also used in torch.manual_seed</span>
-<span class="n">_original_pid</span> <span class="o">=</span> <span class="kc">False</span>
+<span class="n">_is_in_bad_fork</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="p">,</span> <span class="s2">&quot;_cuda_isInBadFork&quot;</span><span class="p">,</span> <span class="k">lambda</span><span class="p">:</span> <span class="kc">False</span><span class="p">)</span>
 <span class="n">_cudart</span> <span class="o">=</span> <span class="kc">None</span>
 
 
@@ -466,8 +467,13 @@
             <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="n">incorrect_binary_warn</span> <span class="o">%</span> <span class="p">(</span><span class="n">d</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="mi">10000</span><span class="p">,</span> <span class="n">CUDA_VERSION</span><span class="p">))</span>
 
 
+<div class="viewcode-block" id="is_initialized"><a class="viewcode-back" href="../../cuda.html#torch.cuda.is_initialized">[docs]</a><span class="k">def</span> <span class="nf">is_initialized</span><span class="p">():</span>
+    <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Returns whether PyTorch&#39;s CUDA state has been initialized.&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">_initialized</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">_is_in_bad_fork</span><span class="p">()</span></div>
+
+
 <span class="k">def</span> <span class="nf">_lazy_call</span><span class="p">(</span><span class="n">callable</span><span class="p">):</span>
-    <span class="k">if</span> <span class="n">_initialized</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">is_initialized</span><span class="p">():</span>
         <span class="n">callable</span><span class="p">()</span>
     <span class="k">else</span><span class="p">:</span>
         <span class="c1"># Don&#39;t store the actual traceback to avoid memory cycle</span>
@@ -494,8 +500,8 @@
 
 
 <span class="k">def</span> <span class="nf">_lazy_init</span><span class="p">():</span>
-    <span class="k">global</span> <span class="n">_initialized</span><span class="p">,</span> <span class="n">_cudart</span><span class="p">,</span> <span class="n">_original_pid</span><span class="p">,</span> <span class="n">_queued_calls</span>
-    <span class="k">if</span> <span class="n">_initialized</span> <span class="ow">or</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">_tls</span><span class="p">,</span> <span class="s1">&#39;is_initializing&#39;</span><span class="p">):</span>
+    <span class="k">global</span> <span class="n">_initialized</span><span class="p">,</span> <span class="n">_cudart</span><span class="p">,</span> <span class="n">_queued_calls</span>
+    <span class="k">if</span> <span class="n">is_initialized</span><span class="p">()</span> <span class="ow">or</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">_tls</span><span class="p">,</span> <span class="s1">&#39;is_initializing&#39;</span><span class="p">):</span>
         <span class="k">return</span>
     <span class="k">with</span> <span class="n">_initialization_lock</span><span class="p">:</span>
         <span class="c1"># We be double-checked locking, boys!  This is OK because</span>
@@ -503,13 +509,13 @@
         <span class="c1"># is for when a thread blocked on some other thread which was</span>
         <span class="c1"># doing the initialization; when they get the lock, they will</span>
         <span class="c1"># find there is nothing left to do.</span>
-        <span class="k">if</span> <span class="n">_initialized</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">is_initialized</span><span class="p">():</span>
             <span class="k">return</span>
         <span class="c1"># It is important to prevent other threads from entering _lazy_init</span>
         <span class="c1"># immediately, while we are still guaranteed to have the GIL, because some</span>
         <span class="c1"># of the C calls we make below will release the GIL</span>
-        <span class="k">if</span> <span class="n">_in_bad_fork</span><span class="p">:</span>
-            <span class="kn">from</span> <span class="nn">sys</span> <span class="k">import</span> <span class="n">version_info</span>
+        <span class="k">if</span> <span class="n">_is_in_bad_fork</span><span class="p">():</span>
+            <span class="kn">from</span> <span class="nn">sys</span> <span class="kn">import</span> <span class="n">version_info</span>
             <span class="k">if</span> <span class="n">version_info</span> <span class="o">&lt;</span> <span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">):</span>
                 <span class="n">msg</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;To use CUDA with multiprocessing, you must use Python &quot;</span>
                        <span class="s2">&quot;3.4+ and the &#39;spawn&#39; start method&quot;</span><span class="p">)</span>
@@ -523,7 +529,6 @@
         <span class="n">_cudart</span> <span class="o">=</span> <span class="n">_load_cudart</span><span class="p">()</span>
         <span class="n">_cudart</span><span class="o">.</span><span class="n">cudaGetErrorName</span><span class="o">.</span><span class="n">restype</span> <span class="o">=</span> <span class="n">ctypes</span><span class="o">.</span><span class="n">c_char_p</span>
         <span class="n">_cudart</span><span class="o">.</span><span class="n">cudaGetErrorString</span><span class="o">.</span><span class="n">restype</span> <span class="o">=</span> <span class="n">ctypes</span><span class="o">.</span><span class="n">c_char_p</span>
-        <span class="n">_original_pid</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">getpid</span><span class="p">()</span>
         <span class="c1"># Some of the queued calls may reentrantly call _lazy_init();</span>
         <span class="c1"># we need to just return without initializing in that case.</span>
         <span class="c1"># However, we must not let any *other* threads in!</span>
@@ -541,17 +546,6 @@
         <span class="n">_initialized</span> <span class="o">=</span> <span class="kc">True</span>
 
 
-<span class="k">def</span> <span class="nf">_after_fork</span><span class="p">(</span><span class="n">arg</span><span class="p">):</span>
-    <span class="k">global</span> <span class="n">_initialized</span><span class="p">,</span> <span class="n">_in_bad_fork</span>
-    <span class="k">if</span> <span class="n">_initialized</span> <span class="ow">and</span> <span class="n">_original_pid</span> <span class="o">!=</span> <span class="n">os</span><span class="o">.</span><span class="n">getpid</span><span class="p">():</span>
-        <span class="n">_initialized</span> <span class="o">=</span> <span class="kc">False</span>
-        <span class="n">_in_bad_fork</span> <span class="o">=</span> <span class="kc">True</span>
-        <span class="n">_CudaBase</span><span class="o">.</span><span class="fm">__new__</span> <span class="o">=</span> <span class="n">_lazy_new</span>
-        <span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">_cuda_set_run_yet_variable_to_false</span><span class="p">()</span>
-
-<span class="n">_register_after_fork</span><span class="p">(</span><span class="n">_after_fork</span><span class="p">,</span> <span class="n">_after_fork</span><span class="p">)</span>
-
-
 <span class="k">def</span> <span class="nf">cudart</span><span class="p">():</span>
     <span class="n">_lazy_init</span><span class="p">()</span>
     <span class="k">return</span> <span class="n">_cudart</span>
@@ -563,7 +557,7 @@
 
 
 <span class="k">class</span> <span class="nc">CudaError</span><span class="p">(</span><span class="ne">RuntimeError</span><span class="p">):</span>
-    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">code</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">code</span><span class="p">):</span>
         <span class="n">msg</span> <span class="o">=</span> <span class="n">cudart</span><span class="p">()</span><span class="o">.</span><span class="n">cudaGetErrorString</span><span class="p">(</span><span class="n">code</span><span class="p">)</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s1">&#39;utf-8&#39;</span><span class="p">)</span>
         <span class="nb">super</span><span class="p">(</span><span class="n">CudaError</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="s1">&#39;</span><span class="si">{0}</span><span class="s1"> (</span><span class="si">{1}</span><span class="s1">)&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">msg</span><span class="p">,</span> <span class="n">code</span><span class="p">))</span>
 
@@ -581,11 +575,11 @@
 <span class="sd">            this argument is a negative integer or ``None``.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
-    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">device</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">device</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">idx</span> <span class="o">=</span> <span class="n">_get_device_index</span><span class="p">(</span><span class="n">device</span><span class="p">,</span> <span class="n">optional</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">prev_idx</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>
 
-    <span class="k">def</span> <span class="nf">__enter__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__enter__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">idx</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">:</span>
             <span class="k">return</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">prev_idx</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">_cuda_getDevice</span><span class="p">()</span>
@@ -593,7 +587,7 @@
             <span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">_cuda_setDevice</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">idx</span><span class="p">)</span>
         <span class="n">_lazy_init</span><span class="p">()</span>
 
-    <span class="k">def</span> <span class="nf">__exit__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__exit__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">):</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">prev_idx</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">idx</span><span class="p">:</span>
             <span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">_cuda_setDevice</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">prev_idx</span><span class="p">)</span>
         <span class="k">return</span> <span class="kc">False</span></div>
@@ -609,7 +603,7 @@
 <span class="sd">        obj (Tensor or Storage): object allocated on the selected device.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
-    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">obj</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">obj</span><span class="p">):</span>
         <span class="n">idx</span> <span class="o">=</span> <span class="n">obj</span><span class="o">.</span><span class="n">get_device</span><span class="p">()</span> <span class="k">if</span> <span class="n">obj</span><span class="o">.</span><span class="n">is_cuda</span> <span class="k">else</span> <span class="o">-</span><span class="mi">1</span>
         <span class="nb">super</span><span class="p">(</span><span class="n">device_of</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">idx</span><span class="p">)</span></div>
 
@@ -659,8 +653,7 @@
 
 
 <span class="k">def</span> <span class="nf">get_device_properties</span><span class="p">(</span><span class="n">device</span><span class="p">):</span>
-    <span class="k">if</span> <span class="ow">not</span> <span class="n">_initialized</span><span class="p">:</span>
-        <span class="n">init</span><span class="p">()</span>  <span class="c1"># will define _get_device_properties and _CudaDeviceProperties</span>
+    <span class="n">_lazy_init</span><span class="p">()</span>  <span class="c1"># will define _get_device_properties and _CudaDeviceProperties</span>
     <span class="n">device</span> <span class="o">=</span> <span class="n">_get_device_index</span><span class="p">(</span><span class="n">device</span><span class="p">,</span> <span class="n">optional</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">device</span> <span class="o">&lt;</span> <span class="mi">0</span> <span class="ow">or</span> <span class="n">device</span> <span class="o">&gt;=</span> <span class="n">device_count</span><span class="p">():</span>
         <span class="k">raise</span> <span class="ne">AssertionError</span><span class="p">(</span><span class="s2">&quot;Invalid device id&quot;</span><span class="p">)</span>
@@ -776,162 +769,17 @@
     <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">_cuda_getCurrentBlasHandle</span><span class="p">()</span></div>
 
 
-<div class="viewcode-block" id="empty_cache"><a class="viewcode-back" href="../../cuda.html#torch.cuda.empty_cache">[docs]</a><span class="k">def</span> <span class="nf">empty_cache</span><span class="p">():</span>
-    <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Releases all unoccupied cached memory currently held by the caching</span>
-<span class="sd">    allocator so that those can be used in other GPU application and visible in</span>
-<span class="sd">    `nvidia-smi`.</span>
-
-<span class="sd">    .. note::</span>
-<span class="sd">        :func:`~torch.cuda.empty_cache` doesn&#39;t increase the amount of GPU</span>
-<span class="sd">        memory available for PyTorch. See :ref:`cuda-memory-management` for</span>
-<span class="sd">        more details about GPU memory management.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">if</span> <span class="n">_initialized</span><span class="p">:</span>
-        <span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">_cuda_emptyCache</span><span class="p">()</span></div>
+<span class="kn">from</span> <span class="nn">.memory</span> <span class="kn">import</span> <span class="o">*</span>
 
 
-<div class="viewcode-block" id="memory_allocated"><a class="viewcode-back" href="../../cuda.html#torch.cuda.memory_allocated">[docs]</a><span class="k">def</span> <span class="nf">memory_allocated</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
-    <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Returns the current GPU memory occupied by tensors in bytes for a given</span>
-<span class="sd">    device.</span>
-
-<span class="sd">    Arguments:</span>
-<span class="sd">        device (torch.device or int, optional): selected device. Returns</span>
-<span class="sd">            statistic for the current device, given by :func:`~torch.cuda.current_device`,</span>
-<span class="sd">            if :attr:`device` is ``None`` (default).</span>
-
-<span class="sd">    .. note::</span>
-<span class="sd">        This is likely less than the amount shown in `nvidia-smi` since some</span>
-<span class="sd">        unused memory can be held by the caching allocator and some context</span>
-<span class="sd">        needs to be created on GPU. See :ref:`cuda-memory-management` for more</span>
-<span class="sd">        details about GPU memory management.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">device</span> <span class="o">=</span> <span class="n">_get_device_index</span><span class="p">(</span><span class="n">device</span><span class="p">,</span> <span class="n">optional</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">_cuda_memoryAllocated</span><span class="p">(</span><span class="n">device</span><span class="p">)</span></div>
-
-
-<div class="viewcode-block" id="max_memory_allocated"><a class="viewcode-back" href="../../cuda.html#torch.cuda.max_memory_allocated">[docs]</a><span class="k">def</span> <span class="nf">max_memory_allocated</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
-    <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Returns the maximum GPU memory occupied by tensors in bytes for a given</span>
-<span class="sd">    device.</span>
-
-<span class="sd">    By default, this returns the peak allocated memory since the beginning of</span>
-<span class="sd">    this program. :func:`~torch.cuda.reset_max_memory_allocated` can be used to</span>
-<span class="sd">    reset the starting point in tracking this metric. For example, these two</span>
-<span class="sd">    functions can measure the peak allocated memory usage of each iteration in a</span>
-<span class="sd">    training loop.</span>
-
-<span class="sd">    Arguments:</span>
-<span class="sd">        device (torch.device or int, optional): selected device. Returns</span>
-<span class="sd">            statistic for the current device, given by :func:`~torch.cuda.current_device`,</span>
-<span class="sd">            if :attr:`device` is ``None`` (default).</span>
-
-<span class="sd">    .. note::</span>
-<span class="sd">        See :ref:`cuda-memory-management` for more details about GPU memory</span>
-<span class="sd">        management.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">device</span> <span class="o">=</span> <span class="n">_get_device_index</span><span class="p">(</span><span class="n">device</span><span class="p">,</span> <span class="n">optional</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">_cuda_maxMemoryAllocated</span><span class="p">(</span><span class="n">device</span><span class="p">)</span></div>
-
-
-<div class="viewcode-block" id="reset_max_memory_allocated"><a class="viewcode-back" href="../../cuda.html#torch.cuda.reset_max_memory_allocated">[docs]</a><span class="k">def</span> <span class="nf">reset_max_memory_allocated</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
-    <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Resets the starting point in tracking maximum GPU memory occupied by</span>
-<span class="sd">    tensors for a given device.</span>
-
-<span class="sd">    See :func:`~torch.cuda.max_memory_allocated` for details.</span>
-
-<span class="sd">    Arguments:</span>
-<span class="sd">        device (torch.device or int, optional): selected device. Returns</span>
-<span class="sd">            statistic for the current device, given by :func:`~torch.cuda.current_device`,</span>
-<span class="sd">            if :attr:`device` is ``None`` (default).</span>
-
-<span class="sd">    .. note::</span>
-<span class="sd">        See :ref:`cuda-memory-management` for more details about GPU memory</span>
-<span class="sd">        management.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">device</span> <span class="o">=</span> <span class="n">_get_device_index</span><span class="p">(</span><span class="n">device</span><span class="p">,</span> <span class="n">optional</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">_cuda_resetMaxMemoryAllocated</span><span class="p">(</span><span class="n">device</span><span class="p">)</span></div>
-
-
-<div class="viewcode-block" id="memory_cached"><a class="viewcode-back" href="../../cuda.html#torch.cuda.memory_cached">[docs]</a><span class="k">def</span> <span class="nf">memory_cached</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
-    <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Returns the current GPU memory managed by the caching allocator in bytes</span>
-<span class="sd">    for a given device.</span>
-
-<span class="sd">    Arguments:</span>
-<span class="sd">        device (torch.device or int, optional): selected device. Returns</span>
-<span class="sd">            statistic for the current device, given by :func:`~torch.cuda.current_device`,</span>
-<span class="sd">            if :attr:`device` is ``None`` (default).</span>
-
-<span class="sd">    .. note::</span>
-<span class="sd">        See :ref:`cuda-memory-management` for more details about GPU memory</span>
-<span class="sd">        management.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">device</span> <span class="o">=</span> <span class="n">_get_device_index</span><span class="p">(</span><span class="n">device</span><span class="p">,</span> <span class="n">optional</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">_cuda_memoryCached</span><span class="p">(</span><span class="n">device</span><span class="p">)</span></div>
-
-
-<div class="viewcode-block" id="max_memory_cached"><a class="viewcode-back" href="../../cuda.html#torch.cuda.max_memory_cached">[docs]</a><span class="k">def</span> <span class="nf">max_memory_cached</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
-    <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Returns the maximum GPU memory managed by the caching allocator in bytes</span>
-<span class="sd">    for a given device.</span>
-
-<span class="sd">    By default, this returns the peak cached memory since the beginning of this</span>
-<span class="sd">    program. :func:`~torch.cuda.reset_max_memory_cached` can be used to reset</span>
-<span class="sd">    the starting point in tracking this metric. For example, these two functions</span>
-<span class="sd">    can measure the peak cached memory amount of each iteration in a training</span>
-<span class="sd">    loop.</span>
-
-<span class="sd">    Arguments:</span>
-<span class="sd">        device (torch.device or int, optional): selected device. Returns</span>
-<span class="sd">            statistic for the current device, given by :func:`~torch.cuda.current_device`,</span>
-<span class="sd">            if :attr:`device` is ``None`` (default).</span>
-
-<span class="sd">    .. note::</span>
-<span class="sd">        See :ref:`cuda-memory-management` for more details about GPU memory</span>
-<span class="sd">        management.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">device</span> <span class="o">=</span> <span class="n">_get_device_index</span><span class="p">(</span><span class="n">device</span><span class="p">,</span> <span class="n">optional</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">_cuda_maxMemoryCached</span><span class="p">(</span><span class="n">device</span><span class="p">)</span></div>
-
-
-<div class="viewcode-block" id="reset_max_memory_cached"><a class="viewcode-back" href="../../cuda.html#torch.cuda.reset_max_memory_cached">[docs]</a><span class="k">def</span> <span class="nf">reset_max_memory_cached</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
-    <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Resets the starting point in tracking maximum GPU memory managed by the</span>
-<span class="sd">    caching allocator for a given device.</span>
-
-<span class="sd">    See :func:`~torch.cuda.max_memory_cached` for details.</span>
-
-<span class="sd">    Arguments:</span>
-<span class="sd">        device (torch.device or int, optional): selected device. Returns</span>
-<span class="sd">            statistic for the current device, given by :func:`~torch.cuda.current_device`,</span>
-<span class="sd">            if :attr:`device` is ``None`` (default).</span>
-
-<span class="sd">    .. note::</span>
-<span class="sd">        See :ref:`cuda-memory-management` for more details about GPU memory</span>
-<span class="sd">        management.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">device</span> <span class="o">=</span> <span class="n">_get_device_index</span><span class="p">(</span><span class="n">device</span><span class="p">,</span> <span class="n">optional</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">_cuda_resetMaxMemoryCached</span><span class="p">(</span><span class="n">device</span><span class="p">)</span></div>
-
-
-<span class="k">def</span> <span class="nf">_host_allocator</span><span class="p">():</span>
-    <span class="n">_lazy_init</span><span class="p">()</span>
-    <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">_cuda_cudaHostAllocator</span><span class="p">()</span>
-
-
-<span class="nd">@contextlib</span><span class="o">.</span><span class="n">contextmanager</span>
-<span class="k">def</span> <span class="nf">_free_mutex</span><span class="p">():</span>
-    <span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">_cuda_lock_mutex</span><span class="p">()</span>
-    <span class="k">try</span><span class="p">:</span>
-        <span class="k">yield</span>
-    <span class="k">finally</span><span class="p">:</span>
-        <span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">_cuda_unlock_mutex</span><span class="p">()</span>
-
-
-<span class="kn">from</span> <span class="nn">.random</span> <span class="k">import</span> <span class="o">*</span>
+<span class="kn">from</span> <span class="nn">.random</span> <span class="kn">import</span> <span class="o">*</span>
 
 <span class="c1">################################################################################</span>
 <span class="c1"># Define Storage and Tensor classes</span>
 <span class="c1">################################################################################</span>
 
 
-<span class="kn">from</span> <span class="nn">..storage</span> <span class="k">import</span> <span class="n">_StorageBase</span>
+<span class="kn">from</span> <span class="nn">..storage</span> <span class="kn">import</span> <span class="n">_StorageBase</span>
 
 
 <span class="k">def</span> <span class="nf">_dummy_type</span><span class="p">(</span><span class="n">name</span><span class="p">):</span>
@@ -958,8 +806,8 @@
 <span class="nd">@staticmethod</span>
 <span class="k">def</span> <span class="nf">_lazy_new</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
     <span class="n">_lazy_init</span><span class="p">()</span>
-    <span class="c1"># We need this method only for lazy init, so we can remove it</span>
-    <span class="k">del</span> <span class="n">_CudaBase</span><span class="o">.</span><span class="fm">__new__</span>
+    <span class="c1"># We may need to call lazy init again if we are a forked child</span>
+    <span class="c1"># del _CudaBase.__new__</span>
     <span class="k">return</span> <span class="nb">super</span><span class="p">(</span><span class="n">_CudaBase</span><span class="p">,</span> <span class="bp">cls</span><span class="p">)</span><span class="o">.</span><span class="fm">__new__</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 
 
@@ -1024,10 +872,10 @@
 <span class="n">torch</span><span class="o">.</span><span class="n">_storage_classes</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">BoolStorage</span><span class="p">)</span>
 <span class="n">torch</span><span class="o">.</span><span class="n">_storage_classes</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">BFloat16Storage</span><span class="p">)</span>
 
-<span class="kn">from</span> <span class="nn">.</span> <span class="k">import</span> <span class="n">sparse</span>  <span class="c1"># noqa: F401</span>
-<span class="kn">from</span> <span class="nn">.</span> <span class="k">import</span> <span class="n">profiler</span>  <span class="c1"># noqa: F401</span>
-<span class="kn">from</span> <span class="nn">.</span> <span class="k">import</span> <span class="n">nvtx</span>  <span class="c1"># noqa: F401</span>
-<span class="kn">from</span> <span class="nn">.streams</span> <span class="k">import</span> <span class="n">Stream</span><span class="p">,</span> <span class="n">Event</span>  <span class="c1"># noqa: F401</span>
+<span class="kn">from</span> <span class="nn">.</span> <span class="kn">import</span> <span class="n">sparse</span>
+<span class="kn">from</span> <span class="nn">.</span> <span class="kn">import</span> <span class="n">profiler</span>
+<span class="kn">from</span> <span class="nn">.</span> <span class="kn">import</span> <span class="n">nvtx</span>
+<span class="kn">from</span> <span class="nn">.streams</span> <span class="kn">import</span> <span class="n">Stream</span><span class="p">,</span> <span class="n">Event</span>
 </pre></div>
 
              </article>
