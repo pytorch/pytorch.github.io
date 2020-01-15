@@ -10,7 +10,7 @@ published: true
 
 # iOS
 
-To get started with PyTorch on iOS, we recommend exploring the following [HelloWorld](https://github.com/pytorch/ios-demo-app/tree/master/HelloWorld). 
+To get started with PyTorch on iOS, we recommend exploring the following [HelloWorld](https://github.com/pytorch/ios-demo-app/tree/master/HelloWorld).
 
 ## Quickstart with a Hello World Example
 
@@ -18,9 +18,9 @@ HelloWorld is a simple image classification application that demonstrates how to
 
 ### Model Preparation
 
-Let's start with model preparation. If you are familiar with PyTorch, you probably should already know how to train and save your model. In case you don't, we are going to use a pre-trained image classification model - [Resnet18](https://pytorch.org/hub/pytorch_vision_resnet/), which is already packaged in [TorchVision](https://pytorch.org/docs/stable/torchvision/index.html). To install it, run the command below.
+Let's start with model preparation. If you are familiar with PyTorch, you probably should already know how to train and save your model. In case you don't, we are going to use a pre-trained image classification model - [MobileNet v2](https://pytorch.org/hub/pytorch_vision_mobilenet_v2/), which is already packaged in [TorchVision](https://pytorch.org/docs/stable/torchvision/index.html). To install it, run the command below.
 
-> We highly recommend following the [Pytorch Github page](https://github.com/pytorch/pytorch) to set up the Python development environment on your local machine. 
+> We highly recommend following the [Pytorch Github page](https://github.com/pytorch/pytorch) to set up the Python development environment on your local machine.
 
 ```shell
 pip install torchvision
@@ -34,7 +34,7 @@ python trace_model.py
 
 If everything works well, we should have our model - `model.pt` generated in the `HelloWorld` folder. Now copy the model file to our application folder `HelloWorld/model`.
 
-> To find out more details about TorchScript, please visit [tutorials on pytorch.org](https://pytorch.org/tutorials/advanced/cpp_export.html) 
+> To find out more details about TorchScript, please visit [tutorials on pytorch.org](https://pytorch.org/tutorials/advanced/cpp_export.html)
 
 ### Install LibTorch via Cocoapods
 
@@ -94,7 +94,7 @@ private lazy var module: TorchModule = {
     }
 }()
 ```
-Note that the `TorchModule` Class is an Objective-C wrapper of `torch::jit::script::Module`. 
+Note that the `TorchModule` Class is an Objective-C wrapper of `torch::jit::script::Module`.
 
 ```cpp
 torch::jit::script::Module module = torch::jit::load(filePath.UTF8String);
@@ -103,7 +103,7 @@ Since Swift can not talk to C++ directly, we have to either use an Objective-C c
 
 #### Run Inference
 
-Now it's time to run inference and get the results. 
+Now it's time to run inference and get the results.
 
 ```swift
 guard let outputs = module.predict(image: UnsafeMutableRawPointer(&pixelBuffer)) else {
@@ -115,17 +115,16 @@ Again, the `predict` method is just an Objective-C wrapper. Under the hood, it c
 ```cpp
 at::Tensor tensor = torch::from_blob(imageBuffer, {1, 3, 224, 224}, at::kFloat);
 torch::autograd::AutoGradMode guard(false);
-at::AutoNonVariableTypeMode non_var_type_mode(true);
 auto outputTensor = _impl.forward({tensor}).toTensor();
 float* floatBuffer = outputTensor.data_ptr<float>();
 ```
-The C++ function `torch::from_blob` will create an input tensor from the pixel buffer. Note that the shape of the tensor is `{1,3,224,224}` which represents `NxCxWxH` as we discussed in the above section. 
+The C++ function `torch::from_blob` will create an input tensor from the pixel buffer. Note that the shape of the tensor is `{1,3,224,224}` which represents `NxCxWxH` as we discussed in the above section.
 
 ```cpp
 torch::autograd::AutoGradMode guard(false);
 at::AutoNonVariableTypeMode non_var_type_mode(true);
 ```
-The above two lines tells the PyTorch engine to do inference only. This is because by default, PyTorch has built-in support for doing auto-differentiation, which is also known as [autograd](https://pytorch.org/docs/stable/notes/autograd.html). Since we don't do training on mobile, we can just disable the autograd mode. 
+The above two lines tells the PyTorch engine to do inference only. This is because by default, PyTorch has built-in support for doing auto-differentiation, which is also known as [autograd](https://pytorch.org/docs/stable/notes/autograd.html). Since we don't do training on mobile, we can just disable the autograd mode.
 
 Finally, we can call this `forward` function to get the output tensor and convert it to a `float` buffer.
 
@@ -183,16 +182,47 @@ After the build succeeds, all static libraries and header files will be generate
 
 Open your project in XCode, copy all the static libraries as well as header files to your project. Navigate to the project settings, set the value **Header Search Paths** to the path of header files you just copied.
 
-In the build settings, search for **other linker flags**.  Add a custom linker flag below 
+In the build settings, search for **other linker flags**.  Add a custom linker flag below
 
 ```
 -force_load $(PROJECT_DIR)/${path-to-libtorch.a}
 ```
  Finally, disable bitcode for your target by selecting the Build Settings, searching for **Enable Bitcode**, and set the value to **No**.
 
-## API Docs
+### API Docs
 
-Currently, the iOS framework uses the Pytorch C++ front-end APIs directly. The C++ document can be found here https://pytorch.org/cppdocs/. To learn more about it, we recommend exploring the [C++ front-end tutorials](https://pytorch.org/tutorials/advanced/cpp_frontend.html) on PyTorch webpage. In the meantime, we're working on providing the Swift/Objective-C API wrappers to PyTorch.
+Currently, the iOS framework uses the Pytorch C++ front-end APIs directly. The C++ document can be found [here](https://pytorch.org/cppdocs/). To learn more about it, we recommend exploring the [C++ front-end tutorials](https://pytorch.org/tutorials/advanced/cpp_frontend.html) on PyTorch webpage. In the meantime, we're working on providing the Swift/Objective-C API wrappers to PyTorch.
+
+
+### Custom Build
+
+Starting from 1.4.0, PyTorch supports custom build. You can now build the PyTorch library that only contains the operators needed by your model. To do that, follow the steps below
+
+1\. Verify your PyTorch version is 1.4.0 or above. You can do that by checking the value of `torch.__version__`.
+
+2\. To dump the operators in your model, say `MobileNetV2`, run the following lines of Python code:
+
+```python
+import torch, yaml
+model = torch.jit.load('MobileNetV2.pt')
+ops = torch.jit.export_opnames(model)
+with open('MobileNetV2.yaml', 'w') as output:
+    yaml.dump(ops, output)
+```
+In the snippet above, you first need to load the ScriptModule. Then, use `export_opnames` to return a list of operator names of the ScriptModule and its submodules. Lastly, save the result in a yaml file.
+
+3\. To run the iOS build script locally with the prepared yaml list of operators, pass in the yaml file generate from the last step into the environment variable `SELECTED_OP_LIST`. Also in the arguments, specify `BUILD_PYTORCH_MOBILE=1` as well as the platform/architechture type. Take the arm64 build for example, the command should be:
+
+```
+SELECTED_OP_LIST=MobileNetV2.yaml BUILD_PYTORCH_MOBILE=1 IOS_ARCH=arm64 ./scripts/build_ios.sh
+```
+4\. After the build succeeds, you can integrate the result libraries to your project by following the [XCode Setup](#xcode-setup) section above.
+
+5\. The last step is to add a single line of C++ code before running `forward`. This is because by default JIT will do some optimizations on operators (fusion for example), which might break the consistency with the ops we dumped from the model.
+
+```cpp
+torch::jit::GraphOptimizerEnabledGuard guard(false);
+```
 
 ## Issues and Contribution
 

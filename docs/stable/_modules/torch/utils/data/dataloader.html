@@ -5,7 +5,6 @@
 <!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
 <!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
 <head>
-  <meta name="robots" content="noindex">
   <meta charset="utf-8">
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -157,7 +156,7 @@
               
               
                 <div class="version">
-                  <a href='http://pytorch.org/docs/versions.html'>1.3.1 &#x25BC</a>
+                  <a href='http://pytorch.org/docs/versions.html'>1.4.0 &#x25BC</a>
                 </div>
               
             
@@ -191,11 +190,13 @@
 <li class="toctree-l1"><a class="reference internal" href="../../../../notes/broadcasting.html">Broadcasting semantics</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../notes/cpu_threading_torchscript_inference.html">CPU threading and TorchScript inference</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../notes/cuda.html">CUDA semantics</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../notes/distributed_autograd.html">Distributed Autograd Design</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../notes/extending.html">Extending PyTorch</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../notes/faq.html">Frequently Asked Questions</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../notes/large_scale_deployments.html">Features for large-scale deployments</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../notes/multiprocessing.html">Multiprocessing best practices</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../notes/randomness.html">Reproducibility</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../notes/rref.html">Remote Reference Protocol</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../notes/serialization.html">Serialization semantics</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../notes/windows.html">Windows FAQ</a></li>
 <li class="toctree-l1"><a class="reference external" href="http://pytorch.org/xla/">PyTorch on XLA Devices</a></li>
@@ -223,6 +224,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../../../../onnx.html">torch.onnx</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../optim.html">torch.optim</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../quantization.html">Quantization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../rpc.html">Distributed RPC Framework</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../random.html">torch.random</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../sparse.html">torch.sparse</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../storage.html">torch.Storage</a></li>
@@ -327,22 +329,25 @@
              <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
               
   <h1>Source code for torch.utils.data.dataloader</h1><div class="highlight"><pre>
-<span></span><span class="sa">r</span><span class="sd">&quot;&quot;&quot;Definition of the DataLoader and it&#39;s iterator _DataLoaderIter classes.</span>
+<span></span><span class="sa">r</span><span class="sd">&quot;&quot;&quot;Definition of the DataLoader and associated iterators that subclass _BaseDataLoaderIter</span>
 
 <span class="sd">To support these two classes, in `./_utils` we define many utility methods and</span>
 <span class="sd">functions to be run in multiprocessing. E.g., the data loading worker loop is</span>
 <span class="sd">in `./_utils/worker.py`.</span>
 <span class="sd">&quot;&quot;&quot;</span>
 
-<span class="kn">import</span> <span class="nn">torch</span>
-<span class="kn">import</span> <span class="nn">multiprocessing</span> <span class="k">as</span> <span class="nn">python_multiprocessing</span>
-<span class="kn">import</span> <span class="nn">torch.multiprocessing</span> <span class="k">as</span> <span class="nn">multiprocessing</span>
-<span class="kn">from</span> <span class="nn">.</span> <span class="k">import</span> <span class="n">IterableDataset</span><span class="p">,</span> <span class="n">Sampler</span><span class="p">,</span> <span class="n">SequentialSampler</span><span class="p">,</span> <span class="n">RandomSampler</span><span class="p">,</span> <span class="n">BatchSampler</span>
-<span class="kn">from</span> <span class="nn">.</span> <span class="k">import</span> <span class="n">_utils</span>
-<span class="kn">from</span> <span class="nn">torch._utils</span> <span class="k">import</span> <span class="n">ExceptionWrapper</span>
 <span class="kn">import</span> <span class="nn">threading</span>
 <span class="kn">import</span> <span class="nn">itertools</span>
-<span class="kn">from</span> <span class="nn">torch._six</span> <span class="k">import</span> <span class="n">queue</span><span class="p">,</span> <span class="n">string_classes</span>
+<span class="kn">import</span> <span class="nn">warnings</span>
+
+<span class="kn">import</span> <span class="nn">multiprocessing</span> <span class="k">as</span> <span class="nn">python_multiprocessing</span>
+<span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">import</span> <span class="nn">torch.multiprocessing</span> <span class="k">as</span> <span class="nn">multiprocessing</span>
+<span class="kn">from</span> <span class="nn">torch._utils</span> <span class="kn">import</span> <span class="n">ExceptionWrapper</span>
+<span class="kn">from</span> <span class="nn">torch._six</span> <span class="kn">import</span> <span class="n">queue</span><span class="p">,</span> <span class="n">string_classes</span>
+
+<span class="kn">from</span> <span class="nn">.</span> <span class="kn">import</span> <span class="n">IterableDataset</span><span class="p">,</span> <span class="n">Sampler</span><span class="p">,</span> <span class="n">SequentialSampler</span><span class="p">,</span> <span class="n">RandomSampler</span><span class="p">,</span> <span class="n">BatchSampler</span>
+<span class="kn">from</span> <span class="nn">.</span> <span class="kn">import</span> <span class="n">_utils</span>
 
 
 <span class="n">get_worker_info</span> <span class="o">=</span> <span class="n">_utils</span><span class="o">.</span><span class="n">worker</span><span class="o">.</span><span class="n">get_worker_info</span>
@@ -370,20 +375,17 @@
 <span class="k">class</span> <span class="nc">_InfiniteConstantSampler</span><span class="p">(</span><span class="n">Sampler</span><span class="p">):</span>
     <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Analogous to ``itertools.repeat(None, None)``.</span>
 <span class="sd">    Used as sampler for :class:`~torch.utils.data.IterableDataset`.</span>
+
+<span class="sd">    Arguments:</span>
+<span class="sd">        data_source (Dataset): dataset to sample from</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
-    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="nb">super</span><span class="p">(</span><span class="n">_InfiniteConstantSampler</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
 
-    <span class="k">def</span> <span class="nf">__iter__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__iter__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
             <span class="k">yield</span> <span class="kc">None</span>
-
-    <span class="k">def</span> <span class="nf">__len__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="c1"># This has to be a TypeError, otherwise, since this is used in</span>
-        <span class="c1"># `len(dataloader)`, `list(dataloader)` will fail.</span>
-        <span class="c1"># see NOTE [ Lack of Default `__len__` in Python Abstract Base Classes ]</span>
-        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s1">&#39;Cannot determine the DataLoader length of a IterableDataset&#39;</span><span class="p">)</span>
 
 
 <div class="viewcode-block" id="DataLoader"><a class="viewcode-back" href="../../../../data.html#torch.utils.data.DataLoader">[docs]</a><span class="k">class</span> <span class="nc">DataLoader</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
@@ -436,17 +438,17 @@
 
 <span class="sd">    .. note:: ``len(dataloader)`` heuristic is based on the length of the sampler used.</span>
 <span class="sd">              When :attr:`dataset` is an :class:`~torch.utils.data.IterableDataset`,</span>
-<span class="sd">              an infinite sampler is used, whose :meth:`__len__` is not</span>
-<span class="sd">              implemented, because the actual length depends on both the</span>
-<span class="sd">              iterable as well as multi-process loading configurations. So one</span>
-<span class="sd">              should not query this method unless they work with a map-style</span>
-<span class="sd">              dataset. See `Dataset Types`_ for more details on these two types</span>
-<span class="sd">              of datasets.</span>
+<span class="sd">              ``len(dataset)`` (if implemented) is returned instead, regardless</span>
+<span class="sd">              of multi-process loading configurations, because PyTorch trust</span>
+<span class="sd">              user :attr:`dataset` code in correctly handling multi-process</span>
+<span class="sd">              loading to avoid duplicate data. See `Dataset Types`_ for more</span>
+<span class="sd">              details on these two types of datasets and how</span>
+<span class="sd">              :class:`~torch.utils.data.IterableDataset` interacts with `Multi-process data loading`_.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="n">__initialized</span> <span class="o">=</span> <span class="kc">False</span>
 
-    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dataset</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">shuffle</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">sampler</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dataset</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">shuffle</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">sampler</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
                  <span class="n">batch_sampler</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">num_workers</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">collate_fn</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
                  <span class="n">pin_memory</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">drop_last</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
                  <span class="n">worker_init_fn</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">multiprocessing_context</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
@@ -560,6 +562,7 @@
 
         <span class="bp">self</span><span class="o">.</span><span class="n">collate_fn</span> <span class="o">=</span> <span class="n">collate_fn</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">__initialized</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_IterableDataset_len_called</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># See NOTE [ IterableDataset and __len__ ]</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">multiprocessing_context</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -593,14 +596,14 @@
 
         <span class="bp">self</span><span class="o">.</span><span class="n">__multiprocessing_context</span> <span class="o">=</span> <span class="n">multiprocessing_context</span>
 
-    <span class="k">def</span> <span class="nf">__setattr__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">attr</span><span class="p">,</span> <span class="n">val</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__setattr__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">attr</span><span class="p">,</span> <span class="n">val</span><span class="p">):</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">__initialized</span> <span class="ow">and</span> <span class="n">attr</span> <span class="ow">in</span> <span class="p">(</span><span class="s1">&#39;batch_size&#39;</span><span class="p">,</span> <span class="s1">&#39;batch_sampler&#39;</span><span class="p">,</span> <span class="s1">&#39;sampler&#39;</span><span class="p">,</span> <span class="s1">&#39;drop_last&#39;</span><span class="p">,</span> <span class="s1">&#39;dataset&#39;</span><span class="p">):</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;</span><span class="si">{}</span><span class="s1"> attribute should not be set after </span><span class="si">{}</span><span class="s1"> is &#39;</span>
                              <span class="s1">&#39;initialized&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">attr</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="p">))</span>
 
         <span class="nb">super</span><span class="p">(</span><span class="n">DataLoader</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__setattr__</span><span class="p">(</span><span class="n">attr</span><span class="p">,</span> <span class="n">val</span><span class="p">)</span>
 
-    <span class="k">def</span> <span class="nf">__iter__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__iter__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
             <span class="k">return</span> <span class="n">_SingleProcessDataLoaderIter</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
@@ -622,14 +625,33 @@
         <span class="k">else</span><span class="p">:</span>
             <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">sampler</span>
 
-    <span class="k">def</span> <span class="nf">__len__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_index_sampler</span><span class="p">)</span>  <span class="c1"># with iterable-style dataset, this will error</span></div>
+    <span class="k">def</span> <span class="fm">__len__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dataset_kind</span> <span class="o">==</span> <span class="n">_DatasetKind</span><span class="o">.</span><span class="n">Iterable</span><span class="p">:</span>
+            <span class="c1"># NOTE [ IterableDataset and __len__ ]</span>
+            <span class="c1">#</span>
+            <span class="c1"># For `IterableDataset`, `__len__` could be inaccurate when one naively</span>
+            <span class="c1"># does multi-processing data loading, since the samples will be duplicated.</span>
+            <span class="c1"># However, no real use case should be actually using that behavior, so</span>
+            <span class="c1"># it should count as a user error. We should generally trust user</span>
+            <span class="c1"># code to do the proper thing (e.g., configure each replica differently</span>
+            <span class="c1"># in `__iter__`), and give us the correct `__len__` if they choose to</span>
+            <span class="c1"># implement it (this will still throw if the dataset does not implement</span>
+            <span class="c1"># a `__len__`).</span>
+            <span class="c1">#</span>
+            <span class="c1"># To provide a further warning, we track if `__len__` was called on the</span>
+            <span class="c1"># `DataLoader`, save the returned value in `self._len_called`, and warn</span>
+            <span class="c1"># if the iterator ends up yielding more than this number of samples.</span>
+            <span class="n">length</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_IterableDataset_len_called</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dataset</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">length</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_index_sampler</span><span class="p">)</span></div>
 
 
 <span class="k">class</span> <span class="nc">_BaseDataLoaderIter</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
-    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">loader</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">loader</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_dataset</span> <span class="o">=</span> <span class="n">loader</span><span class="o">.</span><span class="n">dataset</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_dataset_kind</span> <span class="o">=</span> <span class="n">loader</span><span class="o">.</span><span class="n">_dataset_kind</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_IterableDataset_len_called</span> <span class="o">=</span> <span class="n">loader</span><span class="o">.</span><span class="n">_IterableDataset_len_called</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_auto_collation</span> <span class="o">=</span> <span class="n">loader</span><span class="o">.</span><span class="n">_auto_collation</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_drop_last</span> <span class="o">=</span> <span class="n">loader</span><span class="o">.</span><span class="n">drop_last</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_index_sampler</span> <span class="o">=</span> <span class="n">loader</span><span class="o">.</span><span class="n">_index_sampler</span>
@@ -639,17 +661,36 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_collate_fn</span> <span class="o">=</span> <span class="n">loader</span><span class="o">.</span><span class="n">collate_fn</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_sampler_iter</span> <span class="o">=</span> <span class="nb">iter</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_index_sampler</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_base_seed</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">empty</span><span class="p">((),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span><span class="o">.</span><span class="n">random_</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_num_yielded</span> <span class="o">=</span> <span class="mi">0</span>
 
-    <span class="k">def</span> <span class="nf">__iter__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__iter__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">return</span> <span class="bp">self</span>
 
     <span class="k">def</span> <span class="nf">_next_index</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">return</span> <span class="nb">next</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_sampler_iter</span><span class="p">)</span>  <span class="c1"># may raise StopIteration</span>
 
-    <span class="k">def</span> <span class="nf">__next__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_next_data</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">raise</span> <span class="ne">NotImplementedError</span>
 
-    <span class="k">def</span> <span class="nf">__len__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__next__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_next_data</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_num_yielded</span> <span class="o">+=</span> <span class="mi">1</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dataset_kind</span> <span class="o">==</span> <span class="n">_DatasetKind</span><span class="o">.</span><span class="n">Iterable</span> <span class="ow">and</span> \
+                <span class="bp">self</span><span class="o">.</span><span class="n">_IterableDataset_len_called</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> \
+                <span class="bp">self</span><span class="o">.</span><span class="n">_num_yielded</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">_IterableDataset_len_called</span><span class="p">:</span>
+            <span class="n">warn_msg</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;Length of IterableDataset </span><span class="si">{}</span><span class="s2"> was reported to be </span><span class="si">{}</span><span class="s2"> (when accessing len(dataloader)), but </span><span class="si">{}</span><span class="s2"> &quot;</span>
+                        <span class="s2">&quot;samples have been fetched. &quot;</span><span class="p">)</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_dataset</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_IterableDataset_len_called</span><span class="p">,</span>
+                                                              <span class="bp">self</span><span class="o">.</span><span class="n">_num_yielded</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_num_workers</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="n">warn_msg</span> <span class="o">+=</span> <span class="p">(</span><span class="s2">&quot;For multiprocessing data-loading, this could be caused by not properly configuring the &quot;</span>
+                             <span class="s2">&quot;IterableDataset replica at each worker. Please see &quot;</span>
+                             <span class="s2">&quot;https://pytorch.org/docs/stable/data.html#torch.utils.data.IterableDataset for examples.&quot;</span><span class="p">)</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="n">warn_msg</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">data</span>
+
+    <span class="nb">next</span> <span class="o">=</span> <span class="fm">__next__</span>  <span class="c1"># Python 2 compatibility</span>
+
+    <span class="k">def</span> <span class="fm">__len__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_index_sampler</span><span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">__getstate__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -662,7 +703,7 @@
 
 
 <span class="k">class</span> <span class="nc">_SingleProcessDataLoaderIter</span><span class="p">(</span><span class="n">_BaseDataLoaderIter</span><span class="p">):</span>
-    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">loader</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">loader</span><span class="p">):</span>
         <span class="nb">super</span><span class="p">(</span><span class="n">_SingleProcessDataLoaderIter</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">loader</span><span class="p">)</span>
         <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">_timeout</span> <span class="o">==</span> <span class="mi">0</span>
         <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">_num_workers</span> <span class="o">==</span> <span class="mi">0</span>
@@ -670,14 +711,12 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_dataset_fetcher</span> <span class="o">=</span> <span class="n">_DatasetKind</span><span class="o">.</span><span class="n">create_fetcher</span><span class="p">(</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_dataset_kind</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dataset</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_auto_collation</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_collate_fn</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_drop_last</span><span class="p">)</span>
 
-    <span class="k">def</span> <span class="nf">__next__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_next_data</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="n">index</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_next_index</span><span class="p">()</span>  <span class="c1"># may raise StopIteration</span>
         <span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dataset_fetcher</span><span class="o">.</span><span class="n">fetch</span><span class="p">(</span><span class="n">index</span><span class="p">)</span>  <span class="c1"># may raise StopIteration</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pin_memory</span><span class="p">:</span>
             <span class="n">data</span> <span class="o">=</span> <span class="n">_utils</span><span class="o">.</span><span class="n">pin_memory</span><span class="o">.</span><span class="n">pin_memory</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">data</span>
-
-    <span class="nb">next</span> <span class="o">=</span> <span class="fm">__next__</span>  <span class="c1"># Python 2 compatibility</span>
 
 
 <span class="k">class</span> <span class="nc">_MultiProcessingDataLoaderIter</span><span class="p">(</span><span class="n">_BaseDataLoaderIter</span><span class="p">):</span>
@@ -961,7 +1000,7 @@
     <span class="c1">#     processing indices already in `index_queue` if we are already shutting</span>
     <span class="c1">#     down.</span>
 
-    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">loader</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">loader</span><span class="p">):</span>
         <span class="nb">super</span><span class="p">(</span><span class="n">_MultiProcessingDataLoaderIter</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">loader</span><span class="p">)</span>
 
         <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">_num_workers</span> <span class="o">&gt;</span> <span class="mi">0</span>
@@ -1101,7 +1140,7 @@
                 <span class="k">if</span> <span class="n">success</span><span class="p">:</span>
                     <span class="k">return</span> <span class="n">data</span>
 
-    <span class="k">def</span> <span class="nf">__next__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_next_data</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
             <span class="c1"># If the worker responsible for `self._rcvd_idx` has already ended</span>
             <span class="c1"># and was unable to fulfill this task (due to exhausting an `IterableDataset`),</span>
@@ -1146,8 +1185,6 @@
             <span class="k">else</span><span class="p">:</span>
                 <span class="k">del</span> <span class="bp">self</span><span class="o">.</span><span class="n">_task_info</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span>
                 <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_process_data</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
-
-    <span class="nb">next</span> <span class="o">=</span> <span class="fm">__next__</span>  <span class="c1"># Python 2 compatibility</span>
 
     <span class="k">def</span> <span class="nf">_try_put_index</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">_tasks_outstanding</span> <span class="o">&lt;</span> <span class="mi">2</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">_num_workers</span>
@@ -1251,7 +1288,7 @@
                     <span class="n">_utils</span><span class="o">.</span><span class="n">signal_handling</span><span class="o">.</span><span class="n">_remove_worker_pids</span><span class="p">(</span><span class="nb">id</span><span class="p">(</span><span class="bp">self</span><span class="p">))</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">_worker_pids_set</span> <span class="o">=</span> <span class="kc">False</span>
 
-    <span class="k">def</span> <span class="nf">__del__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__del__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_shutdown_workers</span><span class="p">()</span>
 </pre></div>
 

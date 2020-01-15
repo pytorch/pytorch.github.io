@@ -34,10 +34,10 @@ example = torch.rand(1, 3, 224, 224)
 traced_script_module = torch.jit.trace(model, example)
 traced_script_module.save("app/src/main/assets/model.pt")
 ```
-If everything works well, we should have our model - `model.pt` generated in the assets folder of android application. 
+If everything works well, we should have our model - `model.pt` generated in the assets folder of android application.
 That will be packaged inside android application as `asset` and can be used on the device.
 
-More details about TorchScript you can find in [tutorials on pytorch.org](https://pytorch.org/docs/stable/jit.html) 
+More details about TorchScript you can find in [tutorials on pytorch.org](https://pytorch.org/docs/stable/jit.html)
 
 #### 2. Cloning from github
 ```
@@ -67,14 +67,14 @@ dependencies {
 }
 ```
 Where `org.pytorch:pytorch_android` is the main dependency with PyTorch Android API, including libtorch native library for all 4 android abis (armeabi-v7a, arm64-v8a, x86, x86_64).
-Further in this doc you can find how to rebuild it only for specific list of android abis. 
+Further in this doc you can find how to rebuild it only for specific list of android abis.
 
 `org.pytorch:pytorch_android_torchvision` - additional library with utility functions for converting `android.media.Image` and `android.graphics.Bitmap` to tensors.
 
 #### 4. Reading image from Android Asset
 
 All the logic happens in [`org.pytorch.helloworld.MainActivity`](https://github.com/pytorch/android-demo-app/blob/master/HelloWorldApp/app/src/main/java/org/pytorch/helloworld/MainActivity.java#L31-L69).
-As a first step we read `image.jpg` to `android.graphics.Bitmap` using the standard Android API. 
+As a first step we read `image.jpg` to `android.graphics.Bitmap` using the standard Android API.
 ```
 Bitmap bitmap = BitmapFactory.decodeStream(getAssets().open("image.jpg"));
 ```
@@ -93,13 +93,13 @@ Tensor inputTensor = TensorImageUtils.bitmapToFloat32Tensor(bitmap,
 `org.pytorch.torchvision.TensorImageUtils` is part of `org.pytorch:pytorch_android_torchvision` library.
 The `TensorImageUtils#bitmapToFloat32Tensor` method creates tensors in the [torchvision format](https://pytorch.org/docs/stable/torchvision/models.html) using `android.graphics.Bitmap` as a source.
 
-> All pre-trained models expect input images normalized in the same way, i.e. mini-batches of 3-channel RGB images of shape (3 x H x W), where H and W are expected to be at least 224. 
+> All pre-trained models expect input images normalized in the same way, i.e. mini-batches of 3-channel RGB images of shape (3 x H x W), where H and W are expected to be at least 224.
 > The images have to be loaded in to a range of `[0, 1]` and then normalized using `mean = [0.485, 0.456, 0.406]` and `std = [0.229, 0.224, 0.225]`
 
-`inputTensor`'s shape is `1x3xHxW`, where `H` and `W` are bitmap height and width appropriately. 
+`inputTensor`'s shape is `1x3xHxW`, where `H` and `W` are bitmap height and width appropriately.
 
 #### 7. Run Inference
- 
+
 ```
 Tensor outputTensor = module.forward(IValue.from(inputTensor)).toTensor();
 float[] scores = outputTensor.getDataAsFloatArray();
@@ -109,7 +109,7 @@ float[] scores = outputTensor.getDataAsFloatArray();
 
 #### 8. Processing results
 Its content is retrieved using `org.pytorch.Tensor.getDataAsFloatArray()` method that returns java array of floats with scores for every image net class.
- 
+
 After that we just find index with maximum score and retrieve predicted class name from `ImageNetClasses.IMAGENET_CLASSES` array that contains all ImageNet classes.
 
 ```
@@ -123,8 +123,8 @@ for (int i = 0; i < scores.length; i++) {
 }
 String className = ImageNetClasses.IMAGENET_CLASSES[maxScoreIdx];
 ```
- 
-In the following sections you can find detailed explanations of PyTorch Android API, code walk through for a bigger [demo application](https://github.com/pytorch/android-demo-app/tree/master/PyTorchDemoApp), 
+
+In the following sections you can find detailed explanations of PyTorch Android API, code walk through for a bigger [demo application](https://github.com/pytorch/android-demo-app/tree/master/PyTorchDemoApp),
 implementation details of the API, how to customize and build it from source.
 
 ## PyTorch Demo Application
@@ -169,7 +169,7 @@ After getting predicted scores from the model it finds top K classes with the hi
 #### Language Processing Example
 
 Another example is natural language processing, based on an LSTM model, trained on a reddit comments dataset.
-The logic happens in [`TextClassificattionActivity`](https://github.com/pytorch/android-demo-app/blob/master/PyTorchDemoApp/app/src/main/java/org/pytorch/demo/nlp/TextClassificationActivity.java). 
+The logic happens in [`TextClassificattionActivity`](https://github.com/pytorch/android-demo-app/blob/master/PyTorchDemoApp/app/src/main/java/org/pytorch/demo/nlp/TextClassificationActivity.java).
 
 Result class names are packaged inside the TorchScript model and initialized just after initial module initialization.
 The module has a `get_classes` method that returns `List[str]`, which can be called using method `Module.runMethod(methodName)`:
@@ -199,7 +199,7 @@ Running inference of the model is similar to previous examples:
 Tensor outputTensor = mModule.forward(IValue.from(inputTensor)).toTensor()
 ```
 
-After that, the code processes the output, finding classes with the highest scores. 
+After that, the code processes the output, finding classes with the highest scores.
 
 ## Building PyTorch Android from Source
 
@@ -219,7 +219,7 @@ The workflow contains several steps:
 2\. Create symbolic links to the results of those builds:
 `android/pytorch_android/src/main/jniLibs/${abi}` to the directory with output libraries
 `android/pytorch_android/src/main/cpp/libtorch_include/${abi}` to the directory with headers. These directories are used to build `libpytorch.so` library that will be loaded on android device.
- 
+
 3\. And finally run `gradle` in `android/pytorch_android` directory with task `assembleRelease`
 
 Script requires that Android SDK, Android NDK and gradle are installed.
@@ -263,6 +263,9 @@ dependencies {
     implementation(name:'pytorch_android', ext:'aar')
     implementation(name:'pytorch_android_torchvision', ext:'aar')
     implementation(name:'pytorch_android_fbjni', ext:'aar')
+    ...
+    implementation 'com.android.support:appcompat-v7:28.0.0'
+    implementation 'com.facebook.soloader:nativeloader:0.8.0'
 }
 ```
 
@@ -273,7 +276,40 @@ packagingOptions {
 }
 ```
 
-## More Details
+Also we have to add all transitive dependencies of our aars. As `pytorch_android` depends on `com.android.support:appcompat-v7:28.0.0` and `com.facebook.soloader:nativeloader:0.8.0`, we need to add them. (In case of using maven dependencies they are added automatically from `pom.xml`).
+
+
+## Custom Build
+
+To reduce the size of binaries you can do custom build of PyTorch Android with only set of operators required by your model.
+This includes two steps: preparing the list of operators from your model, rebuilding pytorch android with specified list.
+
+1\. Verify your PyTorch version is 1.4.0 or above. You can do that by checking the value of `torch.__version__`.
+
+2\. Preparation of the list of operators
+
+List of operators of your serialized torchscript model can be prepared in yaml format using python api function `torch.jit.export_opnames()`.
+To dump the operators in your model, say `MobileNetV2`, run the following lines of Python code:
+```
+# Dump list of operators used by MobileNetV2:
+import torch, yaml
+model = torch.jit.load('MobileNetV2.pt')
+ops = torch.jit.export_opnames(model)
+with open('MobileNetV2.yaml', 'w') as output:
+    yaml.dump(ops, output)
+```
+3\. Building PyTorch Android with prepared operators list.
+
+To build PyTorch Android with the prepared yaml list of operators, specify it in the environment variable `SELECTED_OP_LIST`. Also in the arguments, specify which Android ABIs it should build; by default it builds all 4 Android ABIs.
+
+```
+# Build PyTorch Android library customized for MobileNetV2:
+SELECTED_OP_LIST=MobileNetV2.yaml scripts/build_pytorch_android.sh arm64-v8a
+```
+
+After successful build you can integrate the result aar files to your android gradle project, following the steps from previous section of this tutorial (Building PyTorch Android from Source).
+
+## API Docs
 
 You can find more details about the PyTorch Android API in the [Javadoc](https://pytorch.org/docs/stable/packages.html).
 
