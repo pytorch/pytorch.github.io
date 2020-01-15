@@ -316,37 +316,37 @@ function commandMessage(key) {
     "stable,pip,macos,cudanone,python3.7": "pip3 install torch torchvision",
 
     "stable,pip,linux,cudanone,python2.7":
-      "pip install torch==1.3.1+cpu torchvision==0.4.2+cpu -f https://download.pytorch.org/whl/torch_stable.html",
+      "pip install torch==1.4.0+cpu torchvision==0.5.0+cpu -f https://download.pytorch.org/whl/torch_stable.html",
 
     "stable,pip,linux,cuda9.2,python2.7":
-      "pip install torch==1.3.1+cu92 torchvision==0.4.2+cu92 -f https://download.pytorch.org/whl/torch_stable.html",
+      "pip install torch==1.4.0+cu92 torchvision==0.5.0+cu92 -f https://download.pytorch.org/whl/torch_stable.html",
 
     "stable,pip,linux,cuda10.1,python2.7":
        "pip install torch torchvision",
 
     "stable,pip,linux,cudanone,python3.5":
-      "pip3 install torch==1.3.1+cpu torchvision==0.4.2+cpu -f https://download.pytorch.org/whl/torch_stable.html",
+      "pip3 install torch==1.4.0+cpu torchvision==0.5.0+cpu -f https://download.pytorch.org/whl/torch_stable.html",
 
     "stable,pip,linux,cuda9.2,python3.5":
-      "pip3 install torch==1.3.1+cu92 torchvision==0.4.2+cu92 -f https://download.pytorch.org/whl/torch_stable.html",
+      "pip3 install torch==1.4.0+cu92 torchvision==0.5.0+cu92 -f https://download.pytorch.org/whl/torch_stable.html",
 
     "stable,pip,linux,cuda10.1,python3.5":
       "pip3 install torch torchvision",
 
     "stable,pip,linux,cudanone,python3.6":
-      "pip3 install torch==1.3.1+cpu torchvision==0.4.2+cpu -f https://download.pytorch.org/whl/torch_stable.html",
+      "pip3 install torch==1.4.0+cpu torchvision==0.5.0+cpu -f https://download.pytorch.org/whl/torch_stable.html",
 
     "stable,pip,linux,cuda9.2,python3.6":
-      "pip3 install torch==1.3.1+cu92 torchvision==0.4.2+cu92 -f https://download.pytorch.org/whl/torch_stable.html",
+      "pip3 install torch==1.4.0+cu92 torchvision==0.5.0+cu92 -f https://download.pytorch.org/whl/torch_stable.html",
 
     "stable,pip,linux,cuda10.1,python3.6":
       "pip3 install torch torchvision",
 
     "stable,pip,linux,cudanone,python3.7":
-      "pip3 install torch==1.3.1+cpu torchvision==0.4.2+cpu -f https://download.pytorch.org/whl/torch_stable.html",
+      "pip3 install torch==1.4.0+cpu torchvision==0.5.0+cpu -f https://download.pytorch.org/whl/torch_stable.html",
 
     "stable,pip,linux,cuda9.2,python3.7":
-      "pip3 install torch==1.3.1+cu92 torchvision==0.4.2+cu92 -f https://download.pytorch.org/whl/torch_stable.html",
+      "pip3 install torch==1.4.0+cu92 torchvision==0.5.0+cu92 -f https://download.pytorch.org/whl/torch_stable.html",
 
     "stable,pip,linux,cuda10.1,python3.7":
       "pip3 install torch torchvision",
@@ -361,58 +361,58 @@ function commandMessage(key) {
       "# PyTorch does not support Python 2.7 on Windows. Please install with Python 3.",
 
     "stable,pip,windows,cudanone,python3.5":
-      "pip3 install torch==1.3.1+cpu torchvision==0.4.2+cpu -f https://download.pytorch.org/whl/torch_stable.html",
+      "pip3 install torch==1.4.0+cpu torchvision==0.5.0+cpu -f https://download.pytorch.org/whl/torch_stable.html",
 
     "stable,pip,windows,cuda9.2,python3.5":
-      "pip3 install torch==1.3.1+cu92 torchvision==0.4.2+cu92 -f https://download.pytorch.org/whl/torch_stable.html",
+      "pip3 install torch==1.4.0+cu92 torchvision==0.5.0+cu92 -f https://download.pytorch.org/whl/torch_stable.html",
 
     "stable,pip,windows,cuda10.1,python3.5":
-      "pip3 install torch===1.3.1 torchvision===0.4.2 -f https://download.pytorch.org/whl/torch_stable.html",
+      "pip3 install torch===1.4.0 torchvision===0.5.0 -f https://download.pytorch.org/whl/torch_stable.html",
 
     "stable,pip,windows,cudanone,python3.6":
-      "pip3 install torch==1.3.1+cpu torchvision==0.4.2+cpu -f https://download.pytorch.org/whl/torch_stable.html",
+      "pip3 install torch==1.4.0+cpu torchvision==0.5.0+cpu -f https://download.pytorch.org/whl/torch_stable.html",
 
     "stable,pip,windows,cuda9.2,python3.6":
-      "pip3 install torch==1.3.1+cu92 torchvision==0.4.2+cu92 -f https://download.pytorch.org/whl/torch_stable.html",
+      "pip3 install torch==1.4.0+cu92 torchvision==0.5.0+cu92 -f https://download.pytorch.org/whl/torch_stable.html",
 
     "stable,pip,windows,cuda10.1,python3.6":
-      "pip3 install torch===1.3.1 torchvision===0.4.2 -f https://download.pytorch.org/whl/torch_stable.html",
+      "pip3 install torch===1.4.0 torchvision===0.5.0 -f https://download.pytorch.org/whl/torch_stable.html",
 
     "stable,pip,windows,cudanone,python3.7":
-      "pip3 install torch==1.3.1+cpu torchvision==0.4.2+cpu -f https://download.pytorch.org/whl/torch_stable.html",
+      "pip3 install torch==1.4.0+cpu torchvision==0.5.0+cpu -f https://download.pytorch.org/whl/torch_stable.html",
 
     "stable,pip,windows,cuda9.2,python3.7":
-      "pip3 install torch==1.3.1+cu92 torchvision==0.4.2+cu92 -f https://download.pytorch.org/whl/torch_stable.html",
+      "pip3 install torch==1.4.0+cu92 torchvision==0.5.0+cu92 -f https://download.pytorch.org/whl/torch_stable.html",
 
     "stable,pip,windows,cuda10.1,python3.7":
-      "pip3 install torch===1.3.1 torchvision===0.4.2 -f https://download.pytorch.org/whl/torch_stable.html",
+      "pip3 install torch===1.4.0 torchvision===0.5.0 -f https://download.pytorch.org/whl/torch_stable.html",
 
     "stable,libtorch,linux,cudanone,cplusplus":
-      "Download here (Pre-cxx11 ABI): <br/><a href='https://download.pytorch.org/libtorch/cpu/libtorch-shared-with-deps-1.3.1%2Bcpu.zip'>https://download.pytorch.org/libtorch/cpu/libtorch-shared-with-deps-1.3.1%2Bcpu.zip</a><br/><br> Download here (cxx11 ABI): <br/><a href='https://download.pytorch.org/libtorch/cpu/libtorch-cxx11-abi-shared-with-deps-1.3.1%2Bcpu.zip'>https://download.pytorch.org/libtorch/cpu/libtorch-cxx11-abi-shared-with-deps-1.3.1%2Bcpu.zip</a>",
+      "Download here (Pre-cxx11 ABI): <br/><a href='https://download.pytorch.org/libtorch/cpu/libtorch-shared-with-deps-1.4.0%2Bcpu.zip'>https://download.pytorch.org/libtorch/cpu/libtorch-shared-with-deps-1.4.0%2Bcpu.zip</a><br/><br> Download here (cxx11 ABI): <br/><a href='https://download.pytorch.org/libtorch/cpu/libtorch-cxx11-abi-shared-with-deps-1.4.0%2Bcpu.zip'>https://download.pytorch.org/libtorch/cpu/libtorch-cxx11-abi-shared-with-deps-1.4.0%2Bcpu.zip</a>",
 
     "stable,libtorch,linux,cuda9.2,cplusplus":
-      "Download here (Pre-cxx11 ABI): <br/><a href='https://download.pytorch.org/libtorch/cu92/libtorch-shared-with-deps-1.3.1%2Bcu92.zip'>https://download.pytorch.org/libtorch/cu92/libtorch-shared-with-deps-1.3.1%2Bcu92.zip</a><br/><br> Download here (cxx11 ABI): <br/><a href='https://download.pytorch.org/libtorch/cu92/libtorch-cxx11-abi-shared-with-deps-1.3.1%2Bcu92.zip'>https://download.pytorch.org/libtorch/cu92/libtorch-cxx11-abi-shared-with-deps-1.3.1%2Bcu92.zip</a>",
+      "Download here (Pre-cxx11 ABI): <br/><a href='https://download.pytorch.org/libtorch/cu92/libtorch-shared-with-deps-1.4.0%2Bcu92.zip'>https://download.pytorch.org/libtorch/cu92/libtorch-shared-with-deps-1.4.0%2Bcu92.zip</a><br/><br> Download here (cxx11 ABI): <br/><a href='https://download.pytorch.org/libtorch/cu92/libtorch-cxx11-abi-shared-with-deps-1.4.0%2Bcu92.zip'>https://download.pytorch.org/libtorch/cu92/libtorch-cxx11-abi-shared-with-deps-1.4.0%2Bcu92.zip</a>",
 
     "stable,libtorch,linux,cuda10.1,cplusplus":
-      "Download here (Pre-cxx11 ABI): <br/><a href='https://download.pytorch.org/libtorch/cu101/libtorch-shared-with-deps-1.3.1.zip'>https://download.pytorch.org/libtorch/cu101/libtorch-shared-with-deps-1.3.1.zip</a><br/><br> Download here (cxx11 ABI): <br/><a href='https://download.pytorch.org/libtorch/cu101/libtorch-cxx11-abi-shared-with-deps-1.3.1.zip'>https://download.pytorch.org/libtorch/cu101/libtorch-cxx11-abi-shared-with-deps-1.3.1.zip</a>",
+      "Download here (Pre-cxx11 ABI): <br/><a href='https://download.pytorch.org/libtorch/cu101/libtorch-shared-with-deps-1.4.0.zip'>https://download.pytorch.org/libtorch/cu101/libtorch-shared-with-deps-1.4.0.zip</a><br/><br> Download here (cxx11 ABI): <br/><a href='https://download.pytorch.org/libtorch/cu101/libtorch-cxx11-abi-shared-with-deps-1.4.0.zip'>https://download.pytorch.org/libtorch/cu101/libtorch-cxx11-abi-shared-with-deps-1.4.0.zip</a>",
 
     "stable,libtorch,macos,cudanone,cplusplus":
-      "MacOS binaries do not support Java. Support is only available for Linux. Download here for C++: <br/><a href='https://download.pytorch.org/libtorch/cpu/libtorch-macos-1.3.1.zip'> https://download.pytorch.org/libtorch/cpu/libtorch-macos-1.3.1.zip </a>",
+      "MacOS binaries do not support Java. Support is only available for Linux. Download here for C++: <br/><a href='https://download.pytorch.org/libtorch/cpu/libtorch-macos-1.4.0.zip'> https://download.pytorch.org/libtorch/cpu/libtorch-macos-1.4.0.zip </a>",
 
     "stable,libtorch,macos,cuda9.2,cplusplus":
-      "MacOS binaries do not support Java. Support is only available for Linux. MacOS binaries do not support CUDA. Download CPU libtorch here for C++: <br/><a href='https://download.pytorch.org/libtorch/cpu/libtorch-macos-1.3.1.zip'> https://download.pytorch.org/libtorch/cpu/libtorch-macos-1.3.1.zip </a>",
+      "MacOS binaries do not support Java. Support is only available for Linux. MacOS binaries do not support CUDA. Download CPU libtorch here for C++: <br/><a href='https://download.pytorch.org/libtorch/cpu/libtorch-macos-1.4.0.zip'> https://download.pytorch.org/libtorch/cpu/libtorch-macos-1.4.0.zip </a>",
 
     "stable,libtorch,macos,cuda10.1,cplusplus":
-      "MacOS binaries do not support Java. Support is only available for Linux. MacOS binaries do not support CUDA. Download CPU libtorch here for C++: <br/><a href='https://download.pytorch.org/libtorch/cpu/libtorch-macos-1.3.1.zip'> https://download.pytorch.org/libtorch/cpu/libtorch-macos-1.3.1.zip </a>",
+      "MacOS binaries do not support Java. Support is only available for Linux. MacOS binaries do not support CUDA. Download CPU libtorch here for C++: <br/><a href='https://download.pytorch.org/libtorch/cpu/libtorch-macos-1.4.0.zip'> https://download.pytorch.org/libtorch/cpu/libtorch-macos-1.4.0.zip </a>",
 
     "stable,libtorch,windows,cudanone,cplusplus":
-      "Windows binaries do not support Java. Support is only available for Linux.  Download here for C++ (Release version): <br/><a href='https://download.pytorch.org/libtorch/cpu/libtorch-win-shared-with-deps-1.3.1.zip'>https://download.pytorch.org/libtorch/cpu/libtorch-win-shared-with-deps-1.3.1.zip</a><br/><br>  Download here for C++ (Debug version): <br/><a href='https://download.pytorch.org/libtorch/cpu/libtorch-win-shared-with-deps-debug-1.3.1.zip'>https://download.pytorch.org/libtorch/cpu/libtorch-win-shared-with-deps-debug-1.3.1.zip</a>",
+      "Windows binaries do not support Java. Support is only available for Linux.  Download here for C++ (Release version): <br/><a href='https://download.pytorch.org/libtorch/cpu/libtorch-win-shared-with-deps-1.4.0.zip'>https://download.pytorch.org/libtorch/cpu/libtorch-win-shared-with-deps-1.4.0.zip</a><br/><br>  Download here for C++ (Debug version): <br/><a href='https://download.pytorch.org/libtorch/cpu/libtorch-win-shared-with-deps-debug-1.4.0.zip'>https://download.pytorch.org/libtorch/cpu/libtorch-win-shared-with-deps-debug-1.4.0.zip</a>",
 
     "stable,libtorch,windows,cuda9.2,cplusplus":
-      "Windows binaries do not support Java. Support is only available for Linux.  Download here for C++ (Release version): <br/><a href='https://download.pytorch.org/libtorch/cu92/libtorch-win-shared-with-deps-1.3.1.zip'>https://download.pytorch.org/libtorch/cu92/libtorch-win-shared-with-deps-1.3.1.zip</a><br/><br>  Download here for C++ (Debug version): <br/><a href='https://download.pytorch.org/libtorch/cu92/libtorch-win-shared-with-deps-debug-1.3.1.zip'>https://download.pytorch.org/libtorch/cu92/libtorch-win-shared-with-deps-debug-1.3.1.zip</a>",
+      "Windows binaries do not support Java. Support is only available for Linux.  Download here for C++ (Release version): <br/><a href='https://download.pytorch.org/libtorch/cu92/libtorch-win-shared-with-deps-1.4.0.zip'>https://download.pytorch.org/libtorch/cu92/libtorch-win-shared-with-deps-1.4.0.zip</a><br/><br>  Download here for C++ (Debug version): <br/><a href='https://download.pytorch.org/libtorch/cu92/libtorch-win-shared-with-deps-debug-1.4.0.zip'>https://download.pytorch.org/libtorch/cu92/libtorch-win-shared-with-deps-debug-1.4.0.zip</a>",
 
     "stable,libtorch,windows,cuda10.1,cplusplus":
-      "Windows binaries do not support Java. Support is only available for Linux.  Download here for C++ (Release version): <br/><a href='https://download.pytorch.org/libtorch/cu101/libtorch-win-shared-with-deps-1.3.1.zip'>https://download.pytorch.org/libtorch/cu101/libtorch-win-shared-with-deps-1.3.1.zip</a><br/><br>  Download here for C++ (Debug version): <br/><a href='https://download.pytorch.org/libtorch/cu101/libtorch-win-shared-with-deps-debug-1.3.1.zip'>https://download.pytorch.org/libtorch/cu101/libtorch-win-shared-with-deps-debug-1.3.1.zip'/a>",
+      "Windows binaries do not support Java. Support is only available for Linux.  Download here for C++ (Release version): <br/><a href='https://download.pytorch.org/libtorch/cu101/libtorch-win-shared-with-deps-1.4.0.zip'>https://download.pytorch.org/libtorch/cu101/libtorch-win-shared-with-deps-1.4.0.zip</a><br/><br>  Download here for C++ (Debug version): <br/><a href='https://download.pytorch.org/libtorch/cu101/libtorch-win-shared-with-deps-debug-1.4.0.zip'>https://download.pytorch.org/libtorch/cu101/libtorch-win-shared-with-deps-debug-1.4.0.zip'/a>",
 
     "preview,conda,linux,cuda9.2,python2.7":
       "conda install pytorch torchvision cudatoolkit=9.2 -c pytorch-nightly",
