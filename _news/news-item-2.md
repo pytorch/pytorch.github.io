@@ -1,6 +1,6 @@
 ---
 order: 2
-link: https://pytorch.org/blog/openmined-and-pytorch-launch-fellowship-funding-for-privacy-preserving-ml/
-summary: OpenMined and PyTorch partner to launch fellowship funding for privacy-preserving ML community.
+link: https://pytorch.org/blog/pytorch-adds-new-tools-and-libraries-welcomes-preferred-networks-to-its-community/ 
+summary: PyTorch adds new tools and libraries, welcomes Preferred Networks to its community.
 ---
 
