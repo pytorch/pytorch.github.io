@@ -158,7 +158,7 @@
               
               
                 <div class="version">
-                  <a href='http://pytorch.org/docs/versions.html'>1.5.0a0+e0ffe72 &#x25BC</a>
+                  <a href='http://pytorch.org/docs/versions.html'>1.5.0a0+6ad9e5c &#x25BC</a>
                 </div>
               
             
@@ -344,17 +344,30 @@
              <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
               
   <h1>Source code for torch.distributed.rpc.api</h1><div class="highlight"><pre>
-<span></span><span class="kn">from</span> <span class="nn">.</span> <span class="kn">import</span> <span class="p">(</span>
+<span></span><span class="kn">import</span> <span class="nn">contextlib</span>
+<span class="kn">import</span> <span class="nn">functools</span>
+<span class="kn">import</span> <span class="nn">logging</span>
+<span class="kn">import</span> <span class="nn">numbers</span>
+<span class="kn">import</span> <span class="nn">sys</span>
+<span class="kn">import</span> <span class="nn">threading</span>
+<span class="kn">from</span> <span class="nn">datetime</span> <span class="kn">import</span> <span class="n">timedelta</span>
+
+<span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">import</span> <span class="nn">torch.distributed</span> <span class="k">as</span> <span class="nn">dist</span>
+<span class="kn">from</span> <span class="nn">torch._jit_internal</span> <span class="kn">import</span> <span class="n">_qualified_name</span>
+
+<span class="kn">from</span> <span class="nn">.</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">RpcBackendOptions</span><span class="p">,</span>
     <span class="n">WorkerInfo</span><span class="p">,</span>
     <span class="n">_cleanup_python_rpc_handler</span><span class="p">,</span>
     <span class="n">_destroy_rref_context</span><span class="p">,</span>
     <span class="n">_invoke_remote_builtin</span><span class="p">,</span>
     <span class="n">_invoke_remote_python_udf</span><span class="p">,</span>
+    <span class="n">_invoke_remote_torchscript</span><span class="p">,</span>
     <span class="n">_invoke_rpc_builtin</span><span class="p">,</span>
     <span class="n">_invoke_rpc_python_udf</span><span class="p">,</span>
-    <span class="n">_set_rpc_timeout</span><span class="p">,</span>
     <span class="n">_invoke_rpc_script</span><span class="p">,</span>
+    <span class="n">_set_rpc_timeout</span><span class="p">,</span>
     <span class="n">_start_rpc_agent</span><span class="p">,</span>
     <span class="n">backend_registry</span><span class="p">,</span>
 <span class="p">)</span>
@@ -365,16 +378,6 @@
     <span class="n">_start_record_function</span><span class="p">,</span>
 <span class="p">)</span>
 
-<span class="kn">import</span> <span class="nn">contextlib</span>
-<span class="kn">from</span> <span class="nn">datetime</span> <span class="kn">import</span> <span class="n">timedelta</span>
-<span class="kn">import</span> <span class="nn">functools</span>
-<span class="kn">import</span> <span class="nn">numbers</span>
-<span class="kn">import</span> <span class="nn">sys</span>
-<span class="kn">import</span> <span class="nn">logging</span>
-<span class="kn">import</span> <span class="nn">threading</span>
-<span class="kn">import</span> <span class="nn">torch</span>
-<span class="kn">import</span> <span class="nn">torch.distributed</span> <span class="k">as</span> <span class="nn">dist</span>
-<span class="kn">from</span> <span class="nn">torch._jit_internal</span> <span class="kn">import</span> <span class="n">_qualified_name</span>
 
 <span class="n">logging</span><span class="o">.</span><span class="n">basicConfig</span><span class="p">()</span>
 <span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
@@ -391,6 +394,7 @@
 <span class="c1"># To enable RRef leak checking, set this _ignore_rref_leak to False</span>
 <span class="n">_ignore_rref_leak</span> <span class="o">=</span> <span class="kc">True</span>
 <span class="n">_default_pickler</span> <span class="o">=</span> <span class="n">_internal_rpc_pickler</span>
+
 
 <span class="nd">@contextlib</span><span class="o">.</span><span class="n">contextmanager</span>
 <span class="k">def</span> <span class="nf">_use_rpc_pickler</span><span class="p">(</span><span class="n">rpc_pickler</span><span class="p">):</span>
@@ -414,6 +418,7 @@
                 <span class="s2">&quot;torch.distributed.rpc.init_rpc first.&quot;</span>
             <span class="p">)</span>
         <span class="k">return</span> <span class="n">func</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
     <span class="k">return</span> <span class="n">wrapper</span>
 
 
@@ -503,8 +508,7 @@
             <span class="k">except</span> <span class="ne">RuntimeError</span> <span class="k">as</span> <span class="n">ex</span><span class="p">:</span>
                 <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span>
                     <span class="s2">&quot;</span><span class="si">{worker_name}</span><span class="s2"> failed to respond to &#39;Shutdown Proceed.&#39; request in </span><span class="si">{timeout}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
-                        <span class="n">worker_name</span><span class="o">=</span><span class="n">follower_worker_name</span><span class="p">,</span>
-                        <span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">,</span>
+                        <span class="n">worker_name</span><span class="o">=</span><span class="n">follower_worker_name</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span>
                     <span class="p">)</span>
                 <span class="p">)</span>
 
@@ -638,6 +642,7 @@
     <span class="k">else</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Cannot get WorkerInfo from name </span><span class="si">{}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">name_or_info</span><span class="p">))</span>
 
+
 <span class="k">def</span> <span class="nf">_validate_rpc_args</span><span class="p">(</span><span class="n">backend</span><span class="p">,</span> <span class="n">store</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">rank</span><span class="p">,</span> <span class="n">world_size</span><span class="p">,</span> <span class="n">rpc_backend_options</span><span class="p">):</span>
     <span class="n">type_mapping</span> <span class="o">=</span> <span class="p">{</span>
         <span class="n">backend</span><span class="p">:</span> <span class="n">backend_registry</span><span class="o">.</span><span class="n">BackendType</span><span class="p">,</span>
@@ -670,7 +675,8 @@
 
 <span class="sd">    Arguments:</span>
 <span class="sd">        to (str or WorkerInfo): id or name of the destination worker.</span>
-<span class="sd">        func (callable): builtin functions (like :meth:`torch.add`).</span>
+<span class="sd">        func (callable): any callable function. python callable, builtin or annotated TorchScript</span>
+<span class="sd">                         functions (like meth:`torch.add`) can be sent over RPC more efficiently.</span>
 <span class="sd">        args (tuple): the argument tuple for the ``func`` invocation.</span>
 <span class="sd">        kwargs (dict): is a dictionary of keyword arguments for the ``func``</span>
 <span class="sd">                       invocation.</span>
@@ -703,6 +709,24 @@
 <span class="sd">        &gt;&gt;&gt; import torch.distributed.rpc as rpc</span>
 <span class="sd">        &gt;&gt;&gt; rpc.init_rpc(&quot;worker1&quot;, rank=1, world_size=2)</span>
 <span class="sd">        &gt;&gt;&gt; rpc.shutdown()</span>
+
+<span class="sd">        If invoking an annotated TorchScript function, then run the following</span>
+<span class="sd">        code in two different processes:</span>
+
+<span class="sd">        &gt;&gt;&gt; # On worker 0:</span>
+<span class="sd">        &gt;&gt;&gt; @torch.jit.script</span>
+<span class="sd">        &gt;&gt;&gt; def my_script_add(t1, t2):</span>
+<span class="sd">        &gt;&gt;&gt;    return torch.add(t1, t2)</span>
+<span class="sd">        &gt;&gt;&gt; import torch.distributed.rpc as rpc</span>
+<span class="sd">        &gt;&gt;&gt; rpc.init_rpc(&quot;worker0&quot;, rank=0, world_size=2)</span>
+<span class="sd">        &gt;&gt;&gt; rref = rpc.remote(&quot;worker1&quot;, my_script_add, args=(torch.ones(2), 3))</span>
+<span class="sd">        &gt;&gt;&gt; rref.to_here()</span>
+<span class="sd">        &gt;&gt;&gt; rpc.shutdown()</span>
+
+<span class="sd">        &gt;&gt;&gt; # On worker 1:</span>
+<span class="sd">        &gt;&gt;&gt; import torch.distributed.rpc as rpc</span>
+<span class="sd">        &gt;&gt;&gt; rpc.init_rpc(&quot;worker1&quot;, rank=1, world_size=2)</span>
+<span class="sd">        &gt;&gt;&gt; rpc.shutdown()</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">qualified_name</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">jit</span><span class="o">.</span><span class="n">_find_builtin</span><span class="p">(</span><span class="n">func</span><span class="p">)</span>
     <span class="n">info</span> <span class="o">=</span> <span class="n">_to_worker_info</span><span class="p">(</span><span class="n">to</span><span class="p">)</span>
@@ -722,13 +746,16 @@
     <span class="n">kwargs</span> <span class="o">=</span> <span class="n">kwargs</span> <span class="k">if</span> <span class="n">kwargs</span> <span class="k">else</span> <span class="p">{}</span>
 
     <span class="k">if</span> <span class="n">qualified_name</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">_invoke_remote_builtin</span><span class="p">(</span>
-            <span class="n">_agent</span><span class="p">,</span> <span class="n">info</span><span class="p">,</span> <span class="n">qualified_name</span><span class="p">,</span> <span class="n">rf</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">_invoke_remote_builtin</span><span class="p">(</span><span class="n">_agent</span><span class="p">,</span> <span class="n">info</span><span class="p">,</span> <span class="n">qualified_name</span><span class="p">,</span> <span class="n">rf</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">func</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">jit</span><span class="o">.</span><span class="n">ScriptFunction</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">_remote_torchscript</span><span class="p">(</span>
+            <span class="n">info</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">_jit_internal</span><span class="o">.</span><span class="n">_qualified_name</span><span class="p">(</span><span class="n">func</span><span class="p">),</span> <span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span>
+        <span class="p">)</span>
     <span class="k">else</span><span class="p">:</span>
         <span class="p">(</span><span class="n">pickled_python_udf</span><span class="p">,</span> <span class="n">tensors</span><span class="p">)</span> <span class="o">=</span> <span class="n">_default_pickler</span><span class="o">.</span><span class="n">serialize</span><span class="p">(</span>
-            <span class="n">PythonUDF</span><span class="p">(</span><span class="n">func</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">))</span>
-        <span class="k">return</span> <span class="n">_invoke_remote_python_udf</span><span class="p">(</span>
-            <span class="n">_agent</span><span class="p">,</span> <span class="n">info</span><span class="p">,</span> <span class="n">pickled_python_udf</span><span class="p">,</span> <span class="n">tensors</span><span class="p">,</span> <span class="n">rf</span><span class="p">)</span></div>
+            <span class="n">PythonUDF</span><span class="p">(</span><span class="n">func</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">_invoke_remote_python_udf</span><span class="p">(</span><span class="n">_agent</span><span class="p">,</span> <span class="n">info</span><span class="p">,</span> <span class="n">pickled_python_udf</span><span class="p">,</span> <span class="n">tensors</span><span class="p">,</span> <span class="n">rf</span><span class="p">)</span></div>
 
 
 <span class="k">def</span> <span class="nf">_invoke_rpc</span><span class="p">(</span><span class="n">to</span><span class="p">,</span> <span class="n">func</span><span class="p">,</span> <span class="n">rpc_type</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">kwargs</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
@@ -752,15 +779,14 @@
     <span class="n">kwargs</span> <span class="o">=</span> <span class="n">kwargs</span> <span class="k">if</span> <span class="n">kwargs</span> <span class="k">else</span> <span class="p">{}</span>
 
     <span class="k">if</span> <span class="n">qualified_name</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">fut</span> <span class="o">=</span> <span class="n">_invoke_rpc_builtin</span><span class="p">(</span>
-            <span class="n">_agent</span><span class="p">,</span> <span class="n">info</span><span class="p">,</span> <span class="n">qualified_name</span><span class="p">,</span> <span class="n">rf</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
-        <span class="p">)</span>
+        <span class="n">fut</span> <span class="o">=</span> <span class="n">_invoke_rpc_builtin</span><span class="p">(</span><span class="n">_agent</span><span class="p">,</span> <span class="n">info</span><span class="p">,</span> <span class="n">qualified_name</span><span class="p">,</span> <span class="n">rf</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
     <span class="k">else</span><span class="p">:</span>
         <span class="p">(</span><span class="n">pickled_python_udf</span><span class="p">,</span> <span class="n">tensors</span><span class="p">)</span> <span class="o">=</span> <span class="n">_default_pickler</span><span class="o">.</span><span class="n">serialize</span><span class="p">(</span>
-            <span class="n">PythonUDF</span><span class="p">(</span><span class="n">func</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">))</span>
-        <span class="n">fut</span> <span class="o">=</span> <span class="n">_invoke_rpc_python_udf</span><span class="p">(</span>
-            <span class="n">_agent</span><span class="p">,</span> <span class="n">info</span><span class="p">,</span> <span class="n">pickled_python_udf</span><span class="p">,</span> <span class="n">tensors</span><span class="p">,</span> <span class="n">rf</span><span class="p">)</span>
+            <span class="n">PythonUDF</span><span class="p">(</span><span class="n">func</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="n">fut</span> <span class="o">=</span> <span class="n">_invoke_rpc_python_udf</span><span class="p">(</span><span class="n">_agent</span><span class="p">,</span> <span class="n">info</span><span class="p">,</span> <span class="n">pickled_python_udf</span><span class="p">,</span> <span class="n">tensors</span><span class="p">,</span> <span class="n">rf</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">fut</span>
+
 
 <span class="nd">@_require_initialized</span>
 <span class="k">def</span> <span class="nf">enable_gil_profiling</span><span class="p">(</span><span class="n">flag</span><span class="p">):</span>
@@ -1026,6 +1052,63 @@
     <span class="n">kwargs</span> <span class="o">=</span> <span class="n">kwargs</span> <span class="k">if</span> <span class="n">kwargs</span> <span class="k">else</span> <span class="p">{}</span>
     <span class="n">fut</span> <span class="o">=</span> <span class="n">_invoke_rpc_script</span><span class="p">(</span><span class="n">to</span><span class="p">,</span> <span class="n">qualified_name</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">fut</span>
+
+
+<span class="nd">@_require_initialized</span>
+<span class="k">def</span> <span class="nf">_remote_torchscript</span><span class="p">(</span><span class="n">to</span><span class="p">,</span> <span class="n">qualified_name</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">kwargs</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+    <span class="sa">r</span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Make a remote call to run TorchScript func ``qualified_name`` on worker ``to`` and return an</span>
+<span class="sd">    :class:`~torch.distributed.rpc.RRef` to the result value immediately.</span>
+<span class="sd">    Worker ``to`` will be the owner of the returned</span>
+<span class="sd">    :class:`~torch.distributed.rpc.RRef`, and the worker calling ``remote`` is</span>
+<span class="sd">    a user. The owner manages the global reference count of its</span>
+<span class="sd">    :class:`~torch.distributed.rpc.RRef`, and the owner</span>
+<span class="sd">    :class:`~torch.distributed.rpc.RRef` is only destructed when globally there</span>
+<span class="sd">    are no living references to it.</span>
+
+<span class="sd">    Arguments:</span>
+<span class="sd">        to (str or WorkerInfo): id or name of the destination worker.</span>
+<span class="sd">        qualified_name (str): any callable function. python callable, builtin or annotated TorchScript</span>
+<span class="sd">                         functions (like meth:`torch.add`) can be sent over RPC more efficiently.</span>
+<span class="sd">        args (tuple): the argument tuple for the ``func`` invocation.</span>
+<span class="sd">        kwargs (dict): is a dictionary of keyword arguments for the ``func``</span>
+<span class="sd">                       invocation.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        A user :class:`~torch.distributed.rpc.RRef` instance to the result</span>
+<span class="sd">        value. Use the blocking API :meth:`torch.distributed.rpc.RRef.to_here`</span>
+<span class="sd">        to retrieve the result value locally.</span>
+
+<span class="sd">    Example::</span>
+<span class="sd">        Make sure that ``MASTER_ADDRESS`` and ``MASTER_PORT`` are set properly</span>
+<span class="sd">        on both workers. Refer to :meth:`~torch.distributed.init_process_group`</span>
+<span class="sd">        API for more details. For example,</span>
+
+<span class="sd">        &gt;&gt;&gt; export MASTER_ADDRESS=localhost</span>
+<span class="sd">        &gt;&gt;&gt; export MASTER_port=5678</span>
+
+<span class="sd">        Then run the following code in two different processes:</span>
+
+<span class="sd">        &gt;&gt;&gt; # On worker 0:</span>
+<span class="sd">        &gt;&gt;&gt; @torch.jit.script</span>
+<span class="sd">        &gt;&gt;&gt; def my_script_add(t1, t2):</span>
+<span class="sd">        &gt;&gt;&gt;    return torch.add(t1, t2)</span>
+<span class="sd">        &gt;&gt;&gt; import torch.distributed.rpc as rpc</span>
+<span class="sd">        &gt;&gt;&gt; rpc.init_rpc(&quot;worker0&quot;, rank=0, world_size=2)</span>
+<span class="sd">        &gt;&gt;&gt; rref = rpc._remote_torchscript(&quot;worker1&quot;, _qualified_name(my_script_add), args=(torch.ones(2), 3))</span>
+<span class="sd">        &gt;&gt;&gt; rref.to_here()</span>
+<span class="sd">        &gt;&gt;&gt; rpc.shutdown()</span>
+
+<span class="sd">        &gt;&gt;&gt; # On worker 1:</span>
+<span class="sd">        &gt;&gt;&gt; import torch.distributed.rpc as rpc</span>
+<span class="sd">        &gt;&gt;&gt; rpc.init_rpc(&quot;worker1&quot;, rank=1, world_size=2)</span>
+<span class="sd">        &gt;&gt;&gt; rpc.shutdown()</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">args</span> <span class="o">=</span> <span class="n">args</span> <span class="k">if</span> <span class="n">args</span> <span class="k">else</span> <span class="p">()</span>
+    <span class="n">kwargs</span> <span class="o">=</span> <span class="n">kwargs</span> <span class="k">if</span> <span class="n">kwargs</span> <span class="k">else</span> <span class="p">{}</span>
+    <span class="k">return</span> <span class="n">_invoke_remote_torchscript</span><span class="p">(</span>
+        <span class="n">to</span><span class="p">,</span> <span class="n">qualified_name</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
+    <span class="p">)</span>
 </pre></div>
 
              </article>
