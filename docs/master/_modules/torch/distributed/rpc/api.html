@@ -158,7 +158,7 @@
               
               
                 <div class="version">
-                  <a href='http://pytorch.org/docs/versions.html'>1.5.0a0+1e5aead &#x25BC</a>
+                  <a href='http://pytorch.org/docs/versions.html'>1.5.0a0+1217c9b &#x25BC</a>
                 </div>
               
             
@@ -344,7 +344,8 @@
              <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
               
   <h1>Source code for torch.distributed.rpc.api</h1><div class="highlight"><pre>
-<span></span><span class="kn">import</span> <span class="nn">contextlib</span>
+<span></span><span class="kn">import</span> <span class="nn">collections</span>
+<span class="kn">import</span> <span class="nn">contextlib</span>
 <span class="kn">import</span> <span class="nn">functools</span>
 <span class="kn">import</span> <span class="nn">logging</span>
 <span class="kn">import</span> <span class="nn">numbers</span>
@@ -422,39 +423,56 @@
     <span class="k">return</span> <span class="n">wrapper</span>
 
 
+<span class="k">class</span> <span class="nc">WaitAllWorkersStates</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="c1"># Each `intent_worker_names` is an empty set at beginning.</span>
+        <span class="c1"># It&#39;s only used by leader worker. Leader worker is user-specified or</span>
+        <span class="c1"># elected as the first worker in a sorted worker name list.</span>
+        <span class="c1"># Whenever there is a worker showing shutdown intention to the leader, by</span>
+        <span class="c1"># calling `_wait_all_workers()`, the leader adds this worker&#39;s name to the set.</span>
+        <span class="c1"># The leader also adds itself&#39;s name to the set on calling</span>
+        <span class="c1"># `_wait_all_workers()`. We need this because, we confine `_wait_all_workers()`</span>
+        <span class="c1"># to be called only once, by examing if leader&#39;s name has been added to the set.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">intent_worker_names</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+        <span class="c1"># Once `intent_worker_names == _ALL_WORKER_NAMES`,</span>
+        <span class="c1"># we flip `_SHUTDOWN_PROCEED_SIGNAL` on the leader, and leader will send RPCs</span>
+        <span class="c1"># to follower workers to flip their `_SHUTDOWN_PROCEED_SIGNAL`s.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">proceed_signal</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Event</span><span class="p">()</span>
+
+
 <span class="c1"># States used by `def _wait_all_workers()`.</span>
 <span class="c1"># `_ALL_WORKER_NAMES` is initialized on initiaizing RPC layer.</span>
 <span class="n">_ALL_WORKER_NAMES</span> <span class="o">=</span> <span class="kc">None</span>
-<span class="c1"># `_SHUTDOWN_INTENT_WORKER_NAMES` is an empty set at beginning.</span>
-<span class="c1"># It&#39;s only used by leader worker. Leader worker is elected as the first</span>
-<span class="c1"># worker in a sorted worker name list.</span>
-<span class="c1"># Whenever there is a worker showing shutdown intention to the leader, by</span>
-<span class="c1"># calling _wait_all_workers()`, the leader adds this worker&#39;s name to the set.</span>
-<span class="c1"># The leader also adds itself&#39;s name to the set on calling</span>
-<span class="c1"># `_wait_all_workers()`. We need this because, we confine `_wait_all_workers()`</span>
-<span class="c1"># to be called only once, by examing if leader&#39;s name has been added to the set.</span>
-<span class="n">_SHUTDOWN_INTENT_WORKER_NAMES</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
-<span class="c1"># Once `_SHUTDOWN_INTENT_WORKER_NAMES == _ALL_WORKER_NAMES`,</span>
-<span class="c1"># we flip `_SHUTDOWN_PROCEED_SIGNAL` on the leader, and leader will send RPCs</span>
-<span class="c1"># to follower workers to flip their `_SHUTDOWN_PROCEED_SIGNAL`s.</span>
-<span class="n">_SHUTDOWN_PROCEED_SIGNAL</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Event</span><span class="p">()</span>
+<span class="n">_wait_all_workers_dict_lock</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Lock</span><span class="p">()</span>
+<span class="n">_wait_all_workers_sequence_id</span> <span class="o">=</span> <span class="mi">0</span>
+<span class="n">_wait_all_workers_sequence_id_to_states</span> <span class="o">=</span> <span class="n">collections</span><span class="o">.</span><span class="n">defaultdict</span><span class="p">(</span><span class="n">WaitAllWorkersStates</span><span class="p">)</span>
 
 
-<span class="k">def</span> <span class="nf">_on_leader_follower_report_shutdown_intent</span><span class="p">(</span><span class="n">worker_name</span><span class="p">):</span>
+<span class="k">def</span> <span class="nf">_on_leader_follower_report_shutdown_intent</span><span class="p">(</span><span class="n">sequence_id</span><span class="p">,</span> <span class="n">worker_name</span><span class="p">):</span>
     <span class="k">assert</span> <span class="p">(</span>
         <span class="n">worker_name</span> <span class="ow">in</span> <span class="n">_ALL_WORKER_NAMES</span>
     <span class="p">),</span> <span class="s2">&quot;</span><span class="si">{worker_name}</span><span class="s2"> is not expected by leader.&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">worker_name</span><span class="o">=</span><span class="n">worker_name</span><span class="p">)</span>
+    <span class="n">intent_worker_names</span> <span class="o">=</span> <span class="n">_wait_all_workers_sequence_id_to_states</span><span class="p">[</span>
+        <span class="n">sequence_id</span>
+    <span class="p">]</span><span class="o">.</span><span class="n">intent_worker_names</span>
     <span class="k">assert</span> <span class="p">(</span>
-        <span class="n">worker_name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">_SHUTDOWN_INTENT_WORKER_NAMES</span>
-    <span class="p">),</span> <span class="s2">&quot;</span><span class="si">{worker_name}</span><span class="s2"> reported intent twice. &quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">worker_name</span><span class="o">=</span><span class="n">worker_name</span><span class="p">)</span>
-    <span class="n">_SHUTDOWN_INTENT_WORKER_NAMES</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">worker_name</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">_ALL_WORKER_NAMES</span> <span class="o">==</span> <span class="n">_SHUTDOWN_INTENT_WORKER_NAMES</span><span class="p">:</span>
-        <span class="n">_set_proceed_shutdown_signal</span><span class="p">()</span>
+        <span class="n">worker_name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">intent_worker_names</span>
+    <span class="p">),</span> <span class="s2">&quot;</span><span class="si">{worker_name}</span><span class="s2"> reported intent sequence id </span><span class="si">{sequence_id}</span><span class="s2"> twice. &quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+        <span class="n">worker_name</span><span class="o">=</span><span class="n">worker_name</span><span class="p">,</span> <span class="n">sequence_id</span><span class="o">=</span><span class="n">sequence_id</span>
+    <span class="p">)</span>
+    <span class="n">intent_worker_names</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">worker_name</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">_ALL_WORKER_NAMES</span> <span class="o">==</span> <span class="n">intent_worker_names</span><span class="p">:</span>
+        <span class="n">_set_proceed_shutdown_signal</span><span class="p">(</span><span class="n">sequence_id</span><span class="p">)</span>
 
 
-<span class="k">def</span> <span class="nf">_set_proceed_shutdown_signal</span><span class="p">():</span>
-    <span class="k">assert</span> <span class="ow">not</span> <span class="n">_SHUTDOWN_PROCEED_SIGNAL</span><span class="o">.</span><span class="n">is_set</span><span class="p">(),</span> <span class="s2">&quot;Termination signal got set twice.&quot;</span>
-    <span class="n">_SHUTDOWN_PROCEED_SIGNAL</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
+<span class="k">def</span> <span class="nf">_set_proceed_shutdown_signal</span><span class="p">(</span><span class="n">sequence_id</span><span class="p">):</span>
+    <span class="n">proceed_signal</span> <span class="o">=</span> <span class="n">_wait_all_workers_sequence_id_to_states</span><span class="p">[</span><span class="n">sequence_id</span><span class="p">]</span><span class="o">.</span><span class="n">proceed_signal</span>
+    <span class="k">assert</span> <span class="p">(</span>
+        <span class="ow">not</span> <span class="n">proceed_signal</span><span class="o">.</span><span class="n">is_set</span><span class="p">()</span>
+    <span class="p">),</span> <span class="s2">&quot;Termination signal sequence id </span><span class="si">{}</span><span class="s2"> got set twice.&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+        <span class="n">sequence_id</span><span class="o">=</span><span class="n">sequence_id</span>
+    <span class="p">)</span>
+    <span class="n">proceed_signal</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
 
 
 <span class="nd">@_require_initialized</span>
@@ -472,24 +490,29 @@
     <span class="n">leader_worker_name</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">_ALL_WORKER_NAMES</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
 
     <span class="n">self_worker_name</span> <span class="o">=</span> <span class="n">_agent</span><span class="o">.</span><span class="n">get_worker_info</span><span class="p">()</span><span class="o">.</span><span class="n">name</span>
-    <span class="k">assert</span> <span class="p">(</span>
-        <span class="n">self_worker_name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">_SHUTDOWN_INTENT_WORKER_NAMES</span>
-    <span class="p">),</span> <span class="s2">&quot;Can not call `_wait_all_workers()` twice.&quot;</span>
+
+    <span class="k">global</span> <span class="n">_wait_all_workers_sequence_id</span>
+    <span class="k">with</span> <span class="n">_wait_all_workers_dict_lock</span><span class="p">:</span>
+        <span class="n">sequence_id</span> <span class="o">=</span> <span class="n">_wait_all_workers_sequence_id</span>
+        <span class="n">_wait_all_workers_sequence_id</span> <span class="o">+=</span> <span class="mi">1</span>
 
     <span class="n">is_leader_worker</span> <span class="o">=</span> <span class="n">leader_worker_name</span> <span class="o">==</span> <span class="n">self_worker_name</span>
 
     <span class="c1"># Phase 1: Followers send intents.</span>
     <span class="c1"># All followers report intents to the leader.</span>
     <span class="k">if</span> <span class="n">is_leader_worker</span><span class="p">:</span>
-        <span class="n">_on_leader_follower_report_shutdown_intent</span><span class="p">(</span><span class="n">self_worker_name</span><span class="p">)</span>
+        <span class="n">_on_leader_follower_report_shutdown_intent</span><span class="p">(</span><span class="n">sequence_id</span><span class="p">,</span> <span class="n">self_worker_name</span><span class="p">)</span>
     <span class="k">else</span><span class="p">:</span>
         <span class="n">rpc_sync</span><span class="p">(</span>
             <span class="n">leader_worker_name</span><span class="p">,</span>
             <span class="n">_on_leader_follower_report_shutdown_intent</span><span class="p">,</span>
-            <span class="n">args</span><span class="o">=</span><span class="p">(</span><span class="n">self_worker_name</span><span class="p">,),</span>
+            <span class="n">args</span><span class="o">=</span><span class="p">(</span><span class="n">sequence_id</span><span class="p">,</span> <span class="n">self_worker_name</span><span class="p">,),</span>
         <span class="p">)</span>
 
-    <span class="n">_SHUTDOWN_PROCEED_SIGNAL</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span>
+    <span class="n">proceed_signal</span> <span class="o">=</span> <span class="n">_wait_all_workers_sequence_id_to_states</span><span class="p">[</span>
+        <span class="n">sequence_id</span>
+    <span class="p">]</span><span class="o">.</span><span class="n">proceed_signal</span>
+    <span class="n">proceed_signal</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span>
 
     <span class="c1"># Phase 2: Leader asks followers to proceed.</span>
     <span class="c1"># Leader&#39;s signal is the first to be unblocked,</span>
@@ -500,7 +523,9 @@
         <span class="n">_set_rpc_timeout</span><span class="p">(</span><span class="n">timeout</span><span class="p">)</span>
         <span class="n">worker_name_to_response_future_dict</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
         <span class="k">for</span> <span class="n">follower_worker_name</span> <span class="ow">in</span> <span class="n">_ALL_WORKER_NAMES</span> <span class="o">-</span> <span class="p">{</span><span class="n">leader_worker_name</span><span class="p">}:</span>
-            <span class="n">fut</span> <span class="o">=</span> <span class="n">rpc_async</span><span class="p">(</span><span class="n">follower_worker_name</span><span class="p">,</span> <span class="n">_set_proceed_shutdown_signal</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="p">())</span>
+            <span class="n">fut</span> <span class="o">=</span> <span class="n">rpc_async</span><span class="p">(</span>
+                <span class="n">follower_worker_name</span><span class="p">,</span> <span class="n">_set_proceed_shutdown_signal</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="p">(</span><span class="n">sequence_id</span><span class="p">,)</span>
+            <span class="p">)</span>
             <span class="n">worker_name_to_response_future_dict</span><span class="p">[</span><span class="n">follower_worker_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">fut</span>
         <span class="k">for</span> <span class="n">follower_worker_name</span><span class="p">,</span> <span class="n">fut</span> <span class="ow">in</span> <span class="n">worker_name_to_response_future_dict</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
             <span class="k">try</span><span class="p">:</span>
@@ -1106,9 +1131,7 @@
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">args</span> <span class="o">=</span> <span class="n">args</span> <span class="k">if</span> <span class="n">args</span> <span class="k">else</span> <span class="p">()</span>
     <span class="n">kwargs</span> <span class="o">=</span> <span class="n">kwargs</span> <span class="k">if</span> <span class="n">kwargs</span> <span class="k">else</span> <span class="p">{}</span>
-    <span class="k">return</span> <span class="n">_invoke_remote_torchscript</span><span class="p">(</span>
-        <span class="n">to</span><span class="p">,</span> <span class="n">qualified_name</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
-    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">_invoke_remote_torchscript</span><span class="p">(</span><span class="n">to</span><span class="p">,</span> <span class="n">qualified_name</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 </pre></div>
 
              </article>
