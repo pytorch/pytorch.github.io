@@ -311,7 +311,7 @@ After successful build you can integrate the result aar files to your android gr
 
 ## API Docs
 
-You can find more details about the PyTorch Android API in the [Javadoc](https://pytorch.org/docs/stable/packages.html).
+You can find more details about the PyTorch Android API in the [Javadoc](https://pytorch.org/javadoc/).
 
 <!-- Do not remove the below script -->
 
