@@ -67,6 +67,8 @@ var trackEvents = {
     // Clicks on Cloud Platforms in Quick Start Module
     $(".cloud-option").on("click", function() {
       var platformName = $.trim($(this).find(".cloud-option-body").text());
+      //Tracking for SEM Campaign
+      ga("newCampaignTracker.send", "event", "Link", "Click", "Quickstart");
       trackEvents.recordClick("Quick Start Module - Cloud Platforms", platformName);
     });
 
@@ -85,12 +87,13 @@ var trackEvents = {
         "Quick Start Module - Cloud Platforms",
         platformName + " - " + serviceName
       );
-
       return true;
     });
 
     // Clicks on options in Quick Start - Locally
     $(".quick-start-module .row .option").on("click", function() {
+      //Tracking for SEM Campaign
+      ga("newCampaignTracker.send", "event", "Link", "Click", "Quickstart");
       var selectedOption = $.trim($(this).text());
       var rowIndex = $(this).closest(".row").index();
       var selectedCategory = $(".quick-start-module .headings .title-block").
