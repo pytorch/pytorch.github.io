@@ -6,6 +6,7 @@ background-class: get-started-background
 body-class: get-started
 order: 2
 published: true
+get-started-via-cloud: true
 ---
 
 ## Start via Cloud Partners
@@ -20,26 +21,14 @@ published: true
 ---
 
 {% capture aws %}
-<nav class="inline_toc" markdown="1">
-* TOC
-{:toc}
-</nav>
 {% include_relative installation/aws.md %}
 {% endcapture %}
 
 {% capture azure %}
-<nav class="inline_toc" markdown="1">
-* TOC
-{:toc}
-</nav>
 {% include_relative installation/azure.md %}
 {% endcapture %}
 
 {% capture google-cloud %}
-<nav class="inline_toc" markdown="1">
-* TOC
-{:toc}
-</nav>
 {% include_relative installation/google-cloud.md %}
 {% endcapture %}
 
