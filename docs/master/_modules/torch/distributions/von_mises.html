@@ -10,14 +10,14 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>torch.distributions.dirichlet &mdash; PyTorch master documentation</title>
+  <title>torch.distributions.von_mises &mdash; PyTorch master documentation</title>
   
 
   
   
   
   
-    <link rel="canonical" href="https://pytorch.org/docs/stable/_modules/torch/distributions/dirichlet.html"/>
+    <link rel="canonical" href="https://pytorch.org/docs/stable/_modules/torch/distributions/von_mises.html"/>
   
 
   
@@ -182,7 +182,7 @@
 
           
 <div>
-  <a style="color:#F05732" href="https://pytorch.org/docs/stable/_modules/torch/distributions/dirichlet.html">
+  <a style="color:#F05732" href="https://pytorch.org/docs/stable/_modules/torch/distributions/von_mises.html">
     You are viewing unstable developer preview docs.
     Click here to view docs for latest stable release.
   </a>
@@ -313,7 +313,7 @@
         
           <li><a href="../../torch.html">torch</a> &gt;</li>
         
-      <li>torch.distributions.dirichlet</li>
+      <li>torch.distributions.von_mises</li>
     
     
       <li class="pytorch-breadcrumbs-aside">
@@ -341,102 +341,147 @@
             <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
              <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
               
-  <h1>Source code for torch.distributions.dirichlet</h1><div class="highlight"><pre>
-<span></span><span class="kn">import</span> <span class="nn">torch</span>
-<span class="kn">from</span> <span class="nn">torch.autograd</span> <span class="kn">import</span> <span class="n">Function</span>
-<span class="kn">from</span> <span class="nn">torch.autograd.function</span> <span class="kn">import</span> <span class="n">once_differentiable</span>
+  <h1>Source code for torch.distributions.von_mises</h1><div class="highlight"><pre>
+<span></span><span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">absolute_import</span><span class="p">,</span> <span class="n">division</span><span class="p">,</span> <span class="n">print_function</span>
+
+<span class="kn">import</span> <span class="nn">math</span>
+
+<span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">import</span> <span class="nn">torch.jit</span>
 <span class="kn">from</span> <span class="nn">torch.distributions</span> <span class="kn">import</span> <span class="n">constraints</span>
-<span class="kn">from</span> <span class="nn">torch.distributions.exp_family</span> <span class="kn">import</span> <span class="n">ExponentialFamily</span>
+<span class="kn">from</span> <span class="nn">torch.distributions.distribution</span> <span class="kn">import</span> <span class="n">Distribution</span>
+<span class="kn">from</span> <span class="nn">torch.distributions.utils</span> <span class="kn">import</span> <span class="n">broadcast_all</span><span class="p">,</span> <span class="n">lazy_property</span>
 
 
-<span class="c1"># This helper is exposed for testing.</span>
-<span class="k">def</span> <span class="nf">_Dirichlet_backward</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">concentration</span><span class="p">,</span> <span class="n">grad_output</span><span class="p">):</span>
-    <span class="n">total</span> <span class="o">=</span> <span class="n">concentration</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">expand_as</span><span class="p">(</span><span class="n">concentration</span><span class="p">)</span>
-    <span class="n">grad</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">_dirichlet_grad</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">concentration</span><span class="p">,</span> <span class="n">total</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">grad</span> <span class="o">*</span> <span class="p">(</span><span class="n">grad_output</span> <span class="o">-</span> <span class="p">(</span><span class="n">x</span> <span class="o">*</span> <span class="n">grad_output</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="kc">True</span><span class="p">))</span>
+<span class="k">def</span> <span class="nf">_eval_poly</span><span class="p">(</span><span class="n">y</span><span class="p">,</span> <span class="n">coef</span><span class="p">):</span>
+    <span class="n">coef</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">coef</span><span class="p">)</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="n">coef</span><span class="o">.</span><span class="n">pop</span><span class="p">()</span>
+    <span class="k">while</span> <span class="n">coef</span><span class="p">:</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="n">coef</span><span class="o">.</span><span class="n">pop</span><span class="p">()</span> <span class="o">+</span> <span class="n">y</span> <span class="o">*</span> <span class="n">result</span>
+    <span class="k">return</span> <span class="n">result</span>
 
 
-<span class="k">class</span> <span class="nc">_Dirichlet</span><span class="p">(</span><span class="n">Function</span><span class="p">):</span>
-    <span class="nd">@staticmethod</span>
-    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">concentration</span><span class="p">):</span>
-        <span class="n">x</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">_sample_dirichlet</span><span class="p">(</span><span class="n">concentration</span><span class="p">)</span>
-        <span class="n">ctx</span><span class="o">.</span><span class="n">save_for_backward</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">concentration</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">x</span>
+<span class="n">_I0_COEF_SMALL</span> <span class="o">=</span> <span class="p">[</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">3.5156229</span><span class="p">,</span> <span class="mf">3.0899424</span><span class="p">,</span> <span class="mf">1.2067492</span><span class="p">,</span> <span class="mf">0.2659732</span><span class="p">,</span> <span class="mf">0.360768e-1</span><span class="p">,</span> <span class="mf">0.45813e-2</span><span class="p">]</span>
+<span class="n">_I0_COEF_LARGE</span> <span class="o">=</span> <span class="p">[</span><span class="mf">0.39894228</span><span class="p">,</span> <span class="mf">0.1328592e-1</span><span class="p">,</span> <span class="mf">0.225319e-2</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.157565e-2</span><span class="p">,</span> <span class="mf">0.916281e-2</span><span class="p">,</span>
+                  <span class="o">-</span><span class="mf">0.2057706e-1</span><span class="p">,</span> <span class="mf">0.2635537e-1</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.1647633e-1</span><span class="p">,</span> <span class="mf">0.392377e-2</span><span class="p">]</span>
+<span class="n">_I1_COEF_SMALL</span> <span class="o">=</span> <span class="p">[</span><span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.87890594</span><span class="p">,</span> <span class="mf">0.51498869</span><span class="p">,</span> <span class="mf">0.15084934</span><span class="p">,</span> <span class="mf">0.2658733e-1</span><span class="p">,</span> <span class="mf">0.301532e-2</span><span class="p">,</span> <span class="mf">0.32411e-3</span><span class="p">]</span>
+<span class="n">_I1_COEF_LARGE</span> <span class="o">=</span> <span class="p">[</span><span class="mf">0.39894228</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.3988024e-1</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.362018e-2</span><span class="p">,</span> <span class="mf">0.163801e-2</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.1031555e-1</span><span class="p">,</span>
+                  <span class="mf">0.2282967e-1</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.2895312e-1</span><span class="p">,</span> <span class="mf">0.1787654e-1</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.420059e-2</span><span class="p">]</span>
 
-    <span class="nd">@staticmethod</span>
-    <span class="nd">@once_differentiable</span>
-    <span class="k">def</span> <span class="nf">backward</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">grad_output</span><span class="p">):</span>
-        <span class="n">x</span><span class="p">,</span> <span class="n">concentration</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">saved_tensors</span>
-        <span class="k">return</span> <span class="n">_Dirichlet_backward</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">concentration</span><span class="p">,</span> <span class="n">grad_output</span><span class="p">)</span>
+<span class="n">_COEF_SMALL</span> <span class="o">=</span> <span class="p">[</span><span class="n">_I0_COEF_SMALL</span><span class="p">,</span> <span class="n">_I1_COEF_SMALL</span><span class="p">]</span>
+<span class="n">_COEF_LARGE</span> <span class="o">=</span> <span class="p">[</span><span class="n">_I0_COEF_LARGE</span><span class="p">,</span> <span class="n">_I1_COEF_LARGE</span><span class="p">]</span>
 
 
-<div class="viewcode-block" id="Dirichlet"><a class="viewcode-back" href="../../../distributions.html#torch.distributions.dirichlet.Dirichlet">[docs]</a><span class="k">class</span> <span class="nc">Dirichlet</span><span class="p">(</span><span class="n">ExponentialFamily</span><span class="p">):</span>
-    <span class="sa">r</span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Creates a Dirichlet distribution parameterized by concentration :attr:`concentration`.</span>
+<span class="k">def</span> <span class="nf">_log_modified_bessel_fn</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">order</span><span class="o">=</span><span class="mi">0</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Returns ``log(I_order(x))`` for ``x &gt; 0``,</span>
+<span class="sd">    where `order` is either 0 or 1.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">assert</span> <span class="n">order</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">or</span> <span class="n">order</span> <span class="o">==</span> <span class="mi">1</span>
+
+    <span class="c1"># compute small solution</span>
+    <span class="n">y</span> <span class="o">=</span> <span class="p">(</span><span class="n">x</span> <span class="o">/</span> <span class="mf">3.75</span><span class="p">)</span>
+    <span class="n">y</span> <span class="o">=</span> <span class="n">y</span> <span class="o">*</span> <span class="n">y</span>
+    <span class="n">small</span> <span class="o">=</span> <span class="n">_eval_poly</span><span class="p">(</span><span class="n">y</span><span class="p">,</span> <span class="n">_COEF_SMALL</span><span class="p">[</span><span class="n">order</span><span class="p">])</span>
+    <span class="k">if</span> <span class="n">order</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="n">small</span> <span class="o">=</span> <span class="n">x</span><span class="o">.</span><span class="n">abs</span><span class="p">()</span> <span class="o">*</span> <span class="n">small</span>
+    <span class="n">small</span> <span class="o">=</span> <span class="n">small</span><span class="o">.</span><span class="n">log</span><span class="p">()</span>
+
+    <span class="c1"># compute large solution</span>
+    <span class="n">y</span> <span class="o">=</span> <span class="mf">3.75</span> <span class="o">/</span> <span class="n">x</span>
+    <span class="n">large</span> <span class="o">=</span> <span class="n">x</span> <span class="o">-</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="n">x</span><span class="o">.</span><span class="n">log</span><span class="p">()</span> <span class="o">+</span> <span class="n">_eval_poly</span><span class="p">(</span><span class="n">y</span><span class="p">,</span> <span class="n">_COEF_LARGE</span><span class="p">[</span><span class="n">order</span><span class="p">])</span><span class="o">.</span><span class="n">log</span><span class="p">()</span>
+
+    <span class="n">result</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">x</span> <span class="o">&lt;</span> <span class="mf">3.75</span><span class="p">,</span> <span class="n">small</span><span class="p">,</span> <span class="n">large</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">result</span>
+
+
+<span class="nd">@torch</span><span class="o">.</span><span class="n">jit</span><span class="o">.</span><span class="n">script</span>
+<span class="k">def</span> <span class="nf">_rejection_sample</span><span class="p">(</span><span class="n">loc</span><span class="p">,</span> <span class="n">concentration</span><span class="p">,</span> <span class="n">proposal_r</span><span class="p">,</span> <span class="n">x</span><span class="p">):</span>
+    <span class="n">done</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">x</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">loc</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+    <span class="k">while</span> <span class="ow">not</span> <span class="n">done</span><span class="o">.</span><span class="n">all</span><span class="p">():</span>
+        <span class="n">u</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">rand</span><span class="p">((</span><span class="mi">3</span><span class="p">,)</span> <span class="o">+</span> <span class="n">x</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">loc</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">loc</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+        <span class="n">u1</span><span class="p">,</span> <span class="n">u2</span><span class="p">,</span> <span class="n">u3</span> <span class="o">=</span> <span class="n">u</span><span class="o">.</span><span class="n">unbind</span><span class="p">()</span>
+        <span class="n">z</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">math</span><span class="o">.</span><span class="n">pi</span> <span class="o">*</span> <span class="n">u1</span><span class="p">)</span>
+        <span class="n">f</span> <span class="o">=</span> <span class="p">(</span><span class="mi">1</span> <span class="o">+</span> <span class="n">proposal_r</span> <span class="o">*</span> <span class="n">z</span><span class="p">)</span> <span class="o">/</span> <span class="p">(</span><span class="n">proposal_r</span> <span class="o">+</span> <span class="n">z</span><span class="p">)</span>
+        <span class="n">c</span> <span class="o">=</span> <span class="n">concentration</span> <span class="o">*</span> <span class="p">(</span><span class="n">proposal_r</span> <span class="o">-</span> <span class="n">f</span><span class="p">)</span>
+        <span class="n">accept</span> <span class="o">=</span> <span class="p">((</span><span class="n">c</span> <span class="o">*</span> <span class="p">(</span><span class="mi">2</span> <span class="o">-</span> <span class="n">c</span><span class="p">)</span> <span class="o">-</span> <span class="n">u2</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span> <span class="o">|</span> <span class="p">((</span><span class="n">c</span> <span class="o">/</span> <span class="n">u2</span><span class="p">)</span><span class="o">.</span><span class="n">log</span><span class="p">()</span> <span class="o">+</span> <span class="mi">1</span> <span class="o">-</span> <span class="n">c</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">accept</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+            <span class="n">x</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">accept</span><span class="p">,</span> <span class="p">(</span><span class="n">u3</span> <span class="o">-</span> <span class="mf">0.5</span><span class="p">)</span><span class="o">.</span><span class="n">sign</span><span class="p">()</span> <span class="o">*</span> <span class="n">f</span><span class="o">.</span><span class="n">acos</span><span class="p">(),</span> <span class="n">x</span><span class="p">)</span>
+            <span class="n">done</span> <span class="o">=</span> <span class="n">done</span> <span class="o">|</span> <span class="n">accept</span>
+    <span class="k">return</span> <span class="p">(</span><span class="n">x</span> <span class="o">+</span> <span class="n">math</span><span class="o">.</span><span class="n">pi</span> <span class="o">+</span> <span class="n">loc</span><span class="p">)</span> <span class="o">%</span> <span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">math</span><span class="o">.</span><span class="n">pi</span><span class="p">)</span> <span class="o">-</span> <span class="n">math</span><span class="o">.</span><span class="n">pi</span>
+
+
+<div class="viewcode-block" id="VonMises"><a class="viewcode-back" href="../../../distributions.html#torch.distributions.von_mises.VonMises">[docs]</a><span class="k">class</span> <span class="nc">VonMises</span><span class="p">(</span><span class="n">Distribution</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    A circular von Mises distribution.</span>
+
+<span class="sd">    This implementation uses polar coordinates. The ``loc`` and ``value`` args</span>
+<span class="sd">    can be any real number (to facilitate unconstrained optimization), but are</span>
+<span class="sd">    interpreted as angles modulo 2 pi.</span>
 
 <span class="sd">    Example::</span>
+<span class="sd">        &gt;&gt;&gt; m = dist.VonMises(torch.tensor([1.0]), torch.tensor([1.0]))</span>
+<span class="sd">        &gt;&gt;&gt; m.sample() # von Mises distributed with loc=1 and concentration=1</span>
+<span class="sd">        tensor([1.9777])</span>
 
-<span class="sd">        &gt;&gt;&gt; m = Dirichlet(torch.tensor([0.5, 0.5]))</span>
-<span class="sd">        &gt;&gt;&gt; m.sample()  # Dirichlet distributed with concentrarion concentration</span>
-<span class="sd">        tensor([ 0.1046,  0.8954])</span>
-
-<span class="sd">    Args:</span>
-<span class="sd">        concentration (Tensor): concentration parameter of the distribution</span>
-<span class="sd">            (often referred to as alpha)</span>
+<span class="sd">    :param torch.Tensor loc: an angle in radians.</span>
+<span class="sd">    :param torch.Tensor concentration: concentration parameter</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">arg_constraints</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;concentration&#39;</span><span class="p">:</span> <span class="n">constraints</span><span class="o">.</span><span class="n">positive</span><span class="p">}</span>
-    <span class="n">support</span> <span class="o">=</span> <span class="n">constraints</span><span class="o">.</span><span class="n">simplex</span>
-    <span class="n">has_rsample</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="n">arg_constraints</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;loc&#39;</span><span class="p">:</span> <span class="n">constraints</span><span class="o">.</span><span class="n">real</span><span class="p">,</span> <span class="s1">&#39;concentration&#39;</span><span class="p">:</span> <span class="n">constraints</span><span class="o">.</span><span class="n">positive</span><span class="p">}</span>
+    <span class="n">support</span> <span class="o">=</span> <span class="n">constraints</span><span class="o">.</span><span class="n">real</span>
+    <span class="n">has_rsample</span> <span class="o">=</span> <span class="kc">False</span>
 
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">concentration</span><span class="p">,</span> <span class="n">validate_args</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
-        <span class="k">if</span> <span class="n">concentration</span><span class="o">.</span><span class="n">dim</span><span class="p">()</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;`concentration` parameter must be at least one-dimensional.&quot;</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">concentration</span> <span class="o">=</span> <span class="n">concentration</span>
-        <span class="n">batch_shape</span><span class="p">,</span> <span class="n">event_shape</span> <span class="o">=</span> <span class="n">concentration</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">concentration</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">:]</span>
-        <span class="nb">super</span><span class="p">(</span><span class="n">Dirichlet</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">batch_shape</span><span class="p">,</span> <span class="n">event_shape</span><span class="p">,</span> <span class="n">validate_args</span><span class="o">=</span><span class="n">validate_args</span><span class="p">)</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">loc</span><span class="p">,</span> <span class="n">concentration</span><span class="p">,</span> <span class="n">validate_args</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">loc</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">concentration</span> <span class="o">=</span> <span class="n">broadcast_all</span><span class="p">(</span><span class="n">loc</span><span class="p">,</span> <span class="n">concentration</span><span class="p">)</span>
+        <span class="n">batch_shape</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">loc</span><span class="o">.</span><span class="n">shape</span>
+        <span class="n">event_shape</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">()</span>
 
-<div class="viewcode-block" id="Dirichlet.expand"><a class="viewcode-back" href="../../../distributions.html#torch.distributions.dirichlet.Dirichlet.expand">[docs]</a>    <span class="k">def</span> <span class="nf">expand</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch_shape</span><span class="p">,</span> <span class="n">_instance</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
-        <span class="n">new</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_checked_instance</span><span class="p">(</span><span class="n">Dirichlet</span><span class="p">,</span> <span class="n">_instance</span><span class="p">)</span>
-        <span class="n">batch_shape</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">(</span><span class="n">batch_shape</span><span class="p">)</span>
-        <span class="n">new</span><span class="o">.</span><span class="n">concentration</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">concentration</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="n">batch_shape</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">event_shape</span><span class="p">)</span>
-        <span class="nb">super</span><span class="p">(</span><span class="n">Dirichlet</span><span class="p">,</span> <span class="n">new</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">batch_shape</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">event_shape</span><span class="p">,</span> <span class="n">validate_args</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-        <span class="n">new</span><span class="o">.</span><span class="n">_validate_args</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_validate_args</span>
-        <span class="k">return</span> <span class="n">new</span></div>
+        <span class="c1"># Parameters for sampling</span>
+        <span class="n">tau</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">+</span> <span class="p">(</span><span class="mi">1</span> <span class="o">+</span> <span class="mi">4</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">concentration</span> <span class="o">**</span> <span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">sqrt</span><span class="p">()</span>
+        <span class="n">rho</span> <span class="o">=</span> <span class="p">(</span><span class="n">tau</span> <span class="o">-</span> <span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">tau</span><span class="p">)</span><span class="o">.</span><span class="n">sqrt</span><span class="p">())</span> <span class="o">/</span> <span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">concentration</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_proposal_r</span> <span class="o">=</span> <span class="p">(</span><span class="mi">1</span> <span class="o">+</span> <span class="n">rho</span> <span class="o">**</span> <span class="mi">2</span><span class="p">)</span> <span class="o">/</span> <span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">rho</span><span class="p">)</span>
 
-<div class="viewcode-block" id="Dirichlet.rsample"><a class="viewcode-back" href="../../../distributions.html#torch.distributions.dirichlet.Dirichlet.rsample">[docs]</a>    <span class="k">def</span> <span class="nf">rsample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">sample_shape</span><span class="o">=</span><span class="p">()):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">VonMises</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">batch_shape</span><span class="p">,</span> <span class="n">event_shape</span><span class="p">,</span> <span class="n">validate_args</span><span class="p">)</span>
+
+<div class="viewcode-block" id="VonMises.log_prob"><a class="viewcode-back" href="../../../distributions.html#torch.distributions.von_mises.VonMises.log_prob">[docs]</a>    <span class="k">def</span> <span class="nf">log_prob</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+        <span class="n">log_prob</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">concentration</span> <span class="o">*</span> <span class="n">torch</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">value</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">loc</span><span class="p">)</span>
+        <span class="n">log_prob</span> <span class="o">=</span> <span class="n">log_prob</span> <span class="o">-</span> <span class="n">math</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">math</span><span class="o">.</span><span class="n">pi</span><span class="p">)</span> <span class="o">-</span> <span class="n">_log_modified_bessel_fn</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">concentration</span><span class="p">,</span> <span class="n">order</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">log_prob</span></div>
+
+<div class="viewcode-block" id="VonMises.sample"><a class="viewcode-back" href="../../../distributions.html#torch.distributions.von_mises.VonMises.sample">[docs]</a>    <span class="nd">@torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">()</span>
+    <span class="k">def</span> <span class="nf">sample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">sample_shape</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">()):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        The sampling algorithm for the von Mises distribution is based on the following paper:</span>
+<span class="sd">        Best, D. J., and Nicholas I. Fisher.</span>
+<span class="sd">        &quot;Efficient simulation of the von Mises distribution.&quot; Applied Statistics (1979): 152-157.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">shape</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_extended_shape</span><span class="p">(</span><span class="n">sample_shape</span><span class="p">)</span>
-        <span class="n">concentration</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">concentration</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="n">shape</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">_Dirichlet</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">concentration</span><span class="p">)</span></div>
+        <span class="n">x</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">shape</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">loc</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">loc</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">_rejection_sample</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">loc</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">concentration</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_proposal_r</span><span class="p">,</span> <span class="n">x</span><span class="p">)</span></div>
 
-<div class="viewcode-block" id="Dirichlet.log_prob"><a class="viewcode-back" href="../../../distributions.html#torch.distributions.dirichlet.Dirichlet.log_prob">[docs]</a>    <span class="k">def</span> <span class="nf">log_prob</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_validate_args</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_validate_sample</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
-        <span class="k">return</span> <span class="p">((</span><span class="n">torch</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">value</span><span class="p">)</span> <span class="o">*</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">concentration</span> <span class="o">-</span> <span class="mf">1.0</span><span class="p">))</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="o">+</span>
-                <span class="n">torch</span><span class="o">.</span><span class="n">lgamma</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">concentration</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">))</span> <span class="o">-</span>
-                <span class="n">torch</span><span class="o">.</span><span class="n">lgamma</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">concentration</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">))</span></div>
+<div class="viewcode-block" id="VonMises.expand"><a class="viewcode-back" href="../../../distributions.html#torch.distributions.von_mises.VonMises.expand">[docs]</a>    <span class="k">def</span> <span class="nf">expand</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch_shape</span><span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">return</span> <span class="nb">super</span><span class="p">(</span><span class="n">VonMises</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="n">batch_shape</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">NotImplementedError</span><span class="p">:</span>
+            <span class="n">validate_args</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;_validate_args&#39;</span><span class="p">)</span>
+            <span class="n">loc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">loc</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="n">batch_shape</span><span class="p">)</span>
+            <span class="n">concentration</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">concentration</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="n">batch_shape</span><span class="p">)</span>
+            <span class="k">return</span> <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)(</span><span class="n">loc</span><span class="p">,</span> <span class="n">concentration</span><span class="p">,</span> <span class="n">validate_args</span><span class="o">=</span><span class="n">validate_args</span><span class="p">)</span></div>
 
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">mean</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">concentration</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">concentration</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        The provided mean is the circular one.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">loc</span>
 
-    <span class="nd">@property</span>
+<div class="viewcode-block" id="VonMises.variance"><a class="viewcode-back" href="../../../distributions.html#torch.distributions.von_mises.VonMises.variance">[docs]</a>    <span class="nd">@lazy_property</span>
     <span class="k">def</span> <span class="nf">variance</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="n">con0</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">concentration</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">concentration</span> <span class="o">*</span> <span class="p">(</span><span class="n">con0</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">concentration</span><span class="p">)</span> <span class="o">/</span> <span class="p">(</span><span class="n">con0</span><span class="o">.</span><span class="n">pow</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span> <span class="o">*</span> <span class="p">(</span><span class="n">con0</span> <span class="o">+</span> <span class="mi">1</span><span class="p">))</span>
-
-<div class="viewcode-block" id="Dirichlet.entropy"><a class="viewcode-back" href="../../../distributions.html#torch.distributions.dirichlet.Dirichlet.entropy">[docs]</a>    <span class="k">def</span> <span class="nf">entropy</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="n">k</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">concentration</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
-        <span class="n">a0</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">concentration</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
-        <span class="k">return</span> <span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">lgamma</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">concentration</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="o">-</span> <span class="n">torch</span><span class="o">.</span><span class="n">lgamma</span><span class="p">(</span><span class="n">a0</span><span class="p">)</span> <span class="o">-</span>
-                <span class="p">(</span><span class="n">k</span> <span class="o">-</span> <span class="n">a0</span><span class="p">)</span> <span class="o">*</span> <span class="n">torch</span><span class="o">.</span><span class="n">digamma</span><span class="p">(</span><span class="n">a0</span><span class="p">)</span> <span class="o">-</span>
-                <span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">concentration</span> <span class="o">-</span> <span class="mf">1.0</span><span class="p">)</span> <span class="o">*</span> <span class="n">torch</span><span class="o">.</span><span class="n">digamma</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">concentration</span><span class="p">))</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">))</span></div>
-
-    <span class="nd">@property</span>
-    <span class="k">def</span> <span class="nf">_natural_params</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">return</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">concentration</span><span class="p">,</span> <span class="p">)</span>
-
-    <span class="k">def</span> <span class="nf">_log_normalizer</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">):</span>
-        <span class="k">return</span> <span class="n">x</span><span class="o">.</span><span class="n">lgamma</span><span class="p">()</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="o">-</span> <span class="n">torch</span><span class="o">.</span><span class="n">lgamma</span><span class="p">(</span><span class="n">x</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">))</span></div>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        The provided variance is the circular one.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="mi">1</span> <span class="o">-</span> <span class="p">(</span><span class="n">_log_modified_bessel_fn</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">concentration</span><span class="p">,</span> <span class="n">order</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span> <span class="o">-</span>
+                    <span class="n">_log_modified_bessel_fn</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">concentration</span><span class="p">,</span> <span class="n">order</span><span class="o">=</span><span class="mi">0</span><span class="p">))</span><span class="o">.</span><span class="n">exp</span><span class="p">()</span></div></div>
 </pre></div>
 
              </article>
