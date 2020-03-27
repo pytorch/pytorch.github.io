@@ -1,7 +1,7 @@
 ---
 layout: blog_detail
 title: 'Introduction to Quantization on PyTorch'
-author: Raghuraman Krishnamoorthi, James Reed, Min Ni, and Seth Weidman
+author: Raghuraman Krishnamoorthi, James Reed, Min Ni, Chris Gottbrath, and Seth Weidman
 ---
 
 It’s important to make efficient use of both server-side and on-device compute resources when developing machine learning applications. To support more efficient deployment on servers and edge devices, PyTorch added a support for model quantization using the familiar eager mode Python API.
@@ -273,9 +273,9 @@ We also compared the accuracy of static quantized models with the floating point
 ### **Conclusion**
 To get started on quantizing your models in PyTorch, start with [the tutorials on the PyTorch website](https://pytorch.org/tutorials/#model-optimization). If you are working with sequence data start with [dynamic quantization for LSTM](https://pytorch.org/tutorials/advanced/dynamic_quantization_tutorial.html), or [BERT](https://pytorch.org/tutorials/intermediate/dynamic_quantization_bert_tutorial.html). If you are working with image data then we recommend starting with the [transfer learning with quantization](https://pytorch.org/tutorials/intermediate/quantized_transfer_learning_tutorial.html) tutorial. Then you can explore [static post training quantization](https://pytorch.org/tutorials/advanced/static_quantization_tutorial.html). If you find that the accuracy drop with post training quantization is too high, then try [quantization aware training](https://pytorch.org/tutorials/advanced/static_quantization_tutorial.html).
 
-If you run into issues you can get community help by posting in at [discuss.pytorch.org](discuss.pytorch.org), use the quantization category for quantization related issues.
+If you run into issues you can get community help by posting in at [discuss.pytorch.org](https://discuss.pytorch.org/), use the quantization category for quantization related issues.
 
-_This post is authored by Raghuraman Krishnamoorthi, James Reed, MinNi, and Seth Weidman. Special thanks to Jianyu Huan, Lingyi Liu and Haixin Liu for producing quantization metrics included in this post._
+_This post is authored by Raghuraman Krishnamoorthi, James Reed, Min Ni, Chris Gottbrath and Seth Weidman. Special thanks to Jianyu Huang, Lingyi Liu and Haixin Liu for producing quantization metrics included in this post._
 
 ### **Further reading**:
 1. PyTorch quantization presentation at Neurips: [(https://research.fb.com/wp-content/uploads/2019/12/2.-Quantization.pptx)](https://research.fb.com/wp-content/uploads/2019/12/2.-Quantization.pptx)
