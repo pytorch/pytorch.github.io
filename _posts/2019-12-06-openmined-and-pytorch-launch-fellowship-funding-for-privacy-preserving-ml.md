@@ -2,6 +2,7 @@
 layout: blog_detail
 title: 'OpenMined and PyTorch partner to launch fellowship funding for privacy-preserving ML community'
 author: Andrew Trask (OpenMined/U.Oxford), Shubho Sengupta, Laurens van der Maaten, Joe Spisak
+excerpt: Many applications of machine learning (ML) pose a range of security and privacy challenges.
 ---
 
 <div class="text-center">
