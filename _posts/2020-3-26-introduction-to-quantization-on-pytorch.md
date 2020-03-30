@@ -70,23 +70,24 @@ We developed three techniques for quantizing neural networks in PyTorch as part 
    torch.quantization.convert(myModel, inplace=True)
   ```
 
-### **Quantization Aware Training**
-**Quantization-aware training(QAT)** is the third method, and the one that typically results in highest accuracy of these three. With QAT, all weights and activations are “fake quantized” during both the forward and backward passes of training: that is, float values are rounded to mimic int8 values, but all computations are still done with floating point numbers. Thus, all the weight adjustments during training are made while “aware” of the fact that the model will ultimately be quantized; after quantizing, therefore, this method usually yields higher accuracy than the other two methods.
+3. ### **Quantization Aware Training**
+   **Quantization-aware training(QAT)** is the third method, and the one that typically results in highest accuracy of these three. With QAT, all weights and activations are “fake quantized” during both the forward and backward passes of training: that is, float values are rounded to mimic int8 values, but all computations are still done with floating point numbers. Thus, all the weight adjustments during training are made while “aware” of the fact that the model will ultimately be quantized; after quantizing, therefore, this method usually yields higher accuracy than the other two methods.
 * ### **PyTorch API**:
   * `torch.quantization.prepare_qat` inserts fake quantization modules to model quantization.
   * Mimicking the static quantization API, `torch.quantization.convert` actually quantizes the model once training is complete.
 
-For example, in [the end-to-end example](https://pytorch.org/tutorials/advanced/static_quantization_tutorial.html), we load in a pre-trained model as `qat_model`, then we simply perform quantization-aware training using:
-* ```python
-  # specify quantization config for QAT
-  qat_model.qconfig=torch.quantization.get_default_qat_qconfig('fbgemm')
+   For example, in [the end-to-end example](https://pytorch.org/tutorials/advanced/static_quantization_tutorial.html), we load in a pre-trained model as `qat_model`, then we simply perform quantization-aware training using:
 
-  # prepare QAT
-  torch.quantization.prepare_qat(qat_model, inplace=True)
+   ```python
+   # specify quantization config for QAT
+   qat_model.qconfig=torch.quantization.get_default_qat_qconfig('fbgemm')
 
-  # convert to quantized version, removing dropout, to check for accuracy on each
-  epochquantized_model=torch.quantization.convert(qat_model.eval(), inplace=False)
-  ```
+   # prepare QAT
+   torch.quantization.prepare_qat(qat_model, inplace=True)
+
+   # convert to quantized version, removing dropout, to check for accuracy on each
+   epochquantized_model=torch.quantization.convert(qat_model.eval(), inplace=False)
+   ```
 
 ### **Device and Operator Support**
 Quantization support is restricted to a subset of available operators, depending on the method being used, for a list of supported operators, please see the documentation at [https://pytorch.org/docs/stable/quantization.html](https://pytorch.org/docs/stable/quantization.html).
