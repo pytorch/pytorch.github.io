@@ -158,7 +158,7 @@
               
               
                 <div class="version">
-                  <a href='http://pytorch.org/docs/versions.html'>1.6.0a0+ed2d1cb &#x25BC</a>
+                  <a href='http://pytorch.org/docs/versions.html'>1.6.0a0+4b3e3d8 &#x25BC</a>
                 </div>
               
             
@@ -1112,7 +1112,122 @@
                 <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s1">&#39;DataLoader worker (pid(s) </span><span class="si">{}</span><span class="s1">) exited unexpectedly&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">pids_str</span><span class="p">))</span>
             <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">e</span><span class="p">,</span> <span class="n">queue</span><span class="o">.</span><span class="n">Empty</span><span class="p">):</span>
                 <span class="k">return</span> <span class="p">(</span><span class="kc">False</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="kn">import</span> <span class="nn">tempfile</span>
+            <span class="kn">import</span> <span class="nn">errno</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="c1"># Raise an exception if we are this close to the FDs limit.</span>
+                <span class="c1"># Apparently, trying to open only one file is not a sufficient</span>
+                <span class="c1"># test.</span>
+                <span class="c1"># See NOTE [ DataLoader on Linux and open files limit ]</span>
+                <span class="n">fds_limit_margin</span> <span class="o">=</span> <span class="mi">10</span>
+                <span class="n">fs</span> <span class="o">=</span> <span class="p">[</span><span class="n">tempfile</span><span class="o">.</span><span class="n">NamedTemporaryFile</span><span class="p">()</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">fds_limit_margin</span><span class="p">)]</span>
+            <span class="k">except</span> <span class="ne">OSError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">e</span><span class="o">.</span><span class="n">errno</span> <span class="o">==</span> <span class="n">errno</span><span class="o">.</span><span class="n">EMFILE</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                        <span class="s2">&quot;Too many open files. Communication with the&quot;</span>
+                        <span class="s2">&quot; workers is no longer possible. Please increase the&quot;</span>
+                        <span class="s2">&quot; limit using `ulimit -n` in the shell or change the&quot;</span>
+                        <span class="s2">&quot; sharing strategy by calling&quot;</span>
+                        <span class="s2">&quot; `torch.multiprocessing.set_sharing_strategy(&#39;file_system&#39;)`&quot;</span>
+                        <span class="s2">&quot; at the beginning of your code&quot;</span><span class="p">)</span>
             <span class="k">raise</span>
+
+<span class="c1"># NOTE [ DataLoader on Linux and open files limit ]</span>
+<span class="c1">#</span>
+<span class="c1"># On Linux when DataLoader is used with multiprocessing we pass the data between</span>
+<span class="c1"># the root process and the workers through SHM files. We remove those files from</span>
+<span class="c1"># the filesystem as soon as they are created and keep them alive by</span>
+<span class="c1"># passing around their file descriptors through AF_UNIX sockets. (See</span>
+<span class="c1"># docs/source/multiprocessing.rst and &#39;Multiprocessing Technical Notes` in</span>
+<span class="c1"># the wiki (https://github.com/pytorch/pytorch/wiki).)</span>
+<span class="c1">#</span>
+<span class="c1"># This sometimes leads us to exceeding the open files limit. When that happens,</span>
+<span class="c1"># and the offending file descriptor is coming over a socket, the `socket` Python</span>
+<span class="c1"># package silently strips the file descriptor from the message, setting only the</span>
+<span class="c1"># `MSG_CTRUNC` flag (which might be a bit misleading since the manpage says that</span>
+<span class="c1"># it _indicates that some control data were discarded due to lack of space in</span>
+<span class="c1"># the buffer for ancillary data_). This might reflect the C implementation of</span>
+<span class="c1"># AF_UNIX sockets.</span>
+<span class="c1">#</span>
+<span class="c1"># This behaviour can be reproduced with the script and instructions at the</span>
+<span class="c1"># bottom of this note.</span>
+<span class="c1">#</span>
+<span class="c1"># When that happens, the standard Python `multiprocessing` (and not</span>
+<span class="c1"># `torch.multiprocessing`) raises a `RuntimeError: received 0 items of ancdata`</span>
+<span class="c1">#</span>
+<span class="c1"># Sometimes, instead of the FD being stripped, you may get an `OSError:</span>
+<span class="c1"># Too many open files`, both in the script below and in DataLoader. However,</span>
+<span class="c1"># this is rare and seems to be nondeterministic.</span>
+<span class="c1">#</span>
+<span class="c1">#</span>
+<span class="c1">#   #!/usr/bin/env python3</span>
+<span class="c1">#   import sys</span>
+<span class="c1">#   import socket</span>
+<span class="c1">#   import os</span>
+<span class="c1">#   import array</span>
+<span class="c1">#   import shutil</span>
+<span class="c1">#   import socket</span>
+<span class="c1">#</span>
+<span class="c1">#</span>
+<span class="c1">#   if len(sys.argv) != 4:</span>
+<span class="c1">#       print(&quot;Usage: &quot;, sys.argv[0], &quot; tmp_dirname iteration (send|recv)&quot;)</span>
+<span class="c1">#       sys.exit(1)</span>
+<span class="c1">#</span>
+<span class="c1">#   if __name__ == &#39;__main__&#39;:</span>
+<span class="c1">#       dirname = sys.argv[1]</span>
+<span class="c1">#       sock_path = dirname + &quot;/sock&quot;</span>
+<span class="c1">#       iterations = int(sys.argv[2])</span>
+<span class="c1">#       def dummy_path(i):</span>
+<span class="c1">#           return dirname + &quot;/&quot; + str(i) + &quot;.dummy&quot;</span>
+<span class="c1">#</span>
+<span class="c1">#</span>
+<span class="c1">#       if sys.argv[3] == &#39;send&#39;:</span>
+<span class="c1">#           while not os.path.exists(sock_path):</span>
+<span class="c1">#               pass</span>
+<span class="c1">#           client = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)</span>
+<span class="c1">#           client.connect(sock_path)</span>
+<span class="c1">#           for i in range(iterations):</span>
+<span class="c1">#               fd = os.open(dummy_path(i), os.O_WRONLY | os.O_CREAT)</span>
+<span class="c1">#               ancdata = array.array(&#39;i&#39;, [fd])</span>
+<span class="c1">#               msg = bytes([i % 256])</span>
+<span class="c1">#               print(&quot;Sending fd &quot;, fd, &quot; (iteration #&quot;, i, &quot;)&quot;)</span>
+<span class="c1">#               client.sendmsg([msg], [(socket.SOL_SOCKET, socket.SCM_RIGHTS, ancdata)])</span>
+<span class="c1">#</span>
+<span class="c1">#</span>
+<span class="c1">#       else:</span>
+<span class="c1">#           assert sys.argv[3] == &#39;recv&#39;</span>
+<span class="c1">#</span>
+<span class="c1">#           if os.path.exists(dirname):</span>
+<span class="c1">#               raise Exception(&quot;Directory exists&quot;)</span>
+<span class="c1">#</span>
+<span class="c1">#           os.mkdir(dirname)</span>
+<span class="c1">#</span>
+<span class="c1">#           print(&quot;Opening socket...&quot;)</span>
+<span class="c1">#           server = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)</span>
+<span class="c1">#           server.bind(sock_path)</span>
+<span class="c1">#</span>
+<span class="c1">#           print(&quot;Listening...&quot;)</span>
+<span class="c1">#           for i in range(iterations):</span>
+<span class="c1">#               a = array.array(&#39;i&#39;)</span>
+<span class="c1">#               msg, ancdata, flags, addr = server.recvmsg(1, socket.CMSG_SPACE(a.itemsize))</span>
+<span class="c1">#               assert(len(ancdata) == 1)</span>
+<span class="c1">#               cmsg_level, cmsg_type, cmsg_data = ancdata[0]</span>
+<span class="c1">#               a.frombytes(cmsg_data)</span>
+<span class="c1">#               print(&quot;Received fd &quot;, a[0], &quot; (iteration #&quot;, i, &quot;)&quot;)</span>
+<span class="c1">#</span>
+<span class="c1">#           shutil.rmtree(dirname)</span>
+<span class="c1">#</span>
+<span class="c1"># Steps to reproduce:</span>
+<span class="c1">#</span>
+<span class="c1"># 1. Run two shells and set lower file descriptor limit in the receiving one:</span>
+<span class="c1"># (shell1) ulimit -n 1020</span>
+<span class="c1"># (shell2) ulimit -n 1022</span>
+<span class="c1">#</span>
+<span class="c1"># 2. Run the script above with the `recv` option in the first shell</span>
+<span class="c1"># (shell1) ./test_socket.py sock_tmp 1017 recv</span>
+<span class="c1">#</span>
+<span class="c1"># 3. Run the script with the `send` option in the second shell:</span>
+<span class="c1"># (shell2) ./test_socket.py sock_tmp 1017 send</span>
 
     <span class="k">def</span> <span class="nf">_get_data</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="c1"># Fetches data from `self._data_queue`.</span>
