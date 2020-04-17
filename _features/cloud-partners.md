@@ -1,5 +1,5 @@
 ---
-title: Cloud Partners
+title: Cloud Support
 order: 7
 snippet: >
   ```sh
