@@ -1,5 +1,5 @@
 ---
-title: TorchScript
+title: Production Ready
 order: 1
 snippet: >
   ```python
@@ -24,7 +24,7 @@ snippet: >
       my_script_module.save("my_script_module.pt")
   ```
 
-summary-home: TorchScript provides a seamless transition between eager mode and graph mode to accelerate the path to production.
+summary-home: Transition seamlessly between eager and graph modes with TorchScript, and accelerate the path to production with TorchServe.
 featured-home: true
 
 ---
