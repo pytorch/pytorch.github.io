@@ -45,8 +45,7 @@ See the full torch_xla release notes [here](https://github.com/pytorch/xla/relea
 
 torchvision, torchtext, and torchaudio complement PyTorch with common datasets, models, and transforms in each domain area. We’re excited to share new releases for all three domain libraries alongside PyTorch 1.5 and the rest of the library updates. For this release, all three domain libraries are removing support for Python2 and will support Python3 only.
 
-#### torchaudio 0.5
-
+### torchaudio 0.5
 The torchaudio 0.5 release includes new transforms, functionals, and datasets. Highlights for the release include:
 
 * Added the Griffin-Lim functional and transform, `InverseMelScale` and `Vol` transforms, and `DB_to_amplitude`. 
@@ -55,8 +54,7 @@ The torchaudio 0.5 release includes new transforms, functionals, and datasets. H
 
 See the release full notes [here](https://github.com/pytorch/audio/releases) and full docs can be found [here](https://pytorch.org/audio/).
 
-#### torchvision 0.6
-
+### torchvision 0.6
 The torchvision 0.6 release includes updates to datasets, models and a significant number of bug fixes. Highlights include:
 
 * Faster R-CNN now supports negative samples which allows the feeding of images without annotations at training time.
@@ -65,14 +63,12 @@ The torchvision 0.6 release includes updates to datasets, models and a significa
 
 See the release full notes [here](https://github.com/pytorch/vision/releases) and full docs can be found [here](https://pytorch.org/docs/stable/torchvision/index.html).
 
-#### torchtext 0.6
-
+### torchtext 0.6
 The torchtext 0.6 release includes a number of bug fixes, improvements to documentation and updates to the dataset abstraction. Highlights for the release include:
 
 * Fixed an issue related to the SentencePiece dependency in conda package.
 * Added support for the experimental IMDB dataset to allow a custom vocab.
 * A number of documentation updates including adding a code of conduct and a deduplication of the docs on the torchtext site. 
-
 
 Your feedback and discussions on the experimental datasets API are welcomed. You can send them to [issue #664](https://github.com/pytorch/text/issues/664). We would also like to highlight the pull request [here](https://github.com/pytorch/text/pull/701) where the latest dataset abstraction is applied to the text classification datasets. The feedback can be beneficial to finalizing this abstraction. 
 
