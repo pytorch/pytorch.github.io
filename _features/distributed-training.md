@@ -1,6 +1,6 @@
 ---
 title: Distributed Training
-order: 2
+order: 3
 snippet: >
   ```python
     import torch.distributed as dist
