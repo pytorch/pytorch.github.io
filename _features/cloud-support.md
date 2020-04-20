@@ -1,6 +1,6 @@
 ---
 title: Cloud Support
-order: 7
+order: 8
 snippet: >
   ```sh
     export IMAGE_FAMILY="pytorch-latest-cpu"
