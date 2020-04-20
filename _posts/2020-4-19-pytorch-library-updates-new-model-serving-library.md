@@ -20,7 +20,6 @@ TorchServe is a flexible and easy to use library for serving PyTorch models in p
 * Logging including common metrics, and the ability to incorporate custom metrics
 * Ready-made Dockerfile for easy deployment
 * HTTPS support for secure deployment
-
 To learn more about the APIs and the design of this feature, see the links below:
 * See <here> for a full multi-node deployment reference architecture.
 * The full documentation can be found [here](https://pytorch.org/serve).
@@ -51,7 +50,6 @@ The torchaudio 0.5 release includes new transforms, functionals, and datasets. H
 * Added the Griffin-Lim functional and transform, `InverseMelScale` and `Vol` transforms, and `DB_to_amplitude`. 
 * Added support for `allpass`, `fade`, `bandpass`, `bandreject`, `band`, `treble`, `deemph`, and `riaa` filters and transformations.
 * New datasets added including `LJSpeech` and `SpeechCommands` datasets. 
-
 See the release full notes [here](https://github.com/pytorch/audio/releases) and full docs can be found [here](https://pytorch.org/audio/).
 
 ### torchvision 0.6
@@ -60,7 +58,6 @@ The torchvision 0.6 release includes updates to datasets, models and a significa
 * Faster R-CNN now supports negative samples which allows the feeding of images without annotations at training time.
 * Added `aligned` flag to `RoIAlign` to match Detectron2. 
 * Refactored abstractions for C++ video decoder
-
 See the release full notes [here](https://github.com/pytorch/vision/releases) and full docs can be found [here](https://pytorch.org/docs/stable/torchvision/index.html).
 
 ### torchtext 0.6
@@ -78,4 +75,5 @@ See the release full notes [here](https://github.com/pytorch/text/releases) and 
 *We’d like to thank the entire PyTorch team, the Amazon team and the community for all their contributions to this work.*
 
 Cheers!
+
 Team PyTorch
