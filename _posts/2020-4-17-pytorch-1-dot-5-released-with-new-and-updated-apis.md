@@ -95,4 +95,5 @@ Starting PyTorch 1.5.0, we will no longer support Python 2, specifically version
 *We’d like to thank the entire PyTorch team and the community for all their contributions to this work.*
 
 Cheers!
+
 Team PyTorch
