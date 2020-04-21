@@ -1,5 +1,6 @@
 ---
 order: 3
-link: https://pytorch.org/blog/openmined-and-pytorch-launch-fellowship-funding-for-privacy-preserving-ml/
-summary: OpenMined and PyTorch partner to launch fellowship funding for privacy-preserving ML community.
+link: https://pytorch.org/blog/pytorch-1-dot-4-released-and-domain-libraries-updated/
+summary: PyTorch 1.4 is now available - adds ability to do fine grain build level customization for PyTorch Mobile, updated domain libraries, and new experimental features.
 ---
+

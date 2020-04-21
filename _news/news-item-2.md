@@ -1,6 +1,7 @@
 ---
 order: 2
-link: https://pytorch.org/blog/pytorch-adds-new-tools-and-libraries-welcomes-preferred-networks-to-its-community/ 
-summary: PyTorch adds new tools and libraries, welcomes Preferred Networks to its community.
+link: https://pytorch.org/blog/pytorch-library-updates-new-model-serving-library
+summary: PyTorch library updates including new model serving library
 ---
+
 
