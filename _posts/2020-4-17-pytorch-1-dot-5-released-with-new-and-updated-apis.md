@@ -5,7 +5,7 @@ author: Team PyTorch
 ---
 
 
-Today, we’re announcing the availability of PyTorch 1.5, along with new and updated libraries. This release includes several major new API additions and improvements. PyTorch now includes a significant update to the C++ frontend, ‘channels last’ memory format for computer vision models, and a stable release of the distributed RPC framework used for model-parallel training. The release also has new APIs for autograd for hessians and jacobians, and an API that allows the creation of Custom C++ Classes that was inspired by PyBind.
+Today, we’re announcing the availability of PyTorch 1.5, along with new and updated libraries. This release includes several major new API additions and improvements. PyTorch now includes a significant update to the C++ frontend, ‘channels last’ memory format for computer vision models, and a stable release of the distributed RPC framework used for model-parallel training. The release also has new APIs for autograd for hessians and jacobians, and an API that allows the creation of Custom C++ Classes that was inspired by pybind.
 
 You can find the detailed release notes [here](https://github.com/pytorch/pytorch/releases).  
 
