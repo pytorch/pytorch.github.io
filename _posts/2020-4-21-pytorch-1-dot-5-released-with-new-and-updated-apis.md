@@ -29,9 +29,9 @@ This release adds a new API, `torch.CutomClassHolder`,  for binding custom C++ c
 
 ```python
 template <class T>
-struct Stack : torch::CustomClassHolder {
+struct MyStackClass : torch::CustomClassHolder {
   std::vector<T> stack_;
-  Stack(std::vector<T> init) : stack_(std::move(init)) {}
+  MyStackClass(std::vector<T> init) : stack_(std::move(init)) {}
 
   void push(T x) {
     stack_.push_back(x);
@@ -44,11 +44,11 @@ struct Stack : torch::CustomClassHolder {
 };
 
 static auto testStack =
-  torch::class_<Stack<std::string>>("Stack")
+  torch::class_<MyStackClass<std::string>>("myclasses", "MyStackClass")
       .def(torch::init<std::vector<std::string>>())
-      .def("push", &Stack<std::string>::push)
-      .def("pop", &Stack<std::string>::pop)
-      .def("size", [](const c10::intrusive_ptr<Stack>& self) {
+      .def("push", &MyStackClass<std::string>::push)
+      .def("pop", &MyStackClass<std::string>::pop)
+      .def("size", [](const c10::intrusive_ptr<MyStackClass>& self) {
         return self->stack_.size();
       });
 ```
@@ -56,9 +56,9 @@ static auto testStack =
  Which exposes a class you can use in Python and TorchScript like so:
  
 ```python
- @torch.jit.script
-def do_stacks(s : torch.classes.Stack):
-    s2 = torch.classes.Stack(["hi", "mom"])
+@torch.jit.script
+def do_stacks(s : torch.classes.myclasses.MyStackClass):
+    s2 = torch.classes.myclasses.MyStackClass(["hi", "mom"])
     print(s2.pop()) # "mom"
     s2.push("foobar")
     return s2 # ["hi", "foobar"]
