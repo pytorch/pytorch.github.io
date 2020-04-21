@@ -43,7 +43,7 @@ See the full torch_xla release notes [here](https://github.com/pytorch/xla/relea
 
 ## PyTorch Domain Libraries
 
-torchvision, torchtext, and torchaudio complement PyTorch with common datasets, models, and transforms in each domain area. We’re excited to share new releases for all three domain libraries alongside PyTorch 1.5 and the rest of the library updates. For this release, all three domain libraries are removing support for Python2 and will support Python3 only.
+torchaudio, torchvision, and torchtext complement PyTorch with common datasets, models, and transforms in each domain area. We’re excited to share new releases for all three domain libraries alongside PyTorch 1.5 and the rest of the library updates. For this release, all three domain libraries are removing support for Python2 and will support Python3 only.
 
 ### torchaudio 0.5
 The torchaudio 0.5 release includes new transforms, functionals, and datasets. Highlights for the release include:
@@ -64,7 +64,7 @@ The torchvision 0.6 release includes updates to datasets, models and a significa
 See the release full notes [here](https://github.com/pytorch/vision/releases) and full docs can be found [here](https://pytorch.org/docs/stable/torchvision/index.html).
 
 ### torchtext 0.6
-The torchtext 0.6 release includes a number of bug fixes, improvements to documentation and updates to the dataset abstraction. Highlights for the release include:
+The torchtext 0.6 release includes a number of bug fixes and improvements to documentation. Based on user's feedback, dataset abstractions are currently being redesigned also. Highlights for the release include:
 
 * Fixed an issue related to the SentencePiece dependency in conda package.
 * Added support for the experimental IMDB dataset to allow a custom vocab.
