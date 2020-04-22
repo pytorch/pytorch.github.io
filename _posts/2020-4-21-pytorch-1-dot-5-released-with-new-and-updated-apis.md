@@ -64,7 +64,8 @@ def do_stacks(s : torch.classes.myclasses.MyStackClass):
     return s2 # ["hi", "foobar"]
 ```
 
-You can try it out in the tutorial [here](https://pytorch.org/tutorials/recipes/recipes/torsh_script_custom_classes.html).
+You can try it out in the tutorial [here](https://pytorch.org/tutorials/advanced/torch_script_custom_classes.html).
+
 
 ## Distributed RPC framework APIs (Now Stable)
 
