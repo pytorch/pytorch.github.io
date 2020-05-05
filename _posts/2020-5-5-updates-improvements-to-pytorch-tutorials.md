@@ -1,7 +1,7 @@
 ---
 layout: blog_detail
 title: 'Updates & Improvements to PyTorch Tutorials'
-author: by Team PyTorch
+author: Team PyTorch
 ---
 
 PyTorch.org provides researchers and developers with documentation, installation instructions, latest news, community projects, tutorials, and more. Today, we are introducing usability and content improvements including tutorials in additional categories, a new recipe format for quickly referencing common topics, sorting using tags, and an updated homepage. 
@@ -23,7 +23,7 @@ In addition to the existing left navigation bar, tutorials can now be quickly fi
 
 The following additional resources can also be found at the bottom of the Tutorials homepage:
 * [PyTorch Cheat Sheet](https://pytorch.org/tutorials/beginner/ptcheat.html)
-* [Examples of PyTorch](https://github.com/pytorch/examples)
+* [PyTorch Examples](https://github.com/pytorch/examples)
 * [Tutorial on GitHub](https://github.com/pytorch/tutorials)
 
 ## PYTORCH RECIPES  
@@ -35,7 +35,7 @@ Recipes are new bite-sized, actional examples designed to teach researchers and 
 View the full recipes (here)[http://pytorch.org/tutorials/recipes/recipes_index.html].
 
 ## LEARNING PYTORCH
-This section includes tutorials designed for beginners to PyTorch. Based on community feedback, we have made updates to the current [Deep Learning with PyTorch: A 60 Minute Blitz](https://pytorch.org/tutorials/beginner/deep_learning_60min_blitz.html) tutorial, one of our most popular tutorials for beginners. Upon completion, one can understand what PyTorch and neural networks are, and be able to build and train a simple image classification network. Updates include adding explanations to clarify output meanings and linking back to where users can read more in the docs, cleaning up confusing syntax errors, and reconstructing and explaining new concepts for easier readability.  
+This section includes tutorials designed for users new to PyTorch. Based on community feedback, we have made updates to the current [Deep Learning with PyTorch: A 60 Minute Blitz](https://pytorch.org/tutorials/beginner/deep_learning_60min_blitz.html) tutorial, one of our most popular tutorials for beginners. Upon completion, one can understand what PyTorch and neural networks are, and be able to build and train a simple image classification network. Updates include adding explanations to clarify output meanings and linking back to where users can read more in the docs, cleaning up confusing syntax errors, and reconstructing and explaining new concepts for easier readability.  
 
 ## DEPLOYING MODELS IN PRODUCTION
 This section includes tutorials for developers looking to take their PyTorch models to production. The tutorials include:
@@ -45,7 +45,7 @@ This section includes tutorials for developers looking to take their PyTorch mod
 * [Exploring a Model from PyTorch to ONNX and Running it using ONNX Runtime](https://pytorch.org/tutorials/advanced/super_resolution_with_onnxruntime.html)
 
 ## FRONTEND APIS
-PyTorch provides a number of frontend API features that can help developers to code, debug, and validate more efficiently. This section includes tutorials that teach what these features are and how to use them. Some tutorials to highlight: 
+PyTorch provides a number of frontend API features that can help developers to code, debug, and validate their models more efficiently. This section includes tutorials that teach what these features are and how to use them. Some tutorials to highlight: 
 * [Introduction to Named Tensors in PyTorch](https://pytorch.org/tutorials/intermediate/named_tensor_tutorial.html)
 * [Using the PyTorch C++ Frontend](https://pytorch.org/tutorials/advanced/cpp_frontend.html)
 * [Extending TorchScript with Custom C++ Operators](https://pytorch.org/tutorials/advanced/torch_script_custom_ops.html)
@@ -53,7 +53,7 @@ PyTorch provides a number of frontend API features that can help developers to c
 * [Autograd in C++ Frontend](https://pytorch.org/tutorials/advanced/cpp_autograd.html)
 
 ## MODEL OPTIMIZATION
-Deep learning models often consume large amounts of memory, battery, and compute due to their complex tasks. This section provides tutorials for model optimization:
+Deep learning models often consume large amounts of memory, power, and compute due to their complexity. This section provides tutorials for model optimization:
 * [Pruning](https://pytorch.org/tutorials/intermediate/pruning_tutorial.html)
 * [Dynamic Quantization on BERT](https://pytorch.org/tutorials/intermediate/dynamic_quantization_bert_tutorial.html)
 * [Static Quantization with Eager Mode in PyTorch](https://pytorch.org/tutorials/advanced/static_quantization_tutorial.html)
