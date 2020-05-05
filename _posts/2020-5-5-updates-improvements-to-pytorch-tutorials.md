@@ -29,7 +29,7 @@ The following additional resources can also be found at the bottom of the Tutori
 ## PYTORCH RECIPES  
 Recipes are new bite-sized, actionable examples designed to teach researchers and developers how to use specific PyTorch features. Some notable new recipes include:
 * [Loading Data in PyTorch](https://pytorch.org/tutorials/recipes/recipes/loading_data_recipe.html)
-* [Model Interpretability Using Captum](https://pytorch.org/tutorials/recipes/recipes/captum_recipe.html)
+* [Model Interpretability Using Captum](https://pytorch.org/tutorials/recipes/recipes/Captum_Recipe.html)
 * [How to Use TensorBoard](https://pytorch.org/tutorials/recipes/recipes/tensorboard_with_pytorch.html)
 
 View the full recipes [here](http://pytorch.org/tutorials/recipes/recipes_index.html).
