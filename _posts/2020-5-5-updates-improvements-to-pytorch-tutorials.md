@@ -32,7 +32,7 @@ Recipes are new bite-sized, actional examples designed to teach researchers and 
 * [Model Interpretability Using Captum](https://pytorch.org/tutorials/recipes/recipes/captum_recipe.html)
 * [How to Use TensorBoard](https://pytorch.org/tutorials/recipes/recipes/tensorboard_with_pytorch.html)
 
-View the full recipes (here)[http://pytorch.org/tutorials/recipes/recipes_index.html].
+View the full recipes [here](http://pytorch.org/tutorials/recipes/recipes_index.html).
 
 ## LEARNING PYTORCH
 This section includes tutorials designed for users new to PyTorch. Based on community feedback, we have made updates to the current [Deep Learning with PyTorch: A 60 Minute Blitz](https://pytorch.org/tutorials/beginner/deep_learning_60min_blitz.html) tutorial, one of our most popular tutorials for beginners. Upon completion, one can understand what PyTorch and neural networks are, and be able to build and train a simple image classification network. Updates include adding explanations to clarify output meanings and linking back to where users can read more in the docs, cleaning up confusing syntax errors, and reconstructing and explaining new concepts for easier readability.  
