@@ -5,4 +5,5 @@ summary: TensorLy is a high level API for tensor methods and deep tensorized neu
 link: http://tensorly.org/stable/home.html
 order: 18
 redirect_to: http://tensorly.org/stable/home.html
+github-id: tensorly/tensorly
 ---
