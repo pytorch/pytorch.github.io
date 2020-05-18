@@ -1,12 +1,16 @@
+var githubStarsScript = $("script[src*=github-stars]");
+var starCountCallDate = githubStarsScript.attr("star-count-call-date");
+var starCountData = githubStarsScript.attr("star-count-data");
+
 var today = new Date();
-var starCountCallDate = new Date(
-  parseInt(localStorage.getItem("starCountCallDate"), 10)
+var starCountCallDateParsed = new Date(
+  parseInt(localStorage.getItem(starCountCallDate), 10)
 );
 
 if (
   Date.parse(today) >
-    starCountCallDate.setDate(starCountCallDate.getDate() + 7) ||
-  localStorage.getItem("starCountCallDate") == null
+    starCountCallDateParsed.setDate(starCountCallDateParsed.getDate() + 7) ||
+  localStorage.getItem(starCountCallDate) == null
 ) {
   updateStarCount();
 } else {
@@ -18,8 +22,8 @@ function updateStarCount() {
   $.getJSON("https://d3cczln3fy2wkt.cloudfront.net/star-count", function (
     data
   ) {
-    localStorage.setItem("starCountCallDate", Date.parse(today));
-    localStorage.setItem("starCountData", JSON.stringify(data));
+    localStorage.setItem(starCountCallDate, Date.parse(today));
+    localStorage.setItem(starCountData, JSON.stringify(data));
 
     updateStarsOnPage(data);
     reloadFilterScript();
@@ -28,7 +32,7 @@ function updateStarCount() {
 
 function useLocalStorageStarCount() {
   console.log("old");
-  data = JSON.parse(localStorage.getItem("starCountData"));
+  data = JSON.parse(localStorage.getItem(starCountData));
 
   updateStarsOnPage(data);
 }
