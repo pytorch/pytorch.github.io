@@ -67,3 +67,12 @@ $(".filter-btn").on("click", function() {
 
   updateList();
 });
+
+//Scroll back to top of hub cards on click of next/previous page button
+
+$(document).on("click", ".page", function() {
+  $('html, body').animate(
+    {scrollTop: $("#pagination-scroll").position().top},
+    'slow'
+  );
+});
