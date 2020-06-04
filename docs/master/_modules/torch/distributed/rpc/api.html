@@ -158,7 +158,7 @@
               
               
                 <div class="version">
-                  <a href='http://pytorch.org/docs/versions.html'>1.6.0a0+72b0447 &#x25BC</a>
+                  <a href='http://pytorch.org/docs/versions.html'>1.6.0a0+92c6776 &#x25BC</a>
                 </div>
               
             
@@ -355,7 +355,7 @@
     <span class="n">RpcBackendOptions</span><span class="p">,</span>
     <span class="n">WorkerInfo</span><span class="p">,</span>
     <span class="n">_cleanup_python_rpc_handler</span><span class="p">,</span>
-    <span class="n">_delete_all_user_rrefs</span><span class="p">,</span>
+    <span class="n">_delete_all_user_and_unforked_owner_rrefs</span><span class="p">,</span>
     <span class="n">_destroy_rref_context</span><span class="p">,</span>
     <span class="n">_get_current_rpc_agent</span><span class="p">,</span>
     <span class="n">_invoke_remote_builtin</span><span class="p">,</span>
@@ -585,7 +585,7 @@
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="k">if</span> <span class="n">graceful</span><span class="p">:</span>
         <span class="n">_wait_all_workers</span><span class="p">()</span>
-        <span class="n">_delete_all_user_rrefs</span><span class="p">()</span>
+        <span class="n">_delete_all_user_and_unforked_owner_rrefs</span><span class="p">()</span>
         <span class="n">_get_current_rpc_agent</span><span class="p">()</span><span class="o">.</span><span class="n">join</span><span class="p">()</span>
     <span class="k">try</span><span class="p">:</span>
         <span class="c1"># This raises a `TORCH_CHECK()` exception on RRef leak detected.</span>
@@ -689,7 +689,7 @@
 
 
 <div class="viewcode-block" id="remote"><a class="viewcode-back" href="../../../../rpc.html#torch.distributed.rpc.remote">[docs]</a><span class="nd">@_require_initialized</span>
-<span class="k">def</span> <span class="nf">remote</span><span class="p">(</span><span class="n">to</span><span class="p">,</span> <span class="n">func</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">kwargs</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="k">def</span> <span class="nf">remote</span><span class="p">(</span><span class="n">to</span><span class="p">,</span> <span class="n">func</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">kwargs</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="n">UNSET_RPC_TIMEOUT</span><span class="p">):</span>
     <span class="sa">r</span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Make a remote call to run ``func`` on worker ``to`` and return an</span>
 <span class="sd">    :class:`~torch.distributed.rpc.RRef` to the result value immediately.</span>
@@ -709,6 +709,19 @@
 <span class="sd">        kwargs (dict): is a dictionary of keyword arguments for the ``func``</span>
 <span class="sd">                       invocation.</span>
 
+<span class="sd">        timeout (float, optional): timeout in seconds for this remote call. If the</span>
+<span class="sd">                                   creation of this</span>
+<span class="sd">                                   :class:`~torch.distributed.rpc.RRef` on worker</span>
+<span class="sd">                                   ``to`` is not successfully processed on this</span>
+<span class="sd">                                   worker within this timeout, then the next time</span>
+<span class="sd">                                   there is an attempt to use the RRef (such as</span>
+<span class="sd">                                   ``to_here()``), a timeout will be raised</span>
+<span class="sd">                                   indicating this failure. A value of 0 indicates</span>
+<span class="sd">                                   an infinite timeout, i.e. a timeout error will</span>
+<span class="sd">                                   never be raised. If not provided, the default</span>
+<span class="sd">                                   value set during initialization or with</span>
+<span class="sd">                                   ``_set_rpc_timeout`` is used.</span>
+
 <span class="sd">    Returns:</span>
 <span class="sd">        A user :class:`~torch.distributed.rpc.RRef` instance to the result</span>
 <span class="sd">        value. Use the blocking API :meth:`torch.distributed.rpc.RRef.to_here`</span>
@@ -727,6 +740,18 @@
 <span class="sd">        contents of those tensors stay intact until the returned RRef is</span>
 <span class="sd">        confirmed by the owner, which can be checked using the</span>
 <span class="sd">        :meth:`torch.distributed.rpc.RRef.confirmed_by_owner` API.</span>
+
+<span class="sd">    .. warning ::</span>
+<span class="sd">        Errors such as timeouts for the ``remote`` API are handled on a</span>
+<span class="sd">        best-effort basis. This means that when remote calls initiated by</span>
+<span class="sd">        ``remote`` fail, such as with a timeout error, we take a best-effort</span>
+<span class="sd">        approach to error handling. This means that errors are handled and set</span>
+<span class="sd">        on the resulting RRef on an asynchronous basis. If the RRef has not been</span>
+<span class="sd">        used by the application before this handling (such as ``to_here`` or</span>
+<span class="sd">        fork call), then future uses of the ``RRef`` will appropriately raise</span>
+<span class="sd">        errors. However, it is possible that the user application will use the</span>
+<span class="sd">        ``RRef`` before the errors are handled. In this case, errors may not be</span>
+<span class="sd">        raised as they have not yet been handled.</span>
 
 <span class="sd">    Example::</span>
 <span class="sd">        Make sure that ``MASTER_ADDRESS`` and ``MASTER_PORT`` are set properly</span>
@@ -800,19 +825,20 @@
         <span class="n">args</span> <span class="o">=</span> <span class="n">args</span> <span class="k">if</span> <span class="n">args</span> <span class="k">else</span> <span class="p">()</span>
         <span class="n">kwargs</span> <span class="o">=</span> <span class="n">kwargs</span> <span class="k">if</span> <span class="n">kwargs</span> <span class="k">else</span> <span class="p">{}</span>
         <span class="k">if</span> <span class="n">qualified_name</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">rref</span> <span class="o">=</span> <span class="n">_invoke_remote_builtin</span><span class="p">(</span><span class="n">dst_worker_info</span><span class="p">,</span> <span class="n">qualified_name</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+            <span class="n">rref</span> <span class="o">=</span> <span class="n">_invoke_remote_builtin</span><span class="p">(</span><span class="n">dst_worker_info</span><span class="p">,</span> <span class="n">qualified_name</span><span class="p">,</span> <span class="n">timeout</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
         <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">func</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">jit</span><span class="o">.</span><span class="n">ScriptFunction</span><span class="p">):</span>
             <span class="n">rref</span> <span class="o">=</span> <span class="n">_invoke_remote_torchscript</span><span class="p">(</span>
                 <span class="n">dst_worker_info</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
                 <span class="n">torch</span><span class="o">.</span><span class="n">_jit_internal</span><span class="o">.</span><span class="n">_qualified_name</span><span class="p">(</span><span class="n">func</span><span class="p">),</span>
+                <span class="n">timeout</span><span class="p">,</span>
                 <span class="o">*</span><span class="n">args</span><span class="p">,</span>
-                <span class="o">**</span><span class="n">kwargs</span>
+                <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
             <span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="p">(</span><span class="n">pickled_python_udf</span><span class="p">,</span> <span class="n">tensors</span><span class="p">)</span> <span class="o">=</span> <span class="n">_default_pickler</span><span class="o">.</span><span class="n">serialize</span><span class="p">(</span>
                 <span class="n">PythonUDF</span><span class="p">(</span><span class="n">func</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">)</span>
             <span class="p">)</span>
-            <span class="n">rref</span> <span class="o">=</span> <span class="n">_invoke_remote_python_udf</span><span class="p">(</span><span class="n">dst_worker_info</span><span class="p">,</span> <span class="n">pickled_python_udf</span><span class="p">,</span> <span class="n">tensors</span><span class="p">)</span>
+            <span class="n">rref</span> <span class="o">=</span> <span class="n">_invoke_remote_python_udf</span><span class="p">(</span><span class="n">dst_worker_info</span><span class="p">,</span> <span class="n">pickled_python_udf</span><span class="p">,</span> <span class="n">tensors</span><span class="p">,</span> <span class="n">timeout</span><span class="p">)</span>
         <span class="c1"># attach profiling information</span>
         <span class="k">if</span> <span class="n">should_profile</span><span class="p">:</span>
             <span class="k">assert</span> <span class="n">torch</span><span class="o">.</span><span class="n">autograd</span><span class="o">.</span><span class="n">_profiler_enabled</span><span class="p">()</span>
