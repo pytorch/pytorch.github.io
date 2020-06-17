@@ -42,7 +42,7 @@ This section includes tutorials for developers looking to take their PyTorch mod
 * [Deploying PyTorch in Python via a REST API with Flask](https://pytorch.org/tutorials/intermediate/flask_rest_api_tutorial.html)
 * [Introduction to TorchScript](https://pytorch.org/tutorials/beginner/Intro_to_TorchScript_tutorial.html)
 * [Loading a TorchScript Model in C++](https://pytorch.org/tutorials/advanced/cpp_export.html)
-* [Exploring a Model from PyTorch to ONNX and Running it using ONNX Runtime](https://pytorch.org/tutorials/advanced/super_resolution_with_onnxruntime.html)
+* [Exporting a Model from PyTorch to ONNX and Running it using ONNX Runtime](https://pytorch.org/tutorials/advanced/super_resolution_with_onnxruntime.html)
 
 ## FRONTEND APIS
 PyTorch provides a number of frontend API features that can help developers to code, debug, and validate their models more efficiently. This section includes tutorials that teach what these features are and how to use them. Some tutorials to highlight: 
