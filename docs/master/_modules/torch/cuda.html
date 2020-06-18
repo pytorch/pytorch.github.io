@@ -158,7 +158,7 @@
               
               
                 <div class="version">
-                  <a href='http://pytorch.org/docs/versions.html'>1.6.0a0+41f2dbd &#x25BC</a>
+                  <a href='http://pytorch.org/docs/versions.html'>1.6.0a0+8b5732e &#x25BC</a>
                 </div>
               
             
@@ -354,8 +354,11 @@
 <span class="kn">import</span> <span class="nn">traceback</span>
 <span class="kn">import</span> <span class="nn">warnings</span>
 <span class="kn">import</span> <span class="nn">threading</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Union</span>
 <span class="kn">from</span> <span class="nn">torch._six</span> <span class="kn">import</span> <span class="n">raise_from</span>
 <span class="kn">from</span> <span class="nn">._utils</span> <span class="kn">import</span> <span class="n">_get_device_index</span><span class="p">,</span> <span class="n">_dummy_type</span>
+<span class="kn">from</span> <span class="nn">.streams</span> <span class="kn">import</span> <span class="n">Stream</span><span class="p">,</span> <span class="n">Event</span>
+<span class="kn">from</span> <span class="nn">..</span> <span class="kn">import</span> <span class="n">device</span> <span class="k">as</span> <span class="n">_device</span>
 <span class="kn">import</span> <span class="nn">torch._C</span>
 
 <span class="k">try</span><span class="p">:</span>
@@ -368,9 +371,20 @@
 <span class="n">_initialization_lock</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Lock</span><span class="p">()</span>
 <span class="n">_queued_calls</span> <span class="o">=</span> <span class="p">[]</span>  <span class="c1"># don&#39;t invoke these until initialization occurs</span>
 <span class="n">_is_in_bad_fork</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="p">,</span> <span class="s2">&quot;_cuda_isInBadFork&quot;</span><span class="p">,</span> <span class="k">lambda</span><span class="p">:</span> <span class="kc">False</span><span class="p">)</span>
+<span class="n">_device_t</span> <span class="o">=</span> <span class="n">Union</span><span class="p">[</span><span class="n">_device</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span>
 
+<span class="c1"># Define dummy _CudaDeviceProperties type if PyTorch was compiled without CUDA</span>
+<span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="p">,</span> <span class="s1">&#39;_CudaDeviceProperties&#39;</span><span class="p">):</span>
+    <span class="n">_CudaDeviceProperties</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">_CudaDeviceProperties</span>
+<span class="k">else</span><span class="p">:</span>
+    <span class="n">_CudaDeviceProperties</span> <span class="o">=</span> <span class="n">_dummy_type</span><span class="p">(</span><span class="s1">&#39;_CudaDeviceProperties&#39;</span><span class="p">)</span>
 
-<div class="viewcode-block" id="is_available"><a class="viewcode-back" href="../../cuda.html#torch.cuda.is_available">[docs]</a><span class="k">def</span> <span class="nf">is_available</span><span class="p">():</span>
+<span class="c1"># Global variables dynamically populated by native code</span>
+<span class="n">has_magma</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+<span class="n">has_half</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+<span class="n">default_generators</span><span class="p">:</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">Generator</span><span class="p">]</span> <span class="o">=</span> <span class="p">()</span>
+
+<div class="viewcode-block" id="is_available"><a class="viewcode-back" href="../../cuda.html#torch.cuda.is_available">[docs]</a><span class="k">def</span> <span class="nf">is_available</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
     <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Returns a bool indicating if CUDA is currently available.&quot;&quot;&quot;</span>
     <span class="k">if</span> <span class="p">(</span><span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="p">,</span> <span class="s1">&#39;_cuda_isDriverSufficient&#39;</span><span class="p">)</span> <span class="ow">or</span>
             <span class="ow">not</span> <span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">_cuda_isDriverSufficient</span><span class="p">()):</span>
@@ -515,17 +529,16 @@
 
 
 <span class="k">class</span> <span class="nc">cudaStatus</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
-    <span class="n">SUCCESS</span> <span class="o">=</span> <span class="mi">0</span>
-    <span class="n">ERROR_NOT_READY</span> <span class="o">=</span> <span class="mi">34</span>
-
+    <span class="n">SUCCESS</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">ERROR_NOT_READY</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">34</span>
 
 <span class="k">class</span> <span class="nc">CudaError</span><span class="p">(</span><span class="ne">RuntimeError</span><span class="p">):</span>
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">code</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">code</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">msg</span> <span class="o">=</span> <span class="n">_cudart</span><span class="o">.</span><span class="n">cudaGetErrorString</span><span class="p">(</span><span class="n">code</span><span class="p">)</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s1">&#39;utf-8&#39;</span><span class="p">)</span>
         <span class="nb">super</span><span class="p">(</span><span class="n">CudaError</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="s1">&#39;</span><span class="si">{0}</span><span class="s1"> (</span><span class="si">{1}</span><span class="s1">)&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">msg</span><span class="p">,</span> <span class="n">code</span><span class="p">))</span>
 
 
-<span class="k">def</span> <span class="nf">check_error</span><span class="p">(</span><span class="n">res</span><span class="p">):</span>
+<span class="k">def</span> <span class="nf">check_error</span><span class="p">(</span><span class="n">res</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
     <span class="k">if</span> <span class="n">res</span> <span class="o">!=</span> <span class="n">_cudart</span><span class="o">.</span><span class="n">cudaError</span><span class="o">.</span><span class="n">success</span><span class="p">:</span>
         <span class="k">raise</span> <span class="n">CudaError</span><span class="p">(</span><span class="n">res</span><span class="p">)</span>
 
@@ -571,7 +584,7 @@
         <span class="nb">super</span><span class="p">(</span><span class="n">device_of</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">idx</span><span class="p">)</span></div>
 
 
-<div class="viewcode-block" id="set_device"><a class="viewcode-back" href="../../cuda.html#torch.cuda.set_device">[docs]</a><span class="k">def</span> <span class="nf">set_device</span><span class="p">(</span><span class="n">device</span><span class="p">):</span>
+<div class="viewcode-block" id="set_device"><a class="viewcode-back" href="../../cuda.html#torch.cuda.set_device">[docs]</a><span class="k">def</span> <span class="nf">set_device</span><span class="p">(</span><span class="n">device</span><span class="p">:</span> <span class="n">_device_t</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
     <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Sets the current device.</span>
 
 <span class="sd">    Usage of this function is discouraged in favor of :any:`device`. In most</span>
@@ -586,7 +599,7 @@
         <span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">_cuda_setDevice</span><span class="p">(</span><span class="n">device</span><span class="p">)</span></div>
 
 
-<div class="viewcode-block" id="get_device_name"><a class="viewcode-back" href="../../cuda.html#torch.cuda.get_device_name">[docs]</a><span class="k">def</span> <span class="nf">get_device_name</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<div class="viewcode-block" id="get_device_name"><a class="viewcode-back" href="../../cuda.html#torch.cuda.get_device_name">[docs]</a><span class="k">def</span> <span class="nf">get_device_name</span><span class="p">(</span><span class="n">device</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">_device_t</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
     <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Gets the name of a device.</span>
 
 <span class="sd">    Arguments:</span>
@@ -598,7 +611,7 @@
     <span class="k">return</span> <span class="n">get_device_properties</span><span class="p">(</span><span class="n">device</span><span class="p">)</span><span class="o">.</span><span class="n">name</span></div>
 
 
-<div class="viewcode-block" id="get_device_capability"><a class="viewcode-back" href="../../cuda.html#torch.cuda.get_device_capability">[docs]</a><span class="k">def</span> <span class="nf">get_device_capability</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<div class="viewcode-block" id="get_device_capability"><a class="viewcode-back" href="../../cuda.html#torch.cuda.get_device_capability">[docs]</a><span class="k">def</span> <span class="nf">get_device_capability</span><span class="p">(</span><span class="n">device</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">_device_t</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]:</span>
     <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Gets the cuda capability of a device.</span>
 
 <span class="sd">    Arguments:</span>
@@ -615,8 +628,8 @@
     <span class="k">return</span> <span class="n">prop</span><span class="o">.</span><span class="n">major</span><span class="p">,</span> <span class="n">prop</span><span class="o">.</span><span class="n">minor</span></div>
 
 
-<span class="k">def</span> <span class="nf">get_device_properties</span><span class="p">(</span><span class="n">device</span><span class="p">):</span>
-    <span class="n">_lazy_init</span><span class="p">()</span>  <span class="c1"># will define _get_device_properties and _CudaDeviceProperties</span>
+<span class="k">def</span> <span class="nf">get_device_properties</span><span class="p">(</span><span class="n">device</span><span class="p">:</span> <span class="n">_device_t</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">_CudaDeviceProperties</span><span class="p">:</span>
+    <span class="n">_lazy_init</span><span class="p">()</span>  <span class="c1"># will define _get_device_properties</span>
     <span class="n">device</span> <span class="o">=</span> <span class="n">_get_device_index</span><span class="p">(</span><span class="n">device</span><span class="p">,</span> <span class="n">optional</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">device</span> <span class="o">&lt;</span> <span class="mi">0</span> <span class="ow">or</span> <span class="n">device</span> <span class="o">&gt;=</span> <span class="n">device_count</span><span class="p">():</span>
         <span class="k">raise</span> <span class="ne">AssertionError</span><span class="p">(</span><span class="s2">&quot;Invalid device id&quot;</span><span class="p">)</span>
@@ -658,7 +671,7 @@
         <span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">_cuda_setStream</span><span class="p">(</span><span class="n">src_prev_stream</span><span class="o">.</span><span class="n">_cdata</span><span class="p">)</span></div>
 
 
-<div class="viewcode-block" id="device_count"><a class="viewcode-back" href="../../cuda.html#torch.cuda.device_count">[docs]</a><span class="k">def</span> <span class="nf">device_count</span><span class="p">():</span>
+<div class="viewcode-block" id="device_count"><a class="viewcode-back" href="../../cuda.html#torch.cuda.device_count">[docs]</a><span class="k">def</span> <span class="nf">device_count</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
     <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Returns the number of GPUs available.&quot;&quot;&quot;</span>
     <span class="k">if</span> <span class="n">is_available</span><span class="p">():</span>
         <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">_cuda_getDeviceCount</span><span class="p">()</span>
@@ -666,13 +679,13 @@
         <span class="k">return</span> <span class="mi">0</span></div>
 
 
-<div class="viewcode-block" id="current_device"><a class="viewcode-back" href="../../cuda.html#torch.cuda.current_device">[docs]</a><span class="k">def</span> <span class="nf">current_device</span><span class="p">():</span>
+<div class="viewcode-block" id="current_device"><a class="viewcode-back" href="../../cuda.html#torch.cuda.current_device">[docs]</a><span class="k">def</span> <span class="nf">current_device</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
     <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Returns the index of a currently selected device.&quot;&quot;&quot;</span>
     <span class="n">_lazy_init</span><span class="p">()</span>
     <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">_cuda_getDevice</span><span class="p">()</span></div>
 
 
-<div class="viewcode-block" id="synchronize"><a class="viewcode-back" href="../../cuda.html#torch.cuda.synchronize">[docs]</a><span class="k">def</span> <span class="nf">synchronize</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<div class="viewcode-block" id="synchronize"><a class="viewcode-back" href="../../cuda.html#torch.cuda.synchronize">[docs]</a><span class="k">def</span> <span class="nf">synchronize</span><span class="p">(</span><span class="n">device</span><span class="p">:</span> <span class="n">_device_t</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
     <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Waits for all kernels in all streams on a CUDA device to complete.</span>
 
 <span class="sd">    Arguments:</span>
@@ -698,7 +711,7 @@
     <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">_cuda_ipc_collect</span><span class="p">()</span></div>
 
 
-<div class="viewcode-block" id="current_stream"><a class="viewcode-back" href="../../cuda.html#torch.cuda.current_stream">[docs]</a><span class="k">def</span> <span class="nf">current_stream</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<div class="viewcode-block" id="current_stream"><a class="viewcode-back" href="../../cuda.html#torch.cuda.current_stream">[docs]</a><span class="k">def</span> <span class="nf">current_stream</span><span class="p">(</span><span class="n">device</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">_device_t</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Stream</span><span class="p">:</span>
     <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Returns the currently selected :class:`Stream` for a given device.</span>
 
 <span class="sd">    Arguments:</span>
@@ -708,11 +721,11 @@
 <span class="sd">            (default).</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">_lazy_init</span><span class="p">()</span>
-    <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">Stream</span><span class="p">(</span><span class="n">_cdata</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">_cuda_getCurrentStream</span><span class="p">(</span>
+    <span class="k">return</span> <span class="n">Stream</span><span class="p">(</span><span class="n">_cdata</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">_cuda_getCurrentStream</span><span class="p">(</span>
         <span class="n">_get_device_index</span><span class="p">(</span><span class="n">device</span><span class="p">,</span> <span class="n">optional</span><span class="o">=</span><span class="kc">True</span><span class="p">)))</span></div>
 
 
-<div class="viewcode-block" id="default_stream"><a class="viewcode-back" href="../../cuda.html#torch.cuda.default_stream">[docs]</a><span class="k">def</span> <span class="nf">default_stream</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<div class="viewcode-block" id="default_stream"><a class="viewcode-back" href="../../cuda.html#torch.cuda.default_stream">[docs]</a><span class="k">def</span> <span class="nf">default_stream</span><span class="p">(</span><span class="n">device</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">_device_t</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Stream</span><span class="p">:</span>
     <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Returns the default :class:`Stream` for a given device.</span>
 
 <span class="sd">    Arguments:</span>
@@ -722,7 +735,7 @@
 <span class="sd">            (default).</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">_lazy_init</span><span class="p">()</span>
-    <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">Stream</span><span class="p">(</span><span class="n">_cdata</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">_cuda_getDefaultStream</span><span class="p">(</span>
+    <span class="k">return</span> <span class="n">Stream</span><span class="p">(</span><span class="n">_cdata</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">_cuda_getDefaultStream</span><span class="p">(</span>
         <span class="n">_get_device_index</span><span class="p">(</span><span class="n">device</span><span class="p">,</span> <span class="n">optional</span><span class="o">=</span><span class="kc">True</span><span class="p">)))</span></div>
 
 
@@ -840,7 +853,6 @@
 <span class="kn">from</span> <span class="nn">.</span> <span class="kn">import</span> <span class="n">sparse</span>
 <span class="kn">from</span> <span class="nn">.</span> <span class="kn">import</span> <span class="n">profiler</span>
 <span class="kn">from</span> <span class="nn">.</span> <span class="kn">import</span> <span class="n">nvtx</span>
-<span class="kn">from</span> <span class="nn">.streams</span> <span class="kn">import</span> <span class="n">Stream</span><span class="p">,</span> <span class="n">Event</span>
 <span class="kn">from</span> <span class="nn">.</span> <span class="kn">import</span> <span class="n">amp</span>
 </pre></div>
 
