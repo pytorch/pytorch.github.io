@@ -10,14 +10,14 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>torch.cuda.amp.autocast_mode &mdash; PyTorch master documentation</title>
+  <title>torch.distributed.rpc.backend_registry &mdash; PyTorch master documentation</title>
   
 
   
   
   
   
-    <link rel="canonical" href="https://pytorch.org/docs/stable/_modules/torch/cuda/amp/autocast_mode.html"/>
+    <link rel="canonical" href="https://pytorch.org/docs/stable/_modules/torch/distributed/rpc/backend_registry.html"/>
   
 
   
@@ -182,7 +182,7 @@
 
           
 <div>
-  <a style="color:#F05732" href="https://pytorch.org/docs/stable/_modules/torch/cuda/amp/autocast_mode.html">
+  <a style="color:#F05732" href="https://pytorch.org/docs/stable/_modules/torch/distributed/rpc/backend_registry.html">
     You are viewing unstable developer preview docs.
     Click here to view docs for latest stable release.
   </a>
@@ -309,9 +309,11 @@
         
           <li><a href="../../../torch.html">torch</a> &gt;</li>
         
-          <li><a href="../../cuda.html">torch.cuda</a> &gt;</li>
+          <li><a href="../../distributed.html">torch.distributed</a> &gt;</li>
         
-      <li>torch.cuda.amp.autocast_mode</li>
+          <li><a href="../rpc.html">torch.distributed.rpc</a> &gt;</li>
+        
+      <li>torch.distributed.rpc.backend_registry</li>
     
     
       <li class="pytorch-breadcrumbs-aside">
@@ -339,224 +341,213 @@
             <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
              <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
               
-  <h1>Source code for torch.cuda.amp.autocast_mode</h1><div class="highlight"><pre>
-<span></span><span class="kn">import</span> <span class="nn">torch</span>
-<span class="kn">import</span> <span class="nn">functools</span>
-<span class="kn">import</span> <span class="nn">warnings</span>
-<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
-<span class="kn">from</span> <span class="nn">torch._six</span> <span class="kn">import</span> <span class="n">container_abcs</span><span class="p">,</span> <span class="n">string_classes</span>
+  <h1>Source code for torch.distributed.rpc.backend_registry</h1><div class="highlight"><pre>
+<span></span><span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">absolute_import</span><span class="p">,</span> <span class="n">division</span><span class="p">,</span> <span class="n">print_function</span><span class="p">,</span> <span class="n">unicode_literals</span>
+
+<span class="kn">import</span> <span class="nn">collections</span>
+<span class="kn">from</span> <span class="nn">datetime</span> <span class="kn">import</span> <span class="n">timedelta</span>
+<span class="kn">import</span> <span class="nn">enum</span>
+
+<span class="kn">import</span> <span class="nn">torch.distributed</span> <span class="k">as</span> <span class="nn">dist</span>
+
+<span class="kn">from</span> <span class="nn">.</span> <span class="kn">import</span> <span class="n">constants</span> <span class="k">as</span> <span class="n">rpc_constants</span>
 
 
-<div class="viewcode-block" id="autocast"><a class="viewcode-back" href="../../../../amp.html#torch.cuda.amp.autocast">[docs]</a><span class="k">class</span> <span class="nc">autocast</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
-    <span class="sa">r</span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Instances of :class:`autocast` serve as context managers or decorators that</span>
-<span class="sd">    allow regions of your script to run in mixed precision.</span>
+<span class="n">BackendValue</span> <span class="o">=</span> <span class="n">collections</span><span class="o">.</span><span class="n">namedtuple</span><span class="p">(</span>
+    <span class="s2">&quot;BackendValue&quot;</span><span class="p">,</span> <span class="p">[</span><span class="s2">&quot;construct_rpc_backend_options_handler&quot;</span><span class="p">,</span> <span class="s2">&quot;init_backend_handler&quot;</span><span class="p">]</span>
+<span class="p">)</span>
 
-<span class="sd">    In these regions, CUDA ops run in an op-specific dtype chosen by autocast</span>
-<span class="sd">    to improve performance while maintaining accuracy.</span>
-<span class="sd">    See the :ref:`Autocast Op Reference&lt;autocast-op-reference&gt;` for details.</span>
 
-<span class="sd">    When entering an autocast-enabled region, Tensors may be any type.</span>
-<span class="sd">    You should not call ``.half()`` on your model(s) or inputs when using autocasting.</span>
+<span class="k">def</span> <span class="nf">_backend_type_repr</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">return</span> <span class="s2">&quot;BackendType.&quot;</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">name</span>
 
-<span class="sd">    :class:`autocast` should wrap only the forward pass(es) of your network, including the loss</span>
-<span class="sd">    computation(s).  Backward passes under autocast are not recommended.</span>
-<span class="sd">    Backward ops run in the same type that autocast used for corresponding forward ops.</span>
 
-<span class="sd">    Example::</span>
+<span class="n">_backend_type_doc</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;</span>
+<span class="s2">    An enum class of available backends.</span>
 
-<span class="sd">        # Creates model and optimizer in default precision</span>
-<span class="sd">        model = Net().cuda()</span>
-<span class="sd">        optimizer = optim.SGD(model.parameters(), ...)</span>
+<span class="s2">    PyTorch ships with two builtin backends: ``BackendType.PROCESS_GROUP`` and</span>
+<span class="s2">    ``BackendType.TENSORPIPE``. Additional ones can be registered using the</span>
+<span class="s2">    :func:`~torch.distributed.rpc.backend_registry.register_backend` function.</span>
+<span class="s2">&quot;&quot;&quot;</span>
 
-<span class="sd">        for input, target in data:</span>
-<span class="sd">            optimizer.zero_grad()</span>
+<span class="c1"># Create an enum type, `BackendType`, with empty members.</span>
+<span class="n">BackendType</span> <span class="o">=</span> <span class="n">enum</span><span class="o">.</span><span class="n">Enum</span><span class="p">(</span><span class="n">value</span><span class="o">=</span><span class="s2">&quot;BackendType&quot;</span><span class="p">,</span> <span class="n">names</span><span class="o">=</span><span class="p">{})</span>
+<span class="n">BackendType</span><span class="o">.</span><span class="fm">__repr__</span> <span class="o">=</span> <span class="n">_backend_type_repr</span>
+<span class="n">BackendType</span><span class="o">.</span><span class="vm">__doc__</span> <span class="o">=</span> <span class="n">_backend_type_doc</span>
 
-<span class="sd">            # Enables autocasting for the forward pass (model + loss)</span>
-<span class="sd">            with autocast():</span>
-<span class="sd">                output = model(input)</span>
-<span class="sd">                loss = loss_fn(output, target)</span>
-
-<span class="sd">            # Exits the context manager before backward()</span>
-<span class="sd">            loss.backward()</span>
-<span class="sd">            optimizer.step()</span>
-
-<span class="sd">    See the :ref:`Automatic Mixed Precision examples&lt;amp-examples&gt;` for usage (along with gradient scaling)</span>
-<span class="sd">    in more complex scenarios (e.g., gradient penalty, multiple models/losses, custom autograd functions).</span>
-
-<span class="sd">    :class:`autocast` can also be used as a decorator, e.g., on the ``forward`` method of your model::</span>
-
-<span class="sd">        class AutocastModel(nn.Module):</span>
-<span class="sd">            ...</span>
-<span class="sd">            @autocast()</span>
-<span class="sd">            def forward(self, input):</span>
-<span class="sd">                ...</span>
-
-<span class="sd">    Floating-point Tensors produced in an autocast-enabled region may be ``float16``.</span>
-<span class="sd">    After returning to an autocast-disabled region, using them with floating-point</span>
-<span class="sd">    Tensors of different dtypes may cause type mismatch errors.  If so, cast the Tensor(s)</span>
-<span class="sd">    produced in the autocast region back to ``float32`` (or other dtype if desired).</span>
-<span class="sd">    If a Tensor from the autocast region is already ``float32``, the cast is a no-op,</span>
-<span class="sd">    and incurs no additional overhead.  Example::</span>
-
-<span class="sd">        # Creates some tensors in default dtype (here assumed to be float32)</span>
-<span class="sd">        a_float32 = torch.rand((8, 8), device=&quot;cuda&quot;)</span>
-<span class="sd">        b_float32 = torch.rand((8, 8), device=&quot;cuda&quot;)</span>
-<span class="sd">        c_float32 = torch.rand((8, 8), device=&quot;cuda&quot;)</span>
-<span class="sd">        d_float32 = torch.rand((8, 8), device=&quot;cuda&quot;)</span>
-
-<span class="sd">        with autocast():</span>
-<span class="sd">            # torch.mm is on autocast&#39;s list of ops that should run in float16.</span>
-<span class="sd">            # Inputs are float32, but the op runs in float16 and produces float16 output.</span>
-<span class="sd">            # No manual casts are required.</span>
-<span class="sd">            e_float16 = torch.mm(a_float32, b_float32)</span>
-<span class="sd">            # Also handles mixed input types</span>
-<span class="sd">            f_float16 = torch.mm(d_float32, e_float16)</span>
-
-<span class="sd">        # After exiting autocast, calls f_float16.float() to use with d_float32</span>
-<span class="sd">        g_float32 = torch.mm(d_float32, f_float16.float())</span>
-
-<span class="sd">    Type mismatch errors *in* an autocast-enabled region are a bug; if this is what you observe,</span>
-<span class="sd">    please file an issue.</span>
-
-<span class="sd">    ``autocast(enabled=False)`` subregions can be nested in autocast-enabled regions.</span>
-<span class="sd">    Locally disabling autocast can be useful, for example, if you want to force a subregion</span>
-<span class="sd">    to run in a particular ``dtype``.  Disabling autocast gives you explicit control over</span>
-<span class="sd">    the execution type.  In the subregion, inputs from the surrounding region</span>
-<span class="sd">    should be cast to ``dtype`` before use::</span>
-
-<span class="sd">        # Creates some tensors in default dtype (here assumed to be float32)</span>
-<span class="sd">        a_float32 = torch.rand((8, 8), device=&quot;cuda&quot;)</span>
-<span class="sd">        b_float32 = torch.rand((8, 8), device=&quot;cuda&quot;)</span>
-<span class="sd">        c_float32 = torch.rand((8, 8), device=&quot;cuda&quot;)</span>
-<span class="sd">        d_float32 = torch.rand((8, 8), device=&quot;cuda&quot;)</span>
-
-<span class="sd">        with autocast():</span>
-<span class="sd">            e_float16 = torch.mm(a_float32, b_float32)</span>
-
-<span class="sd">            with autocast(enabled=False):</span>
-<span class="sd">                # Calls e_float16.float() to ensure float32 execution</span>
-<span class="sd">                # (necessary because e_float16 was created in an autocasted region)</span>
-<span class="sd">                f_float32 = torch.mm(c_float32, e_float16.float())</span>
-
-<span class="sd">            # No manual casts are required when re-entering the autocast-enabled region.</span>
-<span class="sd">            # torch.mm again runs in float16 and produces float16 output, regardless of input types.</span>
-<span class="sd">            g_float16 = torch.mm(d_float32, f_float32)</span>
-
-<span class="sd">    The autocast state is thread-local.  If you want it enabled in a new thread, the context manager or decorator</span>
-<span class="sd">    must be invoked in that thread.  This affects :class:`torch.nn.DataParallel` and</span>
-<span class="sd">    :class:`torch.nn.parallel.DistributedDataParallel` when used with more than one GPU per process</span>
-<span class="sd">    (see :ref:`Working with Multiple GPUs&lt;amp-multigpu&gt;`).</span>
+<span class="k">def</span> <span class="nf">backend_registered</span><span class="p">(</span><span class="n">backend_name</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Checks if backend_name is registered as an RPC backend.</span>
 
 <span class="sd">    Arguments:</span>
-<span class="sd">        enabled(bool, optional, default=True):  Whether autocasting should be enabled in the region.</span>
+<span class="sd">        backend_name (str): string to identify the RPC backend.</span>
+<span class="sd">    Returns:</span>
+<span class="sd">        True if the backend has been registered with ``register_backend``, else</span>
+<span class="sd">        False.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">enabled</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
-        <span class="k">if</span> <span class="n">enabled</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span><span class="p">():</span>
-            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="s2">&quot;torch.cuda.amp.autocast only affects CUDA ops, but CUDA is not available.  Disabling.&quot;</span><span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_enabled</span> <span class="o">=</span> <span class="kc">False</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_enabled</span> <span class="o">=</span> <span class="n">enabled</span>
-
-    <span class="k">def</span> <span class="fm">__enter__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">prev</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">is_autocast_enabled</span><span class="p">()</span>
-        <span class="n">torch</span><span class="o">.</span><span class="n">set_autocast_enabled</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_enabled</span><span class="p">)</span>
-        <span class="n">torch</span><span class="o">.</span><span class="n">autocast_increment_nesting</span><span class="p">()</span>
-
-    <span class="k">def</span> <span class="fm">__exit__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">):</span>
-        <span class="c1"># Drop the cache when we exit to a nesting level that&#39;s outside any instance of autocast.</span>
-        <span class="k">if</span> <span class="n">torch</span><span class="o">.</span><span class="n">autocast_decrement_nesting</span><span class="p">()</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
-            <span class="n">torch</span><span class="o">.</span><span class="n">clear_autocast_cache</span><span class="p">()</span>
-        <span class="n">torch</span><span class="o">.</span><span class="n">set_autocast_enabled</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">prev</span><span class="p">)</span>
-        <span class="k">return</span> <span class="kc">False</span>
-
-    <span class="k">def</span> <span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">func</span><span class="p">):</span>
-        <span class="nd">@functools</span><span class="o">.</span><span class="n">wraps</span><span class="p">(</span><span class="n">func</span><span class="p">)</span>
-        <span class="k">def</span> <span class="nf">decorate_autocast</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
-            <span class="k">with</span> <span class="bp">self</span><span class="p">:</span>
-                <span class="k">return</span> <span class="n">func</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">decorate_autocast</span></div>
+    <span class="k">return</span> <span class="n">backend_name</span> <span class="ow">in</span> <span class="n">BackendType</span><span class="o">.</span><span class="n">__members__</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span>
 
 
-<span class="c1"># Casts Tensors and containers of Tensors.  Special-cases passthroughs for strings and np.ndarrays, which</span>
-<span class="c1"># may be falsely detected as &quot;Iterables.&quot;</span>
-<span class="k">def</span> <span class="nf">_cast</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">dtype</span><span class="p">):</span>
-    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
-        <span class="k">return</span> <span class="n">value</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">dtype</span><span class="p">)</span> <span class="k">if</span> <span class="p">(</span><span class="n">value</span><span class="o">.</span><span class="n">is_floating_point</span><span class="p">()</span> <span class="ow">and</span> <span class="n">value</span><span class="o">.</span><span class="n">is_cuda</span><span class="p">)</span> <span class="k">else</span> <span class="n">value</span>
-    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">string_classes</span><span class="p">):</span>
-        <span class="k">return</span> <span class="n">value</span>
-    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
-        <span class="k">return</span> <span class="n">value</span>
-    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">container_abcs</span><span class="o">.</span><span class="n">Mapping</span><span class="p">):</span>
-        <span class="k">return</span> <span class="p">{</span><span class="n">_cast</span><span class="p">(</span><span class="n">k</span><span class="p">,</span> <span class="n">dtype</span><span class="p">):</span> <span class="n">_cast</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="n">dtype</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">value</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
-    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">container_abcs</span><span class="o">.</span><span class="n">Iterable</span><span class="p">):</span>
-        <span class="k">return</span> <span class="nb">type</span><span class="p">(</span><span class="n">value</span><span class="p">)(</span><span class="n">_cast</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="n">dtype</span><span class="p">)</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">value</span><span class="p">)</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">value</span>
-
-
-<span class="c1"># custom_fwd is a decorator that may or may not be used with arguments, following</span>
-<span class="c1"># https://github.com/dabeaz/python-cookbook/tree/master/src/9/defining_a_decorator_that_takes_an_optional_argument.</span>
-<span class="c1"># this works:</span>
-<span class="c1">#     @custom_fwd</span>
-<span class="c1">#     def forward(...):</span>
-<span class="c1"># this also works:</span>
-<span class="c1">#     @custom_fwd(cast_inputs=torch.float)</span>
-<span class="c1">#     def forward(...):</span>
-<span class="c1"># TODO:  when python 2 support is dropped, change the signature to</span>
-<span class="c1"># def custom_fwd(fwd=None, *, cast_inputs=None) with internal changes following the link above.</span>
-<div class="viewcode-block" id="custom_fwd"><a class="viewcode-back" href="../../../../amp.html#torch.cuda.amp.custom_fwd">[docs]</a><span class="k">def</span> <span class="nf">custom_fwd</span><span class="p">(</span><span class="n">fwd</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Helper decorator for ``forward`` methods of custom autograd functions (subclasses of</span>
-<span class="sd">    :class:`torch.autograd.Function`).  See the :ref:`example page&lt;amp-custom-examples&gt;` for more detail.</span>
+<span class="k">def</span> <span class="nf">register_backend</span><span class="p">(</span>
+    <span class="n">backend_name</span><span class="p">,</span> <span class="n">construct_rpc_backend_options_handler</span><span class="p">,</span> <span class="n">init_backend_handler</span>
+<span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Registers a new RPC backend.</span>
 
 <span class="sd">    Arguments:</span>
-<span class="sd">        cast_inputs (:class:`torch.dtype` or None, optional, default=None):  If not ``None``, casts incoming</span>
-<span class="sd">            floating-point Tensors to the target dtype (non-floating-point Tensors are not affected),</span>
-<span class="sd">            and causes ``forward`` to execute with autocast disabled.</span>
-<span class="sd">            If ``None``, ``forward``&#39;s internal ops execute with the current autocast state.</span>
+<span class="sd">        backend_name (str): backend string to identify the handler.</span>
+<span class="sd">        construct_rpc_backend_options_handler (function):</span>
+<span class="sd">            Handler that is invoked when</span>
+<span class="sd">            rpc_backend.construct_rpc_backend_options(**dict) is called.</span>
+<span class="sd">        init_backend_handler (function): Handler that is invoked when the</span>
+<span class="sd">            `_init_rpc_backend()` function is called with a backend.</span>
+<span class="sd">             This returns the agent.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">if</span> <span class="n">fwd</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
-            <span class="n">cast_inputs</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span>
-            <span class="n">cast_inputs</span> <span class="o">=</span> <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;cast_inputs&quot;</span><span class="p">]</span>
-        <span class="k">return</span> <span class="n">functools</span><span class="o">.</span><span class="n">partial</span><span class="p">(</span><span class="n">custom_fwd</span><span class="p">,</span> <span class="n">cast_inputs</span><span class="o">=</span><span class="n">cast_inputs</span><span class="p">)</span>
-
-    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
-        <span class="n">cast_inputs</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span>
-        <span class="n">cast_inputs</span> <span class="o">=</span> <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;cast_inputs&quot;</span><span class="p">]</span>
-
-    <span class="nd">@functools</span><span class="o">.</span><span class="n">wraps</span><span class="p">(</span><span class="n">fwd</span><span class="p">)</span>
-    <span class="k">def</span> <span class="nf">decorate_fwd</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
-        <span class="k">if</span> <span class="n">cast_inputs</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">args</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">_fwd_used_autocast</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">is_autocast_enabled</span><span class="p">()</span>
-            <span class="k">return</span> <span class="n">fwd</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">args</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">_fwd_used_autocast</span> <span class="o">=</span> <span class="kc">False</span>
-            <span class="k">with</span> <span class="n">autocast</span><span class="p">(</span><span class="n">enabled</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
-                <span class="k">return</span> <span class="n">fwd</span><span class="p">(</span><span class="o">*</span><span class="n">_cast</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="n">cast_inputs</span><span class="p">),</span> <span class="o">**</span><span class="n">_cast</span><span class="p">(</span><span class="n">kwargs</span><span class="p">,</span> <span class="n">cast_inputs</span><span class="p">))</span>
-    <span class="k">return</span> <span class="n">decorate_fwd</span></div>
+    <span class="k">global</span> <span class="n">BackendType</span>
+    <span class="k">if</span> <span class="n">backend_registered</span><span class="p">(</span><span class="n">backend_name</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;RPC backend </span><span class="si">{}</span><span class="s2">: already registered&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">backend_name</span><span class="p">))</span>
+    <span class="c1"># Create a new enum type, `BackendType`, with extended members.</span>
+    <span class="n">existing_enum_dict</span> <span class="o">=</span> <span class="p">{</span><span class="n">member</span><span class="o">.</span><span class="n">name</span><span class="p">:</span> <span class="n">member</span><span class="o">.</span><span class="n">value</span> <span class="k">for</span> <span class="n">member</span> <span class="ow">in</span> <span class="n">BackendType</span><span class="p">}</span>
+    <span class="n">extended_enum_dict</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span>
+        <span class="p">{</span>
+            <span class="n">backend_name</span><span class="p">:</span> <span class="n">BackendValue</span><span class="p">(</span>
+                <span class="n">construct_rpc_backend_options_handler</span><span class="o">=</span><span class="n">construct_rpc_backend_options_handler</span><span class="p">,</span>
+                <span class="n">init_backend_handler</span><span class="o">=</span><span class="n">init_backend_handler</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="p">},</span>
+        <span class="o">**</span><span class="n">existing_enum_dict</span>
+    <span class="p">)</span>
+    <span class="n">BackendType</span> <span class="o">=</span> <span class="n">enum</span><span class="o">.</span><span class="n">Enum</span><span class="p">(</span><span class="n">value</span><span class="o">=</span><span class="s2">&quot;BackendType&quot;</span><span class="p">,</span> <span class="n">names</span><span class="o">=</span><span class="n">extended_enum_dict</span><span class="p">)</span>
+    <span class="n">BackendType</span><span class="o">.</span><span class="fm">__repr__</span> <span class="o">=</span> <span class="n">_backend_type_repr</span>
+    <span class="n">BackendType</span><span class="o">.</span><span class="vm">__doc__</span> <span class="o">=</span> <span class="n">_backend_type_doc</span>
+    <span class="k">return</span> <span class="n">BackendType</span><span class="p">[</span><span class="n">backend_name</span><span class="p">]</span>
 
 
-<span class="c1"># Autograd ensures incoming gradients are the same type as forward outputs.  Allowing a separate</span>
-<span class="c1"># cast_inputs argument on custom_bwd is unnecessary and could cause errors if it doesn&#39;t match</span>
-<span class="c1"># cast_inputs supplied to custom_fwd.</span>
-<div class="viewcode-block" id="custom_bwd"><a class="viewcode-back" href="../../../../amp.html#torch.cuda.amp.custom_bwd">[docs]</a><span class="k">def</span> <span class="nf">custom_bwd</span><span class="p">(</span><span class="n">bwd</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Helper decorator for backward methods of custom autograd functions (subclasses of</span>
-<span class="sd">    :class:`torch.autograd.Function`).</span>
-<span class="sd">    Ensures that ``backward`` executes with the same autocast state as ``forward``.</span>
-<span class="sd">    See the :ref:`example page&lt;amp-custom-examples&gt;` for more detail.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="nd">@functools</span><span class="o">.</span><span class="n">wraps</span><span class="p">(</span><span class="n">bwd</span><span class="p">)</span>
-    <span class="k">def</span> <span class="nf">decorate_bwd</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
-        <span class="k">with</span> <span class="n">autocast</span><span class="p">(</span><span class="n">args</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">_fwd_used_autocast</span><span class="p">):</span>
-            <span class="k">return</span> <span class="n">bwd</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">decorate_bwd</span></div>
+<span class="k">def</span> <span class="nf">construct_rpc_backend_options</span><span class="p">(</span>
+    <span class="n">backend</span><span class="p">,</span>
+    <span class="n">rpc_timeout</span><span class="o">=</span><span class="n">rpc_constants</span><span class="o">.</span><span class="n">DEFAULT_RPC_TIMEOUT_SEC</span><span class="p">,</span>
+    <span class="n">init_method</span><span class="o">=</span><span class="n">rpc_constants</span><span class="o">.</span><span class="n">DEFAULT_INIT_METHOD</span><span class="p">,</span>
+    <span class="o">**</span><span class="n">kwargs</span>
+<span class="p">):</span>
+
+    <span class="k">return</span> <span class="n">backend</span><span class="o">.</span><span class="n">value</span><span class="o">.</span><span class="n">construct_rpc_backend_options_handler</span><span class="p">(</span>
+        <span class="n">rpc_timeout</span><span class="p">,</span> <span class="n">init_method</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">init_backend</span><span class="p">(</span><span class="n">backend</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">backend</span><span class="o">.</span><span class="n">value</span><span class="o">.</span><span class="n">init_backend_handler</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">_process_group_construct_rpc_backend_options_handler</span><span class="p">(</span>
+    <span class="n">rpc_timeout</span><span class="p">,</span>
+    <span class="n">init_method</span><span class="p">,</span>
+    <span class="n">num_send_recv_threads</span><span class="o">=</span><span class="n">rpc_constants</span><span class="o">.</span><span class="n">DEFAULT_NUM_SEND_RECV_THREADS</span><span class="p">,</span>
+    <span class="o">**</span><span class="n">kwargs</span>
+<span class="p">):</span>
+    <span class="kn">from</span> <span class="nn">.</span> <span class="kn">import</span> <span class="n">ProcessGroupRpcBackendOptions</span>
+
+    <span class="k">return</span> <span class="n">ProcessGroupRpcBackendOptions</span><span class="p">(</span>
+        <span class="n">rpc_timeout</span><span class="o">=</span><span class="n">rpc_timeout</span><span class="p">,</span>
+        <span class="n">init_method</span><span class="o">=</span><span class="n">init_method</span><span class="p">,</span>
+        <span class="n">num_send_recv_threads</span><span class="o">=</span><span class="n">num_send_recv_threads</span>
+    <span class="p">)</span>
+
+<span class="k">def</span> <span class="nf">_init_process_group</span><span class="p">(</span><span class="n">store</span><span class="p">,</span> <span class="n">rank</span><span class="p">,</span> <span class="n">world_size</span><span class="p">):</span>
+    <span class="c1"># Initialize ProcessGroup.</span>
+    <span class="n">process_group_timeout</span> <span class="o">=</span> <span class="n">rpc_constants</span><span class="o">.</span><span class="n">DEFAULT_PROCESS_GROUP_TIMEOUT</span>
+
+    <span class="c1"># We&#39;re using a bunch of private APIs here since `new_group` requires the</span>
+    <span class="c1"># default group to be initialized.</span>
+    <span class="n">group</span> <span class="o">=</span> <span class="n">dist</span><span class="o">.</span><span class="n">ProcessGroupGloo</span><span class="p">(</span><span class="n">store</span><span class="p">,</span> <span class="n">rank</span><span class="p">,</span> <span class="n">world_size</span><span class="p">,</span> <span class="n">process_group_timeout</span><span class="p">)</span>
+
+    <span class="k">assert</span> <span class="n">group</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;Failed to initialize default ProcessGroup.&quot;</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="n">rank</span> <span class="o">!=</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="ow">and</span> <span class="p">(</span><span class="n">rank</span> <span class="o">!=</span> <span class="n">group</span><span class="o">.</span><span class="n">rank</span><span class="p">()):</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+            <span class="s2">&quot;rank argument </span><span class="si">{}</span><span class="s2"> doesn&#39;t match pg rank </span><span class="si">{}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">rank</span><span class="p">,</span> <span class="n">group</span><span class="o">.</span><span class="n">rank</span><span class="p">())</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">world_size</span> <span class="o">!=</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="ow">and</span> <span class="p">(</span><span class="n">world_size</span> <span class="o">!=</span> <span class="n">group</span><span class="o">.</span><span class="n">size</span><span class="p">()):</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+            <span class="s2">&quot;world_size argument </span><span class="si">{}</span><span class="s2"> doesn&#39;t match pg size </span><span class="si">{}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                <span class="n">world_size</span><span class="p">,</span> <span class="n">group</span><span class="o">.</span><span class="n">size</span><span class="p">()</span>
+            <span class="p">)</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="n">group</span>
+
+<span class="k">def</span> <span class="nf">_process_group_init_backend_handler</span><span class="p">(</span>
+    <span class="n">store</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">rank</span><span class="p">,</span> <span class="n">world_size</span><span class="p">,</span> <span class="n">rpc_backend_options</span>
+<span class="p">):</span>
+    <span class="kn">from</span> <span class="nn">.</span> <span class="kn">import</span> <span class="n">ProcessGroupAgent</span>
+
+    <span class="n">group</span> <span class="o">=</span> <span class="n">_init_process_group</span><span class="p">(</span><span class="n">store</span><span class="p">,</span> <span class="n">rank</span><span class="p">,</span> <span class="n">world_size</span><span class="p">)</span>
+
+    <span class="c1"># TODO: add try-except and destroy _agent in all processes if any fails.</span>
+    <span class="k">return</span> <span class="n">ProcessGroupAgent</span><span class="p">(</span>
+        <span class="n">name</span><span class="p">,</span>
+        <span class="n">group</span><span class="p">,</span>
+        <span class="n">rpc_backend_options</span><span class="o">.</span><span class="n">num_send_recv_threads</span><span class="p">,</span>
+        <span class="n">timedelta</span><span class="p">(</span><span class="n">seconds</span><span class="o">=</span><span class="n">rpc_backend_options</span><span class="o">.</span><span class="n">rpc_timeout</span><span class="p">),</span>
+    <span class="p">)</span>
+
+
+<span class="n">register_backend</span><span class="p">(</span>
+    <span class="s2">&quot;PROCESS_GROUP&quot;</span><span class="p">,</span>
+    <span class="n">_process_group_construct_rpc_backend_options_handler</span><span class="p">,</span>
+    <span class="n">_process_group_init_backend_handler</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="k">def</span> <span class="nf">_tensorpipe_construct_rpc_backend_options_handler</span><span class="p">(</span>
+    <span class="n">rpc_timeout</span><span class="p">,</span>
+    <span class="n">init_method</span><span class="p">,</span>
+    <span class="n">num_worker_threads</span><span class="o">=</span><span class="n">rpc_constants</span><span class="o">.</span><span class="n">DEFAULT_NUM_WORKER_THREADS</span><span class="p">,</span>
+    <span class="n">_transports</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">_channels</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="o">**</span><span class="n">kwargs</span>
+<span class="p">):</span>
+    <span class="kn">from</span> <span class="nn">.</span> <span class="kn">import</span> <span class="n">TensorPipeRpcBackendOptions</span>
+
+    <span class="k">return</span> <span class="n">TensorPipeRpcBackendOptions</span><span class="p">(</span>
+        <span class="n">rpc_timeout</span><span class="o">=</span><span class="n">rpc_timeout</span><span class="p">,</span>
+        <span class="n">init_method</span><span class="o">=</span><span class="n">init_method</span><span class="p">,</span>
+        <span class="n">num_worker_threads</span><span class="o">=</span><span class="n">num_worker_threads</span><span class="p">,</span>
+        <span class="n">_transports</span><span class="o">=</span><span class="n">_transports</span><span class="p">,</span>
+        <span class="n">_channels</span><span class="o">=</span><span class="n">_channels</span><span class="p">,</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">_tensorpipe_init_backend_handler</span><span class="p">(</span><span class="n">store</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">rank</span><span class="p">,</span> <span class="n">world_size</span><span class="p">,</span> <span class="n">rpc_backend_options</span><span class="p">):</span>
+    <span class="kn">from</span> <span class="nn">.</span> <span class="kn">import</span> <span class="n">TensorPipeRpcBackendOptions</span>
+    <span class="kn">from</span> <span class="nn">.</span> <span class="kn">import</span> <span class="n">TensorPipeAgent</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">store</span><span class="p">,</span> <span class="n">dist</span><span class="o">.</span><span class="n">Store</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;`store` must be a c10d::Store. </span><span class="si">{}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">store</span><span class="p">))</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span>
+        <span class="n">rpc_backend_options</span><span class="p">,</span> <span class="n">TensorPipeRpcBackendOptions</span>
+    <span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+            <span class="s2">&quot;`rpc_backend_options` must be a `TensorPipeRpcBackendOptions`. </span><span class="si">{}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                <span class="n">rpc_backend_options</span>
+            <span class="p">)</span>
+        <span class="p">)</span>
+
+    <span class="c1"># The agent&#39;s join method is required to behave like a barrier and perform</span>
+    <span class="c1"># collective operations, for which it relies on a process group, instead of</span>
+    <span class="c1"># re-implementing this on top of RPCs.</span>
+
+    <span class="n">group</span> <span class="o">=</span> <span class="n">_init_process_group</span><span class="p">(</span><span class="n">store</span><span class="p">,</span> <span class="n">rank</span><span class="p">,</span> <span class="n">world_size</span><span class="p">)</span>
+
+    <span class="c1"># TODO: add try-except and destroy _agent in all processes if any fails.</span>
+    <span class="k">return</span> <span class="n">TensorPipeAgent</span><span class="p">(</span>
+        <span class="n">store</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">rank</span><span class="p">,</span> <span class="n">world_size</span><span class="p">,</span> <span class="n">group</span><span class="p">,</span> <span class="n">rpc_backend_options</span>
+    <span class="p">)</span>
+
+
+<span class="n">register_backend</span><span class="p">(</span>
+    <span class="s2">&quot;TENSORPIPE&quot;</span><span class="p">,</span>
+    <span class="n">_tensorpipe_construct_rpc_backend_options_handler</span><span class="p">,</span>
+    <span class="n">_tensorpipe_init_backend_handler</span><span class="p">,</span>
+<span class="p">)</span>
 </pre></div>
 
              </article>
