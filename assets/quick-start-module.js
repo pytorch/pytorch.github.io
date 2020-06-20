@@ -307,16 +307,16 @@ function commandMessage(key) {
       "conda install pytorch torchvision -c pytorch-nightly",
 
     "preview,conda,windows,cuda9.2,python":
-      "conda install pytorch torchvision cudatoolkit=9.2 -c pytorch-nightly -c defaults -c conda-forge -c numba/label/dev",
+      "conda install pytorch torchvision cudatoolkit=9.2 -c pytorch-nightly -c defaults -c numba/label/dev",
 
     "preview,conda,windows,cuda10.1,python":
-      "conda install pytorch torchvision cudatoolkit=10.1 -c pytorch-nightly -c defaults -c conda-forge",
+      "conda install pytorch torchvision cudatoolkit=10.1 -c pytorch-nightly",
 
     "preview,conda,windows,cuda10.2,python":
-      "conda install pytorch torchvision cudatoolkit=10.2 -c pytorch-nightly -c defaults -c conda-forge",
+      "conda install pytorch torchvision cudatoolkit=10.2 -c pytorch-nightly",
 
     "preview,conda,windows,cudanone,python":
-      "conda install pytorch torchvision cpuonly -c pytorch-nightly -c defaults -c conda-forge",
+      "conda install pytorch torchvision cpuonly -c pytorch-nightly",
 
     "preview,pip,macos,cuda9.2,python":
       "pip install numpy<br />pip install --pre torch torchvision -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html<br /># On MacOS, we provide CPU-only packages, CUDA functionality is not provided",
