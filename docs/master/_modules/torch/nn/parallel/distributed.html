@@ -158,7 +158,7 @@
               
               
                 <div class="version">
-                  <a href='http://pytorch.org/docs/versions.html'>1.6.0a0+13a8ec3 &#x25BC</a>
+                  <a href='http://pytorch.org/docs/versions.html'>1.6.0a0+6c40ec5 &#x25BC</a>
                 </div>
               
             
@@ -449,7 +449,12 @@
 <span class="sd">        same model and thus the exact same parameter registration order.</span>
 
 <span class="sd">    .. warning::</span>
-<span class="sd">        This module assumes all buffers and gradients are dense.</span>
+<span class="sd">        This module allows parameters with non-rowmajor-contiguous strides.</span>
+<span class="sd">        For example, your model may contain some parameters whose</span>
+<span class="sd">        :class:`torch.memory_format` is ``torch.contiguous_format``</span>
+<span class="sd">        and others whose format is ``torch.channels_last``.  However,</span>
+<span class="sd">        corresponding parameters in different processes must have the</span>
+<span class="sd">        same strides.</span>
 
 <span class="sd">    .. warning::</span>
 <span class="sd">        This module doesn&#39;t work with :func:`torch.autograd.grad` (i.e. it will</span>
@@ -712,6 +717,13 @@
 
             <span class="k">for</span> <span class="n">module_copy</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_module_copies</span><span class="p">[</span><span class="mi">1</span><span class="p">:]:</span>
                 <span class="k">for</span> <span class="n">param</span><span class="p">,</span> <span class="n">copy_param</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="o">.</span><span class="n">parameters</span><span class="p">(),</span> <span class="n">parameters</span><span class="p">(</span><span class="n">module_copy</span><span class="p">)):</span>
+                    <span class="c1"># Reducer requires param copies have the same strides across replicas.</span>
+                    <span class="c1"># Fixes up copy_param strides in case replicate didn&#39;t match param strides.</span>
+                    <span class="k">if</span> <span class="n">param</span><span class="o">.</span><span class="n">layout</span> <span class="ow">is</span> <span class="n">torch</span><span class="o">.</span><span class="n">strided</span> <span class="ow">and</span> <span class="n">param</span><span class="o">.</span><span class="n">stride</span><span class="p">()</span> <span class="o">!=</span> <span class="n">copy_param</span><span class="o">.</span><span class="n">stride</span><span class="p">():</span>
+                        <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>
+                            <span class="n">copy_param</span><span class="o">.</span><span class="n">set_</span><span class="p">(</span><span class="n">copy_param</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+                                                      <span class="o">.</span><span class="n">as_strided</span><span class="p">(</span><span class="n">param</span><span class="o">.</span><span class="n">size</span><span class="p">(),</span> <span class="n">param</span><span class="o">.</span><span class="n">stride</span><span class="p">())</span>
+                                                      <span class="o">.</span><span class="n">copy_</span><span class="p">(</span><span class="n">copy_param</span><span class="p">))</span>
                     <span class="n">copy_param</span><span class="o">.</span><span class="n">requires_grad</span> <span class="o">=</span> <span class="n">param</span><span class="o">.</span><span class="n">requires_grad</span>
 
         <span class="k">else</span><span class="p">:</span>
@@ -885,7 +897,13 @@
                 <span class="k">for</span> <span class="n">tensors</span><span class="p">,</span> <span class="n">module_params</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">result</span><span class="p">[</span><span class="mi">1</span><span class="p">:],</span>
                                                   <span class="bp">self</span><span class="o">.</span><span class="n">modules_params</span><span class="p">[</span><span class="mi">1</span><span class="p">:]):</span>
                     <span class="k">for</span> <span class="n">tensor</span><span class="p">,</span> <span class="n">param</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">tensors</span><span class="p">,</span> <span class="n">module_params</span><span class="p">):</span>
-                        <span class="n">param</span><span class="o">.</span><span class="n">set_</span><span class="p">(</span><span class="n">tensor</span><span class="p">)</span>
+                        <span class="c1"># Formerly, this spot used param.set_(tensor) to steal tensor&#39;s</span>
+                        <span class="c1"># data without a deep copy.  Unfortunately, that wiped out the</span>
+                        <span class="c1"># allreduce hook attached to param&#39;s AccumulateGrad function,</span>
+                        <span class="c1"># likely causing https://github.com/pytorch/pytorch/issues/37079.</span>
+                        <span class="c1"># TODO:  If set_ becomes safe to use here, use set_.</span>
+                        <span class="c1"># Otherwise, find another way to steal tensor&#39;s data.</span>
+                        <span class="n">param</span><span class="o">.</span><span class="n">copy_</span><span class="p">(</span><span class="n">tensor</span><span class="p">)</span>
                         <span class="c1"># Assume we have just run the optimizer and zeroed the</span>
                         <span class="c1"># grads of the parameters on the root model. We need</span>
                         <span class="c1"># to zero the grads on all model replicas as well.</span>
