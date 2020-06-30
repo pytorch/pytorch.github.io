@@ -36,7 +36,15 @@ function useLocalStorageStarCount() {
 
 function updateStarsOnPage(data) {
   for (var i = 0; i < data.length; i++) {
-    $("[data-id='" + data[i].id + "'] .github-stars-count").html(data[i].stars);
+    var starCount = data[i].stars;
+
+    if (starCount > 999) {
+      starCount = numeral(starCount).format("0.0a");
+    } else if (starCount > 9999) {
+      starCount = numeral(starCount).format("0.00a");
+    }
+
+    $("[data-id='" + data[i].id + "'] .github-stars-count").html(starCount);
   }
 }
 
