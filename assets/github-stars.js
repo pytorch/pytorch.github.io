@@ -19,9 +19,7 @@ if (
 
 function updateStarCount() {
   console.log("Updated star count fetched");
-  $.getJSON("https://du4l4liqvfo92.cloudfront.net/star-count", function (
-    data
-  ) {
+  $.getJSON("https://du4l4liqvfo92.cloudfront.net/star-count", function (data) {
     localStorage.setItem(starCountCallDate, Date.parse(today));
     localStorage.setItem(starCountData, JSON.stringify(data));
 
@@ -31,7 +29,7 @@ function updateStarCount() {
 }
 
 function useLocalStorageStarCount() {
-  data = JSON.parse(localStorage.getItem(starCountData));
+  var data = JSON.parse(localStorage.getItem(starCountData));
 
   updateStarsOnPage(data);
 }
