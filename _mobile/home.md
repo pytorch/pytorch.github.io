@@ -19,7 +19,7 @@ PyTorch Mobile is in beta stage right now and in wide scale production use. It w
 
 Key features of PyTorch Mobile:
 
-* Available for iOS, Android and Linux
+* Available for [iOS]({{site.baseurl}}/mobile/ios), [Android]({{site.baseurl}}/mobile/android) and Linux
 * Provides APIs that cover common preprocessing and integration tasks needed for incorporating ML in mobile applications
 * Support for tracing and scripting via TorchScript IR
 * Support for XNNPACK floating point kernel libraries for Arm CPUs
@@ -27,6 +27,7 @@ Key features of PyTorch Mobile:
 * Build level optimization and selective compilation depending on the operators needed for user applications, i.e., the final binary size of the app is determined by the actual operators the app needs
 * Support for hardware backends like GPU, DSP, NPU will be available soon
 
+A typical workflow from training to mobile deployment with the optional model optimization steps is outlined in the following figure.
 <div class="text-center">
   <img src="{{ site.baseurl }}/assets/images/pytorch-mobile.png" width="100%">
 </div>
