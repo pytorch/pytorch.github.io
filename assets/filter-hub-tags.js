@@ -78,13 +78,9 @@ $(document).on("click", ".page", function() {
 });
 
 $("#sortLowLeft").on("click", function() {
-  console.log('tets')
-  console.log(hubList.sort("github-stars-count-whole-number", { order: "asc" }))
   hubList.sort("github-stars-count-whole-number", { order: "asc" });
 });
 
 $("#sortHighLeft").on("click", function() {
-  console.log('high')
-  console.log(hubList.sort("github-stars-count-whole-number", { order: "desc" }))
   hubList.sort("github-stars-count-whole-number", { order: "desc" });
 });
