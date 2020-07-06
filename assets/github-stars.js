@@ -44,6 +44,7 @@ function updateStarsOnPage(data) {
       starCount = numeral(starCount).format("0.00a");
     }
 
+    $("[data-id='" + data[i].id + "'] .github-stars-count-whole-number").html(data[i].stars);
     $("[data-id='" + data[i].id + "'] .github-stars-count").html(starCount);
   }
 }
