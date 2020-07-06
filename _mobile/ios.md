@@ -99,7 +99,7 @@ Note that the `TorchModule` Class is an Objective-C wrapper of `torch::jit::scri
 ```cpp
 torch::jit::script::Module module = torch::jit::load(filePath.UTF8String);
 ```
-Since Swift can not talk to C++ directly, we have to either use an Objective-C class as a bridge, or create a C wrapper for the C++ library. For demo purpose, we're going to wrap everything in this Objective-C class. However, we're working on providing the Swift/Objective-C API wrappers to PyTorch. Stay tuned!
+Since Swift can not talk to C++ directly, we have to either use an Objective-C class as a bridge, or create a C wrapper for the C++ library. For demo purpose, we're going to wrap everything in this Objective-C class.
 
 #### Run Inference
 
@@ -185,14 +185,13 @@ Open your project in XCode, copy all the static libraries as well as header file
 In the build settings, search for **other linker flags**.  Add a custom linker flag below
 
 ```
--force_load $(PROJECT_DIR)/${path-to-libtorch.a}
+-all_load
 ```
  Finally, disable bitcode for your target by selecting the Build Settings, searching for **Enable Bitcode**, and set the value to **No**.
 
 ### API Docs
 
-Currently, the iOS framework uses the Pytorch C++ front-end APIs directly. The C++ document can be found [here](https://pytorch.org/cppdocs/). To learn more about it, we recommend exploring the [C++ front-end tutorials](https://pytorch.org/tutorials/advanced/cpp_frontend.html) on PyTorch webpage. In the meantime, we're working on providing the Swift/Objective-C API wrappers to PyTorch.
-
+Currently, the iOS framework uses the Pytorch C++ front-end APIs directly. The C++ document can be found [here](https://pytorch.org/cppdocs/). To learn more about it, we recommend exploring the [C++ front-end tutorials](https://pytorch.org/tutorials/advanced/cpp_frontend.html) on PyTorch webpage.
 
 ### Custom Build
 
