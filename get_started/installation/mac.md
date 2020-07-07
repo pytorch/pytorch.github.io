@@ -15,7 +15,7 @@ PyTorch is supported on macOS 10.10 (Yosemite) or above.
 ### Python
 {: #mac-python}
 
-By default, macOS is installed with Python 2.7. PyTorch can be installed with Python 2.7, but it is recommended that you use Python 3.6 or greater, which can be installed either through the Anaconda package manager (see [below](#anaconda)), [Homebrew](https://brew.sh/), or the [Python website](https://www.python.org/downloads/mac-osx/).
+It is recommended that you use Python 3.5 or greater, which can be installed either through the Anaconda package manager (see [below](#anaconda)), [Homebrew](https://brew.sh/), or the [Python website](https://www.python.org/downloads/mac-osx/).
 
 ### Package Manager
 {: #mac-package-manager}
@@ -41,14 +41,6 @@ If you installed Python via Homebrew or the Python website, `pip` was installed 
 
 > Tip: If you want to use just the command  `pip`, instead of `pip3`, you can symlink `pip` to the `pip3` binary.
 
-*Python 2*
-
-If you are using the default installed Python 2.7, you will need to install `pip` via `easy_install`
-
-```bash
-sudo easy_install pip
-```
-
 ## Installation
 {: #mac-installation}
 
@@ -69,11 +61,6 @@ To install PyTorch via pip, use one of the following two commands, depending on 
 ```bash
 # Python 3.x
 pip3 install torch torchvision
-```
-
-```bash
-# Python 2.x`
-pip install torch torchvision
 ```
 
 ## Verification

@@ -40,7 +40,7 @@ If you decide to use APT, you can run the following command to install it:
 sudo apt install python
 ```
 
-> PyTorch can be installed with Python 2.7, but it is recommended that you use Python 3.6 or greater, which can be installed via any of the mechanisms above .
+> It is recommended that you use Python 3.5, 3.6, 3.7 or 3.8, which can be installed via any of the mechanisms above .
 
 > If you use [Anaconda](#anaconda) to install PyTorch, it will install a sandboxed version of Python that will be used for running PyTorch applications.
 
@@ -73,14 +73,6 @@ sudo apt install python3-pip
 ```
 
 > Tip: If you want to use just the command  `pip`, instead of `pip3`, you can symlink `pip` to the `pip3` binary.
-
-*Python 2*
-
-If you are using Python 2.7, you will need to use this command
-
-```bash
-sudo apt install python-pip
-```
 
 ## Installation
 {: #linux-installation}
