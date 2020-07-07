@@ -7,7 +7,7 @@ author: Team PyTorch
 
 Today, we’re announcing the availability of PyTorch 1.5, along with new and updated libraries. This release includes several major new API additions and improvements. PyTorch now includes a significant update to the C++ frontend, ‘channels last’ memory format for computer vision models, and a stable release of the distributed RPC framework used for model-parallel training. The release also has new APIs for autograd for hessians and jacobians, and an API that allows the creation of Custom C++ Classes that was inspired by pybind.
 
-You can find the detailed release notes [here](https://github.com/pytorch/pytorch/releases).  
+You can find the detailed release notes [here](https://github.com/pytorch/pytorch/releases).
 
 ## C++ Frontend API (Stable)
 
@@ -52,9 +52,9 @@ static auto testStack =
         return self->stack_.size();
       });
 ```
- 
+
  Which exposes a class you can use in Python and TorchScript like so:
- 
+
 ```python
 @torch.jit.script
 def do_stacks(s : torch.classes.myclasses.MyStackClass):
@@ -75,7 +75,7 @@ The Distributed [RPC framework](https://pytorch.org/docs/stable/rpc.html) was la
 The RPC API allows users to specify functions to run and objects to be instantiated on remote nodes. These functions are transparently recorded so that gradients can backpropagate through remote nodes using Distributed Autograd.
 
 ### Distributed Autograd
-Distributed Autograd connects the autograd graph across several nodes and allows gradients to flow through during the backwards pass. Gradients are accumulated into a context (as opposed to the .grad field as with Autograd) and users must specify their model’s forward pass under a with `dist_autograd.context()` manager in order to ensure that all RPC communication is recorded properly. Currently, only FAST mode is implemented (see [here](https://pytorch.org/docs/stable/rpc/distributed_autograd.html#distributed-autograd-design) for the difference between FAST and SMART modes). 
+Distributed Autograd connects the autograd graph across several nodes and allows gradients to flow through during the backwards pass. Gradients are accumulated into a context (as opposed to the .grad field as with Autograd) and users must specify their model’s forward pass under a with `dist_autograd.context()` manager in order to ensure that all RPC communication is recorded properly. Currently, only FAST mode is implemented (see [here](https://pytorch.org/docs/stable/rpc/distributed_autograd.html#distributed-autograd-design) for the difference between FAST and SMART modes).
 
 ### Distributed Optimizer
 The distributed optimizer creates RRefs to optimizers on each worker with parameters that require gradients, and then uses the RPC API to run the optimizer remotely. The user must collect all remote parameters and wrap them in an `RRef`, as this is required input to the distributed optimizer. The user must also specify the distributed autograd `context_id` so that the optimizer knows in which context to look for gradients.
@@ -84,13 +84,13 @@ Learn more about distributed RPC framework APIs [here](https://pytorch.org/docs/
 
 ## New High level autograd API (Experimental)
 
-PyTorch 1.5 brings new functions including jacobian, hessian, jvp, vjp, hvp and vhp to the `torch.autograd.functional` submodule. This feature builds on the current API and allows the user to easily perform these functions. 
+PyTorch 1.5 brings new functions including jacobian, hessian, jvp, vjp, hvp and vhp to the `torch.autograd.functional` submodule. This feature builds on the current API and allows the user to easily perform these functions.
 
 Detailed design discussion on GitHub can be found [here](https://github.com/pytorch/pytorch/issues/30632).
 
 ## Python 2 no longer supported
 
-Starting PyTorch 1.5.0, we will no longer support Python 2, specifically version 2.7. Going forward support for Python will be limited to Python 3, specifically Python 3.5, 3.6, 3.7 and 3.8 (first enabled in PyTorch 1.4.0). 
+Starting PyTorch 1.5.0, we will no longer support Python 2, specifically version 2.7. Going forward support for Python will be limited to Python 3, specifically Python 3.5, 3.6, 3.7 and 3.8 (first enabled in PyTorch 1.4.0).
 
 
 *We’d like to thank the entire PyTorch team and the community for all their contributions to this work.*
