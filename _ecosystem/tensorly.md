@@ -6,5 +6,5 @@ link: http://tensorly.org/stable/home.html
 order: 18
 redirect_to: http://tensorly.org/stable/home.html
 github-id: tensorly/tensorly
-date-added:
+date-added: 8/14/19
 ---

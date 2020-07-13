@@ -7,7 +7,7 @@ order: 19
 logo-class: language
 redirect_to: https://github.com/pytorch/translate
 github-id: pytorch/translate
-date-added:
+date-added: 8/14/19
 ---
 
 ## Get Started

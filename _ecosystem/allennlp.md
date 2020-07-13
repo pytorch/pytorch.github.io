@@ -8,6 +8,6 @@ summary-home: AllenNLP is an open-source research library built on PyTorch for d
 featured-home: false
 redirect_to: https://allennlp.org/
 github-id: allenai/allennlp
-date-added:
+date-added: 6/14/19
 ---
 
