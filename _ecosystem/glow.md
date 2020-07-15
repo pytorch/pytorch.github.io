@@ -8,4 +8,5 @@ summary-home: Glow is a ML compiler that accelerates the performance of deep lea
 featured-home: false
 logo-class: tool
 redirect_to: https://github.com/pytorch/glow
+github-id: pytorch/glow
 ---
