@@ -158,7 +158,7 @@
               
               
                 <div class="version">
-                  <a href='http://pytorch.org/docs/versions.html'>1.7.0a0+c86699d &#x25BC</a>
+                  <a href='http://pytorch.org/docs/versions.html'>1.7.0a0+008ab27 &#x25BC</a>
                 </div>
               
             
@@ -343,6 +343,7 @@
 <span class="kn">import</span> <span class="nn">copy</span>
 <span class="kn">import</span> <span class="nn">itertools</span>
 <span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">import</span> <span class="nn">inspect</span>
 
 <span class="kn">import</span> <span class="nn">torch</span>
 
@@ -943,6 +944,60 @@
         <span class="k">for</span> <span class="n">module</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_module_copies</span><span class="p">[</span><span class="mi">1</span><span class="p">:]:</span>
             <span class="n">module</span><span class="o">.</span><span class="n">train</span><span class="p">(</span><span class="n">mode</span><span class="p">)</span>
 
+    <span class="k">def</span> <span class="nf">_register_comm_hook</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="nb">object</span><span class="p">,</span> <span class="n">hook</span><span class="p">:</span> <span class="n">callable</span><span class="p">):</span>
+        <span class="sa">r</span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Register a communication hook which is an enhancement that provides a</span>
+<span class="sd">        flexible hook to users where they can specify how DDP aggregates gradients</span>
+<span class="sd">        across multiple workers.</span>
+
+<span class="sd">        This hook would be very useful for researchers to try out new ideas. For</span>
+<span class="sd">        example, this hook can be used to implement several algorithms like GossipGrad</span>
+<span class="sd">        and gradient compression which involve different communication strategies for</span>
+<span class="sd">        parameter syncs while running Distributed DataParallel training.</span>
+
+<span class="sd">        Arguments:</span>
+<span class="sd">            state (object): state is passed to the hook and can be used to maintain</span>
+<span class="sd">                            and update any state information that users would like to</span>
+<span class="sd">                            maintain as part of the training process. Examples: error</span>
+<span class="sd">                            feedback in gradient compression, peers to communicate with</span>
+<span class="sd">                            next in GossipGrad etc.</span>
+<span class="sd">            hook (callable): is defined as:</span>
+<span class="sd">                             hook(state: object, bucket: dist.GradBucket) -&gt; torch.futures.Future:</span>
+
+<span class="sd">                             This function is called once the bucket is ready. The</span>
+<span class="sd">                             hook can perform whatever processing is needed and return</span>
+<span class="sd">                             a Future indicating completion of any async work (ex: allreduce).</span>
+<span class="sd">                             If the hook doesn&#39;t perform any communication, it can also</span>
+<span class="sd">                             just return a completed Future. The Future should hold the</span>
+<span class="sd">                             new value of grad bucket&#39;s tensors. Once a bucket is ready,</span>
+<span class="sd">                             c10d reducer would call this hook and use the tensors returned</span>
+<span class="sd">                             by the Future and copy grads to individual parameters.</span>
+
+<span class="sd">        .. warning ::</span>
+<span class="sd">            DDP communication hook can only be registered once and should be registered</span>
+<span class="sd">            before calling backward.</span>
+
+<span class="sd">        .. warning ::</span>
+<span class="sd">            The torch.futures.Future object that hook returns should contain a result that</span>
+<span class="sd">            has the same shape with the tensors inside GradBucket bucket.</span>
+
+<span class="sd">        .. warning ::</span>
+<span class="sd">            DDP communication hook is experimental and subject to change.</span>
+
+<span class="sd">        Example::</span>
+<span class="sd">            Below is an example of a noop hook that returns back the same tensors:</span>
+
+<span class="sd">            &gt;&gt;&gt; ddp._register_comm_hook(state = None, hook = noop)</span>
+
+<span class="sd">            &gt;&gt;&gt; def noop(state: object, bucket: dist.GradBucket): -&gt; torch.futures.Future</span>
+<span class="sd">            &gt;&gt;&gt;     fut = torch.futures.Future()</span>
+<span class="sd">            &gt;&gt;&gt;     fut.set_result(bucket.get_tensors())</span>
+<span class="sd">            &gt;&gt;&gt;     return fut</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_check_comm_hook</span><span class="p">(</span><span class="n">hook</span><span class="p">)</span>
+        <span class="n">dist</span><span class="o">.</span><span class="n">_register_comm_hook</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">reducer</span><span class="p">,</span> <span class="n">state</span><span class="p">,</span> <span class="n">hook</span><span class="p">)</span>
+
     <span class="k">def</span> <span class="nf">_distributed_broadcast_coalesced</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensors</span><span class="p">,</span> <span class="n">buffer_size</span><span class="p">):</span>
         <span class="n">dist</span><span class="o">.</span><span class="n">_broadcast_coalesced</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">process_group</span><span class="p">,</span> <span class="n">tensors</span><span class="p">,</span> <span class="n">buffer_size</span><span class="p">)</span>
 
@@ -1000,7 +1055,20 @@
                 <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">layer</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">modules</span><span class="o">.</span><span class="n">SyncBatchNorm</span><span class="p">):</span>
                     <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">device_type</span> <span class="o">!=</span> <span class="s1">&#39;cpu&#39;</span><span class="p">,</span> <span class="s2">&quot;SyncBatchNorm layers only work with GPU modules&quot;</span>
                     <span class="n">layer</span><span class="o">.</span><span class="n">_specify_ddp_gpu_num</span><span class="p">(</span>
-                        <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">device_ids</span><span class="p">)</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">device_ids</span> <span class="k">else</span> <span class="mi">1</span><span class="p">)</span></div>
+                        <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">device_ids</span><span class="p">)</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">device_ids</span> <span class="k">else</span> <span class="mi">1</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_check_comm_hook</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">hook</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">callable</span><span class="p">(</span><span class="n">hook</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;Communication hook must be callable.&quot;</span><span class="p">)</span>
+
+        <span class="n">sig</span> <span class="o">=</span> <span class="n">inspect</span><span class="o">.</span><span class="n">signature</span><span class="p">(</span><span class="n">hook</span><span class="p">)</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">sig</span><span class="o">.</span><span class="n">parameters</span><span class="p">[</span><span class="s1">&#39;bucket&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">annotation</span> <span class="o">!=</span> <span class="n">inspect</span><span class="o">.</span><span class="n">_empty</span> <span class="ow">and</span>
+                <span class="n">sig</span><span class="o">.</span><span class="n">parameters</span><span class="p">[</span><span class="s1">&#39;bucket&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">annotation</span> <span class="o">!=</span> <span class="n">dist</span><span class="o">.</span><span class="n">GradBucket</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Communication hook: bucket annotation is not dist.GradBucket.&quot;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="p">(</span><span class="n">sig</span><span class="o">.</span><span class="n">return_annotation</span> <span class="o">!=</span> <span class="n">inspect</span><span class="o">.</span><span class="n">_empty</span> <span class="ow">and</span>
+                <span class="n">sig</span><span class="o">.</span><span class="n">return_annotation</span> <span class="o">!=</span> <span class="n">torch</span><span class="o">.</span><span class="n">futures</span><span class="o">.</span><span class="n">Future</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Communication hook: return annotation is not torch.futures.Future.&quot;</span><span class="p">)</span></div>
 </pre></div>
 
              </article>
