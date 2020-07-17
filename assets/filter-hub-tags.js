@@ -4,7 +4,7 @@ var displayCount = Number(filterScript.attr("display-count"));
 var pagination = filterScript.attr("pagination");
 
 var options = {
-  valueNames: ["github-stars-count-whole-number", { data: ["tags"] }],
+  valueNames: ["github-stars-count-whole-number", { data: ["tags", "date-added"] }],
   page: displayCount
 };
 
@@ -83,4 +83,12 @@ $("#sortLowLeft").on("click", function() {
 
 $("#sortHighLeft").on("click", function() {
   hubList.sort("github-stars-count-whole-number", { order: "desc" });
+});
+
+$("#sortDateNew").on("click", function() {
+  hubList.sort("date-added", { order: "desc" });
+});
+
+$("#sortDateOld").on("click", function() {
+  hubList.sort("date-added", { order: "asc" });
 });
