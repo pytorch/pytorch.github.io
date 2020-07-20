@@ -158,7 +158,7 @@
               
               
                 <div class="version">
-                  <a href='http://pytorch.org/docs/versions.html'>1.7.0a0+9600ed9 &#x25BC</a>
+                  <a href='http://pytorch.org/docs/versions.html'>1.7.0a0+16dde6e &#x25BC</a>
                 </div>
               
             
@@ -425,6 +425,9 @@
 <span class="sd">        qscheme: Quantization scheme to be used.</span>
 <span class="sd">        reduce_range: Reduces the range of the quantized data type by 1 bit.</span>
 <span class="sd">                      This is sometimes required to avoid instruction overflow.</span>
+<span class="sd">        initial_dynamic_qrange: Nullable tuple containing the initial qmin and qmax values</span>
+<span class="sd">                                to support dynamic quantization range. If unspecified,</span>
+<span class="sd">                                the initialization of qmin and qmax follows the 8-bit setup.</span>
 
 <span class="sd">    .. warning::</span>
 
@@ -439,13 +442,11 @@
 <span class="sd">        - ``torch.per_channel_affine``</span>
 <span class="sd">        - ``torch.per_channel_symmetric``</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">quint8</span><span class="p">,</span> <span class="n">qscheme</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">per_tensor_affine</span><span class="p">,</span>
-                 <span class="n">reduce_range</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+                 <span class="n">reduce_range</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">initial_dynamic_qrange</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
         <span class="nb">super</span><span class="p">(</span><span class="n">_ObserverBase</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">qscheme</span> <span class="o">=</span> <span class="n">qscheme</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">reduce_range</span> <span class="o">=</span> <span class="n">reduce_range</span>
-
         <span class="bp">self</span><span class="o">.</span><span class="n">eps</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">finfo</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span><span class="o">.</span><span class="n">eps</span>
         <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">qscheme</span> <span class="ow">in</span> <span class="p">(</span>
             <span class="n">torch</span><span class="o">.</span><span class="n">per_tensor_affine</span><span class="p">,</span>
@@ -459,6 +460,72 @@
             <span class="n">torch</span><span class="o">.</span><span class="n">qint8</span><span class="p">,</span>
             <span class="n">torch</span><span class="o">.</span><span class="n">quint8</span><span class="p">,</span>
         <span class="p">),</span> <span class="s2">&quot;Default Observer only works for qint8 and quint8 data type&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">is_dynamic_qrange</span> <span class="o">=</span> <span class="n">initial_dynamic_qrange</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">is_dynamic_qrange</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_validate_dynamic_range_init</span><span class="p">(</span><span class="n">initial_dynamic_qrange</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">initial_dynamic_qrange</span> <span class="o">=</span> <span class="n">initial_dynamic_qrange</span>
+
+    <span class="nd">@torch</span><span class="o">.</span><span class="n">jit</span><span class="o">.</span><span class="n">export</span>
+    <span class="k">def</span> <span class="nf">_validate_dynamic_range_init</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">initial_dynamic_qrange</span><span class="p">):</span>
+        <span class="c1"># type: (Tuple[int, int]) -&gt; None</span>
+        <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Validates that the dynamic quantization range is properly initialized</span>
+<span class="sd">        and within the given bound supported by the observer dtype.</span>
+
+<span class="sd">        To accommodate lower-bit quantization with respect to the existing torch.qint8 and</span>
+<span class="sd">        torch.quint8 datatypes, the user can choose to use dynamic quantization range by passing</span>
+<span class="sd">        in a tuple of initial qmin and qmax values. One use case is these customized qmin and qmax</span>
+<span class="sd">        values are used to calculate static estimates of the scale and zero point for aggressive lower-bit</span>
+<span class="sd">        fake quantization. These estimates are compared against parameters learned through backpropagation.</span>
+<span class="sd">        The related literatures for scale and zero point via backpropagation are as follows:</span>
+
+<span class="sd">        Learned Step Size Quantization: https://openreview.net/pdf?id=rkgO66VKDS</span>
+<span class="sd">        Trained Quantization Thresholds: https://arxiv.org/pdf/1903.08066.pdf</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># The variable names are prefixed with &quot;initial&quot; because their values (qmin and qmax) might be adjusted</span>
+        <span class="c1"># based on whether quantization range is reduced and the datatype (signed/unsigned) used by the observer.</span>
+        <span class="n">initial_qmin</span><span class="p">,</span> <span class="n">initial_qmax</span> <span class="o">=</span> <span class="n">initial_dynamic_qrange</span>
+        <span class="k">assert</span> <span class="n">initial_qmin</span> <span class="o">&lt;=</span> <span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">initial_qmax</span><span class="p">,</span> <span class="s2">&quot;Dynamic quantization range must include 0.&quot;</span>
+        <span class="k">assert</span> <span class="n">initial_qmin</span> <span class="o">&lt;</span> <span class="n">initial_qmax</span><span class="p">,</span> <span class="s2">&quot;qmin must be strictly less than qmax for dynamic quantization range.&quot;</span>
+
+    <span class="nd">@torch</span><span class="o">.</span><span class="n">jit</span><span class="o">.</span><span class="n">export</span>
+    <span class="k">def</span> <span class="nf">_calculate_qmin_qmax</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="c1"># type: () -&gt; Tuple[int, int]</span>
+        <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Calculates actual qmin and qmax based on the quantization range,</span>
+<span class="sd">        observer datatype and if range is reduced.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">is_dynamic_qrange</span><span class="p">:</span>
+            <span class="c1"># This initialization here is to be resolve TorchScript compilation issues and allow</span>
+            <span class="c1"># using of refinement to decouple initial_qmin and initial_qmax from quantization range.</span>
+            <span class="c1"># The actual values of initial_qmin and initial_qmax will be reset below.</span>
+            <span class="n">initial_qmin</span><span class="p">,</span> <span class="n">initial_qmax</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">255</span>
+            <span class="c1"># The following assignment of initial_qrange to a local variable and the if check refine the</span>
+            <span class="c1"># attribute from Optional to a valid tuple for use, based on TorchScript&#39;s requirements.</span>
+            <span class="n">initial_dynamic_qrange</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">initial_dynamic_qrange</span>
+            <span class="k">if</span> <span class="n">initial_dynamic_qrange</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">initial_qmin</span><span class="p">,</span> <span class="n">initial_qmax</span> <span class="o">=</span> <span class="n">initial_dynamic_qrange</span>
+
+            <span class="n">qrange_len</span> <span class="o">=</span> <span class="n">initial_qmax</span> <span class="o">-</span> <span class="n">initial_qmin</span> <span class="o">+</span> <span class="mi">1</span>
+            <span class="k">assert</span> <span class="mi">0</span> <span class="o">&lt;</span> <span class="n">qrange_len</span> <span class="o">&lt;=</span> <span class="mi">256</span><span class="p">,</span> \
+                <span class="s2">&quot;quantization range should be positive and not exceed the maximum bit range (=256).&quot;</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">dtype</span> <span class="o">==</span> <span class="n">torch</span><span class="o">.</span><span class="n">qint8</span><span class="p">:</span>
+                <span class="n">qmin</span><span class="p">,</span> <span class="n">qmax</span> <span class="o">=</span> <span class="o">-</span><span class="n">qrange_len</span> <span class="o">//</span> <span class="mi">2</span><span class="p">,</span> <span class="n">qrange_len</span> <span class="o">//</span> <span class="mi">2</span> <span class="o">-</span> <span class="mi">1</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">qmin</span><span class="p">,</span> <span class="n">qmax</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span> <span class="n">qrange_len</span> <span class="o">-</span> <span class="mi">1</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">reduce_range</span><span class="p">:</span>
+                <span class="n">qmin</span><span class="p">,</span> <span class="n">qmax</span> <span class="o">=</span> <span class="n">qmin</span> <span class="o">//</span> <span class="mi">2</span><span class="p">,</span> <span class="n">qmax</span> <span class="o">//</span> <span class="mi">2</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># Fallback onto default 8-bit qmin and qmax calculation if dynamic range is not used.</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">dtype</span> <span class="o">==</span> <span class="n">torch</span><span class="o">.</span><span class="n">qint8</span><span class="p">:</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">reduce_range</span><span class="p">:</span>
+                    <span class="n">qmin</span><span class="p">,</span> <span class="n">qmax</span> <span class="o">=</span> <span class="o">-</span><span class="mi">64</span><span class="p">,</span> <span class="mi">63</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">qmin</span><span class="p">,</span> <span class="n">qmax</span> <span class="o">=</span> <span class="o">-</span><span class="mi">128</span><span class="p">,</span> <span class="mi">127</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">reduce_range</span><span class="p">:</span>
+                    <span class="n">qmin</span><span class="p">,</span> <span class="n">qmax</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">127</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">qmin</span><span class="p">,</span> <span class="n">qmax</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">255</span>
+        <span class="k">return</span> <span class="n">qmin</span><span class="p">,</span> <span class="n">qmax</span>
 
     <span class="nd">@torch</span><span class="o">.</span><span class="n">jit</span><span class="o">.</span><span class="n">export</span>
     <span class="k">def</span> <span class="nf">_calculate_qparams</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">min_val</span><span class="p">,</span> <span class="n">max_val</span><span class="p">):</span>
@@ -490,16 +557,7 @@
                 <span class="n">min_val</span><span class="p">,</span> <span class="n">max_val</span>
             <span class="p">)</span>
 
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">dtype</span> <span class="o">==</span> <span class="n">torch</span><span class="o">.</span><span class="n">qint8</span><span class="p">:</span>
-            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">reduce_range</span><span class="p">:</span>
-                <span class="n">qmin</span><span class="p">,</span> <span class="n">qmax</span> <span class="o">=</span> <span class="o">-</span><span class="mi">64</span><span class="p">,</span> <span class="mi">63</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="n">qmin</span><span class="p">,</span> <span class="n">qmax</span> <span class="o">=</span> <span class="o">-</span><span class="mi">128</span><span class="p">,</span> <span class="mi">127</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">reduce_range</span><span class="p">:</span>
-                <span class="n">qmin</span><span class="p">,</span> <span class="n">qmax</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">127</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="n">qmin</span><span class="p">,</span> <span class="n">qmax</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">255</span>
+        <span class="n">qmin</span><span class="p">,</span> <span class="n">qmax</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_calculate_qmin_qmax</span><span class="p">()</span>
 
         <span class="n">min_val</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="n">min_val</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">min_val</span><span class="p">))</span>
         <span class="n">max_val</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">max_val</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">max_val</span><span class="p">))</span>
@@ -513,7 +571,11 @@
             <span class="n">scale</span> <span class="o">=</span> <span class="n">max_val</span> <span class="o">/</span> <span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">qmax</span> <span class="o">-</span> <span class="n">qmin</span><span class="p">)</span> <span class="o">/</span> <span class="mi">2</span><span class="p">)</span>
             <span class="n">scale</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">scale</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">eps</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">scale</span><span class="o">.</span><span class="n">dtype</span><span class="p">))</span>
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">dtype</span> <span class="o">==</span> <span class="n">torch</span><span class="o">.</span><span class="n">quint8</span><span class="p">:</span>
-                <span class="n">zero_point</span> <span class="o">=</span> <span class="n">zero_point</span><span class="o">.</span><span class="n">new_full</span><span class="p">(</span><span class="n">zero_point</span><span class="o">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">128</span><span class="p">)</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">is_dynamic_qrange</span><span class="p">:</span>
+                    <span class="c1"># When dynamic quantization range is used, down-rounded midpoint of the range is chosen.</span>
+                    <span class="n">zero_point</span> <span class="o">=</span> <span class="n">zero_point</span><span class="o">.</span><span class="n">new_full</span><span class="p">(</span><span class="n">zero_point</span><span class="o">.</span><span class="n">size</span><span class="p">(),</span> <span class="p">(</span><span class="n">qmin</span> <span class="o">+</span> <span class="n">qmax</span><span class="p">)</span> <span class="o">//</span> <span class="mi">2</span><span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">zero_point</span> <span class="o">=</span> <span class="n">zero_point</span><span class="o">.</span><span class="n">new_full</span><span class="p">(</span><span class="n">zero_point</span><span class="o">.</span><span class="n">size</span><span class="p">(),</span> <span class="mi">128</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="n">scale</span> <span class="o">=</span> <span class="p">(</span><span class="n">max_val</span> <span class="o">-</span> <span class="n">min_val</span><span class="p">)</span> <span class="o">/</span> <span class="nb">float</span><span class="p">(</span><span class="n">qmax</span> <span class="o">-</span> <span class="n">qmin</span><span class="p">)</span>
             <span class="n">scale</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">scale</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">eps</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">scale</span><span class="o">.</span><span class="n">dtype</span><span class="p">))</span>
