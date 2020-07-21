@@ -70,7 +70,8 @@ $(".filter-btn").on("click", function() {
 
 //Scroll back to top of hub cards on click of next/previous page button
 
-$(document).on("click", ".page", function() {
+$(document).on("click", ".page", function(e) {
+  e.preventDefault();
   $('html, body').animate(
     {scrollTop: $("#pagination-scroll").position().top},
     'slow'
