@@ -4,7 +4,7 @@ var displayCount = Number(filterScript.attr("display-count"));
 var pagination = filterScript.attr("pagination");
 
 var options = {
-  valueNames: ["github-stars-count-whole-number", { data: ["tags"] }],
+  valueNames: ["github-stars-count-whole-number", { data: ["tags", "date-added", "title"] }],
   page: displayCount
 };
 
@@ -70,7 +70,8 @@ $(".filter-btn").on("click", function() {
 
 //Scroll back to top of hub cards on click of next/previous page button
 
-$(document).on("click", ".page", function() {
+$(document).on("click", ".page", function(e) {
+  e.preventDefault();
   $('html, body').animate(
     {scrollTop: $("#pagination-scroll").position().top},
     'slow'
@@ -83,4 +84,20 @@ $("#sortLowLeft").on("click", function() {
 
 $("#sortHighLeft").on("click", function() {
   hubList.sort("github-stars-count-whole-number", { order: "desc" });
+});
+
+$("#sortDateNew").on("click", function() {
+  hubList.sort("date-added", { order: "desc" });
+});
+
+$("#sortDateOld").on("click", function() {
+  hubList.sort("date-added", { order: "asc" });
+});
+
+$("#sortTitleLow").on("click", function() {
+  hubList.sort("title", { order: "desc" });
+});
+
+$("#sortTitleHigh").on("click", function() {
+  hubList.sort("title", { order: "asc" });
 });
