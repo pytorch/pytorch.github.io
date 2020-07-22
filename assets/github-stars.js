@@ -1,6 +1,15 @@
 var githubStarsScript = $("script[src*=github-stars]");
 var starCountCallDate = githubStarsScript.attr("star-count-call-date");
 var starCountData = githubStarsScript.attr("star-count-data");
+var ecosystemStars = githubStarsScript.attr("ecosystem");
+var cloudfrontUrl = "";
+
+if (ecosystemStars == "true") {
+  cloudfrontUrl = "https://d2ze5o8gurgoho.cloudfront.net/star-count";
+}
+else {
+  cloudfrontUrl = "https://du4l4liqvfo92.cloudfront.net/star-count";
+}
 
 var today = new Date();
 var starCountCallDateParsed = new Date(
@@ -19,7 +28,7 @@ if (
 
 function updateStarCount() {
   console.log("Updated star count fetched");
-  $.getJSON("https://du4l4liqvfo92.cloudfront.net/star-count", function (data) {
+  $.getJSON(cloudfrontUrl, function (data) {
     localStorage.setItem(starCountCallDate, Date.parse(today));
     localStorage.setItem(starCountData, JSON.stringify(data));
 
