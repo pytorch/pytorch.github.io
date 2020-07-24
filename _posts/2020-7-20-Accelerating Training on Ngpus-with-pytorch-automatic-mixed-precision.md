@@ -109,7 +109,9 @@ Training accuracy: NVIDIA DGX-1 (8x V100 16GB)
 ### FP16 on NVIDIA V100 vs. FP32 on V100
 AMP with FP16 is the most performant option for DL training on the V100. In Table 1, we can observe that for various models, AMP on V100 provides a speedup of 1.5x to 5.5x over FP32 on V100 while converging to the same final accuracy.
 
-
+<div class="text-center">
+  <img src="{{ site.url }}/assets/images/torchvision_0.3_headline.png" width="100%">
+</div>
 
 
 
