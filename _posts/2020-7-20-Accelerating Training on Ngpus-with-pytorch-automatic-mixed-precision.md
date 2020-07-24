@@ -114,19 +114,17 @@ AMP with FP16 is the most performant option for DL training on the V100. In Tabl
 </div>
 Figure 2. Performance of mixed precision training on NVIDIA 8xV100 vs. FP32 training on 8xV100 GPU. Bars represent the speedup factor of V100 AMP over V100 FP32. The higher the better. [ALT: Performance of mixed precision training on NVIDIA 8xV100 vs FP32 training on 8xV100 GPU]
 
-FP16 on NVIDIA A100 vs. FP16 on V100
+## FP16 on NVIDIA A100 vs. FP16 on V100
 
 AMP with FP16 remains the most performant option for DL training on the A100. In Figure 3, we can observe that for various models, AMP on A100 provides a speedup of 1.3x to 2.5x over AMP on V100 while converging to the same final accuracy.
 
-## Call to action
-AMP provides a healthy speedup for Deep Learning training workloads on Nvidia Tensor Core GPUs, especially on the latest Ampere generation A100 GPUs.  You can start experimenting with AMP enabled models and model scripts for A100, V100, T4 and other GPUs available at NVIDIA deep learning [examples](https://github.com/NVIDIA/DeepLearningExamples). NVIDIA PyTorch with native AMP support is available from the [PyTorch NGC container](https://ngc.nvidia.com/catalog/containers/nvidia:pytorch) version 20.06. We highly encourage existing **apex.amp** customers to transition to **using torch.cuda.amp** from PyTorch Core available in the latest PyTorch 1.6 release <link>. 
-
-
-
 <div class="text-center">
-  <img src="{{ site.url }}/assets/images/nvidiafp16onv100.jpg" width="100%">
+  <img src="{{ site.url }}/assets/images/nvidiafp16onv100.png" width="100%">
 </div>
 Figure 3. Performance of mixed precision training on NVIDIA 8xA100 vs. 8xV100 GPU. Bars represent the speedup factor of A100 over V100. The higher the better. [ALT: Performance of mixed precision training on NVIDIA 8xA100 vs 8xV100 GPU]
+
+## Call to action
+AMP provides a healthy speedup for Deep Learning training workloads on Nvidia Tensor Core GPUs, especially on the latest Ampere generation A100 GPUs.  You can start experimenting with AMP enabled models and model scripts for A100, V100, T4 and other GPUs available at NVIDIA deep learning [examples](https://github.com/NVIDIA/DeepLearningExamples). NVIDIA PyTorch with native AMP support is available from the [PyTorch NGC container](https://ngc.nvidia.com/catalog/containers/nvidia:pytorch) version 20.06. We highly encourage existing **apex.amp** customers to transition to **using torch.cuda.amp** from PyTorch Core available in the latest PyTorch 1.6 release <link>. 
 
 	
 	
