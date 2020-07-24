@@ -21,5 +21,98 @@ For the PyTorch 1.6 release, developers at NVIDIA and Facebook moved mixed preci
 * [Gradient penalty](https://pytorch.org/docs/master/notes/amp_examples.html#gradient-penalty) (double backward)
 * torch.cuda.amp.autocast() has no effect outside regions where it's enabled, so it should serve cases that formerly struggled with multiple calls to [apex.amp.initialize()](https://github.com/NVIDIA/apex/issues/439) (including [cross-validation)](https://github.com/NVIDIA/apex/issues/392#issuecomment-610038073) without difficulty. Multiple convergence runs in the same script should each use a fresh [GradScaler instance](https://github.com/NVIDIA/apex/issues/439#issuecomment-610028282), but GradScalers are lightweight and self-contained so that's not a problem.
 * Sparse gradient support
- 
 
+With AMP being added to PyTorch core, we have started the process of deprecating **apex.amp.** We have moved **apex.amp** to maintenance mode and will support customers using **apex.amp.** However, we highly encourage **apex.amp** customers to transition to using **torch.cuda.amp** from PyTorch Core.  
+
+## Example Walkthrough
+Please see official docs for usage: 
+https://pytorch.org/docs/stable/amp.html 
+https://pytorch.org/docs/stable/notes/amp_examples.html
+
+Example:
+
+```Python
+import torch 
+# Creates once at the beginning of training 
+scaler = torch.cuda.amp.GradScaler() 
+ 
+for data, label in data_iter: 
+optimizer.zero_grad() 
+# Casts operations to mixed precision 
+with torch.cuda.amp.autocast(): 
+loss = model(data) 
+ 
+# Scales the loss, and calls backward() 
+# to create scaled gradients 
+scaler.scale(loss).backward() 
+ 
+# Unscales gradients and calls 
+# or skips optimizer.step() 
+scaler.step(optimizer) 
+ 
+# Updates the scale for next iteration 
+scaler.update() 
+```
+
+## Performance Benchmarks
+In this section, we discuss the accuracy and performance of mixed precision training with AMP on the latest NVIDIA GPU A100 and also previous generation V100 GPU. The mixed precision performance is compared to FP32 performance, when running Deep Learning workloads in the [NVIDIA pytorch:20.06-py3 container](https://ngc.nvidia.com/catalog/containers/nvidia:pytorch) from NGC.
+
+## Accuracy: AMP (FP16), FP32
+The advantage of using AMP for Deep Learning training is that the models converge to the similar final accuracy while providing improved training performance. To illustrate this point, for [Resnet 50 v1.5 training](https://github.com/NVIDIA/DeepLearningExamples/tree/master/PyTorch/Classification/ConvNets/resnet50v1.5#training-accuracy-nvidia-dgx-a100-8x-a100-40gb), we see the following accuracy results where higher is better. Please note that the below accuracy numbers are sample numbers that are subject to run to run variance of up to 0.4%. Accuracy numbers for other models including BERT, Transformer, ResNeXt-101, Mask-RCNN, DLRM can be found at  [NVIDIA Deep Learning Examples Github](https://github.com/NVIDIA/DeepLearningExamples). 
+
+Training accuracy: NVIDIA DGX A100 (8x A100 40GB)
+
+<table width="460" border="0" cellspacing="5" cellpadding="5">
+  <tbody>
+    <tr>
+      <td><strong>&nbsp;epochs</strong></td>
+      <td><strong>&nbsp;Mixed Precision Top 1(%)</strong></td>
+      <td>&nbsp;<strong>TF32 Top1(%)</strong></td>
+    </tr>
+    <tr>
+      <td>&nbsp;90</td>
+      <td>&nbsp;76.93</td>
+      <td>&nbsp;76.85</td>
+    </tr>
+  </tbody>
+</table>
+
+Training accuracy: NVIDIA DGX-1 (8x V100 16GB)
+	
+ <table width="460" border="0" cellspacing="5" cellpadding="5">
+  <tbody>
+    <tr>
+     <td><strong>&nbsp;epochs</strong></td>
+      <td><strong>&nbsp;Mixed Precision Top 1(%)</strong></td>
+      <td>&nbsp;<strong>TF32 Top1(%)</strong></td>
+    </tr>
+    <tr>
+      <td>50</td>
+      <td>76.25</td>
+      <td>76.26</td>
+    </tr>
+    <tr>
+      <td>90</td>
+      <td>77.09</td>
+      <td>77.01</td>
+    </tr>
+	  <tr>
+      <td>250</td>
+      <td>78.42</td>
+      <td>78.30</td>
+    </tr>
+  </tbody>
+</table>
+
+## Speedup Performance: 
+
+### FP16 on NVIDIA V100 vs. FP32 on V100
+AMP with FP16 is the most performant option for DL training on the V100. In Table 1, we can observe that for various models, AMP on V100 provides a speedup of 1.5x to 5.5x over FP32 on V100 while converging to the same final accuracy.
+
+
+
+
+
+	
+	
+    
