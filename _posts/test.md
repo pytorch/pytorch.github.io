@@ -1,5 +1,5 @@
 ---
 layout: blog_detail
-title: 'Test'
+title: 'Test 2'
 author: Team PyTorch
 ---
