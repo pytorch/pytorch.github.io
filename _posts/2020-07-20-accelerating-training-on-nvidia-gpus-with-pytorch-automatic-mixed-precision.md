@@ -11,7 +11,7 @@ Most deep learning frameworks, including PyTorch, train with 32-bit floating poi
 
 In order to streamline the user experience of training in mixed precision for researchers and practitioners, NVIDIA developed [Apex](https://developer.nvidia.com/blog/apex-pytorch-easy-mixed-precision-training/) in 2018, which is a lightweight PyTorch extension with [Automatic Mixed Precision](https://developer.nvidia.com/automatic-mixed-precision) (AMP) feature. This feature enables automatic conversion of certain GPU operations from FP32 precision to mixed precision, thus improving performance while maintaining accuracy. 
 
-For the PyTorch 1.6 release, developers at NVIDIA and Facebook moved mixed precision functionality into PyTorch core as the AMP package, `torch.cuda.amp` < Missing link>. `torch.cuda.amp` is more flexible and intuitive compared to `apex.amp`. Some of `apex.amp`'s known pain points that torch.cuda.amp has been able to fix:
+For the PyTorch 1.6 release, developers at NVIDIA and Facebook moved mixed precision functionality into PyTorch core as the AMP package, `[torch.cuda.amp](https://pytorch.org/docs/stable/amp.html)`. `torch.cuda.amp` is more flexible and intuitive compared to `apex.amp`. Some of `apex.amp`'s known pain points that `torch.cuda.amp` has been able to fix:
 
 * Guaranteed PyTorch version compatibility, because it's part of PyTorch
 * No need to build extensions
@@ -22,39 +22,39 @@ For the PyTorch 1.6 release, developers at NVIDIA and Facebook moved mixed preci
 * torch.cuda.amp.autocast() has no effect outside regions where it's enabled, so it should serve cases that formerly struggled with multiple calls to [apex.amp.initialize()](https://github.com/NVIDIA/apex/issues/439) (including [cross-validation)](https://github.com/NVIDIA/apex/issues/392#issuecomment-610038073) without difficulty. Multiple convergence runs in the same script should each use a fresh [GradScaler instance](https://github.com/NVIDIA/apex/issues/439#issuecomment-610028282), but GradScalers are lightweight and self-contained so that's not a problem.
 * Sparse gradient support
 
-With AMP being added to PyTorch core, we have started the process of deprecating **apex.amp.** We have moved **apex.amp** to maintenance mode and will support customers using **apex.amp.** However, we highly encourage **apex.amp** customers to transition to using **torch.cuda.amp** from PyTorch Core.  
+With AMP being added to PyTorch core, we have started the process of deprecating `apex.amp.` We have moved `apex.amp` to maintenance mode and will support customers using `apex.amp.` However, we highly encourage `apex.amp` customers to transition to using `torch.cuda.amp` from PyTorch Core.  
 
-## Example Walkthrough
-Please see official docs for usage: 
-https://pytorch.org/docs/stable/amp.html 
-https://pytorch.org/docs/stable/notes/amp_examples.html
+# Example Walkthrough
+Please see official docs for usage:
+* [https://pytorch.org/docs/stable/amp.html](https://pytorch.org/docs/stable/amp.html )
+* [https://pytorch.org/docs/stable/notes/amp_examples.html](https://pytorch.org/docs/stable/notes/amp_examples.html)
 
 Example:
 
-```Python
+```python
 import torch 
 # Creates once at the beginning of training 
 scaler = torch.cuda.amp.GradScaler() 
  
 for data, label in data_iter: 
-optimizer.zero_grad() 
-# Casts operations to mixed precision 
-with torch.cuda.amp.autocast(): 
-loss = model(data) 
+   optimizer.zero_grad() 
+   # Casts operations to mixed precision 
+   with torch.cuda.amp.autocast(): 
+      loss = model(data) 
  
-# Scales the loss, and calls backward() 
-# to create scaled gradients 
-scaler.scale(loss).backward() 
+   # Scales the loss, and calls backward() 
+   # to create scaled gradients 
+   scaler.scale(loss).backward() 
  
-# Unscales gradients and calls 
-# or skips optimizer.step() 
-scaler.step(optimizer) 
+   # Unscales gradients and calls 
+   # or skips optimizer.step() 
+   scaler.step(optimizer) 
  
-# Updates the scale for next iteration 
-scaler.update() 
+   # Updates the scale for next iteration 
+   scaler.update() 
 ```
 
-## Performance Benchmarks
+# Performance Benchmarks
 In this section, we discuss the accuracy and performance of mixed precision training with AMP on the latest NVIDIA GPU A100 and also previous generation V100 GPU. The mixed precision performance is compared to FP32 performance, when running Deep Learning workloads in the [NVIDIA pytorch:20.06-py3 container](https://ngc.nvidia.com/catalog/containers/nvidia:pytorch) from NGC.
 
 ## Accuracy: AMP (FP16), FP32
@@ -84,7 +84,7 @@ Training accuracy: NVIDIA DGX-1 (8x V100 16GB)
     <tr>
      <td><strong>&nbsp;epochs</strong></td>
       <td><strong>&nbsp;Mixed Precision Top 1(%)</strong></td>
-      <td>&nbsp;<strong>TF32 Top1(%)</strong></td>
+      <td>&nbsp;<strong>FP32 Top1(%)</strong></td>
     </tr>
     <tr>
       <td>50</td>
@@ -112,7 +112,7 @@ AMP with FP16 is the most performant option for DL training on the V100. In Tabl
 <div class="text-center">
   <img src="{{ site.url }}/assets/images/nvidiafp32onv100.jpg" width="100%">
 </div>
-Figure 2. Performance of mixed precision training on NVIDIA 8xV100 vs. FP32 training on 8xV100 GPU. Bars represent the speedup factor of V100 AMP over V100 FP32. The higher the better. [ALT: Performance of mixed precision training on NVIDIA 8xV100 vs FP32 training on 8xV100 GPU]
+*Figure 2. Performance of mixed precision training on NVIDIA 8xV100 vs. FP32 training on 8xV100 GPU. Bars represent the speedup factor of V100 AMP over V100 FP32. The higher the better.*
 
 ## FP16 on NVIDIA A100 vs. FP16 on V100
 
@@ -121,10 +121,10 @@ AMP with FP16 remains the most performant option for DL training on the A100. In
 <div class="text-center">
   <img src="{{ site.url }}/assets/images/nvidiafp16onv100.png" width="100%">
 </div>
-Figure 3. Performance of mixed precision training on NVIDIA 8xA100 vs. 8xV100 GPU. Bars represent the speedup factor of A100 over V100. The higher the better. [ALT: Performance of mixed precision training on NVIDIA 8xA100 vs 8xV100 GPU]
+*Figure 3. Performance of mixed precision training on NVIDIA 8xA100 vs. 8xV100 GPU. Bars represent the speedup factor of A100 over V100. The higher the better.*
 
-## Call to action
-AMP provides a healthy speedup for Deep Learning training workloads on Nvidia Tensor Core GPUs, especially on the latest Ampere generation A100 GPUs.  You can start experimenting with AMP enabled models and model scripts for A100, V100, T4 and other GPUs available at NVIDIA deep learning [examples](https://github.com/NVIDIA/DeepLearningExamples). NVIDIA PyTorch with native AMP support is available from the [PyTorch NGC container](https://ngc.nvidia.com/catalog/containers/nvidia:pytorch) version 20.06. We highly encourage existing **apex.amp** customers to transition to **using torch.cuda.amp** from PyTorch Core available in the latest PyTorch 1.6 release <link>. 
+# Call to action
+AMP provides a healthy speedup for Deep Learning training workloads on Nvidia Tensor Core GPUs, especially on the latest Ampere generation A100 GPUs.  You can start experimenting with AMP enabled models and model scripts for A100, V100, T4 and other GPUs available at NVIDIA deep learning [examples](https://github.com/NVIDIA/DeepLearningExamples). NVIDIA PyTorch with native AMP support is available from the [PyTorch NGC container](https://ngc.nvidia.com/catalog/containers/nvidia:pytorch) version 20.06. We highly encourage existing `apex.amp` customers to transition to using `torch.cuda.amp` from PyTorch Core available in the latest [PyTorch 1.6 release](https://pytorch.org/blog/pytorch-1.6-released/). 
 
 	
 	
