@@ -20,6 +20,10 @@ We previously called these features ‘Experimental’ and we found that this cr
 
 *Level of commitment*: We are committing to seeing the feature through to the Stable classification. We are however not committing to Backwards Compatibility. Users can depend on us providing a solution for problems in this area going forward, but the APIs and performance characteristics of this feature may change.
 
+<div class="text-center">
+  <img src="{{ site.url }}/assets/images/install-matrix.png" width="100%">
+</div>
+
 ## Prototype
 Previously these were features that were known about by developers who paid close attention to RFCs and to features that land in master. In this case the feature is not available as part of binary distributions like PyPI or Conda (except maybe behind run-time flags), but we would like to get high bandwidth partner feedback ahead of a real release in order to gauge utility and any changes we need to make to the UX. To test these kinds of features we would, depending on the feature, recommend building from master or using the nightly whls that are made available on pytorch.org. For each prototype feature, a pointer to draft docs or other instructions will be provided.
 
