@@ -8,7 +8,7 @@ Traditionally features in PyTorch were classified as either stable or experiment
 
 # New Feature Designations
 
-We will continue to have three designations for features but, as mentioned, with a few changes: Stable, Beta (previously experimental) and Prototype (previously ‘nightlies’). Below is a brief description of each and a comment on the backward compatibility expected:
+We will continue to have three designations for features but, as mentioned, with a few changes: Stable, Beta (previously Experimental) and Prototype (previously Nightlies). Below is a brief description of each and a comment on the backward compatibility expected:
 
 ## Stable
 Nothing changes here. A stable feature means that the user value-add is or has been proven, the API isn’t expected to change, the feature is performant and all documentation exists to support end user adoption.
