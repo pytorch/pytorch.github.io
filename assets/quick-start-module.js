@@ -199,9 +199,6 @@ function commandMessage(key) {
     "stable,conda,macos,cudanone,python":
       "conda install pytorch torchvision -c pytorch",
 
-    "stable,conda,windows,cuda9.2,python":
-      "conda install pytorch torchvision cudatoolkit=9.2 -c pytorch -c defaults -c numba/label/dev ",
-
     "stable,conda,windows,cuda10.1,python":
       "conda install pytorch torchvision cudatoolkit=10.1 -c pytorch",
 
@@ -237,9 +234,6 @@ function commandMessage(key) {
     "stable,pip,windows,cudanone,python":
       "pip install torch==1.6.0+cpu torchvision==0.7.0+cpu -f https://download.pytorch.org/whl/torch_stable.html",
 
-    "stable,pip,windows,cuda9.2,python":
-      "pip install torch==1.6.0+cu92 torchvision==0.7.0+cu92 -f https://download.pytorch.org/whl/torch_stable.html",
-
     "stable,pip,windows,cuda10.1,python":
       "pip install torch==1.6.0+cu101 torchvision==0.7.0+cu101 -f https://download.pytorch.org/whl/torch_stable.html",
 
@@ -272,9 +266,6 @@ function commandMessage(key) {
 
     "stable,libtorch,windows,cudanone,cplusplus":
       "Windows binaries do not support Java. Support is only available for Linux.  Download here for C++ (Release version): <br/><a href='https://download.pytorch.org/libtorch/cpu/libtorch-win-shared-with-deps-1.6.0%2Bcpu.zip'>https://download.pytorch.org/libtorch/cpu/libtorch-win-shared-with-deps-1.6.0%2Bcpu.zip</a><br/><br>  Download here for C++ (Debug version): <br/><a href='https://download.pytorch.org/libtorch/cpu/libtorch-win-shared-with-deps-debug-1.6.0%2Bcpu.zip'>https://download.pytorch.org/libtorch/cpu/libtorch-win-shared-with-deps-debug-1.6.0%2Bcpu.zip</a>",
-
-    "stable,libtorch,windows,cuda9.2,cplusplus":
-      "Windows binaries do not support Java. Support is only available for Linux.  Download here for C++ (Release version): <br/><a href='https://download.pytorch.org/libtorch/cu92/libtorch-win-shared-with-deps-1.6.0%2Bcu92.zip'>https://download.pytorch.org/libtorch/cu92/libtorch-win-shared-with-deps-1.6.0%2Bcu92.zip</a><br/><br>  Download here for C++ (Debug version): <br/><a href='https://download.pytorch.org/libtorch/cu92/libtorch-win-shared-with-deps-debug-1.6.0%2Bcu92.zip'>https://download.pytorch.org/libtorch/cu92/libtorch-win-shared-with-deps-debug-1.6.0%2Bcu92.zip</a>",
 
     "stable,libtorch,windows,cuda10.1,cplusplus":
       "Windows binaries do not support Java. Support is only available for Linux.  Download here for C++ (Release version): <br/><a href='https://download.pytorch.org/libtorch/cu101/libtorch-win-shared-with-deps-1.6.0%2Bcu101.zip'>https://download.pytorch.org/libtorch/cu101/libtorch-win-shared-with-deps-1.6.0%2Bcu101.zip</a><br/><br>  Download here for C++ (Debug version): <br/><a href='https://download.pytorch.org/libtorch/cu101/libtorch-win-shared-with-deps-debug-1.6.0%2Bcu101.zip'>https://download.pytorch.org/libtorch/cu101/libtorch-win-shared-with-deps-debug-1.6.0%2Bcu101.zip</a>",
