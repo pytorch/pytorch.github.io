@@ -1,6 +1,6 @@
 ---
 layout: blog_detail
-title: 'Accelerating Training on NVIDIA GPUs with PyTorch Automatic Mixed Precision'
+title: 'Accelerating training on NVIDIA GPUs with PyTorch automatic mixed precision'
 author: Michael Carilli, Mengdi Huang, Chetan Tekur
 ---
 
