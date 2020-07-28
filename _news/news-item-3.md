@@ -1,6 +1,6 @@
 ---
 order: 3
-link: https://pytorch.org/blog/pytorch-library-updates-new-model-serving-library
-summary: PyTorch library updates including new model serving library
+link: https://pytorch.org/blog/microsoft-becomes-maintainer-of-the-windows-version-of-pytorch/
+summary: Microsoft becomes maintainer of the Windows version of PyTorch.
 ---
 
