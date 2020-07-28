@@ -1,6 +1,6 @@
 ---
 layout: blog_detail
-title: 'PyTorch Feature Classification Changes'
+title: 'PyTorch feature classification changes'
 author: Team PyTorch
 ---
 
