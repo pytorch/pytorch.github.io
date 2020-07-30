@@ -33,7 +33,6 @@ function updateStarCount() {
     localStorage.setItem(starCountData, JSON.stringify(data));
 
     updateStarsOnPage(data);
-    reloadFilterScript();
   });
 }
 
@@ -43,23 +42,38 @@ function useLocalStorageStarCount() {
   updateStarsOnPage(data);
 }
 
+// Loop through each card and add the star count
+// Once each card has its star count then the pagination script is added
+
 function updateStarsOnPage(data) {
-  for (var i = 0; i < data.length; i++) {
-    var starCount = data[i].stars;
-
-    if (starCount > 999) {
-      starCount = numeral(starCount).format("0.0a");
-    } else if (starCount > 9999) {
-      starCount = numeral(starCount).format("0.00a");
+  return new Promise(function (resolve, reject) {
+    for (var i = 0; i < data.length; i++) {
+      var starCount = data[i].stars;
+      if (starCount > 999) {
+        starCount = numeral(starCount).format("0.0a");
+      } else if (starCount > 9999) {
+        starCount = numeral(starCount).format("0.00a");
+      }
+      $("[data-id='" + data[i].id + "'] .github-stars-count-whole-number").html(data[i].stars);
+      $("[data-id='" + data[i].id + "'] .github-stars-count").html(starCount);
     }
-
-    $("[data-id='" + data[i].id + "'] .github-stars-count-whole-number").html(data[i].stars);
-    $("[data-id='" + data[i].id + "'] .github-stars-count").html(starCount);
-  }
+    resolve(
+      $("#filter-script").html(addFilterScript())
+    );
+  });
 }
 
-function reloadFilterScript() {
-  var filterScript = $("#filter-script")[0];
-  $("#filter-script")[0].remove();
-  $(filterScript).appendTo("head");
+function addFilterScript() {
+  var data = $("#filter-script").data();
+
+  var script =
+    "<script list-id=" +
+    data["listId"] +
+    " display-count=" +
+    data["displayCount"] +
+    " pagination=" +
+    data["pagination"] +
+    " src='/assets/filter-hub-tags.js'></script>";
+
+  return script;
 }
