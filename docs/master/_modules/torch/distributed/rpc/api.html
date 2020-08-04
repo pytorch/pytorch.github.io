@@ -158,7 +158,7 @@
               
               
                 <div class="version">
-                  <a href='http://pytorch.org/docs/versions.html'>1.7.0a0+b87f0e5 &#x25BC</a>
+                  <a href='http://pytorch.org/docs/versions.html'>1.7.0a0+fa9ae67 &#x25BC</a>
                 </div>
               
             
@@ -256,7 +256,7 @@
 <ul>
 <li class="toctree-l1"><a class="reference external" href="https://pytorch.org/audio">torchaudio</a></li>
 <li class="toctree-l1"><a class="reference external" href="https://pytorch.org/text">torchtext</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../../../../torchvision/index.html">torchvision</a></li>
+<li class="toctree-l1"><a class="reference external" href="https://pytorch.org/vision">torchvision</a></li>
 <li class="toctree-l1"><a class="reference external" href="https://pytorch.org/elastic/">TorchElastic</a></li>
 <li class="toctree-l1"><a class="reference external" href="https://pytorch.org/serve">TorchServe</a></li>
 <li class="toctree-l1"><a class="reference external" href="http://pytorch.org/xla/">PyTorch on XLA Devices</a></li>
@@ -429,58 +429,123 @@
     <span class="k">return</span> <span class="n">wrapper</span>
 
 
-<span class="k">class</span> <span class="nc">WaitAllWorkersStates</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+<span class="k">class</span> <span class="nc">AllGatherStates</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="c1"># Each `intent_worker_names` is an empty set at beginning.</span>
-        <span class="c1"># It&#39;s only used by leader worker. Leader worker is user-specified or</span>
-        <span class="c1"># elected as the first worker in a sorted worker name list.</span>
-        <span class="c1"># Whenever there is a worker showing shutdown intention to the leader, by</span>
-        <span class="c1"># calling `_wait_all_workers()`, the leader adds this worker&#39;s name to the set.</span>
-        <span class="c1"># The leader also adds itself&#39;s name to the set on calling</span>
-        <span class="c1"># `_wait_all_workers()`. We need this because, we confine `_wait_all_workers()`</span>
-        <span class="c1"># to be called only once, by examing if leader&#39;s name has been added to the set.</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">intent_worker_names</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
-        <span class="c1"># Once `intent_worker_names == _ALL_WORKER_NAMES`,</span>
-        <span class="c1"># we flip `_SHUTDOWN_PROCEED_SIGNAL` on the leader, and leader will send RPCs</span>
-        <span class="c1"># to follower workers to flip their `_SHUTDOWN_PROCEED_SIGNAL`s.</span>
+        <span class="c1"># Each `gathered_objects` is an empty dict at beginning.</span>
+        <span class="c1"># The leader worker is elected as the first worker in a sorted worker</span>
+        <span class="c1"># name list. Whenever there is a worker entering `_all_gather()`, it</span>
+        <span class="c1"># runs `_gather_to_leader()` on the leader to add its own name and</span>
+        <span class="c1"># data obj to this dict. The leader also adds itself&#39;s name to the dict</span>
+        <span class="c1"># on calling `_all_gather()`.</span>
+        <span class="c1"># Once `set(gathered_objects.keys()) == _ALL_WORKER_NAMES`, the leader</span>
+        <span class="c1"># will broadcast the gathered dict to all follower workers and set their</span>
+        <span class="c1"># `gathered_objects` field and the `proceed_signal` field.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">gathered_objects</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="c1"># All workers wait on this signal until it receives all gathered</span>
+        <span class="c1"># objects.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">proceed_signal</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Event</span><span class="p">()</span>
 
 
-<span class="c1"># States used by `def _wait_all_workers()`.</span>
+<span class="c1"># States used by `def _all_gather()`.</span>
 <span class="c1"># `_ALL_WORKER_NAMES` is initialized on initiaizing RPC layer.</span>
 <span class="n">_ALL_WORKER_NAMES</span> <span class="o">=</span> <span class="kc">None</span>
-<span class="n">_wait_all_workers_dict_lock</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">RLock</span><span class="p">()</span>
-<span class="n">_wait_all_workers_sequence_id</span> <span class="o">=</span> <span class="mi">0</span>
-<span class="n">_wait_all_workers_sequence_id_to_states</span> <span class="o">=</span> <span class="n">collections</span><span class="o">.</span><span class="n">defaultdict</span><span class="p">(</span><span class="n">WaitAllWorkersStates</span><span class="p">)</span>
+<span class="n">_all_gather_dict_lock</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">RLock</span><span class="p">()</span>
+<span class="n">_all_gather_sequence_id</span> <span class="o">=</span> <span class="mi">0</span>
+<span class="n">_all_gather_sequence_id_to_states</span> <span class="o">=</span> <span class="n">collections</span><span class="o">.</span><span class="n">defaultdict</span><span class="p">(</span><span class="n">AllGatherStates</span><span class="p">)</span>
 
 
-<span class="k">def</span> <span class="nf">_on_leader_follower_report_shutdown_intent</span><span class="p">(</span><span class="n">sequence_id</span><span class="p">,</span> <span class="n">worker_name</span><span class="p">):</span>
-    <span class="k">with</span> <span class="n">_wait_all_workers_dict_lock</span><span class="p">:</span>
+<span class="k">def</span> <span class="nf">_gather_to_leader</span><span class="p">(</span><span class="n">sequence_id</span><span class="p">,</span> <span class="n">worker_name</span><span class="p">,</span> <span class="n">obj</span><span class="p">):</span>
+    <span class="k">with</span> <span class="n">_all_gather_dict_lock</span><span class="p">:</span>
         <span class="k">assert</span> <span class="p">(</span>
             <span class="n">worker_name</span> <span class="ow">in</span> <span class="n">_ALL_WORKER_NAMES</span>
         <span class="p">),</span> <span class="s2">&quot;</span><span class="si">{worker_name}</span><span class="s2"> is not expected by leader.&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">worker_name</span><span class="o">=</span><span class="n">worker_name</span><span class="p">)</span>
-        <span class="n">intent_worker_names</span> <span class="o">=</span> <span class="n">_wait_all_workers_sequence_id_to_states</span><span class="p">[</span>
-            <span class="n">sequence_id</span>
-        <span class="p">]</span><span class="o">.</span><span class="n">intent_worker_names</span>
+        <span class="n">states</span> <span class="o">=</span> <span class="n">_all_gather_sequence_id_to_states</span><span class="p">[</span><span class="n">sequence_id</span><span class="p">]</span>
         <span class="k">assert</span> <span class="p">(</span>
-            <span class="n">worker_name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">intent_worker_names</span>
+            <span class="n">worker_name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">states</span><span class="o">.</span><span class="n">gathered_objects</span>
         <span class="p">),</span> <span class="s2">&quot;</span><span class="si">{worker_name}</span><span class="s2"> reported intent sequence id </span><span class="si">{sequence_id}</span><span class="s2"> twice. &quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
             <span class="n">worker_name</span><span class="o">=</span><span class="n">worker_name</span><span class="p">,</span> <span class="n">sequence_id</span><span class="o">=</span><span class="n">sequence_id</span>
         <span class="p">)</span>
-        <span class="n">intent_worker_names</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">worker_name</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">_ALL_WORKER_NAMES</span> <span class="o">==</span> <span class="n">intent_worker_names</span><span class="p">:</span>
-            <span class="n">_set_proceed_shutdown_signal</span><span class="p">(</span><span class="n">sequence_id</span><span class="p">)</span>
+        <span class="n">states</span><span class="o">.</span><span class="n">gathered_objects</span><span class="p">[</span><span class="n">worker_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">obj</span>
+        <span class="k">if</span> <span class="n">_ALL_WORKER_NAMES</span> <span class="o">==</span> <span class="nb">set</span><span class="p">(</span><span class="n">states</span><span class="o">.</span><span class="n">gathered_objects</span><span class="o">.</span><span class="n">keys</span><span class="p">()):</span>
+            <span class="n">states</span><span class="o">.</span><span class="n">proceed_signal</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
 
 
-<span class="k">def</span> <span class="nf">_set_proceed_shutdown_signal</span><span class="p">(</span><span class="n">sequence_id</span><span class="p">):</span>
-    <span class="k">with</span> <span class="n">_wait_all_workers_dict_lock</span><span class="p">:</span>
-        <span class="n">proceed_signal</span> <span class="o">=</span> <span class="n">_wait_all_workers_sequence_id_to_states</span><span class="p">[</span>
-            <span class="n">sequence_id</span>
-        <span class="p">]</span><span class="o">.</span><span class="n">proceed_signal</span>
+<span class="k">def</span> <span class="nf">_broadcast_to_followers</span><span class="p">(</span><span class="n">sequence_id</span><span class="p">,</span> <span class="n">objects_map</span><span class="p">):</span>
+    <span class="k">with</span> <span class="n">_all_gather_dict_lock</span><span class="p">:</span>
+        <span class="n">states</span> <span class="o">=</span> <span class="n">_all_gather_sequence_id_to_states</span><span class="p">[</span><span class="n">sequence_id</span><span class="p">]</span>
+
     <span class="k">assert</span> <span class="p">(</span>
-        <span class="ow">not</span> <span class="n">proceed_signal</span><span class="o">.</span><span class="n">is_set</span><span class="p">()</span>
+        <span class="ow">not</span> <span class="n">states</span><span class="o">.</span><span class="n">proceed_signal</span><span class="o">.</span><span class="n">is_set</span><span class="p">()</span>
     <span class="p">),</span> <span class="s2">&quot;Termination signal sequence id </span><span class="si">{}</span><span class="s2"> got set twice.&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">sequence_id</span><span class="p">)</span>
-    <span class="n">proceed_signal</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
+    <span class="n">states</span><span class="o">.</span><span class="n">gathered_objects</span> <span class="o">=</span> <span class="n">objects_map</span>
+    <span class="n">states</span><span class="o">.</span><span class="n">proceed_signal</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
+
+
+<span class="nd">@_require_initialized</span>
+<span class="k">def</span> <span class="nf">_all_gather</span><span class="p">(</span><span class="n">obj</span><span class="p">):</span>
+    <span class="sa">r</span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    This is similar to torch.distributed.all_gather(), but is using RPC. It</span>
+<span class="sd">    picks the worker with the smallest name (alphabetic order) as the leader.</span>
+<span class="sd">    Then all followers send their data ``obj`` to the leader. After the leader</span>
+<span class="sd">    has received all, it will broadcast the results back to all followers. This</span>
+<span class="sd">    function blocks until all workers have received the gathered results.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">assert</span> <span class="p">(</span>
+        <span class="n">_ALL_WORKER_NAMES</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+    <span class="p">),</span> <span class="s2">&quot;`_ALL_WORKER_NAMES` is not initialized for `def _all_gather`.&quot;</span>
+    <span class="n">leader_name</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">_ALL_WORKER_NAMES</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+
+    <span class="n">self_name</span> <span class="o">=</span> <span class="n">_get_current_rpc_agent</span><span class="p">()</span><span class="o">.</span><span class="n">get_worker_info</span><span class="p">()</span><span class="o">.</span><span class="n">name</span>
+
+    <span class="k">global</span> <span class="n">_all_gather_sequence_id</span>
+    <span class="k">with</span> <span class="n">_all_gather_dict_lock</span><span class="p">:</span>
+        <span class="n">sequence_id</span> <span class="o">=</span> <span class="n">_all_gather_sequence_id</span>
+        <span class="n">_all_gather_sequence_id</span> <span class="o">+=</span> <span class="mi">1</span>
+
+    <span class="n">is_leader</span> <span class="o">=</span> <span class="n">leader_name</span> <span class="o">==</span> <span class="n">self_name</span>
+    <span class="c1"># Set a long enough timeout for all shutdown messages to be processed.</span>
+    <span class="n">timeout</span> <span class="o">=</span> <span class="mi">5</span>  <span class="c1"># second</span>
+
+    <span class="c1"># Phase 1: Followers send it&#39;s object to the leader</span>
+    <span class="k">if</span> <span class="n">is_leader</span><span class="p">:</span>
+        <span class="n">_gather_to_leader</span><span class="p">(</span><span class="n">sequence_id</span><span class="p">,</span> <span class="n">self_name</span><span class="p">,</span> <span class="n">obj</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">rpc_sync</span><span class="p">(</span>
+            <span class="n">leader_name</span><span class="p">,</span>
+            <span class="n">_gather_to_leader</span><span class="p">,</span>
+            <span class="n">args</span><span class="o">=</span><span class="p">(</span><span class="n">sequence_id</span><span class="p">,</span> <span class="n">self_name</span><span class="p">,</span> <span class="n">obj</span><span class="p">),</span>
+            <span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="k">with</span> <span class="n">_all_gather_dict_lock</span><span class="p">:</span>
+        <span class="n">states</span> <span class="o">=</span> <span class="n">_all_gather_sequence_id_to_states</span><span class="p">[</span>
+            <span class="n">sequence_id</span>
+        <span class="p">]</span>
+    <span class="n">states</span><span class="o">.</span><span class="n">proceed_signal</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span>
+
+    <span class="c1"># Phase 2: Leader broadcast gathered results to all followers</span>
+    <span class="c1"># Leader&#39;s signal is the first to be unblocked, after receiving all</span>
+    <span class="c1"># followers&#39; data objects.</span>
+    <span class="k">if</span> <span class="n">is_leader</span><span class="p">:</span>
+        <span class="n">worker_name_to_response_future_dict</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">follower_name</span> <span class="ow">in</span> <span class="n">_ALL_WORKER_NAMES</span> <span class="o">-</span> <span class="p">{</span><span class="n">leader_name</span><span class="p">}:</span>
+            <span class="n">fut</span> <span class="o">=</span> <span class="n">rpc_async</span><span class="p">(</span>
+                <span class="n">follower_name</span><span class="p">,</span>
+                <span class="n">_broadcast_to_followers</span><span class="p">,</span>
+                <span class="n">args</span><span class="o">=</span><span class="p">(</span><span class="n">sequence_id</span><span class="p">,</span> <span class="n">states</span><span class="o">.</span><span class="n">gathered_objects</span><span class="p">),</span>
+                <span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span>
+            <span class="p">)</span>
+            <span class="n">worker_name_to_response_future_dict</span><span class="p">[</span><span class="n">follower_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">fut</span>
+        <span class="k">for</span> <span class="n">follower_name</span><span class="p">,</span> <span class="n">fut</span> <span class="ow">in</span> <span class="n">worker_name_to_response_future_dict</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">fut</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span>
+            <span class="k">except</span> <span class="ne">RuntimeError</span> <span class="k">as</span> <span class="n">ex</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span>
+                    <span class="s2">&quot;</span><span class="si">{worker_name}</span><span class="s2"> failed to respond to &#39;Shutdown Proceed.&#39; request in </span><span class="si">{timeout}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                        <span class="n">worker_name</span><span class="o">=</span><span class="n">follower_name</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span>
+                    <span class="p">)</span>
+                <span class="p">)</span>
+    <span class="k">return</span> <span class="n">states</span><span class="o">.</span><span class="n">gathered_objects</span>
 
 
 <span class="nd">@_require_initialized</span>
@@ -492,59 +557,7 @@
 <span class="sd">    terminate the RPC framework, and there is no guarantee that the RPC</span>
 <span class="sd">    framework will work after this method returns.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">assert</span> <span class="p">(</span>
-        <span class="n">_ALL_WORKER_NAMES</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
-    <span class="p">),</span> <span class="s2">&quot;`_ALL_WORKER_NAMES` is not initialized for `def _wait_all_workers`.&quot;</span>
-    <span class="n">leader_worker_name</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">_ALL_WORKER_NAMES</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
-
-    <span class="n">self_worker_name</span> <span class="o">=</span> <span class="n">_get_current_rpc_agent</span><span class="p">()</span><span class="o">.</span><span class="n">get_worker_info</span><span class="p">()</span><span class="o">.</span><span class="n">name</span>
-
-    <span class="k">global</span> <span class="n">_wait_all_workers_sequence_id</span>
-    <span class="k">with</span> <span class="n">_wait_all_workers_dict_lock</span><span class="p">:</span>
-        <span class="n">sequence_id</span> <span class="o">=</span> <span class="n">_wait_all_workers_sequence_id</span>
-        <span class="n">_wait_all_workers_sequence_id</span> <span class="o">+=</span> <span class="mi">1</span>
-
-    <span class="n">is_leader_worker</span> <span class="o">=</span> <span class="n">leader_worker_name</span> <span class="o">==</span> <span class="n">self_worker_name</span>
-    <span class="c1"># Set a long enough timeout for all shutdown messages to be processed.</span>
-    <span class="n">timeout</span> <span class="o">=</span> <span class="mi">5</span>  <span class="c1"># second</span>
-
-    <span class="c1"># Phase 1: Followers send intents.</span>
-    <span class="c1"># All followers report intents to the leader.</span>
-    <span class="k">if</span> <span class="n">is_leader_worker</span><span class="p">:</span>
-        <span class="n">_on_leader_follower_report_shutdown_intent</span><span class="p">(</span><span class="n">sequence_id</span><span class="p">,</span> <span class="n">self_worker_name</span><span class="p">)</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="n">rpc_sync</span><span class="p">(</span>
-            <span class="n">leader_worker_name</span><span class="p">,</span>
-            <span class="n">_on_leader_follower_report_shutdown_intent</span><span class="p">,</span>
-            <span class="n">args</span><span class="o">=</span><span class="p">(</span><span class="n">sequence_id</span><span class="p">,</span> <span class="n">self_worker_name</span><span class="p">,),</span>
-            <span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">,</span>
-        <span class="p">)</span>
-
-    <span class="k">with</span> <span class="n">_wait_all_workers_dict_lock</span><span class="p">:</span>
-        <span class="n">proceed_signal</span> <span class="o">=</span> <span class="n">_wait_all_workers_sequence_id_to_states</span><span class="p">[</span>
-            <span class="n">sequence_id</span>
-        <span class="p">]</span><span class="o">.</span><span class="n">proceed_signal</span>
-    <span class="n">proceed_signal</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span>
-
-    <span class="c1"># Phase 2: Leader asks followers to proceed.</span>
-    <span class="c1"># Leader&#39;s signal is the first to be unblocked,</span>
-    <span class="c1"># after receiving all followers&#39; intents.</span>
-    <span class="k">if</span> <span class="n">is_leader_worker</span><span class="p">:</span>
-        <span class="c1"># The leader sends out proceeed signals to all followers.</span>
-        <span class="n">worker_name_to_response_future_dict</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
-        <span class="k">for</span> <span class="n">follower_worker_name</span> <span class="ow">in</span> <span class="n">_ALL_WORKER_NAMES</span> <span class="o">-</span> <span class="p">{</span><span class="n">leader_worker_name</span><span class="p">}:</span>
-            <span class="n">fut</span> <span class="o">=</span> <span class="n">rpc_async</span><span class="p">(</span><span class="n">follower_worker_name</span><span class="p">,</span> <span class="n">_set_proceed_shutdown_signal</span><span class="p">,</span>
-                            <span class="n">args</span><span class="o">=</span><span class="p">(</span><span class="n">sequence_id</span><span class="p">,),</span> <span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">)</span>
-            <span class="n">worker_name_to_response_future_dict</span><span class="p">[</span><span class="n">follower_worker_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">fut</span>
-        <span class="k">for</span> <span class="n">follower_worker_name</span><span class="p">,</span> <span class="n">fut</span> <span class="ow">in</span> <span class="n">worker_name_to_response_future_dict</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-            <span class="k">try</span><span class="p">:</span>
-                <span class="n">fut</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span>
-            <span class="k">except</span> <span class="ne">RuntimeError</span> <span class="k">as</span> <span class="n">ex</span><span class="p">:</span>
-                <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span>
-                    <span class="s2">&quot;</span><span class="si">{worker_name}</span><span class="s2"> failed to respond to &#39;Shutdown Proceed.&#39; request in </span><span class="si">{timeout}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
-                        <span class="n">worker_name</span><span class="o">=</span><span class="n">follower_worker_name</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span>
-                    <span class="p">)</span>
-                <span class="p">)</span>
+    <span class="n">_all_gather</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
 
 
 <div class="viewcode-block" id="shutdown"><a class="viewcode-back" href="../../../../rpc.html#torch.distributed.rpc.shutdown">[docs]</a><span class="nd">@_require_initialized</span>
