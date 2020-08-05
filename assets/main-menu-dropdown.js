@@ -1,9 +1,9 @@
-$("[data-toggle='ecosystem-dropdown']").on("click", function() {
+$("[data-toggle='ecosystem-dropdown']").hover(function() {
   toggleDropdown($(this).attr("data-toggle"));
   toggleArrowClass(".ecosystem-option");
 });
 
-$("[data-toggle='resources-dropdown']").on("click", function() {
+$("[data-toggle='resources-dropdown']").hover(function() {
   toggleDropdown($(this).attr("data-toggle"));
   toggleArrowClass(".resource-option");
 });
