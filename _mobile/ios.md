@@ -223,14 +223,11 @@ torch::jit::GraphOptimizerEnabledGuard guard(false);
 
 ## iOS Tutorials
 
-[![PyTorch Mobile Runtime for iOS](https://i.ytimg.com/vi/JFy3uHyqXn0/maxresdefault.jpg =560x)](https://www.youtube.com/watch?v=JFy3uHyqXn0 "PyTorch Mobile Runtime for iOS")
+Watch the following [video](https://www.youtube.com/watch?v=JFy3uHyqXn0) as PyTorch Partner Engineer Brad Heintz walks through steps for setting up the PyTorch Runtime for iOS projects:
 
-![PyTorch Mobile Runtime for iOS](https://i.ytimg.com/vi/JFy3uHyqXn0/maxresdefault.jpg =560x)
+[![PyTorch Mobile Runtime for iOS](https://i.ytimg.com/vi/JFy3uHyqXn0/maxresdefault.jpg){:height="75%" width="75%"}](https://www.youtube.com/watch?v=JFy3uHyqXn0 "PyTorch Mobile Runtime for iOS")
 
-<div style="margin-top:10px; margin-bottom:10px;">
-    <iframe  title="PyTorch Mobile Runtime for iOS" width="560" height="315" src="https://www.youtube.com/watch?v=JFy3uHyqXn0" frameborder="0" allowfullscreen></iframe>
-</div>
-
+Additionally, checkout our [Mobile Performance Recipes](https://pytorch.org/tutorials/recipes/mobile_perf.html) which cover how to optimize your model to help decrease execution time (higher performance, lower latency) and check if optimizations helped using benchmarking.
 
 ## API Docs
 
