@@ -225,6 +225,8 @@ torch::jit::GraphOptimizerEnabledGuard guard(false);
 
 [![PyTorch Mobile Runtime for iOS](https://i.ytimg.com/vi/JFy3uHyqXn0/maxresdefault.jpg =560x)](https://www.youtube.com/watch?v=JFy3uHyqXn0 "PyTorch Mobile Runtime for iOS")
 
+![PyTorch Mobile Runtime for iOS](https://i.ytimg.com/vi/JFy3uHyqXn0/maxresdefault.jpg =560x)
+
 ## API Docs
 
 Currently, the iOS framework uses the Pytorch C++ front-end APIs directly. The C++ document can be found [here](https://pytorch.org/cppdocs/). To learn more about it, we recommend exploring the [C++ front-end tutorials](https://pytorch.org/tutorials/advanced/cpp_frontend.html) on PyTorch webpage.
