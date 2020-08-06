@@ -223,8 +223,7 @@ torch::jit::GraphOptimizerEnabledGuard guard(false);
 
 ## iOS Tutorials
 
-<iframe width="1280" height="720" src="https://www.youtube.com/watch?v=JFy3uHyqXn0" frameborder="0" allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
-
+[![PyTorch Mobile Runtime for iOS](https://i.ytimg.com/vi/JFy3uHyqXn0/maxresdefault.jpg)](]https://www.youtube.com/watch?v=JFy3uHyqXn0 "PyTorch Mobile Runtime for iOS")
 
 ## API Docs
 
