@@ -309,6 +309,16 @@ SELECTED_OP_LIST=MobileNetV2.yaml scripts/build_pytorch_android.sh arm64-v8a
 
 After successful build you can integrate the result aar files to your android gradle project, following the steps from previous section of this tutorial (Building PyTorch Android from Source).
 
+## Android Tutorials
+
+Watch the following [video](https://www.youtube.com/watch?v=O_2KBhkIvnc) as PyTorch Partner Engineer Brad Heintz walks through steps for setting up the PyTorch Runtime for Android projects:
+
+[![PyTorch Mobile Runtime for Android](https://i.ytimg.com/vi/O_2KBhkIvnc/maxresdefault.jpg){:height="75%" width="75%"}](https://www.youtube.com/watch?v=JFy3uHyqXn0 "PyTorch Mobile Runtime for Android")
+
+Checkout our [Mobile Performance Recipes](https://pytorch.org/tutorials/recipes/mobile_perf.html) which cover how to optimize your model and check if optimizations helped via benchmarking.
+
+In addition, follow this recipe to learn how to [make Native Android Application that use PyTorch prebuilt libraries](https://pytorch.org/tutorials/recipes/android_native_app_with_custom_op.html).
+
 ## API Docs
 
 You can find more details about the PyTorch Android API in the [Javadoc](https://pytorch.org/javadoc/).
