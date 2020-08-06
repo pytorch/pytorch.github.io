@@ -227,7 +227,8 @@ Watch the following [video](https://www.youtube.com/watch?v=JFy3uHyqXn0) as PyTo
 
 [![PyTorch Mobile Runtime for iOS](https://i.ytimg.com/vi/JFy3uHyqXn0/maxresdefault.jpg){:height="75%" width="75%"}](https://www.youtube.com/watch?v=JFy3uHyqXn0 "PyTorch Mobile Runtime for iOS")
 
-Additionally, checkout our [Mobile Performance Recipes](https://pytorch.org/tutorials/recipes/mobile_perf.html) which cover how to optimize your model to help decrease execution time (higher performance, lower latency) and check if optimizations helped using benchmarking.
+Additionally, checkout our [Mobile Performance Recipes](https://pytorch.org/tutorials/recipes/mobile_perf.html) which cover how to optimize your model and check if optimizations helped via benchmarking.
+
 
 ## API Docs
 
