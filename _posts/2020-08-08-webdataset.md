@@ -42,6 +42,10 @@ The WebDataset library is a complete solution for working with large datasets an
 
 The use of sharded, sequentially readable formats is essential for very large datasets. In addition, it has benefits in many other environments. WebDataset provides a solution that scales well from small problems on a desktop machine to very large deep learning problems in clusters or in the cloud. The following table summarizes some of the benefits in different environments. 
 
+ 
+
+
+
 <table width="650" border="1" cellspacing="5" cellpadding="5">
   <tbody>
     <tr>
