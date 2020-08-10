@@ -147,6 +147,7 @@ For a general introduction to how we handle large scale training with WebDataset
 
 * [Bigdata 2019 Paper with Benchmarks](https://arxiv.org/abs/2001.01858)
 
+Check out [the library](https://github.com/tmbdev/webdataset) and provide your feedback for [RFC 38419](https://github.com/pytorch/pytorch/issues/38419).
 
 
 
