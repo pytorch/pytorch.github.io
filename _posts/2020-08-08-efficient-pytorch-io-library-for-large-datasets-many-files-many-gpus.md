@@ -20,15 +20,13 @@ However, working with the large amount of data sets presents a number of challen
 * **Shuffling and Augmentation:** training data needs to be shuffled and augmented prior to training.
 * **Scalability:** users often want to develop and test on small datasets and then rapidly scale up to large datasets.
 
-Traditional local and network file systems, and even object storage servers, are not designed for these kinds of applications. [The WebDataset I/O library](https://github.com/tmbdev/webdataset) for PyTorch, together with the optional 
-
-[AIStore server](https://github.com/NVIDIA/aistore) and [Tensorcom RDMA](https://github.com/NVlabs/tensorcom) libraries, provide an efficient, simple, and standards-based solution to all these problems. The library is simple enough for day-to-day use, is based on mature open source standards, and is easy to migrate to from existing file-based datasets. 
+Traditional local and network file systems, and even object storage servers, are not designed for these kinds of applications. [The WebDataset I/O library](https://github.com/tmbdev/webdataset) for PyTorch, together with the optional [AIStore server](https://github.com/NVIDIA/aistore) and [Tensorcom RDMA](https://github.com/NVlabs/tensorcom) libraries, provide an efficient, simple, and standards-based solution to all these problems. The library is simple enough for day-to-day use, is based on mature open source standards, and is easy to migrate to from existing file-based datasets. 
 
 Using WebDataset is simple and requires little effort, and it will let you scale up the same code from running local experiments to using hundreds of GPUs on clusters or in the cloud with linearly scalable performance. Even on small problems and on your desktop, it can speed up I/O tenfold and simplifies data management and processing of large datasets. The rest of this blog post tells you how to get started with WebDataset and how it works.
 
 ## The WebDataset Library
+
 The WebDataset library provides a simple solution to the challenges listed above. Currently, it is available as a separate library [(github.com/tmbdev/webdataset)](https://github.com/tmbdev/webdataset), but it is on track for being incorporated into PyTorch (see [RFC 38419](https://github.com/pytorch/pytorch/issues/38419)).  The WebDataset implementation is small (about 1500 LOC) and has no external dependencies.
-Instead of inventing a new format, WebDataset represents large datasets as collections of POSIX tar archive files consisting of the original data files. The WebDataset library can use such tar archives directly for training, without the need for unpacking or local storage.
 
 Instead of inventing a new format, WebDataset represents large datasets as collections of POSIX tar archive files consisting of the original data files. The WebDataset library can use such tar archives directly for training, without the need for unpacking or local storage.
 
@@ -50,8 +48,8 @@ The use of sharded, sequentially readable formats is essential for very large da
 <table width="650" border="1" cellspacing="5" cellpadding="5">
   <tbody>
     <tr>
-      <td>  Environment </td>
-      <td> Benefits of WebDataset</td>
+      <td width="280">  Environment </td>
+      <td> Benefits of WebDataset </td>
     </tr>
     <tr>
       <td>Local Cluster with AIStore</td>
@@ -116,7 +114,7 @@ For example, ImageNet is stored in 1282 separate 100 Mbyte shards with names ```
 
 WebDataset datasets can be used directly from local disk, from web servers (hence the name), from cloud storage and object stores, just by changing a URL. WebDataset datasets can be used for training without unpacking, and training can even be carried out on streaming data, with no local storage.
 
-Shuffling during training is important for many deep learning applications, and WebDataset performs shuffling both at the shard level and at the sample level. Splitting of data across multiple workers is performed at the shard level using a user-provided shard_selection function that defaults to a function that splits based on get_worker_info. (WebDataset can be combined with the [tensorcom](https://github.com/NVLabs/tensorcom) library to offload decompression/data augmentation and provide RDMA and direct-to-GPU loading; see below.)
+Shuffling during training is important for many deep learning applications, and WebDataset performs shuffling both at the shard level and at the sample level. Splitting of data across multiple workers is performed at the shard level using a user-provided ```shard_selection``` function that defaults to a function that splits based on ```get_worker_info.``` (WebDataset can be combined with the [tensorcom](https://github.com/NVLabs/tensorcom) library to offload decompression/data augmentation and provide RDMA and direct-to-GPU loading; see below.)
 
 ## Code Sample
 Here are some code snippets illustrating the use of WebDataset in a typical PyTorch deep learning application (you can find a full example at [http://github.com/tmbdev/pytorch-imagenet-wds](http://github.com/tmbdev/pytorch-imagenet-wds).
