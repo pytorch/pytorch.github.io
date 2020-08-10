@@ -42,43 +42,17 @@ The WebDataset library is a complete solution for working with large datasets an
 The use of sharded, sequentially readable formats is essential for very large datasets. In addition, it has benefits in many other environments. WebDataset provides a solution that scales well from small problems on a desktop machine to very large deep learning problems in clusters or in the cloud. The following table summarizes some of the benefits in different environments. 
 
  
+ | Environment  | Benefits of WebDataset |
+| ------------- | ------------- |
+| Local Cluster with AIStore | AIStore can be deployed easily as K8s containers and offers linear scalability and near 100% utilization of network and I/O bandwidth. Suitable for petascale deep learning. |
+| Cloud Computing | WebDataset deep learning jobs can be trained directly against datasets stored in cloud buckets; no volume plugins required. Local and cloud jobs work identically. Suitable for petascale learning. |
+| Local Cluster with existing distributed FS or object store |  WebDataset’s large sequential reads improve performance with existing distributed stores and eliminate the need for dedicated volume plugins. |
+| Educational Environments | WebDatasets can be stored on existing web servers and web caches, and can be accessed directly by students by URL |
+| Training on Workstations from Local Drives | obs can start training as the data still downloads. Data doesn’t need to be unpacked for training. Ten-fold improvements in I/O performance on hard drives over random access file-based datasets. |
+| All Environments | Datasets are represented in an archival format and contain metadata such as file types. Data is compressed in native formats (JPEG, MP4, etc.). Data management, ETL-style jobs, and data transformations and I/O are simplified and easily parallelized.  |
 
 
 
-<table width="650" border="1" cellspacing="5" cellpadding="5">
-  <tbody>
-    <tr>
-      <td width="280">  Environment </td>
-      <td> Benefits of WebDataset </td>
-    </tr>
-    <tr>
-      <td>Local Cluster with AIStore</td>
-      <td> 
-AIStore can be deployed easily as K8s containers and offers linear scalability and near 100% utilization of network and I/O bandwidth. Suitable for petascale deep learning.
-</td>
-    </tr>
-    <tr>
-      <td>Cloud Computing</td>
-      <td>WebDataset deep learning jobs can be trained directly against datasets stored in cloud buckets; no volume plugins required. Local and cloud jobs work identically. Suitable for petascale learning.</td>
-    </tr>
-    <tr>
-      <td>Local Cluster with existing distributed FS or object store</td>
-      <td>WebDataset’s large sequential reads improve performance with existing distributed stores and eliminate the need for dedicated volume plugins.</td>
-    </tr>
-    <tr>
-      <td>Educational Environments</td>
-      <td>WebDatasets can be stored on existing web servers and web caches, and can be accessed directly by students by URL</td>
-    </tr>
-    <tr>
-      <td>Training on Workstations from Local Drives</td>
-      <td>obs can start training as the data still downloads. Data doesn’t need to be unpacked for training. Ten-fold improvements in I/O performance on hard drives over random access file-based datasets.</td>
-    </tr>
-    <tr>
-      <td>All Environments</td>
-      <td>Datasets are represented in an archival format and contain metadata such as file types. Data is compressed in native formats (JPEG, MP4, etc.). Data management, ETL-style jobs, and data transformations and I/O are simplified and easily parallelized. </td>
-    </tr>
-  </tbody>
-</table>
 
 We will be adding more examples giving benchmarks and showing how to use WebDataset in these environments over the coming months.
 
