@@ -14,7 +14,7 @@ Although the most commonly encountered big data sets right now involve images an
 
 However, working with the large amount of data sets presents a number of challenges:
 
-* **Dataset** Size:** datasets often exceed the capacity of node-local disk storage, requiring distributed storage systems and efficient network access.
+* **Dataset Size:** datasets often exceed the capacity of node-local disk storage, requiring distributed storage systems and efficient network access.
 * **Number of Files:** datasets often consist of billions of files with uniformly random access patterns, something that often overwhelms both local and network file systems.
 * **Data Rates:** training jobs on large datasets often use many GPUs, requiring aggregate I/O bandwidths to the dataset of many GBytes/s; these can only be satisfied by massively parallel I/O systems.
 * **Shuffling and Augmentation:** training data needs to be shuffled and augmented prior to training.
