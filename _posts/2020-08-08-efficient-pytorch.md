@@ -20,7 +20,7 @@ However, working with the large amount of data sets presents a number of challen
 * **Shuffling and Augmentation:** training data needs to be shuffled and augmented prior to training.
 * **Scalability:** users often want to develop and test on small datasets and then rapidly scale up to large datasets.
 
-Traditional local and network file systems, and even object storage servers, are not designed for these kinds of applications. [The WebDataset I/O library](https://github.com/tmbdev/webdataset) for PyTorch, together with the optional [AIStore server](https://github.com/NVIDIA/aistore) and [Tensorcom RDMA](https://github.com/NVlabs/tensorcom) libraries, provide an efficient, simple, and standards-based solution to all these problems. The library is simple enough for day-to-day use, is based on mature open source standards, and is easy to migrate to from existing file-based datasets. 
+Traditional local and network file systems, and even object storage servers, are not designed for these kinds of applications. [The WebDataset I/O library](https://github.com/tmbdev/webdataset) for PyTorch, together with the optional [AIStore server](https://github.com/NVIDIA/aistore) and [Tensorcom](https://github.com/NVlabs/tensorcom) RDMA libraries, provide an efficient, simple, and standards-based solution to all these problems. The library is simple enough for day-to-day use, is based on mature open source standards, and is easy to migrate to from existing file-based datasets. 
 
 Using WebDataset is simple and requires little effort, and it will let you scale up the same code from running local experiments to using hundreds of GPUs on clusters or in the cloud with linearly scalable performance. Even on small problems and on your desktop, it can speed up I/O tenfold and simplifies data management and processing of large datasets. The rest of this blog post tells you how to get started with WebDataset and how it works.
 
@@ -47,7 +47,7 @@ The use of sharded, sequentially readable formats is essential for very large da
 | Cloud Computing | WebDataset deep learning jobs can be trained directly against datasets stored in cloud buckets; no volume plugins required. Local and cloud jobs work identically. Suitable for petascale learning. |
 | Local Cluster with existing distributed FS or object store |  WebDataset’s large sequential reads improve performance with existing distributed stores and eliminate the need for dedicated volume plugins. |
 | Educational Environments | WebDatasets can be stored on existing web servers and web caches, and can be accessed directly by students by URL |
-| Training on Workstations from Local Drives | obs can start training as the data still downloads. Data doesn’t need to be unpacked for training. Ten-fold improvements in I/O performance on hard drives over random access file-based datasets. |
+| Training on Workstations from Local Drives | Jobs can start training as the data still downloads. Data doesn’t need to be unpacked for training. Ten-fold improvements in I/O performance on hard drives over random access file-based datasets. |
 | All Environments | Datasets are represented in an archival format and contain metadata such as file types. Data is compressed in native formats (JPEG, MP4, etc.). Data management, ETL-style jobs, and data transformations and I/O are simplified and easily parallelized.  |
 
 We will be adding more examples giving benchmarks and showing how to use WebDataset in these environments over the coming months.
