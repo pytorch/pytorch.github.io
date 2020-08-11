@@ -149,7 +149,7 @@ For a general introduction to how we handle large scale training with WebDataset
 
 * [tensorcom](https://github.com/NVLabs/tensorcom) is a library supporting distributed data augmentation and RDMA to GPU.
 
-* [webdataset-examples](https://github.com/tmbdev/webdataset-examples) contains an example (and soon more examples) of how to use WebDataset in practice.
+* [pytorch-imagenet-wds](https://github.com/tmbdev/pytorch-imagenet-wds) contains an example of how to use WebDataset with ImageNet, based on the PyTorch ImageNet example.
 
 * [Bigdata 2019 Paper with Benchmarks](https://arxiv.org/abs/2001.01858)
 
