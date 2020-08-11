@@ -58,7 +58,7 @@ For high-performance computation on local clusters, the companion open-source [A
 Below is a benchmark of AIStore with WebDataset clients using 10 server nodes and 120 rotational drives each.
 
 <div class="text-center">
-  <img src="{{ site.url }}/assets/images/webdataset1.png" width="100%">
+  <img src="{{ site.url }}/assets/images/pytorchwebdataset1.png" width="100%">
 </div>
 
 The left axis shows the aggregate bandwidth from the cluster, while the right scale shows the measured per drive I/O bandwidth. WebDataset and AIStore scale linearly to about 300 clients, at which point they are increasingly limited by the maximum I/O bandwidth available from the rotational drives (about 150 MBytes/s per drive). For comparison, HDFS is shown. HDFS uses a similar approach to AIStore/WebDataset and also exhibits linear scaling up to about 192 clients; at that point, it hits a performance limit of about 120 MBytes/s per drive, and it failed when using more than 1024 clients. Unlike HDFS, the WebDataset-based code just uses standard URLs and HTTP to access data and works identically with local files, with files stored on web servers, and with AIStore. For comparison, NFS in similar experiments delivers about 10-20 MBytes/s per drive.
