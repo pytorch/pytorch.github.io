@@ -40,7 +40,7 @@ The WebDataset library is a complete solution for working with large datasets an
 
 The use of sharded, sequentially readable formats is essential for very large datasets. In addition, it has benefits in many other environments. WebDataset provides a solution that scales well from small problems on a desktop machine to very large deep learning problems in clusters or in the cloud. The following table summarizes some of the benefits in different environments. 
 
- 
+  {:.table.table-striped.table-bordered}
  | Environment  | Benefits of WebDataset |
 | ------------- | ------------- |
 | Local Cluster with AIStore | AIStore can be deployed easily as K8s containers and offers linear scalability and near 100% utilization of network and I/O bandwidth. Suitable for petascale deep learning. |
