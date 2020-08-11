@@ -4,7 +4,7 @@ title: 'Efficient PyTorch I/O library for Large Datasets, Many Files, Many GPUs'
 author: Alex Aizman, Gavin Maltby, Thomas Breuel
 ---
 
-The size of data sets are growing bigger and faster every day. This means there are more data sets for deep learning researchers and engineers to train and validate their models.
+Data sets are growing bigger every day and GPUs are getting faster. This means there are more data sets for deep learning researchers and engineers to train and validate their models.
 
 * Many datasets for research in still image recognition are becoming available with 10 million or more images, including OpenImages and Places.
 * million YouTube videos [(YouTube 8M)](https://research.google.com/youtube8m/) consume about 300 TB in 720p, used for research in object recognition, video analytics, and action recognition.
