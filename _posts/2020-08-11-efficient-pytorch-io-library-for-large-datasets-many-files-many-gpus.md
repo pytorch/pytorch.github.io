@@ -55,7 +55,7 @@ We will be adding more examples giving benchmarks and showing how to use WebData
 ## High-Performance
 For high-performance computation on local clusters, the companion open-source [AIStore](https://github.com/NVIDIA/AIStore) server provides full disk to GPU I/O bandwidth, subject only to hardware constraints. [This Bigdata 2019 Paper](https://arxiv.org/abs/2001.01858) contains detailed benchmarks and performance measurements. In addition to benchmarks, research projects at NVIDIA and Microsoft have used WebDataset for petascale datasets and billions of training samples.
 
-Below is a benchmark of AIStore with WebDataset clients using 10 server nodes and 120 rotational drives each.
+Below is a benchmark of AIStore with WebDataset clients using 12 server nodes with 10 rotational drives each.
 
 <div class="text-center">
   <img src="{{ site.url }}/assets/images/pytorchwebdataset1.png" width="100%">
