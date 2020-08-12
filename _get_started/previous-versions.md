@@ -17,6 +17,57 @@ your convenience.
 
 ## Commands for Versions >= 1.0.0
 
+### v1.5.1
+
+#### Conda
+
+##### OSX
+
+```
+# conda
+conda install pytorch==1.5.1 torchvision==0.6.1 -c pytorch
+```
+
+#####  Linux and Windows
+
+```
+# CUDA 9.2
+conda install pytorch==1.5.1 torchvision==0.6.1 cudatoolkit=9.2 -c pytorch
+
+# CUDA 10.1
+conda install pytorch==1.5.1 torchvision==0.6.1 cudatoolkit=10.1 -c pytorch
+
+# CUDA 10.2
+conda install pytorch==1.5.1 torchvision==0.6.1 cudatoolkit=10.2 -c pytorch
+
+# CPU Only
+conda install pytorch==1.5.1 torchvision==0.6.1 cpuonly -c pytorch
+```
+
+#### Wheel
+
+##### OSX
+
+```
+pip install torch==1.5.1 torchvision==0.6.1
+```
+
+##### Linux and Windows
+
+```
+# CUDA 10.2
+pip install torch==1.5.1 torchvision==0.6.1
+
+# CUDA 10.1
+pip install torch==1.5.1+cu101 torchvision==0.6.1+cu101 -f https://download.pytorch.org/whl/torch_stable.html
+
+# CUDA 9.2
+pip install torch==1.5.1+cu92 torchvision==0.6.1+cu92 -f https://download.pytorch.org/whl/torch_stable.html
+
+# CPU only
+pip install torch==1.5.1+cpu torchvision==0.6.1+cpu -f https://download.pytorch.org/whl/torch_stable.html
+```
+
 ### v1.5.0
 
 #### Conda
@@ -56,7 +107,7 @@ pip install torch==1.5.0 torchvision==0.6.0
 
 ```
 # CUDA 10.2
-pip install torch==1.5.0 torchvision==0.6.0 -f https://download.pytorch.org/whl/torch_stable.html
+pip install torch==1.5.0 torchvision==0.6.0
 
 # CUDA 10.1
 pip install torch==1.5.0+cu101 torchvision==0.6.0+cu101 -f https://download.pytorch.org/whl/torch_stable.html
@@ -104,7 +155,7 @@ pip install torch==1.4.0 torchvision==0.5.0
 
 ```
 # CUDA 10.1
-pip install torch==1.4.0 torchvision==0.5.0 -f https://download.pytorch.org/whl/torch_stable.html
+pip install torch==1.4.0 torchvision==0.5.0
 
 # CUDA 9.2
 pip install torch==1.4.0+cu92 torchvision==0.5.0+cu92 -f https://download.pytorch.org/whl/torch_stable.html
@@ -149,7 +200,7 @@ pip install torch==1.2.0 torchvision==0.4.0
 
 ```
 # CUDA 10.0
-pip install torch==1.2.0 torchvision==0.4.0 -f https://download.pytorch.org/whl/torch_stable.html
+pip install torch==1.2.0 torchvision==0.4.0
 
 # CUDA 9.2
 pip install torch==1.2.0+cu92 torchvision==0.4.0+cu92 -f https://download.pytorch.org/whl/torch_stable.html
