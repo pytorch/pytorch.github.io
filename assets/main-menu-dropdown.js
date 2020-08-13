@@ -1,6 +1,5 @@
 $("[data-toggle='resources-dropdown']").hover(function() {
   toggleDropdown($(this).attr("data-toggle"));
-  toggleArrowClass(".resource-option");
 });
 
 function toggleDropdown(menuToggle) {
@@ -13,8 +12,4 @@ function toggleDropdown(menuToggle) {
     $("[data-toggle=" + menuToggle + "].show-menu").removeClass(showMenuClass);
     $(menuClass).addClass(showMenuClass);
   }
-}
-
-function toggleArrowClass(dropdown) {
-  $(dropdown).toggleClass("with-right-white-arrow with-down-white-arrow");
 }
