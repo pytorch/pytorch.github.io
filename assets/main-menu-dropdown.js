@@ -1,8 +1,3 @@
-$("[data-toggle='ecosystem-dropdown']").hover(function() {
-  toggleDropdown($(this).attr("data-toggle"));
-  toggleArrowClass(".ecosystem-option");
-});
-
 $("[data-toggle='resources-dropdown']").hover(function() {
   toggleDropdown($(this).attr("data-toggle"));
   toggleArrowClass(".resource-option");
