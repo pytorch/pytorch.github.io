@@ -158,7 +158,7 @@
               
               
                 <div class="version">
-                  <a href='http://pytorch.org/docs/versions.html'>1.7.0a0+6717a14 &#x25BC</a>
+                  <a href='http://pytorch.org/docs/versions.html'>1.7.0a0+874f157 &#x25BC</a>
                 </div>
               
             
@@ -352,8 +352,10 @@
 <span class="kn">from</span> <span class="nn">datetime</span> <span class="kn">import</span> <span class="n">timedelta</span>
 <span class="kn">import</span> <span class="nn">enum</span>
 
+<span class="kn">import</span> <span class="nn">torch</span>
 <span class="kn">import</span> <span class="nn">torch.distributed</span> <span class="k">as</span> <span class="nn">dist</span>
 
+<span class="kn">from</span> <span class="nn">.</span> <span class="kn">import</span> <span class="n">api</span>
 <span class="kn">from</span> <span class="nn">.</span> <span class="kn">import</span> <span class="n">constants</span> <span class="k">as</span> <span class="n">rpc_constants</span>
 
 
@@ -519,6 +521,57 @@
     <span class="p">)</span>
 
 
+<span class="c1"># detect if any worker has invalid device_map configurations, and return</span>
+<span class="c1"># names of failed workers</span>
+<span class="k">def</span> <span class="nf">_tensorpipe_check_device_maps</span><span class="p">(</span><span class="n">agent</span><span class="p">,</span> <span class="n">device_maps</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">device_maps</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">device_maps</span> <span class="o">=</span> <span class="p">{}</span>
+
+    <span class="k">def</span> <span class="nf">check_one_worker</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">device_maps</span><span class="p">,</span> <span class="n">all_device_counts</span><span class="p">):</span>
+        <span class="n">device_count</span> <span class="o">=</span> <span class="n">all_device_counts</span><span class="p">[</span><span class="n">name</span><span class="p">]</span>
+        <span class="n">wrong_worker_names</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">device_maps</span><span class="p">)</span> <span class="o">-</span> <span class="nb">set</span><span class="p">(</span><span class="n">all_device_counts</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">wrong_worker_names</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Wrong worker names: </span><span class="si">{</span><span class="n">wrong_worker_names</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">worker_name</span> <span class="ow">in</span> <span class="n">all_device_counts</span><span class="p">:</span>
+            <span class="n">remote_device_count</span> <span class="o">=</span> <span class="n">all_device_counts</span><span class="p">[</span><span class="n">worker_name</span><span class="p">]</span>
+            <span class="k">if</span> <span class="n">worker_name</span> <span class="ow">in</span> <span class="n">device_maps</span><span class="p">:</span>
+                <span class="n">device_map</span> <span class="o">=</span> <span class="n">device_maps</span><span class="p">[</span><span class="n">worker_name</span><span class="p">]</span>
+                <span class="n">key_set</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">device_map</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+                <span class="n">val_set</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">device_map</span><span class="o">.</span><span class="n">values</span><span class="p">())</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="nb">all</span><span class="p">([</span>
+                    <span class="nb">len</span><span class="p">(</span><span class="n">device_map</span><span class="p">)</span> <span class="o">==</span> <span class="nb">len</span><span class="p">(</span><span class="n">key_set</span><span class="p">),</span>
+                    <span class="nb">len</span><span class="p">(</span><span class="n">device_map</span><span class="p">)</span> <span class="o">==</span> <span class="nb">len</span><span class="p">(</span><span class="n">val_set</span><span class="p">),</span>  <span class="c1"># check 1-to-1 mapping</span>
+                    <span class="nb">min</span><span class="p">(</span><span class="n">key_set</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">,</span>
+                    <span class="nb">max</span><span class="p">(</span><span class="n">key_set</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">device_count</span><span class="p">,</span>  <span class="c1"># check local range</span>
+                    <span class="nb">min</span><span class="p">(</span><span class="n">val_set</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">,</span>
+                    <span class="nb">max</span><span class="p">(</span><span class="n">val_set</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">remote_device_count</span>  <span class="c1"># check remote range</span>
+                <span class="p">]):</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;Invalid device_map configuration on </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">:</span><span class="se">\n</span><span class="s2">&quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;device_maps = </span><span class="si">{</span><span class="n">device_maps</span><span class="si">}</span><span class="s2">&quot;</span>
+                    <span class="p">)</span>
+
+    <span class="n">gathered</span> <span class="o">=</span> <span class="n">api</span><span class="o">.</span><span class="n">_all_gather</span><span class="p">([</span><span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">device_count</span><span class="p">(),</span> <span class="n">device_maps</span><span class="p">])</span>
+    <span class="n">all_device_counts</span> <span class="o">=</span> <span class="p">{</span><span class="n">name</span><span class="p">:</span> <span class="n">gathered</span><span class="p">[</span><span class="n">name</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">gathered</span><span class="p">}</span>
+    <span class="n">all_device_maps</span> <span class="o">=</span> <span class="p">{</span><span class="n">name</span><span class="p">:</span> <span class="n">gathered</span><span class="p">[</span><span class="n">name</span><span class="p">][</span><span class="mi">1</span><span class="p">]</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">gathered</span><span class="p">}</span>
+    <span class="k">for</span> <span class="n">worker_name</span> <span class="ow">in</span> <span class="n">all_device_maps</span><span class="p">:</span>
+        <span class="n">worker_device_maps</span> <span class="o">=</span> <span class="n">all_device_maps</span><span class="p">[</span><span class="n">worker_name</span><span class="p">]</span>
+        <span class="n">check_one_worker</span><span class="p">(</span><span class="n">worker_name</span><span class="p">,</span> <span class="n">worker_device_maps</span><span class="p">,</span> <span class="n">all_device_counts</span><span class="p">)</span>
+
+    <span class="c1"># passed all checked, construct reverse mapping for return values</span>
+    <span class="n">reverse_device_maps</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">local_name</span> <span class="o">=</span> <span class="n">api</span><span class="o">.</span><span class="n">get_worker_info</span><span class="p">()</span><span class="o">.</span><span class="n">name</span>
+    <span class="k">for</span> <span class="n">worker_name</span> <span class="ow">in</span> <span class="n">all_device_maps</span><span class="p">:</span>
+        <span class="n">remote_device_maps</span> <span class="o">=</span> <span class="n">all_device_maps</span><span class="p">[</span><span class="n">worker_name</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">local_name</span> <span class="ow">in</span> <span class="n">remote_device_maps</span><span class="p">:</span>
+            <span class="n">remote_device_map</span> <span class="o">=</span> <span class="n">remote_device_maps</span><span class="p">[</span><span class="n">local_name</span><span class="p">]</span>
+            <span class="n">reverse_device_maps</span><span class="p">[</span><span class="n">worker_name</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+                <span class="n">remote_device_map</span><span class="p">[</span><span class="n">k</span><span class="p">]:</span> <span class="n">k</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">remote_device_map</span>
+            <span class="p">}</span>
+
+    <span class="n">agent</span><span class="o">.</span><span class="n">_set_reverse_device_maps</span><span class="p">(</span><span class="n">reverse_device_maps</span><span class="p">)</span>
+
+
 <span class="k">def</span> <span class="nf">_tensorpipe_init_backend_handler</span><span class="p">(</span><span class="n">store</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">rank</span><span class="p">,</span> <span class="n">world_size</span><span class="p">,</span> <span class="n">rpc_backend_options</span><span class="p">):</span>
     <span class="kn">from</span> <span class="nn">.</span> <span class="kn">import</span> <span class="n">TensorPipeRpcBackendOptions</span>
     <span class="kn">from</span> <span class="nn">.</span> <span class="kn">import</span> <span class="n">TensorPipeAgent</span>
@@ -542,9 +595,19 @@
     <span class="n">group</span> <span class="o">=</span> <span class="n">_init_process_group</span><span class="p">(</span><span class="n">store</span><span class="p">,</span> <span class="n">rank</span><span class="p">,</span> <span class="n">world_size</span><span class="p">)</span>
 
     <span class="c1"># TODO: add try-except and destroy _agent in all processes if any fails.</span>
-    <span class="k">return</span> <span class="n">TensorPipeAgent</span><span class="p">(</span>
+    <span class="n">agent</span> <span class="o">=</span> <span class="n">TensorPipeAgent</span><span class="p">(</span>
         <span class="n">store</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">rank</span><span class="p">,</span> <span class="n">world_size</span><span class="p">,</span> <span class="n">group</span><span class="p">,</span> <span class="n">rpc_backend_options</span>
     <span class="p">)</span>
+
+    <span class="n">api</span><span class="o">.</span><span class="n">_init_rpc_states</span><span class="p">(</span><span class="n">agent</span><span class="p">)</span>
+
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">_tensorpipe_check_device_maps</span><span class="p">(</span><span class="n">agent</span><span class="p">,</span> <span class="n">rpc_backend_options</span><span class="o">.</span><span class="n">device_maps</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+        <span class="n">api</span><span class="o">.</span><span class="n">shutdown</span><span class="p">()</span>
+        <span class="k">raise</span>
+
+    <span class="k">return</span> <span class="n">agent</span>
 
 
 <span class="n">register_backend</span><span class="p">(</span>
