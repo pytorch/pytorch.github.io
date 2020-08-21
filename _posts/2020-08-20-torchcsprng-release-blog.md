@@ -1,6 +1,6 @@
 ---
 layout: blog_detail
-title: 'PyTorch framework for crypto secure random number generation, torchcsprng, now available'
+title: 'PyTorch framework for cryptographically secure random number generation, torchcsprng, now available'
 author: Team PyTorch
 ---
 
@@ -36,8 +36,10 @@ pip:
 
 **Step 2: import packages as usual but add csprng**
 
-`import torch`
-`import torchcsprng as csprng`
+```python
+import torch
+import torchcsprng as csprng
+ ```
 
 **Step 3: Create a cryptographically secure pseudorandom number generator from /dev/urandom:**
 
@@ -60,6 +62,7 @@ Another advantage of torchcsprng generators is that they are parallel on CPU unl
 The easiest way to get started with torchcsprng is by visiting the [GitHub page](https://github.com/pytorch/csprng) where you can find installation and build instructions, and more how-to examples. 
 
 Cheers,
+
 The PyTorch Team
 
 
