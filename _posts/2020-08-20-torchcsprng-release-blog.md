@@ -4,13 +4,15 @@ title: 'PyTorch framework for crypto secure random number generation, torchcsprn
 author: Team PyTorch
 ---
 
+[torchcsprng](https://github.com/pytorch/csprng) is a PyTorch [C++/CUDA extension](https://pytorch.org/tutorials/advanced/cpp_extension.html) that provides [cryptographically secure pseudorandom number generators](https://en.wikipedia.org/wiki/Cryptographically_secure_pseudorandom_number_generator) for PyTorch.
+
 One of the key components of modern cryptography is the pseudorandom number generator. The use of badly designed or inappropriate random number generators can often leave a good cryptosystem vulnerable to attack. Particular care must be taken to use a random number generator that is designed for cryptographic use, rather than a "general-purpose" random number generator which may be fine for some applications but not ones that are required to be cryptographically secure. Additionally, most pseudorandom number generators scale poorly to massively parallel high-performance computation because of their sequential nature. Others don’t satisfy cryptographically secure properties.
 
 ## torchcsprng overview 
 
 Historically, PyTorch had only two pseudorandom number generator implementations: Mersenne Twister for CPU and Nvidia’s cuRAND Philox for CUDA. Despite good performance properties, neither of them are suitable for cryptographic applications. Over the course of the past several months, the PyTorch team developed the torchcsprng extension API. Based on PyTorch dispatch mechanism and operator registration, it allows the users to extend c10::GeneratorImpl and implement their own custom pseudorandom number generator.
 
-torchcsprng generates a random 128-bit key on the CPU using one of its generators and then runs AES128 in [CTR mode](https://en.wikipedia.org/wiki/Block_cipher_mode_of_operation#Counter_(CTR)) either on CPU or GPU using CUDA.  This then generates a random 128-bit state and applies a transformation function to map it to target tensor values. This approach is based on [Parallel Random Numbers: As Easy as 1, 2, 3 (John K. Salmon, Mark A. Moraes, Ron O. Dror, and David E. Shaw, D. E. Shaw Research)](http://www.thesalmons.org/john/random123/papers/random123sc11.pdf). It makes torchcsprng both crypto-secure and parallel on both CPU and CUDA.
+torchcsprng generates a random 128-bit key on the CPU using one of its generators and then runs AES128 in [CTR mode](https://en.wikipedia.org/wiki/Block_cipher_mode_of_operation#Counter_(CTR)) either on CPU or GPU using CUDA. This then generates a random 128-bit state and applies a transformation function to map it to target tensor values. This approach is based on [Parallel Random Numbers: As Easy as 1, 2, 3 (John K. Salmon, Mark A. Moraes, Ron O. Dror, and David E. Shaw, D. E. Shaw Research)](http://www.thesalmons.org/john/random123/papers/random123sc11.pdf). It makes torchcsprng both crypto-secure and parallel on both CPU and CUDA.
 
 <div class="text-center">
   <img src="{{ site.url }}/assets/images/torchcsprng.jpg" width="100%">
