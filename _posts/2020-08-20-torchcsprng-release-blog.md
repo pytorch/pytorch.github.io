@@ -15,7 +15,7 @@ Historically, PyTorch had only two pseudorandom number generator implementations
 torchcsprng generates a random 128-bit key on the CPU using one of its generators and then runs AES128 in [CTR mode](https://en.wikipedia.org/wiki/Block_cipher_mode_of_operation#Counter_(CTR)) either on CPU or GPU using CUDA. This then generates a random 128-bit state and applies a transformation function to map it to target tensor values. This approach is based on [Parallel Random Numbers: As Easy as 1, 2, 3 (John K. Salmon, Mark A. Moraes, Ron O. Dror, and David E. Shaw, D. E. Shaw Research)](http://www.thesalmons.org/john/random123/papers/random123sc11.pdf). It makes torchcsprng both crypto-secure and parallel on both CPU and CUDA.
 
 <div class="text-center">
-  <img src="{{ site.url }}/assets/images/torchcsprng.jpg" width="100%">
+  <img src="{{ site.url }}/assets/images/torchcsprng.png" width="100%">
 </div>
 
 Since torchcsprng is a PyTorch extension, it is available on the platforms where PyTorch is available (support for Windows-CUDA will be available in the coming months). 
