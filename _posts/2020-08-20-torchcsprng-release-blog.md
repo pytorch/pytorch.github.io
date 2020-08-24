@@ -6,7 +6,7 @@ author: Team PyTorch
 
 [torchcsprng](https://github.com/pytorch/csprng) is a PyTorch [C++/CUDA extension](https://pytorch.org/tutorials/advanced/cpp_extension.html) that provides [cryptographically secure pseudorandom number generators](https://en.wikipedia.org/wiki/Cryptographically_secure_pseudorandom_number_generator) for PyTorch.
 
-One of the key components of modern cryptography is the pseudorandom number generator. The use of badly designed or inappropriate random number generators can often leave a good cryptosystem vulnerable to attack. Particular care must be taken to use a random number generator that is designed for cryptographic use, rather than a "general-purpose" random number generator which may be fine for some applications but not ones that are required to be cryptographically secure. Additionally, most pseudorandom number generators scale poorly to massively parallel high-performance computation because of their sequential nature. Others don’t satisfy cryptographically secure properties.
+One of the key components of modern cryptography is the pseudorandom number generator. Katz and Lindell stated, "The use of badly designed or inappropriate random number generators can often leave a good cryptosystem vulnerable to attack. Particular care must be taken to use a random number generator that is designed for cryptographic use, rather than a 'general-purpose' random number generator which may be fine for some applications but not ones that are required to be cryptographically secure."[1] Additionally, most pseudorandom number generators scale poorly to massively parallel high-performance computation because of their sequential nature. Others don’t satisfy cryptographically secure properties.
 
 ## torchcsprng overview 
 
@@ -28,11 +28,15 @@ The torchcsprng API is very simple to use and is fully compatible with the PyTor
 
 Anaconda:
 
-`conda install torchcsprng -c pytorch`
+```python
+conda install torchcsprng -c pytorch
+ ```
 
 pip:
 
-`pip install torchcsprng`
+```python
+pip install torchcsprng
+ ```
 
 **Step 2: import packages as usual but add csprng**
 
@@ -43,17 +47,23 @@ import torchcsprng as csprng
 
 **Step 3: Create a cryptographically secure pseudorandom number generator from /dev/urandom:**
 
-`urandom_gen = csprng.create_random_device_generator('/dev/urandom')`
-
+```python
+urandom_gen = csprng.create_random_device_generator('/dev/urandom')
+ ```
+ 
 and simply use it with the existing PyTorch methods:
 
-`torch.randn(10, device='cpu', generator=urandom_gen)`
+```python
+torch.randn(10, device='cpu', generator=urandom_gen)
+ ```
 
 **Step 4: Test with Cuda**
 
 One of the advantages of torchcsprng generators is that they can be used with both CPU and CUDA tensors:
 
-`torch.randn(10, device='cuda', generator=urandom_gen)`
+```python
+torch.randn(10, device='cuda', generator=urandom_gen)
+ ```
 
 Another advantage of torchcsprng generators is that they are parallel on CPU unlike the default PyTorch CPU generator.
 
@@ -65,7 +75,7 @@ Cheers,
 
 The PyTorch Team
 
-
+[1] [Introduction to Modern Cryptography: Principles and Protocols (Chapman & Hall/CRC Cryptography and Network Security Series)](https://www.amazon.com/Introduction-Modern-Cryptography-Principles-Protocols/dp/1584885513) by Jonathan Katz and Yehuda Lindell
 
 
 
