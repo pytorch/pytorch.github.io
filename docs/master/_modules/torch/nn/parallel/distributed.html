@@ -158,7 +158,7 @@
               
               
                 <div class="version">
-                  <a href='http://pytorch.org/docs/versions.html'>1.7.0a0+8a83851 &#x25BC</a>
+                  <a href='http://pytorch.org/docs/versions.html'>1.7.0a0+be34aa1 &#x25BC</a>
                 </div>
               
             
@@ -355,7 +355,7 @@
 
 <span class="k">if</span> <span class="n">dist</span><span class="o">.</span><span class="n">is_available</span><span class="p">():</span>
     <span class="kn">from</span> <span class="nn">torch.distributed.distributed_c10d</span> <span class="kn">import</span> <span class="n">_get_default_group</span>
-
+    <span class="kn">from</span> <span class="nn">torch.distributed.distributed_c10d</span> <span class="kn">import</span> <span class="n">ReduceOp</span>
 <span class="kn">from</span> <span class="nn">..modules</span> <span class="kn">import</span> <span class="n">Module</span>
 <span class="kn">from</span> <span class="nn">.replicate</span> <span class="kn">import</span> <span class="n">replicate</span>
 <span class="kn">from</span> <span class="nn">.scatter_gather</span> <span class="kn">import</span> <span class="n">scatter_kwargs</span><span class="p">,</span> <span class="n">gather</span>
@@ -717,10 +717,12 @@
 
         <span class="bp">self</span><span class="o">.</span><span class="n">dim</span> <span class="o">=</span> <span class="n">dim</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">module</span> <span class="o">=</span> <span class="n">module</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">device</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="o">.</span><span class="n">parameters</span><span class="p">())[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">device</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">broadcast_buffers</span> <span class="o">=</span> <span class="n">broadcast_buffers</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">find_unused_parameters</span> <span class="o">=</span> <span class="n">find_unused_parameters</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">require_backward_grad_sync</span> <span class="o">=</span> <span class="kc">True</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">require_forward_param_sync</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">ddp_join_enabled</span> <span class="o">=</span> <span class="kc">False</span>
 
         <span class="k">if</span> <span class="n">check_reduction</span><span class="p">:</span>
             <span class="c1"># This argument is no longer used since the reducer</span>
@@ -735,13 +737,17 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">bucket_bytes_cap</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">bucket_cap_mb</span> <span class="o">*</span> <span class="mi">1024</span> <span class="o">*</span> <span class="mi">1024</span><span class="p">)</span>
 
         <span class="c1"># Sync params and buffers</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_sync_params_and_buffers</span><span class="p">(</span><span class="n">authoritative_rank</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_ddp_init_helper</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">_sync_params_and_buffers</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">authoritative_rank</span><span class="o">=</span><span class="mi">0</span><span class="p">):</span>
         <span class="n">module_states</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()</span><span class="o">.</span><span class="n">values</span><span class="p">())</span>
         <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">module_states</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_distributed_broadcast_coalesced</span><span class="p">(</span>
                 <span class="n">module_states</span><span class="p">,</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">broadcast_bucket_size</span><span class="p">)</span>
-
-        <span class="bp">self</span><span class="o">.</span><span class="n">_ddp_init_helper</span><span class="p">()</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">broadcast_bucket_size</span><span class="p">,</span>
+                <span class="n">authoritative_rank</span><span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">_ddp_init_helper</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
@@ -912,6 +918,15 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">require_backward_grad_sync</span> <span class="o">=</span> <span class="n">old_require_backward_grad_sync</span></div>
 
     <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">inputs</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">ddp_join_enabled</span><span class="p">:</span>
+            <span class="n">ones</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span>
+                <span class="mi">1</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span>
+            <span class="p">)</span>
+            <span class="n">work</span> <span class="o">=</span> <span class="n">dist</span><span class="o">.</span><span class="n">all_reduce</span><span class="p">(</span><span class="n">ones</span><span class="p">,</span> <span class="n">group</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">process_group</span><span class="p">,</span> <span class="n">async_op</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">reducer</span><span class="o">.</span><span class="n">_set_forward_pass_work_handle</span><span class="p">(</span>
+                <span class="n">work</span><span class="p">,</span> <span class="n">ones</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">ddp_join_divide_by_initial_world_size</span>
+            <span class="p">)</span>
+
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">require_forward_param_sync</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_sync_params</span><span class="p">()</span>
 
@@ -955,6 +970,194 @@
         <span class="k">for</span> <span class="n">module</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_module_copies</span><span class="p">[</span><span class="mi">1</span><span class="p">:]:</span>
             <span class="n">module</span><span class="o">.</span><span class="n">train</span><span class="p">(</span><span class="n">mode</span><span class="p">)</span>
         <span class="k">return</span> <span class="bp">self</span>
+
+    <span class="c1"># When running in join mode, schedules an allreduce to match the one in the</span>
+    <span class="c1"># forward pass to determine the no. of currently active processes and whether</span>
+    <span class="c1"># all processes have joined.</span>
+    <span class="k">def</span> <span class="nf">_schedule_shadow_all_reduce_for_fwd_pass</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">all_active_procs</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span>
+            <span class="mi">1</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span>
+        <span class="p">)</span>
+        <span class="n">dist</span><span class="o">.</span><span class="n">all_reduce</span><span class="p">(</span><span class="n">all_active_procs</span><span class="p">,</span> <span class="n">group</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">process_group</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">all_active_procs</span><span class="o">.</span><span class="n">item</span><span class="p">()</span>
+
+    <span class="c1"># When running in join mode, checks and performs sync of module buffers if</span>
+    <span class="c1"># the models have buffers that should be synchronized in the forward pass.</span>
+    <span class="k">def</span> <span class="nf">_check_and_sync_module_buffers</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">will_sync_module_buffers</span><span class="p">():</span>
+            <span class="n">my_rank</span> <span class="o">=</span> <span class="n">dist</span><span class="o">.</span><span class="n">get_rank</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">process_group</span><span class="p">)</span>
+            <span class="n">authoritative_rank</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_find_common_rank</span><span class="p">(</span><span class="n">my_rank</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_distributed_broadcast_coalesced</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">modules_buffers</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">broadcast_bucket_size</span><span class="p">,</span> <span class="n">authoritative_rank</span>
+            <span class="p">)</span>
+
+    <span class="c1"># When running in join model, agrees upon a common rank and broadcast model</span>
+    <span class="c1"># parameters to all other ranks.</span>
+    <span class="k">def</span> <span class="nf">_sync_final_model</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">is_last_joiner</span><span class="p">):</span>
+        <span class="c1"># Agree upon the process that will be the authoritative model copy.</span>
+        <span class="c1"># The current rank is a candidate for being the authoritative copy if</span>
+        <span class="c1"># is_last_joiner=True. We break ties via picking the larger rank.</span>
+        <span class="n">my_rank</span> <span class="o">=</span> <span class="n">dist</span><span class="o">.</span><span class="n">get_rank</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">process_group</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_authoritative_rank</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_find_common_rank</span><span class="p">(</span><span class="n">my_rank</span><span class="p">,</span> <span class="n">is_last_joiner</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_sync_params_and_buffers</span><span class="p">(</span><span class="n">authoritative_rank</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_authoritative_rank</span><span class="p">)</span>
+
+    <span class="c1"># Schedule allreduce ops to match those scheduled in the reducer&#39;s backward</span>
+    <span class="c1"># pass.</span>
+    <span class="k">def</span> <span class="nf">_match_all_reduce_for_bwd_pass</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">allreduce_work</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="c1"># Schedule allreduce in the same order as Reducer schedules them, i.e.</span>
+        <span class="c1"># the order of the buckets. Retrieving the bucket order from the reducer</span>
+        <span class="c1"># ensures that we keep the same order in join mode, such as when bucket</span>
+        <span class="c1"># order is rebuilt dynamically.</span>
+        <span class="n">all_bucket_tensors</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">reducer</span><span class="o">.</span><span class="n">get_bucket_tensors</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">bucket_tensors</span> <span class="ow">in</span> <span class="n">all_bucket_tensors</span><span class="p">:</span>
+            <span class="c1"># Joined processes contribute zero gradient. In the case that</span>
+            <span class="c1"># divide_by_initial_world_size=True, we divide grads by the static</span>
+            <span class="c1"># world size, if not, the dividing factor is reduced by the number</span>
+            <span class="c1"># of joined processes.</span>
+            <span class="n">zero_tensors</span> <span class="o">=</span> <span class="p">[</span>
+                <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">t</span><span class="p">)</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">bucket_tensors</span>
+            <span class="p">]</span>
+            <span class="n">work</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">process_group</span><span class="o">.</span><span class="n">allreduce</span><span class="p">(</span><span class="n">zero_tensors</span><span class="p">)</span>
+            <span class="n">allreduce_work</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">work</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">work</span> <span class="ow">in</span> <span class="n">allreduce_work</span><span class="p">:</span>
+            <span class="n">work</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span>
+
+    <span class="c1"># Allreduces the used parameter mapping across ranks.</span>
+    <span class="k">def</span> <span class="nf">_match_unused_params_allreduce</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">locally_used_param_maps</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">reducer</span><span class="o">.</span><span class="n">_get_local_used_maps</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">process_group</span><span class="o">.</span><span class="n">allreduce</span><span class="p">(</span><span class="n">locally_used_param_maps</span><span class="p">)</span>
+
+<div class="viewcode-block" id="DistributedDataParallel.join"><a class="viewcode-back" href="../../../../generated/torch.nn.parallel.DistributedDataParallel.html#torch.nn.parallel.DistributedDataParallel.join">[docs]</a>    <span class="nd">@contextmanager</span>
+    <span class="k">def</span> <span class="nf">join</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">divide_by_initial_world_size</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">enable</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+        <span class="sa">r</span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        A context manager to be used in conjunction with an instance of</span>
+<span class="sd">        :class:`torch.nn.parallel.distributed.DistributedDataParallel` to be</span>
+<span class="sd">        able to train with uneven inputs across participating processes.</span>
+
+<span class="sd">        This context manager will keep track of already-joined DDP processes,</span>
+<span class="sd">        and &quot;shadow&quot; the forward and backward passes by inserting collective</span>
+<span class="sd">        communication operations to match with the ones created by non-joined</span>
+<span class="sd">        DDP processes. This will ensure each collective call has a corresponding</span>
+<span class="sd">        call by already-joined DDP processes, preventing hangs or errors that</span>
+<span class="sd">        would otherwise happen when training with uneven inputs across</span>
+<span class="sd">        processes.</span>
+
+<span class="sd">        Once all DDP processes have joined, the context manager will broadcast</span>
+<span class="sd">        the model corresponding to the last joined process to all processes to</span>
+<span class="sd">        ensure the model is the same across all processes</span>
+<span class="sd">        (which is guaranteed by DDP).</span>
+
+<span class="sd">        To use this to enable training with uneven inputs across processes,</span>
+<span class="sd">        simply wrap this context manager around your training loop. No further</span>
+<span class="sd">        modifications to the model or data loading is required.</span>
+
+<span class="sd">        .. warning::</span>
+<span class="sd">            This module works only with the multi-process, single-device usage</span>
+<span class="sd">            of :class:`torch.nn.parallel.distributed.DistributedDataParallel`,</span>
+<span class="sd">            which means that a single process works on a single GPU.</span>
+
+<span class="sd">        ..warning::</span>
+<span class="sd">            This module currently does not support custom distributed collective</span>
+<span class="sd">            operations in the forward pass, such as ``SyncBatchNorm`` or other</span>
+<span class="sd">            custom defined collectives in the model&#39;s forward pass.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            divide_by_initial_world_size (bool): If ``True``, will divide</span>
+<span class="sd">                gradients by the initial ``world_size`` DDP training was launched</span>
+<span class="sd">                with. If ``False``, will compute the effective world size</span>
+<span class="sd">                (number of ranks that have not depleted their inputs yet) and</span>
+<span class="sd">                divide gradients by that during allreduce. Set</span>
+<span class="sd">                ``divide_by_initial_world_size=True`` to ensure every input</span>
+<span class="sd">                sample including the uneven inputs have equal weight in terms of</span>
+<span class="sd">                how much they contribute to the global gradient. This is</span>
+<span class="sd">                achieved by always dividing the gradient by the initial</span>
+<span class="sd">                ``world_size`` even when we encounter uneven inputs. If you set</span>
+<span class="sd">                this to ``False``, we divide the gradient by the remaining</span>
+<span class="sd">                number of nodes. This ensures parity with training on a smaller</span>
+<span class="sd">                world_size although it also means the uneven inputs would</span>
+<span class="sd">                contribute more towards the global gradient. Typically, you</span>
+<span class="sd">                would want to set this to ``True`` for cases where the last few</span>
+<span class="sd">                inputs of your training job are uneven. In extreme cases, where</span>
+<span class="sd">                there is a large discrepancy in the number of inputs, setting</span>
+<span class="sd">                this to ``False`` might provide better results.</span>
+<span class="sd">            enable (bool): Whether to enable uneven input detection or not. Pass</span>
+<span class="sd">                in ``enable=False`` to disable in cases where you know that</span>
+<span class="sd">                inputs are even across participating processes. Default is</span>
+<span class="sd">                ``True``.</span>
+
+
+<span class="sd">        Example::</span>
+<span class="sd">          &gt;&gt;&gt;  import torch</span>
+<span class="sd">          &gt;&gt;&gt;  import torch.distributed as dist</span>
+<span class="sd">          &gt;&gt;&gt;  import os</span>
+<span class="sd">          &gt;&gt;&gt;  import torch.multiprocessing as mp</span>
+<span class="sd">          &gt;&gt;&gt;  import torch.nn as nn</span>
+<span class="sd">          &gt;&gt;&gt;  # On each spawned worker</span>
+<span class="sd">          &gt;&gt;&gt;  def worker(rank):</span>
+<span class="sd">          &gt;&gt;&gt;      dist.init_process_group(&quot;nccl&quot;, rank=rank, world_size=2)</span>
+<span class="sd">          &gt;&gt;&gt;      torch.cuda.set_device(rank)</span>
+<span class="sd">          &gt;&gt;&gt;      model = nn.Linear(1, 1, bias=False).to(rank)</span>
+<span class="sd">          &gt;&gt;&gt;      model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[rank], output_device=rank)</span>
+<span class="sd">          &gt;&gt;&gt;      # Rank 1 gets one more input than rank 0.</span>
+<span class="sd">          &gt;&gt;&gt;      inputs = [torch.tensor([1]).float() for _ in range(10 + rank)]</span>
+<span class="sd">          &gt;&gt;&gt;      with model.join():</span>
+<span class="sd">          &gt;&gt;&gt;          for _ in range(5):</span>
+<span class="sd">          &gt;&gt;&gt;              for inp in inputs:</span>
+<span class="sd">          &gt;&gt;&gt;                  loss = model(inp).sum()</span>
+<span class="sd">          &gt;&gt;&gt;                  loss.backward()</span>
+<span class="sd">          &gt;&gt;&gt;  # Without the join() API, the below synchronization will hang</span>
+<span class="sd">          &gt;&gt;&gt;  # blocking for rank 1&#39;s allreduce to complete.</span>
+<span class="sd">          &gt;&gt;&gt;  torch.cuda.synchronize(device=rank)</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">device_ids</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">device_ids</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sd">&quot;&quot;&quot;DDP join() API does not support Single-Process Multi-GPU</span>
+<span class="sd">                    mode training. The recommended approach for DDP training is</span>
+<span class="sd">                    to spawn a single process that works on a single GPU.&quot;&quot;&quot;</span>
+                <span class="p">)</span>
+            <span class="n">has_error</span> <span class="o">=</span> <span class="kc">False</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">ddp_join_enabled</span> <span class="o">=</span> <span class="n">enable</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">ddp_join_divide_by_initial_world_size</span> <span class="o">=</span> <span class="n">divide_by_initial_world_size</span>
+            <span class="k">yield</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="c1"># Set to skip any processing in the finally block.</span>
+            <span class="n">has_error</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="k">raise</span> <span class="n">e</span>
+        <span class="k">finally</span><span class="p">:</span>
+            <span class="c1"># Skip any processing to let the exception immediately be raised if</span>
+            <span class="c1"># there was one.</span>
+            <span class="k">if</span> <span class="n">enable</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">has_error</span><span class="p">:</span>
+                <span class="n">all_procs_joined</span> <span class="o">=</span> <span class="kc">False</span>
+                <span class="n">is_last_joiner</span> <span class="o">=</span> <span class="kc">True</span>
+                <span class="n">buckets_rebuilt</span> <span class="o">=</span> <span class="kc">False</span>
+                <span class="c1"># Schedules allreduce to match fwd pass allreduce in non-joined procs</span>
+                <span class="k">while</span> <span class="ow">not</span> <span class="n">all_procs_joined</span><span class="p">:</span>
+                    <span class="n">num_active_procs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_schedule_shadow_all_reduce_for_fwd_pass</span><span class="p">()</span>
+                    <span class="k">if</span> <span class="n">num_active_procs</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                        <span class="n">all_procs_joined</span> <span class="o">=</span> <span class="kc">True</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="c1"># Some DDP process still needs to be joined.</span>
+                        <span class="k">if</span> <span class="n">is_last_joiner</span><span class="p">:</span>
+                            <span class="n">is_last_joiner</span> <span class="o">=</span> <span class="kc">False</span>
+                        <span class="c1"># Schedule a corresponding broadcast if we are syncing module</span>
+                        <span class="c1"># buffers in the forward pass.</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">_check_and_sync_module_buffers</span><span class="p">()</span>
+                        <span class="c1"># Schedules one allreduce per gradient bucket to match</span>
+                        <span class="c1"># the backwards pass allreduce.</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">_match_all_reduce_for_bwd_pass</span><span class="p">()</span>
+                        <span class="c1"># Check if we need to allreduce locally unused params.</span>
+                        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">find_unused_parameters</span><span class="p">:</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">_match_unused_params_allreduce</span><span class="p">()</span>
+                        <span class="c1"># If buckets not rebuilt, will push original bucket</span>
+                        <span class="c1"># indices to simulate a rebuild.</span>
+                        <span class="k">if</span> <span class="ow">not</span> <span class="n">buckets_rebuilt</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">find_unused_parameters</span><span class="p">:</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">reducer</span><span class="o">.</span><span class="n">_push_all_rebuilt_params</span><span class="p">()</span>
+                            <span class="n">buckets_rebuilt</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">reducer</span><span class="o">.</span><span class="n">_rebuild_buckets</span><span class="p">()</span>
+
+                <span class="c1"># All procs joined. Agree on authoritative rank and broadcast the model.</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_sync_final_model</span><span class="p">(</span><span class="n">is_last_joiner</span><span class="p">)</span></div>
 
     <span class="k">def</span> <span class="nf">_register_comm_hook</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="nb">object</span><span class="p">,</span> <span class="n">hook</span><span class="p">:</span> <span class="n">callable</span><span class="p">):</span>
         <span class="sa">r</span><span class="sd">&quot;&quot;&quot;</span>
@@ -1043,8 +1246,33 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_check_comm_hook</span><span class="p">(</span><span class="n">hook</span><span class="p">)</span>
         <span class="n">dist</span><span class="o">.</span><span class="n">_register_comm_hook</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">reducer</span><span class="p">,</span> <span class="n">state</span><span class="p">,</span> <span class="n">hook</span><span class="p">)</span>
 
-    <span class="k">def</span> <span class="nf">_distributed_broadcast_coalesced</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensors</span><span class="p">,</span> <span class="n">buffer_size</span><span class="p">):</span>
-        <span class="n">dist</span><span class="o">.</span><span class="n">_broadcast_coalesced</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">process_group</span><span class="p">,</span> <span class="n">tensors</span><span class="p">,</span> <span class="n">buffer_size</span><span class="p">)</span>
+    <span class="k">def</span> <span class="nf">_distributed_broadcast_coalesced</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">tensors</span><span class="p">,</span> <span class="n">buffer_size</span><span class="p">,</span> <span class="n">authoritative_rank</span><span class="o">=</span><span class="mi">0</span>
+    <span class="p">):</span>
+        <span class="n">dist</span><span class="o">.</span><span class="n">_broadcast_coalesced</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">process_group</span><span class="p">,</span> <span class="n">tensors</span><span class="p">,</span> <span class="n">buffer_size</span><span class="p">,</span> <span class="n">authoritative_rank</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">will_sync_module_buffers</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">require_forward_param_sync</span>
+            <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">broadcast_buffers</span>
+            <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">modules_buffers</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span> <span class="o">&gt;</span> <span class="mi">0</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_find_common_rank</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">input_rank</span><span class="p">,</span> <span class="n">rank_cond</span><span class="p">):</span>
+        <span class="c1"># -1 indicates that this rank is not under consideration to be the</span>
+        <span class="c1"># common_rank</span>
+        <span class="n">rank_to_use</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span>
+            <span class="p">[</span><span class="n">input_rank</span> <span class="k">if</span> <span class="n">rank_cond</span> <span class="k">else</span> <span class="o">-</span><span class="mi">1</span><span class="p">],</span>
+            <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">dist</span><span class="o">.</span><span class="n">all_reduce</span><span class="p">(</span><span class="n">rank_to_use</span><span class="p">,</span> <span class="n">op</span><span class="o">=</span><span class="n">ReduceOp</span><span class="o">.</span><span class="n">MAX</span><span class="p">,</span> <span class="n">group</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">process_group</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">rank_to_use</span><span class="o">.</span><span class="n">item</span><span class="p">()</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;BUG! Expected rank_cond to be true for at least one process.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">rank_to_use</span><span class="o">.</span><span class="n">item</span><span class="p">()</span>
 
     <span class="k">def</span> <span class="nf">_sync_params</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>
@@ -1078,12 +1306,21 @@
                             <span class="n">param</span><span class="o">.</span><span class="n">grad</span><span class="o">.</span><span class="n">zero_</span><span class="p">()</span>
 
             <span class="c1"># module buffer sync</span>
-            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">broadcast_buffers</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">modules_buffers</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">will_sync_module_buffers</span><span class="p">():</span>
                 <span class="c1"># Synchronize buffers across processes.</span>
-                <span class="c1"># The process with rank 0 is considered the authoritative copy.</span>
+                <span class="c1"># If we are running DDP with the join manager, we have to agree</span>
+                <span class="c1"># upon a rank to sync module buffers from, since rank 0 may</span>
+                <span class="c1"># already have been joined and have stale module buffers.</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">ddp_join_enabled</span><span class="p">:</span>
+                    <span class="n">authoritative_rank</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_find_common_rank</span><span class="p">(</span><span class="n">dist</span><span class="o">.</span><span class="n">get_rank</span><span class="p">(),</span> <span class="kc">True</span><span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="c1"># The process with rank 0 is considered the authoritative copy.</span>
+                    <span class="n">authoritative_rank</span> <span class="o">=</span> <span class="mi">0</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_distributed_broadcast_coalesced</span><span class="p">(</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">modules_buffers</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">broadcast_bucket_size</span><span class="p">)</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">broadcast_bucket_size</span><span class="p">,</span>
+                    <span class="n">authoritative_rank</span><span class="p">,</span>
+                <span class="p">)</span>
                 <span class="c1"># only do intra-node buffer sync for replicated single-device</span>
                 <span class="c1"># CUDA modules</span>
                 <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">device_ids</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">device_ids</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
