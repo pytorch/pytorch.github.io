@@ -142,7 +142,7 @@ let zippedResults = zip(labels.indices, outputs)
 let sortedResults = zippedResults.sorted { $0.1.floatValue > $1.1.floatValue }.prefix(3)
 ```
 
-### PyTorch Demo App
+## PyTorch Demo App
 
 For more complex use cases, we recommend to check out the [PyTorch demo application](https://github.com/pytorch/ios-demo-app). The demo app contains two showcases. A camera app that runs a quantized model to predict the images coming from device’s rear-facing camera in real time. And a text-based app that uses a text classififcation model to predict the topic from the input string.
 
@@ -189,11 +189,9 @@ In the build settings, search for **other linker flags**.  Add a custom linker f
 ```
  Finally, disable bitcode for your target by selecting the Build Settings, searching for **Enable Bitcode**, and set the value to **No**.
 
-### API Docs
 
-Currently, the iOS framework uses the Pytorch C++ front-end APIs directly. The C++ document can be found [here](https://pytorch.org/cppdocs/). To learn more about it, we recommend exploring the [C++ front-end tutorials](https://pytorch.org/tutorials/advanced/cpp_frontend.html) on PyTorch webpage.
 
-### Custom Build
+## Custom Build
 
 Starting from 1.4.0, PyTorch supports custom build. You can now build the PyTorch library that only contains the operators needed by your model. To do that, follow the steps below
 
@@ -222,6 +220,21 @@ SELECTED_OP_LIST=MobileNetV2.yaml BUILD_PYTORCH_MOBILE=1 IOS_ARCH=arm64 ./script
 ```cpp
 torch::jit::GraphOptimizerEnabledGuard guard(false);
 ```
+
+## iOS Tutorials
+
+Watch the following [video](https://www.youtube.com/watch?v=JFy3uHyqXn0) as PyTorch Partner Engineer Brad Heintz walks through steps for setting up the PyTorch Runtime for iOS projects:
+
+[![PyTorch Mobile Runtime for iOS](https://i.ytimg.com/vi/JFy3uHyqXn0/maxresdefault.jpg){:height="75%" width="75%"}](https://www.youtube.com/watch?v=JFy3uHyqXn0 "PyTorch Mobile Runtime for iOS")
+
+The corresponding code can be found [here](https://github.com/pytorch/workshops/tree/master/PTMobileWalkthruIOS).
+
+Additionally, checkout our [Mobile Performance Recipes](https://pytorch.org/tutorials/recipes/mobile_perf.html) which cover how to optimize your model and check if optimizations helped via benchmarking.
+
+
+## API Docs
+
+Currently, the iOS framework uses the Pytorch C++ front-end APIs directly. The C++ document can be found [here](https://pytorch.org/cppdocs/). To learn more about it, we recommend exploring the [C++ front-end tutorials](https://pytorch.org/tutorials/advanced/cpp_frontend.html) on PyTorch webpage.
 
 ## Issues and Contribution
 
