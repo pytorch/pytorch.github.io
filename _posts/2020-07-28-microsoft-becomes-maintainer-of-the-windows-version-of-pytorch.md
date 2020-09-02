@@ -5,7 +5,7 @@ author: Maxim Lukiyanov - Principal PM at Microsoft, Emad Barsoum - Group EM at 
 
 ---
 
-Along with the PyTorch 1.6 release, we are excited to announce that Microsoft has expanded its participation in the PyTorch community and is taking ownership of the development and maintenance of the PyTorch build for Windows.
+Along with the PyTorch 1.6 release, we are excited to announce that Microsoft has expanded its participation in the PyTorch community and will be responsible for the development and maintenance of the PyTorch build for Windows.
 
 According to the latest [Stack Overflow developer survey](https://insights.stackoverflow.com/survey/2020#technology-developers-primary-operating-systems), Windows remains the primary operating system for the developer community (46% Windows vs 28% MacOS). [Jiachen Pu](https://github.com/peterjc123) initially made a heroic effort to add support for PyTorch on Windows, but due to limited resources, Windows support for PyTorch has lagged behind other platforms. Lack of test coverage resulted in unexpected issues popping up every now and then. Some of the core tutorials, meant for new users to learn and adopt PyTorch, would fail to run. The installation experience was also not as smooth, with the lack of official PyPI support for PyTorch on Windows. Lastly, some of the PyTorch functionality was simply not available on the Windows platform, such as the TorchAudio domain library and distributed training support. To help alleviate this pain, Microsoft is happy to bring its Windows expertise to the table and bring PyTorch on Windows to its best possible self.
 
