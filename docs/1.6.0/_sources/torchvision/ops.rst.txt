@@ -1,0 +1,25 @@
+torchvision.ops
+===============
+
+.. currentmodule:: torchvision.ops
+
+:mod:`torchvision.ops` implements operators that are specific for Computer Vision.
+
+.. note::
+  All operators have native support for TorchScript.
+
+
+.. autofunction:: nms
+.. autofunction:: roi_align
+.. autofunction:: ps_roi_align
+.. autofunction:: roi_pool
+.. autofunction:: ps_roi_pool
+.. autofunction:: deform_conv2d
+
+.. autoclass:: RoIAlign
+.. autoclass:: PSRoIAlign
+.. autoclass:: RoIPool
+.. autoclass:: PSRoIPool
+.. autoclass:: DeformConv2d
+.. autoclass:: MultiScaleRoIAlign
+.. autoclass:: FeaturePyramidNetwork
