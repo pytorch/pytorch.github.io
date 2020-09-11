@@ -158,7 +158,7 @@
               
               
                 <div class="version">
-                  <a href='http://pytorch.org/docs/versions.html'>1.7.0a0+fd726f7 &#x25BC</a>
+                  <a href='http://pytorch.org/docs/versions.html'>1.7.0a0+e49fa99 &#x25BC</a>
                 </div>
               
             
@@ -931,6 +931,10 @@
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">require_forward_param_sync</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_sync_params</span><span class="p">()</span>
 
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">ddp_join_enabled</span><span class="p">:</span>
+            <span class="c1"># Notify joined ranks whether they should sync in backwards pass or not.</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_check_global_requires_backward_grad_sync</span><span class="p">(</span><span class="n">is_joined_rank</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">device_ids</span><span class="p">:</span>
             <span class="n">inputs</span><span class="p">,</span> <span class="n">kwargs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">scatter</span><span class="p">(</span><span class="n">inputs</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">device_ids</span><span class="p">)</span>
             <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">device_ids</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
@@ -981,6 +985,19 @@
         <span class="p">)</span>
         <span class="n">dist</span><span class="o">.</span><span class="n">all_reduce</span><span class="p">(</span><span class="n">all_active_procs</span><span class="p">,</span> <span class="n">group</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">process_group</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">all_active_procs</span><span class="o">.</span><span class="n">item</span><span class="p">()</span>
+
+    <span class="c1"># When running in join mode, schedules an allreduce to notify joined ranks</span>
+    <span class="c1"># of whether backwards pass synchronization will run this iteraton or not.</span>
+    <span class="k">def</span> <span class="nf">_check_global_requires_backward_grad_sync</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">is_joined_rank</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">is_joined_rank</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">require_backward_grad_sync</span><span class="p">:</span>
+            <span class="n">requires_sync_tensor</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">requires_sync_tensor</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+
+        <span class="n">work</span> <span class="o">=</span> <span class="n">dist</span><span class="o">.</span><span class="n">all_reduce</span><span class="p">(</span>
+            <span class="n">requires_sync_tensor</span><span class="p">,</span> <span class="n">group</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">process_group</span><span class="p">,</span> <span class="n">async_op</span><span class="o">=</span><span class="kc">True</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">work</span><span class="p">,</span> <span class="n">requires_sync_tensor</span>
 
     <span class="c1"># When running in join mode, checks and performs sync of module buffers if</span>
     <span class="c1"># the models have buffers that should be synchronized in the forward pass.</span>
@@ -1146,6 +1163,22 @@
                         <span class="c1"># Schedule a corresponding broadcast if we are syncing module</span>
                         <span class="c1"># buffers in the forward pass.</span>
                         <span class="bp">self</span><span class="o">.</span><span class="n">_check_and_sync_module_buffers</span><span class="p">()</span>
+
+                        <span class="p">(</span>
+                            <span class="n">work</span><span class="p">,</span>
+                            <span class="n">should_sync_backwards_tensor</span><span class="p">,</span>
+                        <span class="p">)</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_check_global_requires_backward_grad_sync</span><span class="p">(</span>
+                            <span class="n">is_joined_rank</span><span class="o">=</span><span class="kc">True</span>
+                        <span class="p">)</span>
+                        <span class="n">work</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span>
+                        <span class="c1"># If nonzero, then we should sync in the bwd pass.</span>
+                        <span class="n">should_sync_backwards</span> <span class="o">=</span> <span class="n">should_sync_backwards_tensor</span><span class="o">.</span><span class="n">item</span><span class="p">()</span> <span class="o">!=</span> <span class="mi">0</span>
+                        <span class="c1"># Forward param sync is disabled in the next iteration</span>
+                        <span class="c1"># if we are skipping grad sync this iteration. Hence, we</span>
+                        <span class="c1"># set require_forward_param_sync appropriately here.</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">require_forward_param_sync</span> <span class="o">=</span> <span class="n">should_sync_backwards</span>
+                        <span class="k">if</span> <span class="ow">not</span> <span class="n">should_sync_backwards</span><span class="p">:</span>
+                            <span class="k">continue</span>
                         <span class="c1"># Schedules one allreduce per gradient bucket to match</span>
                         <span class="c1"># the backwards pass allreduce.</span>
                         <span class="bp">self</span><span class="o">.</span><span class="n">_match_all_reduce_for_bwd_pass</span><span class="p">()</span>
