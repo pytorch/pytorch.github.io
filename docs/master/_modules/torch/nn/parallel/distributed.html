@@ -158,7 +158,7 @@
               
               
                 <div class="version">
-                  <a href='http://pytorch.org/docs/versions.html'>1.7.0a0+e9e73ea &#x25BC</a>
+                  <a href='http://pytorch.org/docs/versions.html'>1.7.0a0+343422a &#x25BC</a>
                 </div>
               
             
@@ -349,6 +349,7 @@
 <span class="kn">import</span> <span class="nn">os</span>
 <span class="kn">import</span> <span class="nn">inspect</span>
 <span class="kn">import</span> <span class="nn">logging</span>
+<span class="kn">import</span> <span class="nn">warnings</span>
 
 <span class="kn">import</span> <span class="nn">torch</span>
 
@@ -660,6 +661,28 @@
 <span class="sd">                         are getting different gradients, which should not</span>
 <span class="sd">                         happen if DistributedDataParallel is correctly used.</span>
 <span class="sd">                         (default: ``False``)</span>
+<span class="sd">        gradient_as_bucket_view (bool): this is a prototype feature. When set to ``True``,</span>
+<span class="sd">                      gradients will be views pointing to different offsets of</span>
+<span class="sd">                      allreduce communication buckets. This can reduce peak memory</span>
+<span class="sd">                      usage, where the saved memory size will be equal to the total</span>
+<span class="sd">                      gradients size. Moreover, it avoids the overhead of copying</span>
+<span class="sd">                      between gradients and allreduce communication buckets.</span>
+<span class="sd">                      When gradients are views, ``detach_()`` cannot be called on the</span>
+<span class="sd">                      gradients. If hitting such errors, please fix it by referring to</span>
+<span class="sd">                      the :meth:`~torch.optim.Optimizer.zero_grad` function in</span>
+<span class="sd">                      ``torch/optim/optimizer.py`` as the solution.</span>
+<span class="sd">                      Warning! It is also found that ``gradient_as_bucket_view = true``</span>
+<span class="sd">                      does not work as expected when ``apex.amp`` is used for</span>
+<span class="sd">                      mixed precision training. ``apex.amp`` maintained stashed gradients</span>
+<span class="sd">                      that are used for unscaling gradients. These stashed gradients</span>
+<span class="sd">                      are pointed to gradients (will be communication buckets when</span>
+<span class="sd">                      ``gradient_as_bucket_view = true``) before starting new iteration.</span>
+<span class="sd">                      In new iteration, the communication buckets are mutated and thus</span>
+<span class="sd">                      these stashed gradients will be unexpectedly mutated as well,</span>
+<span class="sd">                      the unexpectedly muated stashed gradients may result in wrong</span>
+<span class="sd">                      results. To fix it, these stashed gradients should not be pointed</span>
+<span class="sd">                      to gradients, instead they should be copied from gradients when</span>
+<span class="sd">                      ``gradient_as_bucket_view = true``.</span>
 
 <span class="sd">    Attributes:</span>
 <span class="sd">        module (Module): the module to be parallelized</span>
@@ -674,7 +697,8 @@
                  <span class="n">process_group</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
                  <span class="n">bucket_cap_mb</span><span class="o">=</span><span class="mi">25</span><span class="p">,</span>
                  <span class="n">find_unused_parameters</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-                 <span class="n">check_reduction</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+                 <span class="n">check_reduction</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                 <span class="n">gradient_as_bucket_view</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
 
         <span class="nb">super</span><span class="p">(</span><span class="n">DistributedDataParallel</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
 
@@ -725,6 +749,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">require_backward_grad_sync</span> <span class="o">=</span> <span class="kc">True</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">require_forward_param_sync</span> <span class="o">=</span> <span class="kc">True</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">ddp_join_enabled</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">gradient_as_bucket_view</span> <span class="o">=</span> <span class="n">gradient_as_bucket_view</span>
 
         <span class="k">if</span> <span class="n">check_reduction</span><span class="p">:</span>
             <span class="c1"># This argument is no longer used since the reducer</span>
@@ -776,7 +801,6 @@
 
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">device_ids</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">device_ids</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
 
-            <span class="kn">import</span> <span class="nn">warnings</span>
             <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
                 <span class="s2">&quot;Single-Process Multi-GPU is not the recommended mode for &quot;</span>
                 <span class="s2">&quot;DDP. In this mode, each DDP instance operates on multiple &quot;</span>
@@ -861,7 +885,8 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">process_group</span><span class="p">,</span>
             <span class="n">expect_sparse_gradient</span><span class="p">,</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">bucket_bytes_cap</span><span class="p">,</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">find_unused_parameters</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">find_unused_parameters</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">gradient_as_bucket_view</span><span class="p">)</span>
 
         <span class="c1"># passing a handle to torch.nn.SyncBatchNorm layer</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_passing_sync_batchnorm_handle</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_module_copies</span><span class="p">)</span>
@@ -1160,8 +1185,20 @@
             <span class="k">if</span> <span class="n">enable</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">has_error</span><span class="p">:</span>
                 <span class="n">all_procs_joined</span> <span class="o">=</span> <span class="kc">False</span>
                 <span class="n">is_last_joiner</span> <span class="o">=</span> <span class="kc">True</span>
-                <span class="c1"># Schedules allreduce to match fwd pass allreduce in non-joined procs</span>
+                <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span>
+                <span class="n">WARN_THRESHOLD</span> <span class="o">=</span> <span class="mi">1000</span>
+                <span class="n">warnings</span><span class="o">.</span><span class="n">simplefilter</span><span class="p">(</span><span class="s2">&quot;once&quot;</span><span class="p">)</span>
                 <span class="k">while</span> <span class="ow">not</span> <span class="n">all_procs_joined</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="n">i</span> <span class="o">&gt;</span> <span class="n">WARN_THRESHOLD</span><span class="p">:</span>
+                        <span class="n">my_rank</span> <span class="o">=</span> <span class="n">dist</span><span class="o">.</span><span class="n">get_rank</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">process_group</span><span class="p">)</span>
+                        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                            <span class="s2">&quot;Detected uneven input skew of greater &quot;</span>
+                            <span class="sa">f</span><span class="s2">&quot;than </span><span class="si">{</span><span class="n">WARN_THRESHOLD</span><span class="si">}</span><span class="s2">. This means that rank </span><span class="si">{</span><span class="n">my_rank</span><span class="si">}</span><span class="s2"> &quot;</span>
+                            <span class="sa">f</span><span class="s2">&quot;has at least </span><span class="si">{</span><span class="n">WARN_THRESHOLD</span><span class="si">}</span><span class="s2"> fewer inputs than &quot;</span>
+                            <span class="s2">&quot;other currently active ranks. This level of skew could &quot;</span>
+                            <span class="s2">&quot;lead to performance degradation during training.&quot;</span>
+                        <span class="p">)</span>
+                    <span class="c1"># Schedules allreduce to match fwd pass allreduce in non-joined procs</span>
                     <span class="n">num_active_procs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_schedule_shadow_all_reduce_for_fwd_pass</span><span class="p">()</span>
                     <span class="k">if</span> <span class="n">num_active_procs</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
                         <span class="n">all_procs_joined</span> <span class="o">=</span> <span class="kc">True</span>
@@ -1198,6 +1235,7 @@
                             <span class="bp">self</span><span class="o">.</span><span class="n">_match_unused_params_allreduce</span><span class="p">()</span>
                         <span class="c1"># It will push rebuilt params only once during training period</span>
                         <span class="bp">self</span><span class="o">.</span><span class="n">reducer</span><span class="o">.</span><span class="n">_push_all_rebuilt_params</span><span class="p">()</span>
+                        <span class="n">i</span> <span class="o">+=</span> <span class="mi">1</span>
 
                 <span class="c1"># All procs joined. Agree on authoritative rank and broadcast the model.</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_sync_final_model</span><span class="p">(</span><span class="n">is_last_joiner</span><span class="p">)</span></div>
