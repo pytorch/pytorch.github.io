@@ -28,7 +28,7 @@ The winners in each category are:
 
 **1st place** - [DeMask](https://pytorch2020.devpost.com/review/submissions/MlVLNmlyc2JDREtGMmFua3FIZGNMUTZIelR3SHJOL2cwUi9vTXNnQ3F5ak5vZDhFZk1NU0hRQVFDSE9hTDA2V1BPb2VLRDFLN0lIY3Bva2RvK1hnOEltMnQ2aW9jVnpCemZ0c0o3bkNzeUU9LS1yWTNMdkR6blBJVlBJV2lnUkxHdStnPT0=--81e61a941d3b90d97a725a81a491458c838f25dd)
 
-DeMask is an end-to-end model for enhancing speech while wearing face masks — offering a clear benefit during times when face masks are mandatory in many spaces and for workers who wear face masks on the job. Built with Asteroid, a PyTorch-based audio source separation toolkit, DeMask is trained to recognize distortions in speech created by the muffling from face masks and to adjust the speech to make it sound clearer. 
+DeMask is an end-to-end model for enhancing speech while wearing face masks — offering a clear benefit during times when face masks are mandatory in many spaces and for workers who wear face masks on the job. Built with [Asteroid](https://github.com/mpariente/asteroid), a PyTorch-based audio source separation toolkit, DeMask is trained to recognize distortions in speech created by the muffling from face masks and to adjust the speech to make it sound clearer. 
 
 This submission stood out in particular because it represents both a high-quality idea and an implementation that can be reproduced by other researchers.
 
@@ -72,7 +72,7 @@ TorchExpo is a collection of models and extensions that simplifies taking PyTorc
 Q&Aid is a conceptual health-care chatbot aimed at making health-care diagnoses and facilitating communication between patients and doctors. It relies on a series of machine learning models to filter, label, and answer medical questions, based on a medical image and/or questions in text provided by a patient. The transcripts from the chat app then can be forwarded to the local hospitals and the patient will be contacted by one of them to make an appointment to determine proper diagnosis and care. The team hopes that this concept application helps hospitals to work with patients more efficiently and provide proper care. 
 
 <div class="text-center">
-  <img src="{{ site.url }}/assets/images/qaid.gif" width="100%">
+  <img src="{{ site.url }}/assets/images/qaid.gif" width="50%">
 </div>
 
 **2nd place** - [Rasoee](https://pytorch2020.devpost.com/review/submissions/cjBvdzBPdVpPQUJZYWdVNXRDL2Y5RVc0YVJzemlqRUY1L0ppT0NCMERMNm9NSmtjbjNnSW1qZHEyMjJHSDNuc0c2bSt2R0NldVkrTk5MaXFwWW11OXdSSUhSUlYvS0Uwc25TWjJVNm5vTjQ9LS1XQ25BK2YvemR5bGcydXdvMEMxMFFnPT0=--9f1410c15a8b6a2a2518b7ccf55369af9bc89de1)
@@ -102,24 +102,8 @@ Fluence is a PyTorch-based deep learning library for language research. It speci
 Causing (CAUSal INterpretation using Graphs) is a multivariate graphic analysis tool for bringing transparency to neural networks. It explains causality and helps researchers and developers interpret the causal effects of a given equation system to ensure fairness. Developers can input data and a model describing the dependencies between the variables within the data set into Causing, and Causing will output a colored graph of quantified effects acting between the model’s variables. In addition, it also allows developers to estimate these effects to validate whether data fits a model.
 
 Thank you,
-The PyTorch team
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+**The PyTorch team**
 
 
 
