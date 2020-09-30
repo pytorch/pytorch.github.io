@@ -71,6 +71,10 @@ TorchExpo is a collection of models and extensions that simplifies taking PyTorc
 
 Q&Aid is a conceptual health-care chatbot aimed at making health-care diagnoses and facilitating communication between patients and doctors. It relies on a series of machine learning models to filter, label, and answer medical questions, based on a medical image and/or questions in text provided by a patient. The transcripts from the chat app then can be forwarded to the local hospitals and the patient will be contacted by one of them to make an appointment to determine proper diagnosis and care. The team hopes that this concept application helps hospitals to work with patients more efficiently and provide proper care. 
 
+<div class="text-center">
+  <img src="{{ site.url }}/assets/images/qaid.gif" width="100%">
+</div>
+
 **2nd place** - [Rasoee](https://pytorch2020.devpost.com/review/submissions/cjBvdzBPdVpPQUJZYWdVNXRDL2Y5RVc0YVJzemlqRUY1L0ppT0NCMERMNm9NSmtjbjNnSW1qZHEyMjJHSDNuc0c2bSt2R0NldVkrTk5MaXFwWW11OXdSSUhSUlYvS0Uwc25TWjJVNm5vTjQ9LS1XQ25BK2YvemR5bGcydXdvMEMxMFFnPT0=--9f1410c15a8b6a2a2518b7ccf55369af9bc89de1)
 
 Rasoee is an application that can take images as input and output the name of the dish. It also lists the ingredients and recipe, along with the link to the original recipe online. Additionally, users can choose a cuisine from the list of cuisines in the drop menu, and describe the taste and/or method of preparation in text. Then the application will return matching dishes from the [list of 308 identifiable dishes](https://github.com/arijitgupta42/Rasoee/blob/master/Dishes.txt). The team has put a significant amount of effort gathering and cleaning various datasets to build more accurate and comprehensive models. You can check out the application [here](https://rasoee.herokuapp.com).
