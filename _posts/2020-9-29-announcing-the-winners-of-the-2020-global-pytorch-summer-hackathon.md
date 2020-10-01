@@ -93,6 +93,8 @@ FairTorch is a fairness library for PyTorch. It lets developers add constraints 
   <a href="https://www.youtube.com/watch?v=b2Cj4VflFKQ"><img src="https://img.youtube.com/vi/b2Cj4VflFKQ/0.jpg" alt="IMAGE ALT TEXT"></a>
 </div>
 
+[![FairTorch](https://yt-embed.herokuapp.com/embed?v=b2Cj4VflFKQ)](https://yt-embed.herokuapp.com/embed?v=b2Cj4VflFKQ "FairTorch")
+
 **2nd place**: [Fluence](https://pytorch2020.devpost.com/review/submissions/SnJDYmw0cGt3RmN6UWVHUmhYSW5LK3RhdU40WGhhVGNrb3pBUExudTRQRndzWTh3bVRWVDF0c0FYaFdObkJqRnhnTjFUZUw5ekFJck5DZ0ozeUU4a0Z5dURhcVZqcGlLZVYyOXBhblNxQWc9LS02UmQ5T1Bxbk1JSjRod2E0ZzkwajN3PT0=--d87fbb0e849dbced6e42f03937def2e99ab23587)
 
 Fluence is a PyTorch-based deep learning library for language research. It specifically addresses the large compute demands of natural language processing (NLP) research. Fluence aims to provide low-resource and computationally efficient algorithms for NLP, giving researchers algorithms that can enhance current NLP methods or help discover where current methods fall short.
