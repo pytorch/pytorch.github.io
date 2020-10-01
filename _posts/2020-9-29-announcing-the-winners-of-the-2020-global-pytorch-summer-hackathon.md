@@ -90,10 +90,13 @@ Rexana is an AI voice assistant meant to lay the foundation for a physical robot
 FairTorch is a fairness library for PyTorch. It lets developers add constraints to their models to equalize metrics across subgroups by simply adding a few lines of code. Model builders can choose a metric definition of fairness for their context, and enforce it at time of training. The library offers a suite of metrics that measure an AI system’s performance among subgroups, and can apply to high-stakes examples where decision-making algorithms are deployed, such as hiring, school admissions, and banking.
 
 <div align="center">
-  <a href="https://www.youtube.com/watch?v=b2Cj4VflFKQ"><img src="https://img.youtube.com/vi/b2Cj4VflFKQ/0.jpg" alt="IMAGE ALT TEXT"></a>
-</div>
-
-[![FairTorch](https://yt-embed.herokuapp.com/embed?v=b2Cj4VflFKQ)](https://yt-embed.herokuapp.com/embed?v=b2Cj4VflFKQ "FairTorch")
+      <a href="https://www.youtube.com/watch?v=b2Cj4VflFKQ">
+     <img 
+      src="https://yt-embed.herokuapp.com/embed?v=b2Cj4VflFKQ" 
+      alt="FairTorch" 
+      style="width:70%;">
+      </a>
+    </div>
 
 **2nd place**: [Fluence](https://pytorch2020.devpost.com/review/submissions/SnJDYmw0cGt3RmN6UWVHUmhYSW5LK3RhdU40WGhhVGNrb3pBUExudTRQRndzWTh3bVRWVDF0c0FYaFdObkJqRnhnTjFUZUw5ekFJck5DZ0ozeUU4a0Z5dURhcVZqcGlLZVYyOXBhblNxQWc9LS02UmQ5T1Bxbk1JSjRod2E0ZzkwajN3PT0=--d87fbb0e849dbced6e42f03937def2e99ab23587)
 
