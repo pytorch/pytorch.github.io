@@ -7,7 +7,7 @@ author: Team PyTorch
 More than 2,500 participants in this year’s Global PyTorch Summer Hackathon pushed the envelope to create unique new tools and applications for PyTorch developers and researchers.
 
 <div class="text-center">
-  <img src="{{ site.url }}/assets/images/Hackathon_Facebook_Cover.png" width="100%">
+  <img src="{{ site.url }}/assets/images/Summer_hackathon.png" width="100%">
 </div>
 
 ***Notice**: None of the projects submitted to the hackathon are associated with or offered by Facebook, Inc.* 
