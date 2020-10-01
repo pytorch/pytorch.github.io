@@ -7,22 +7,22 @@ author: Team PyTorch
 More than 2,500 participants in this year’s Global PyTorch Summer Hackathon pushed the envelope to create unique new tools and applications for PyTorch developers and researchers.
 
 <div class="text-center">
-  <img src="{{ site.url }}/assets/images/summer_hackathon_2020.jpeg" width="100%">
+  <img src="{{ site.url }}/assets/images/Hackathon_Facebook_Cover.png" width="100%">
 </div>
 
 ***Notice**: None of the projects submitted to the hackathon are associated with or offered by Facebook, Inc.* 
 
 This year’s projects fell into three categories:
 
-**PyTorch Developer Tools:** a tool or library for improving productivity and efficiency for PyTorch researchers and developers.
+* **PyTorch Developer Tools:** a tool or library for improving productivity and efficiency for PyTorch researchers and developers.
 
-**Web/Mobile Applications Powered by PyTorch:** a web or mobile interface and/or an embedded device built using PyTorch.
+* **Web/Mobile Applications Powered by PyTorch:** a web or mobile interface and/or an embedded device built using PyTorch.
 
-**PyTorch Responsible AI Development Tools:** a tool, library, or web/mobile app to support researchers and developers in creating responsible AI that factors in fairness, security, privacy, and more throughout its entire development process.
+* **PyTorch Responsible AI Development Tools:** a tool, library, or web/mobile app to support researchers and developers in creating responsible AI that factors in fairness, security, privacy, and more throughout its entire development process.
 
 The virtual hackathon ran from June 22 to August 25, with more than 2,500 registered participants, representing 114 countries from Republic of Azerbaijan, to Zimbabwe, to Japan, submitting a total of 106 projects. Entrants were judged on their idea’s quality, originality, potential impact, and how well they implemented it.
 
-The winners in each category are:
+Meet the winners of each category below. 
 
 ## PyTorch Developer Tools
 
@@ -72,7 +72,7 @@ TorchExpo is a collection of models and extensions that simplifies taking PyTorc
 Q&Aid is a conceptual health-care chatbot aimed at making health-care diagnoses and facilitating communication between patients and doctors. It relies on a series of machine learning models to filter, label, and answer medical questions, based on a medical image and/or questions in text provided by a patient. The transcripts from the chat app then can be forwarded to the local hospitals and the patient will be contacted by one of them to make an appointment to determine proper diagnosis and care. The team hopes that this concept application helps hospitals to work with patients more efficiently and provide proper care. 
 
 <div class="text-center">
-  <img src="{{ site.url }}/assets/images/qaid.gif" width="50%">
+  <img src="{{ site.url }}/assets/images/Q_AID_architecture.png" width="100%">
 </div>
 
 **2nd place** - [Rasoee](https://pytorch2020.devpost.com/review/submissions/cjBvdzBPdVpPQUJZYWdVNXRDL2Y5RVc0YVJzemlqRUY1L0ppT0NCMERMNm9NSmtjbjNnSW1qZHEyMjJHSDNuc0c2bSt2R0NldVkrTk5MaXFwWW11OXdSSUhSUlYvS0Uwc25TWjJVNm5vTjQ9LS1XQ25BK2YvemR5bGcydXdvMEMxMFFnPT0=--9f1410c15a8b6a2a2518b7ccf55369af9bc89de1)
@@ -94,7 +94,7 @@ FairTorch is a fairness library for PyTorch. It lets developers add constraints 
      <img 
       src="https://yt-embed.herokuapp.com/embed?v=b2Cj4VflFKQ" 
       alt="FairTorch" 
-      style="width:70%;">
+      style="width:50%;">
       </a>
     </div>
 
