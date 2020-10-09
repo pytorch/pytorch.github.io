@@ -158,7 +158,7 @@
               
               
                 <div class="version">
-                  <a href='http://pytorch.org/docs/versions.html'>1.8.0a0+104de7d &#x25BC</a>
+                  <a href='http://pytorch.org/docs/versions.html'>1.8.0a0+403616e &#x25BC</a>
                 </div>
               
             
@@ -350,6 +350,7 @@
 <span class="kn">import</span> <span class="nn">torch.distributed.rpc</span> <span class="k">as</span> <span class="nn">rpc</span>
 <span class="kn">import</span> <span class="nn">torch.optim</span> <span class="k">as</span> <span class="nn">optim</span>
 <span class="kn">import</span> <span class="nn">torch.jit</span> <span class="k">as</span> <span class="nn">jit</span>
+<span class="kn">import</span> <span class="nn">torch.nn</span> <span class="k">as</span> <span class="nn">nn</span>
 <span class="kn">from</span> <span class="nn">torch</span> <span class="kn">import</span> <span class="n">Tensor</span>
 <span class="kn">from</span> <span class="nn">torch.distributed.rpc</span> <span class="kn">import</span> <span class="n">RRef</span>
 <span class="kn">from</span> <span class="nn">.functional_adagrad</span> <span class="kn">import</span> <span class="n">_FunctionalAdagrad</span>
@@ -375,7 +376,12 @@
     <span class="k">def</span> <span class="nf">step</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">autograd_ctx_id</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">pass</span>
 
-<span class="k">class</span> <span class="nc">_ScriptLocalOptimizer</span><span class="p">(</span><span class="n">jit</span><span class="o">.</span><span class="n">ScriptModule</span><span class="p">):</span>
+<span class="k">class</span> <span class="nc">_ScriptLocalOptimizer</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+    <span class="c1"># TorchScript does not support multithread concurrent compiling.</span>
+    <span class="c1"># request_callback might invoke concurrent compiling, so we</span>
+    <span class="c1"># serialize the compiling with a lock</span>
+    <span class="n">compile_lock</span> <span class="o">=</span> <span class="n">Lock</span><span class="p">()</span>
+
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">optim_cls</span><span class="p">,</span> <span class="n">local_params_rref</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_local_params</span> <span class="o">=</span> <span class="p">[</span><span class="n">rref</span><span class="o">.</span><span class="n">local_value</span><span class="p">()</span> <span class="k">for</span> <span class="n">rref</span> <span class="ow">in</span> <span class="n">local_params_rref</span><span class="p">]</span>
@@ -384,7 +390,7 @@
             <span class="o">*</span><span class="n">args</span><span class="p">,</span>
             <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 
-    <span class="nd">@jit</span><span class="o">.</span><span class="n">script_method</span>
+    <span class="nd">@jit</span><span class="o">.</span><span class="n">export</span>
     <span class="k">def</span> <span class="nf">step</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">autograd_ctx_id</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
         <span class="n">all_local_grads</span> <span class="o">=</span> <span class="n">dist_autograd</span><span class="o">.</span><span class="n">get_gradients</span><span class="p">(</span><span class="n">autograd_ctx_id</span><span class="p">)</span>
         <span class="c1"># apply functional optimizer step with a list of gradients</span>
@@ -396,6 +402,8 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">optim</span><span class="o">.</span><span class="n">step</span><span class="p">(</span><span class="n">grads</span><span class="p">)</span>
 
 
+<span class="c1"># TODO (wanchaol): remove/merge this with ScriptLocalOptimizer once</span>
+<span class="c1"># we have converted all to functional optimizer in distributed.optim</span>
 <span class="k">class</span> <span class="nc">_LocalOptimizer</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
     <span class="c1"># Ideally we would only need to share a lock for instances of</span>
     <span class="c1"># _LocalOptimizer that deal with the same parameters. We are</span>
@@ -434,8 +442,12 @@
 
 <span class="c1"># new/step functions combined with _ScriptLocalOptimizer to provide GIL-free optimizer</span>
 <span class="k">def</span> <span class="nf">_new_script_local_optimizer</span><span class="p">(</span><span class="n">optim_cls</span><span class="p">,</span> <span class="n">local_params_rref</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
-    <span class="k">return</span> <span class="n">rpc</span><span class="o">.</span><span class="n">RRef</span><span class="p">(</span>
-        <span class="n">_ScriptLocalOptimizer</span><span class="p">(</span><span class="n">optim_cls</span><span class="p">,</span> <span class="n">local_params_rref</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">),</span> <span class="n">_ScriptLocalOptimizerInterface</span><span class="p">)</span>
+    <span class="n">optim</span> <span class="o">=</span> <span class="n">_ScriptLocalOptimizer</span><span class="p">(</span><span class="n">optim_cls</span><span class="p">,</span> <span class="n">local_params_rref</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+    <span class="k">with</span> <span class="n">_ScriptLocalOptimizer</span><span class="o">.</span><span class="n">compile_lock</span><span class="p">:</span>
+        <span class="n">script_optim</span> <span class="o">=</span> <span class="n">jit</span><span class="o">.</span><span class="n">script</span><span class="p">(</span><span class="n">optim</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">rpc</span><span class="o">.</span><span class="n">RRef</span><span class="p">(</span>
+            <span class="n">script_optim</span><span class="p">,</span> <span class="n">_ScriptLocalOptimizerInterface</span><span class="p">)</span>
 
 <span class="nd">@jit</span><span class="o">.</span><span class="n">script</span>
 <span class="k">def</span> <span class="nf">_script_local_optimizer_step</span><span class="p">(</span>
