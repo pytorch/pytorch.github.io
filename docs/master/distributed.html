@@ -159,7 +159,7 @@
               
               
                 <div class="version">
-                  <a href='http://pytorch.org/docs/versions.html'>1.8.0a0+104de7d &#x25BC</a>
+                  <a href='http://pytorch.org/docs/versions.html'>1.8.0a0+403616e &#x25BC</a>
                 </div>
               
             
@@ -1258,20 +1258,49 @@ None, if not part of the group</p>
 </div>
 <div class="section" id="synchronous-and-asynchronous-collective-operations">
 <h2>Synchronous and asynchronous collective operations<a class="headerlink" href="#synchronous-and-asynchronous-collective-operations" title="Permalink to this headline">¶</a></h2>
-<p>Every collective operation function supports the following two kinds of operations:</p>
-<p>synchronous operation - the default mode, when <code class="docutils literal notranslate"><span class="pre">async_op</span></code> is set to False.
-when the function returns, it is guaranteed that
-the collective operation is performed (not necessarily completed if it’s a CUDA op since all
-CUDA ops are asynchronous), and any further function calls depending on the data of the
-collective operation can be called. In the synchronous mode, the collective function does not
-return anything</p>
-<p>asynchronous operation - when <code class="docutils literal notranslate"><span class="pre">async_op</span></code> is set to True. The collective operation function
+<p>Every collective operation function supports the following two kinds of operations,
+depending on the setting of the <code class="docutils literal notranslate"><span class="pre">async_op</span></code> flag passed into the collective:</p>
+<p><strong>Synchronous operation</strong> - the default mode, when <code class="docutils literal notranslate"><span class="pre">async_op</span></code> is set to <code class="docutils literal notranslate"><span class="pre">False</span></code>.
+When the function returns, it is guaranteed that
+the collective operation is performed. In the case of CUDA operations, it is not guaranteed
+that the CUDA operation is completed, since CUDA operations are asynchronous. For CPU collectives, any
+further function calls utilizing the output of the collective call will behave as expected. For CUDA collectives,
+function calls utilizing the output on the same CUDA stream will behave as expected. Users must take care of
+synchronization under the scenario of running under different streams. For details on CUDA semantics such as stream
+synchronization, see <a class="reference external" href="https://pytorch.org/docs/stable/notes/cuda.html">CUDA Semantics</a>.
+See the below script to see examples of differences in these semantics for CPU and CUDA operations.</p>
+<p><strong>Asynchronous operation</strong> - when <code class="docutils literal notranslate"><span class="pre">async_op</span></code> is set to True. The collective operation function
 returns a distributed request object. In general, you don’t need to create it manually and it
 is guaranteed to support two methods:</p>
 <ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">is_completed()</span></code> - returns True if the operation has finished</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">wait()</span></code> - will block the process until the operation is finished.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">is_completed()</span></code> - in the case of CPU collectives, returns <code class="docutils literal notranslate"><span class="pre">True</span></code> if completed. In the case of CUDA operations,
+returns <code class="docutils literal notranslate"><span class="pre">True</span></code> if the operation has been successfully enqueued onto a CUDA stream and the output can be utilized on the
+default stream without further synchronization.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">wait()</span></code> - in the case of CPU collectives, will block the process until the operation is completed. In the case
+of CUDA collectives, will block until the operation has been successfully enqueued onto a CUDA stream and the
+output can be utilized on the default stream without further synchronization.</p></li>
 </ul>
+<p><strong>Example</strong></p>
+<p>The following code can serve as a reference regarding semantics for CUDA operations when using distributed collectives.
+It shows the explicit need to synchronize when using collective outputs on different CUDA streams:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="c1"># Code runs on each rank.</span>
+<span class="n">dist</span><span class="o">.</span><span class="n">init_process_group</span><span class="p">(</span><span class="s2">&quot;nccl&quot;</span><span class="p">,</span> <span class="n">rank</span><span class="o">=</span><span class="n">rank</span><span class="p">,</span> <span class="n">world_size</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+<span class="n">output</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="n">rank</span><span class="p">])</span><span class="o">.</span><span class="n">cuda</span><span class="p">(</span><span class="n">rank</span><span class="p">)</span>
+<span class="n">s</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">Stream</span><span class="p">()</span>
+<span class="n">handle</span> <span class="o">=</span> <span class="n">dist</span><span class="o">.</span><span class="n">all_reduce</span><span class="p">(</span><span class="n">output</span><span class="p">,</span> <span class="n">async_op</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="c1"># Wait ensures the operation is enqueued, but not necessarily complete.</span>
+<span class="n">handle</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span>
+<span class="c1"># Using result on non-default stream.</span>
+<span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">stream</span><span class="p">(</span><span class="n">s</span><span class="p">):</span>
+    <span class="n">s</span><span class="o">.</span><span class="n">wait_stream</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">default_stream</span><span class="p">())</span>
+    <span class="n">output</span><span class="o">.</span><span class="n">add_</span><span class="p">(</span><span class="mi">100</span><span class="p">)</span>
+<span class="k">if</span> <span class="n">rank</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+    <span class="c1"># if the explicit call to wait_stream was omitted, the output below will be</span>
+    <span class="c1"># non-deterministically 1 or 101, depending on whether the allreduce overwrote</span>
+    <span class="c1"># the value after the add completed.</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">output</span><span class="p">)</span>
+</pre></div>
+</div>
 </div>
 <div class="section" id="collective-functions">
 <h2>Collective functions<a class="headerlink" href="#collective-functions" title="Permalink to this headline">¶</a></h2>
