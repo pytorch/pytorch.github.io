@@ -5,10 +5,9 @@ To gain the full experience of what PyTorch has to offer, a machine with at leas
 
 Azure [provides](https://azure.microsoft.com/en-us/services/machine-learning-services/){:target="_blank"}:
 
+* a [machine learning service](https://azure.microsoft.com/en-us/services/machine-learning/) with a robust Python SDK to help you train and deploy PyTorch models at cloud scale.
 * dedicated, pre-built [machine learning virtual machines](https://azure.microsoft.com/en-us/services/virtual-machines/data-science-virtual-machines/){:target="_blank"}, complete with PyTorch.
 * bare Linux and Windows virtual machines for you to do a custom install of PyTorch.
-* [notebooks](https://notebooks.azure.com/pytorch){:target="_blank"} to help you learn PyTorch and machine learning.
-* a [machine learning service](https://azure.microsoft.com /en-us/services/machine-learning-services/ ) with a robust Python SDK to help you train and deploy PyTorch models at cloud scale.
 
 ## Azure Primer
 {: #microsoft-azure-primer}
