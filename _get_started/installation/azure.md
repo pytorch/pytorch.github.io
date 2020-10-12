@@ -16,12 +16,6 @@ In order to use Azure, you need to set up an [Azure account](https://azure.micro
 
 Once you are logged in, you will be brought to your [Azure portal](https://portal.azure.com/){:target="_blank"}.  You can even learn more about Azure through a set of [simple video tutorials](https://azure.microsoft.com/en-us/get-started/video/){:target="_blank"}.
 
-### GPU-based Virtual Machines
-
-Generally, you will be using [Azure Virtual Machines](https://azure.microsoft.com/en-us/services/virtual-machines/){:target="_blank"}) to begin with PyTorch. Microsoft has various virtual machine types and pricing options, with both [Linux](https://azure.microsoft.com/en-us/pricing/details/virtual-machines/linux/){:target="_blank"} and [Windows](https://azure.microsoft.com/en-us/pricing/details/virtual-machines/windows/){:target="_blank"}, all of which are configured for specific use cases. For PyTorch, it is highly recommended that you use the [GPU optimized](https://docs.microsoft.com/en-us/azure/virtual-machines/linux/sizes-gpu){:target="_blank"}, virtual machines. They are tailored for the high compute needs of machine learning.
-
-The expense of your virtual machine is directly correlated to the number of GPUs that it contains. The NC6 virtual machine is, for example, one of the smallest, cheapest virtual machines and can actually be suitable for many use cases.
-
 ## Azure Machine Learning Service
 {: #microsoft-azure-machine-learning-service}
 
@@ -33,6 +27,12 @@ See [the documentation](https://docs.microsoft.com/en-us/azure/machine-learning/
 {: #microsoft-azure-virtual-machines}
 
 Azure [provides](https://azure.microsoft.com/en-us/services/virtual-machines/data-science-virtual-machines/){:target="_blank"} [pre-configured](https://docs.microsoft.com/en-us/azure/machine-learning/data-science-virtual-machine/){:target="_blank"} data learning and machine learning virtual machines. PyTorch are available on many of these - for example here is the [documentation](https://docs.microsoft.com/en-us/azure/machine-learning/data-science-virtual-machine/dsvm-ubuntu-intro){:target="_blank"} for how to setup an Azure virtual machine on Ubuntu Linux.
+
+### GPU-based Virtual Machines
+
+Microsoft has various virtual machine types and pricing options, with both [Linux](https://azure.microsoft.com/en-us/pricing/details/virtual-machines/linux/){:target="_blank"} and [Windows](https://azure.microsoft.com/en-us/pricing/details/virtual-machines/windows/){:target="_blank"}, all of which are configured for specific use cases. For PyTorch, it is highly recommended that you use the [GPU optimized](https://docs.microsoft.com/en-us/azure/virtual-machines/linux/sizes-gpu){:target="_blank"}, virtual machines. They are tailored for the high compute needs of machine learning.
+
+The expense of your virtual machine is directly correlated to the number of GPUs that it contains. The NC6 virtual machine is, for example, one of the smallest, cheapest virtual machines and can actually be suitable for many use cases.
 
 ## Installing PyTorch From Scratch
 {: #microsoft-azure-from-scratch}
