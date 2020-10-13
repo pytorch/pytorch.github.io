@@ -158,7 +158,7 @@
               
               
                 <div class="version">
-                  <a href='http://pytorch.org/docs/versions.html'>1.8.0a0+5015a81 &#x25BC</a>
+                  <a href='http://pytorch.org/docs/versions.html'>1.8.0a0+9e25229 &#x25BC</a>
                 </div>
               
             
@@ -390,6 +390,17 @@
     <span class="n">from</span><span class="o">.</span> <span class="kn">import</span> <span class="nn">ProcessGroupGloo</span>
 <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
     <span class="n">_GLOO_AVAILABLE</span> <span class="o">=</span> <span class="kc">False</span>
+
+<span class="c1"># Some reduce ops are not supported by complex numbers.</span>
+<span class="c1"># We currently provide complex support to the distributed API by viewing</span>
+<span class="c1"># complex tensors as real (torch.view_as_real), meaning that calling</span>
+<span class="c1"># these unsupported ops will return garbage values rather than error out.</span>
+<span class="c1"># (e.g. max(2+3i, 3+2i) = 3+3i)</span>
+<span class="c1"># We&#39;d like calls to unsupported ops to error out accordingly,</span>
+<span class="c1"># rather than returning garbage values.</span>
+<span class="k">def</span> <span class="nf">supports_complex</span><span class="p">(</span><span class="n">reduceOp</span><span class="p">:</span> <span class="n">ReduceOp</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+    <span class="n">denyList</span> <span class="o">=</span> <span class="p">[</span><span class="n">ReduceOp</span><span class="o">.</span><span class="n">MAX</span><span class="p">,</span> <span class="n">ReduceOp</span><span class="o">.</span><span class="n">MIN</span><span class="p">,</span> <span class="n">ReduceOp</span><span class="o">.</span><span class="n">PRODUCT</span><span class="p">]</span>
+    <span class="k">return</span> <span class="n">reduceOp</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">denyList</span>
 
 
 <div class="viewcode-block" id="Backend"><a class="viewcode-back" href="../../../distributed.html#torch.distributed.Backend">[docs]</a><span class="k">class</span> <span class="nc">Backend</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
@@ -1317,6 +1328,8 @@
 <span class="sd">    After the call, all ``tensor`` in ``tensor_list`` is going to be bitwise</span>
 <span class="sd">    identical in all processes.</span>
 
+<span class="sd">    Complex tensors are supported.</span>
+
 <span class="sd">    Only nccl and gloo backend is currently supported</span>
 <span class="sd">    tensors should only be GPU tensors</span>
 
@@ -1339,6 +1352,8 @@
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="k">if</span> <span class="n">_rank_not_in_group</span><span class="p">(</span><span class="n">group</span><span class="p">):</span>
         <span class="k">return</span>
+
+    <span class="n">tensor_list</span> <span class="o">=</span> <span class="p">[</span><span class="n">t</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">t</span><span class="o">.</span><span class="n">is_complex</span><span class="p">()</span> <span class="k">else</span> <span class="n">torch</span><span class="o">.</span><span class="n">view_as_real</span><span class="p">(</span><span class="n">t</span><span class="p">)</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">tensor_list</span><span class="p">]</span>
 
     <span class="n">opts</span> <span class="o">=</span> <span class="n">AllreduceOptions</span><span class="p">()</span>
     <span class="n">opts</span><span class="o">.</span><span class="n">reduceOp</span> <span class="o">=</span> <span class="n">op</span>
@@ -1364,6 +1379,8 @@
 
 <span class="sd">    After the call ``tensor`` is going to be bitwise identical in all processes.</span>
 
+<span class="sd">    Complex tensors are supported.</span>
+
 <span class="sd">    Arguments:</span>
 <span class="sd">        tensor (Tensor): Input and output of the collective. The function</span>
 <span class="sd">            operates in-place.</span>
@@ -1377,10 +1394,38 @@
 <span class="sd">        Async work handle, if async_op is set to True.</span>
 <span class="sd">        None, if not async_op or if not part of the group</span>
 
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; # All tensors below are of torch.int64 type.</span>
+<span class="sd">        &gt;&gt;&gt; # We have 2 process groups, 2 ranks.</span>
+<span class="sd">        &gt;&gt;&gt; tensor = torch.arange(2, dtype=torch.int64) + 1 + 2 * rank</span>
+<span class="sd">        &gt;&gt;&gt; tensor</span>
+<span class="sd">        tensor([1, 2]) # Rank 0</span>
+<span class="sd">        tensor([3, 4]) # Rank 1</span>
+<span class="sd">        &gt;&gt;&gt; dist.all_reduce(tensor, op=ReduceOp.SUM)</span>
+<span class="sd">        &gt;&gt;&gt; tensor</span>
+<span class="sd">        tensor([4, 6]) # Rank 0</span>
+<span class="sd">        tensor([4, 6]) # Rank 1</span>
+
+<span class="sd">        &gt;&gt;&gt; # All tensors below are of torch.cfloat type.</span>
+<span class="sd">        &gt;&gt;&gt; # We have 2 process groups, 2 ranks.</span>
+<span class="sd">        &gt;&gt;&gt; tensor = torch.tensor([1+1j, 2+2j], dtype=torch.cfloat) + 2 * rank * (1+1j)</span>
+<span class="sd">        &gt;&gt;&gt; tensor</span>
+<span class="sd">        tensor([1.+1.j, 2.+2.j]) # Rank 0</span>
+<span class="sd">        tensor([3.+3.j, 4.+4.j]) # Rank 1</span>
+<span class="sd">        &gt;&gt;&gt; dist.all_reduce(tensor, op=ReduceOp.SUM)</span>
+<span class="sd">        &gt;&gt;&gt; tensor</span>
+<span class="sd">        tensor([4.+4.j, 6.+6.j]) # Rank 0</span>
+<span class="sd">        tensor([4.+4.j, 6.+6.j]) # Rank 1</span>
+
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">_check_single_tensor</span><span class="p">(</span><span class="n">tensor</span><span class="p">,</span> <span class="s2">&quot;tensor&quot;</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">_rank_not_in_group</span><span class="p">(</span><span class="n">group</span><span class="p">):</span>
         <span class="k">return</span>
+
+    <span class="k">if</span> <span class="n">tensor</span><span class="o">.</span><span class="n">is_complex</span><span class="p">():</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">supports_complex</span><span class="p">(</span><span class="n">op</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;all_reduce does not support </span><span class="si">{</span><span class="n">op</span><span class="si">}</span><span class="s2"> on complex tensors&quot;</span><span class="p">)</span>
+        <span class="n">tensor</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">view_as_real</span><span class="p">(</span><span class="n">tensor</span><span class="p">)</span>
 
     <span class="n">opts</span> <span class="o">=</span> <span class="n">AllreduceOptions</span><span class="p">()</span>
     <span class="n">opts</span><span class="o">.</span><span class="n">reduceOp</span> <span class="o">=</span> <span class="n">op</span>
@@ -1415,6 +1460,8 @@
 <span class="sd">    After the call each tensor in tensors is going to bitwise identical</span>
 <span class="sd">    in all processes.</span>
 
+<span class="sd">    Complex tensors are supported.</span>
+
 <span class="sd">    Arguments:</span>
 <span class="sd">        tensors (List[Tensor]): Input and output of the collective. The function</span>
 <span class="sd">            operates in-place.</span>
@@ -1432,6 +1479,11 @@
     <span class="n">_check_tensor_list</span><span class="p">(</span><span class="n">tensors</span><span class="p">,</span> <span class="s2">&quot;tensor&quot;</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">_rank_not_in_group</span><span class="p">(</span><span class="n">group</span><span class="p">):</span>
         <span class="k">return</span>
+
+    <span class="k">if</span> <span class="nb">any</span><span class="p">([</span><span class="n">t</span><span class="o">.</span><span class="n">is_complex</span><span class="p">()</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">tensors</span><span class="p">])</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">supports_complex</span><span class="p">(</span><span class="n">op</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;all_reduce does not support </span><span class="si">{</span><span class="n">op</span><span class="si">}</span><span class="s2"> on complex tensors&quot;</span><span class="p">)</span>
+
+    <span class="n">tensors</span> <span class="o">=</span> <span class="p">[</span><span class="n">t</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">t</span><span class="o">.</span><span class="n">is_complex</span><span class="p">()</span> <span class="k">else</span> <span class="n">torch</span><span class="o">.</span><span class="n">view_as_real</span><span class="p">(</span><span class="n">t</span><span class="p">)</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">tensors</span><span class="p">]</span>
 
     <span class="n">opts</span> <span class="o">=</span> <span class="n">AllreduceCoalescedOptions</span><span class="p">()</span>
     <span class="n">opts</span><span class="o">.</span><span class="n">reduceOp</span> <span class="o">=</span> <span class="n">op</span>
@@ -1562,6 +1614,8 @@
 <span class="sd">    Only nccl backend is currently supported</span>
 <span class="sd">    tensors should only be GPU tensors</span>
 
+<span class="sd">    Complex tensors are supported.</span>
+
 <span class="sd">    Arguments:</span>
 <span class="sd">        output_tensor_lists (List[List[Tensor]]): Output lists. It should</span>
 <span class="sd">            contain correctly-sized tensors on each GPU to be used for output</span>
@@ -1596,6 +1650,9 @@
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="k">if</span> <span class="n">_rank_not_in_group</span><span class="p">(</span><span class="n">group</span><span class="p">):</span>
         <span class="k">return</span>
+
+    <span class="n">output_tensor_lists</span> <span class="o">=</span> <span class="p">[[</span><span class="n">t</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">t</span><span class="o">.</span><span class="n">is_complex</span><span class="p">()</span> <span class="k">else</span> <span class="n">torch</span><span class="o">.</span><span class="n">view_as_real</span><span class="p">(</span><span class="n">t</span><span class="p">)</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">l</span><span class="p">]</span> <span class="k">for</span> <span class="n">l</span> <span class="ow">in</span> <span class="n">output_tensor_lists</span><span class="p">]</span>
+    <span class="n">input_tensor_list</span> <span class="o">=</span> <span class="p">[</span><span class="n">t</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">t</span><span class="o">.</span><span class="n">is_complex</span><span class="p">()</span> <span class="k">else</span> <span class="n">torch</span><span class="o">.</span><span class="n">view_as_real</span><span class="p">(</span><span class="n">t</span><span class="p">)</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">input_tensor_list</span><span class="p">]</span>
 
     <span class="k">if</span> <span class="n">group</span> <span class="o">==</span> <span class="n">GroupMember</span><span class="o">.</span><span class="n">WORLD</span><span class="p">:</span>
         <span class="n">_check_default_pg</span><span class="p">()</span>
@@ -1845,6 +1902,8 @@
     <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Gathers tensors from the whole group in a list.</span>
 
+<span class="sd">    Complex tensors are supported.</span>
+
 <span class="sd">    Arguments:</span>
 <span class="sd">        tensor_list (list[Tensor]): Output list. It should contain</span>
 <span class="sd">            correctly-sized tensors to be used for output of the collective.</span>
@@ -1856,11 +1915,43 @@
 <span class="sd">        Async work handle, if async_op is set to True.</span>
 <span class="sd">        None, if not async_op or if not part of the group</span>
 
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; # All tensors below are of torch.int64 dtype.</span>
+<span class="sd">        &gt;&gt;&gt; # We have 2 process groups, 2 ranks.</span>
+<span class="sd">        &gt;&gt;&gt; tensor_list = [torch.zero(2, dtype=torch.int64) for _ in range(2)]</span>
+<span class="sd">        &gt;&gt;&gt; tensor_list</span>
+<span class="sd">        [tensor([0, 0]), tensor([0, 0])] # Rank 0 and 1</span>
+<span class="sd">        &gt;&gt;&gt; tensor = torch.arange(2, dtype=torch.int64) + 1 + 2 * rank</span>
+<span class="sd">        &gt;&gt;&gt; tensor</span>
+<span class="sd">        tensor([1, 2]) # Rank 0</span>
+<span class="sd">        tensor([3, 4]) # Rank 1</span>
+<span class="sd">        &gt;&gt;&gt; dist.all_gather(tensor_list, tensor)</span>
+<span class="sd">        &gt;&gt;&gt; tensor_list</span>
+<span class="sd">        [tensor([1, 2]), tensor([3, 4])] # Rank 0</span>
+<span class="sd">        [tensor([1, 2]), tensor([3, 4])] # Rank 1</span>
+
+<span class="sd">        &gt;&gt;&gt; # All tensors below are of torch.cfloat dtype.</span>
+<span class="sd">        &gt;&gt;&gt; # We have 2 process groups, 2 ranks.</span>
+<span class="sd">        &gt;&gt;&gt; tensor_list = [torch.zero(2, dtype=torch.cfloat) for _ in range(2)]</span>
+<span class="sd">        &gt;&gt;&gt; tensor_list</span>
+<span class="sd">        [tensor([0.+0.j, 0.+0.j]), tensor([0.+0.j, 0.+0.j])] # Rank 0 and 1</span>
+<span class="sd">        &gt;&gt;&gt; tensor = torch.tensor([1+1j, 2+2j], dtype=torch.cfloat) + 2 * rank * (1+1j)</span>
+<span class="sd">        &gt;&gt;&gt; tensor</span>
+<span class="sd">        tensor([1.+1.j, 2.+2.j]) # Rank 0</span>
+<span class="sd">        tensor([3.+3.j, 4.+4.j]) # Rank 1</span>
+<span class="sd">        &gt;&gt;&gt; dist.all_gather(tensor_list, tensor)</span>
+<span class="sd">        &gt;&gt;&gt; tensor_list</span>
+<span class="sd">        [tensor([1.+1.j, 2.+2.j]), tensor([3.+3.j, 4.+4.j])] # Rank 0</span>
+<span class="sd">        [tensor([1.+1.j, 2.+2.j]), tensor([3.+3.j, 4.+4.j])] # Rank 1</span>
+
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">_check_tensor_list</span><span class="p">(</span><span class="n">tensor_list</span><span class="p">,</span> <span class="s2">&quot;tensor_list&quot;</span><span class="p">)</span>
     <span class="n">_check_single_tensor</span><span class="p">(</span><span class="n">tensor</span><span class="p">,</span> <span class="s2">&quot;tensor&quot;</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">_rank_not_in_group</span><span class="p">(</span><span class="n">group</span><span class="p">):</span>
         <span class="k">return</span>
+
+    <span class="n">tensor_list</span> <span class="o">=</span> <span class="p">[</span><span class="n">t</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">t</span><span class="o">.</span><span class="n">is_complex</span><span class="p">()</span> <span class="k">else</span> <span class="n">torch</span><span class="o">.</span><span class="n">view_as_real</span><span class="p">(</span><span class="n">t</span><span class="p">)</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">tensor_list</span><span class="p">]</span>
+    <span class="n">tensor</span> <span class="o">=</span> <span class="n">tensor</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">tensor</span><span class="o">.</span><span class="n">is_complex</span><span class="p">()</span> <span class="k">else</span> <span class="n">torch</span><span class="o">.</span><span class="n">view_as_real</span><span class="p">(</span><span class="n">tensor</span><span class="p">)</span>
 
     <span class="k">if</span> <span class="n">group</span> <span class="o">==</span> <span class="n">GroupMember</span><span class="o">.</span><span class="n">WORLD</span><span class="p">:</span>
         <span class="n">_check_default_pg</span><span class="p">()</span>
@@ -1879,6 +1970,8 @@
                          <span class="n">async_op</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Gathers input tensors from the whole group in a list in a coalesced manner.</span>
+
+<span class="sd">    Complex tensors are supported.</span>
 
 <span class="sd">    Arguments:</span>
 <span class="sd">        output_tensor_lists (list[list[Tensor]]): Output list. It should contain</span>
@@ -1927,6 +2020,9 @@
                            <span class="s2">&quot;output_tensor_lists should be a list&quot;</span><span class="p">)</span>
     <span class="k">for</span> <span class="n">output_tensor_list</span> <span class="ow">in</span> <span class="n">output_tensor_lists</span><span class="p">:</span>
         <span class="n">_check_tensor_list</span><span class="p">(</span><span class="n">output_tensor_list</span><span class="p">,</span> <span class="s2">&quot;output_tensor_lists&quot;</span><span class="p">)</span>
+
+    <span class="n">output_tensor_lists</span> <span class="o">=</span> <span class="p">[[</span><span class="n">t</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">t</span><span class="o">.</span><span class="n">is_complex</span><span class="p">()</span> <span class="k">else</span> <span class="n">torch</span><span class="o">.</span><span class="n">view_as_real</span><span class="p">(</span><span class="n">t</span><span class="p">)</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">l</span><span class="p">]</span> <span class="k">for</span> <span class="n">l</span> <span class="ow">in</span> <span class="n">output_tensor_lists</span><span class="p">]</span>
+    <span class="n">input_tensor_list</span> <span class="o">=</span> <span class="p">[</span><span class="n">t</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">t</span><span class="o">.</span><span class="n">is_complex</span><span class="p">()</span> <span class="k">else</span> <span class="n">torch</span><span class="o">.</span><span class="n">view_as_real</span><span class="p">(</span><span class="n">t</span><span class="p">)</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">input_tensor_list</span><span class="p">]</span>
 
     <span class="k">if</span> <span class="n">group</span> <span class="o">==</span> <span class="n">GroupMember</span><span class="o">.</span><span class="n">WORLD</span><span class="p">:</span>
         <span class="n">_check_default_pg</span><span class="p">()</span>
