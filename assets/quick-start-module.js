@@ -232,31 +232,31 @@ function commandMessage(key) {
     "stable,pip,macos,cudanone,python": "pip install torch torchvision torchaudio",
 
     "stable,pip,linux,cudanone,python":
-      "pip install torch==1.7.0+cpu torchvision==0.8.0+cpu torchaudio==0.7.0 -f https://download.pytorch.org/whl/torch_stable.html",
+      "pip install torch==1.7.0+cpu torchvision==0.8.1+cpu torchaudio==0.7.0 -f https://download.pytorch.org/whl/torch_stable.html",
 
     "stable,pip,linux,cuda9.2,python":
-      "pip install torch==1.7.0+cu92 torchvision==0.8.0+cu92 torchaudio==0.7.0 -f https://download.pytorch.org/whl/torch_stable.html",
+      "pip install torch==1.7.0+cu92 torchvision==0.8.1+cu92 torchaudio==0.7.0 -f https://download.pytorch.org/whl/torch_stable.html",
 
     "stable,pip,linux,cuda10.1,python":
-      "pip install torch==1.7.0+cu101 torchvision==0.8.0+cu101 torchaudio==0.7.0 -f https://download.pytorch.org/whl/torch_stable.html",
+      "pip install torch==1.7.0+cu101 torchvision==0.8.1+cu101 torchaudio==0.7.0 -f https://download.pytorch.org/whl/torch_stable.html",
 
     "stable,pip,linux,cuda10.2,python":
       "pip install torch torchvision",
 
     "stable,pip,linux,cuda11.0,python":
-      "pip install torch==1.7.0+cu110 torchvision==0.8.0+cu110 torchaudio===0.7.0 -f https://download.pytorch.org/whl/torch_stable.html",
+      "pip install torch==1.7.0+cu110 torchvision==0.8.1+cu110 torchaudio===0.7.0 -f https://download.pytorch.org/whl/torch_stable.html",
 
     "stable,pip,windows,cudanone,python":
-      "pip install torch==1.7.0+cpu torchvision==0.8.0+cpu torchaudio===0.7.0 -f https://download.pytorch.org/whl/torch_stable.html",
+      "pip install torch==1.7.0+cpu torchvision==0.8.1+cpu torchaudio===0.7.0 -f https://download.pytorch.org/whl/torch_stable.html",
 
     "stable,pip,windows,cuda10.1,python":
-      "pip install torch==1.7.0+cu101 torchvision==0.8.0+cu101 torchaudio===0.7.0 -f https://download.pytorch.org/whl/torch_stable.html",
+      "pip install torch==1.7.0+cu101 torchvision==0.8.1+cu101 torchaudio===0.7.0 -f https://download.pytorch.org/whl/torch_stable.html",
 
     "stable,pip,windows,cuda10.2,python":
-      "pip install torch===1.7.0 torchvision===0.8.0 torchaudio===0.7.0 -f https://download.pytorch.org/whl/torch_stable.html",
+      "pip install torch===1.7.0 torchvision===0.8.1 torchaudio===0.7.0 -f https://download.pytorch.org/whl/torch_stable.html",
 
     "stable,pip,windows,cuda11.0,python":
-      "pip install torch===1.7.0+cu110 torchvision===0.8.0+cu110 torchaudio===0.7.0 -f https://download.pytorch.org/whl/torch_stable.html",
+      "pip install torch===1.7.0+cu110 torchvision===0.8.1+cu110 torchaudio===0.7.0 -f https://download.pytorch.org/whl/torch_stable.html",
 
     "stable,libtorch,linux,cudanone,cplusplus":
       "Download here (Pre-cxx11 ABI): <br/><a href='https://download.pytorch.org/libtorch/cpu/libtorch-shared-with-deps-1.7.0%2Bcpu.zip'>https://download.pytorch.org/libtorch/cpu/libtorch-shared-with-deps-1.7.0%2Bcpu.zip</a><br/><br> Download here (cxx11 ABI): <br/><a href='https://download.pytorch.org/libtorch/cpu/libtorch-cxx11-abi-shared-with-deps-1.7.0%2Bcpu.zip'>https://download.pytorch.org/libtorch/cpu/libtorch-cxx11-abi-shared-with-deps-1.7.0%2Bcpu.zip</a>",
