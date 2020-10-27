@@ -196,6 +196,9 @@ function commandMessage(key) {
     "stable,conda,macos,cuda10.2,python":
       "conda install pytorch torchvision -c pytorch<br /># MacOS Binaries dont support CUDA, install from source if CUDA is needed",
 
+    "stable,conda,macos,cuda11.0,python":
+      "conda install pytorch torchvision -c pytorch<br /># MacOS Binaries dont support CUDA, install from source if CUDA is needed",
+
     "stable,conda,macos,cudanone,python":
       "conda install pytorch torchvision -c pytorch",
 
@@ -215,6 +218,9 @@ function commandMessage(key) {
       "pip install torch torchvision<br /># MacOS Binaries dont support CUDA, install from source if CUDA is needed",
 
     "stable,pip,macos,cuda10.2,python":
+      "pip install torch torchvision<br /># MacOS Binaries dont support CUDA, install from source if CUDA is needed",
+
+    "stable,pip,macos,cuda11.0,python":
       "pip install torch torchvision<br /># MacOS Binaries dont support CUDA, install from source if CUDA is needed",
 
     "stable,pip,macos,cudanone,python": "pip install torch torchvision",
@@ -264,6 +270,9 @@ function commandMessage(key) {
     "stable,libtorch,macos,cuda10.2,cplusplus":
       "MacOS binaries do not support CUDA. Download CPU libtorch here: <br/><a href='https://download.pytorch.org/libtorch/cpu/libtorch-macos-1.6.0.zip'> https://download.pytorch.org/libtorch/cpu/libtorch-macos-1.6.0.zip </a>",
 
+    "stable,libtorch,macos,cuda11.0,cplusplus":
+      "MacOS binaries do not support CUDA. Download CPU libtorch here: <br/><a href='https://download.pytorch.org/libtorch/cpu/libtorch-macos-1.6.0.zip'> https://download.pytorch.org/libtorch/cpu/libtorch-macos-1.6.0.zip </a>",
+
     "stable,libtorch,windows,cudanone,cplusplus":
       "Windows binaries do not support Java. Support is only available for Linux and MacOS.  Download here for C++ (Release version): <br/><a href='https://download.pytorch.org/libtorch/cpu/libtorch-win-shared-with-deps-1.6.0%2Bcpu.zip'>https://download.pytorch.org/libtorch/cpu/libtorch-win-shared-with-deps-1.6.0%2Bcpu.zip</a><br/><br>  Download here for C++ (Debug version): <br/><a href='https://download.pytorch.org/libtorch/cpu/libtorch-win-shared-with-deps-debug-1.6.0%2Bcpu.zip'>https://download.pytorch.org/libtorch/cpu/libtorch-win-shared-with-deps-debug-1.6.0%2Bcpu.zip</a>",
 
@@ -282,6 +291,9 @@ function commandMessage(key) {
     "preview,conda,linux,cuda10.2,python":
       "conda install pytorch torchvision cudatoolkit=10.2 -c pytorch-nightly",
 
+    "preview,conda,linux,cuda11.0,python":
+      "conda install pytorch torchvision cudatoolkit=11.0 -c pytorch-nightly",
+
     "preview,conda,linux,cudanone,python":
       "conda install pytorch torchvision cpuonly -c pytorch-nightly",
 
@@ -292,6 +304,9 @@ function commandMessage(key) {
       "conda install pytorch torchvision -c pytorch-nightly",
 
     "preview,conda,macos,cuda10.2,python":
+      "conda install pytorch torchvision -c pytorch-nightly",
+
+    "preview,conda,macos,cuda11.0,python":
       "conda install pytorch torchvision -c pytorch-nightly",
 
     "preview,conda,macos,cudanone,python":
@@ -306,6 +321,9 @@ function commandMessage(key) {
     "preview,conda,windows,cuda10.2,python":
       "conda install pytorch torchvision cudatoolkit=10.2 -c pytorch-nightly",
 
+    "preview,conda,windows,cuda11.0,python":
+      "conda install pytorch torchvision cudatoolkit=11.0 -c pytorch-nightly",
+
     "preview,conda,windows,cudanone,python":
       "conda install pytorch torchvision cpuonly -c pytorch-nightly",
 
@@ -316,6 +334,9 @@ function commandMessage(key) {
       "pip install numpy<br />pip install --pre torch torchvision -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html<br /># On MacOS, we provide CPU-only packages, CUDA functionality is not provided",
 
     "preview,pip,macos,cuda10.2,python":
+      "pip install numpy<br />pip install --pre torch torchvision -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html<br /># On MacOS, we provide CPU-only packages, CUDA functionality is not provided",
+
+    "preview,pip,macos,cuda11.0,python":
       "pip install numpy<br />pip install --pre torch torchvision -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html<br /># On MacOS, we provide CPU-only packages, CUDA functionality is not provided",
 
     "preview,pip,macos,cudanone,python":
@@ -333,6 +354,9 @@ function commandMessage(key) {
     "preview,pip,linux,cuda10.2,python":
       "pip install numpy<br />pip install --pre torch torchvision -f https://download.pytorch.org/whl/nightly/cu102/torch_nightly.html",
 
+    "preview,pip,linux,cuda11.0,python":
+      "pip install numpy<br />pip install --pre torch torchvision -f https://download.pytorch.org/whl/nightly/cu110/torch_nightly.html",
+
     "preview,pip,windows,cudanone,python":
       "pip install numpy<br />pip install --pre torch torchvision -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html",
 
@@ -344,6 +368,9 @@ function commandMessage(key) {
 
     "preview,pip,windows,cuda10.2,python":
       "pip install numpy<br />pip install --pre torch torchvision -f https://download.pytorch.org/whl/nightly/cu102/torch_nightly.html",
+
+    "preview,pip,windows,cuda11.0,python":
+      "pip install numpy<br />pip install --pre torch torchvision -f https://download.pytorch.org/whl/nightly/cu110/torch_nightly.html",
 
     "preview,libtorch,linux,cudanone,cplusplus":
       "Download here (Pre-cxx11 ABI): <br/><a href='https://download.pytorch.org/libtorch/nightly/cpu/libtorch-shared-with-deps-latest.zip'>https://download.pytorch.org/libtorch/nightly/cpu/libtorch-shared-with-deps-latest.zip</a><br/><br> Download here (cxx11 ABI): <br/><a href='https://download.pytorch.org/libtorch/nightly/cpu/libtorch-cxx11-abi-shared-with-deps-latest.zip'>https://download.pytorch.org/libtorch/nightly/cpu/libtorch-cxx11-abi-shared-with-deps-latest.zip</a>",
@@ -357,6 +384,9 @@ function commandMessage(key) {
     "preview,libtorch,linux,cuda10.2,cplusplus":
       "Download here (Pre-cxx11 ABI): <br/><a href='https://download.pytorch.org/libtorch/nightly/cu102/libtorch-shared-with-deps-latest.zip'>https://download.pytorch.org/libtorch/nightly/cu102/libtorch-shared-with-deps-latest.zip</a><br/><br> Download here (cxx11 ABI): <br/><a href='https://download.pytorch.org/libtorch/nightly/cu102/libtorch-cxx11-abi-shared-with-deps-latest.zip'>https://download.pytorch.org/libtorch/nightly/cu102/libtorch-cxx11-abi-shared-with-deps-latest.zip</a>",
 
+    "preview,libtorch,linux,cuda11.0,cplusplus":
+      "Download here (Pre-cxx11 ABI): <br/><a href='https://download.pytorch.org/libtorch/nightly/cu110/libtorch-shared-with-deps-latest.zip'>https://download.pytorch.org/libtorch/nightly/cu110/libtorch-shared-with-deps-latest.zip</a><br/><br> Download here (cxx11 ABI): <br/><a href='https://download.pytorch.org/libtorch/nightly/cu110/libtorch-cxx11-abi-shared-with-deps-latest.zip'>https://download.pytorch.org/libtorch/nightly/cu110/libtorch-cxx11-abi-shared-with-deps-latest.zip</a>",
+
     "preview,libtorch,macos,cudanone,cplusplus":
       "Download here: <br/><a href='https://download.pytorch.org/libtorch/nightly/cpu/libtorch-macos-latest.zip'> https://download.pytorch.org/libtorch/nightly/cpu/libtorch-macos-latest.zip </a>",
 
@@ -367,6 +397,9 @@ function commandMessage(key) {
       "MacOS binaries do not support CUDA. Download CPU libtorch here: <br/><a href='https://download.pytorch.org/libtorch/nightly/cpu/libtorch-macos-latest.zip'> https://download.pytorch.org/libtorch/nightly/cpu/libtorch-macos-latest.zip </a>",
 
     "preview,libtorch,macos,cuda10.2,cplusplus":
+      "MacOS binaries do not support CUDA. Download CPU libtorch here: <br/><a href='https://download.pytorch.org/libtorch/nightly/cpu/libtorch-macos-latest.zip'> https://download.pytorch.org/libtorch/nightly/cpu/libtorch-macos-latest.zip </a>",
+
+    "preview,libtorch,macos,cuda11.0,cplusplus":
       "MacOS binaries do not support CUDA. Download CPU libtorch here: <br/><a href='https://download.pytorch.org/libtorch/nightly/cpu/libtorch-macos-latest.zip'> https://download.pytorch.org/libtorch/nightly/cpu/libtorch-macos-latest.zip </a>",
 
     "preview,libtorch,windows,cudanone,cplusplus":
@@ -380,6 +413,9 @@ function commandMessage(key) {
 
     "preview,libtorch,windows,cuda10.2,cplusplus":
       "Windows binaries do not support Java. Support is only available for Linux and MacOS.  Download here for C++ (Release version): <br/><a href='https://download.pytorch.org/libtorch/nightly/cu102/libtorch-win-shared-with-deps-latest.zip'>https://download.pytorch.org/libtorch/nightly/cu102/libtorch-win-shared-with-deps-latest.zip</a><br/><br>  Download here for C++ (Debug version): <br/><a href='https://download.pytorch.org/libtorch/nightly/cu102/libtorch-win-shared-with-deps-debug-latest.zip'>https://download.pytorch.org/libtorch/nightly/cu102/libtorch-win-shared-with-deps-debug-latest.zip</a>",
+
+    "preview,libtorch,windows,cuda11.0,cplusplus":
+      "Windows binaries do not support Java. Support is only available for Linux and MacOS.  Download here for C++ (Release version): <br/><a href='https://download.pytorch.org/libtorch/nightly/cu110/libtorch-win-shared-with-deps-latest.zip'>https://download.pytorch.org/libtorch/nightly/cu110/libtorch-win-shared-with-deps-latest.zip</a><br/><br>  Download here for C++ (Debug version): <br/><a href='https://download.pytorch.org/libtorch/nightly/cu110/libtorch-win-shared-with-deps-debug-latest.zip'>https://download.pytorch.org/libtorch/nightly/cu110/libtorch-win-shared-with-deps-debug-latest.zip</a>",
   };
 
   if (!object.hasOwnProperty(key)) {
