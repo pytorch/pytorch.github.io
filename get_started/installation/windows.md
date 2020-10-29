@@ -47,7 +47,7 @@ To install Anaconda, you will use the [64-bit graphical installer](https://www.a
 
 #### pip
 
-If you installed Python by any of the recommended ways above[LINK], `[pip](https://pypi.org/project/pip/)` will have already been installed for you.
+If you installed Python by any of the recommended ways [above](#windows-python), [pip](https://pypi.org/project/pip/) will have already been installed for you.
 
 ## Installation
 {: #windows-installation}
