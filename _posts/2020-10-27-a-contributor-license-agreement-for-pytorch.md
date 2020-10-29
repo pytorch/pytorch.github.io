@@ -34,7 +34,7 @@ If you've contributed to other Facebook Open Source projects, you may have alrea
 
 If you're contributing as an individual, meaning the code is not something you worked on as part of your job, you should sign the individual contributor agreement. This agreement associates your GitHub username with future contributions and only needs to be signed once.
 
-If you're contributing as part of your employment, you may need to sign the [corporate contributor agreement](https://code.facebook.com/cla/corporate). Check with your lawyer on filling this out. Also you will include a list of github ids from your company.
+If you're contributing as part of your employment, you may need to sign the [corporate contributor agreement](https://code.facebook.com/cla/corporate). Check with your legal team on filling this out. Also you will include a list of github ids from your company.
 
 As always, we continue to be humbled and grateful for all your support, and we look forward to scaling PyTorch together to even greater heights in the years to come.
 
