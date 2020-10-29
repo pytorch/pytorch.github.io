@@ -54,7 +54,7 @@ var trackEvents = {
 
     // Clicks on Ecosystem Project cards
     $(".ecosystem-card a").on("click", function() {
-      trackEvents.recordClick("Ecosystem Project Card", $(this).find("h4").text());
+      trackEvents.recordClick("Ecosystem Project Card", $(this).find(".card-title").text());
       return true;
     });
 
