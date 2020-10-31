@@ -158,7 +158,7 @@
               
               
                 <div class="version">
-                  <a href='http://pytorch.org/docs/versions.html'>1.8.0a0+3ee3d3b &#x25BC</a>
+                  <a href='http://pytorch.org/docs/versions.html'>1.8.0a0+ec10b11 &#x25BC</a>
                 </div>
               
             
@@ -350,6 +350,7 @@
 <span class="sd">in `./_utils/worker.py`.</span>
 <span class="sd">&quot;&quot;&quot;</span>
 
+<span class="kn">import</span> <span class="nn">os</span>
 <span class="kn">import</span> <span class="nn">threading</span>
 <span class="kn">import</span> <span class="nn">itertools</span>
 <span class="kn">import</span> <span class="nn">warnings</span>
@@ -635,10 +636,13 @@
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_iterator</span> <span class="o">=</span> <span class="kc">None</span>
 
+        <span class="bp">self</span><span class="o">.</span><span class="n">check_worker_number_rationality</span><span class="p">()</span>
+
     <span class="k">def</span> <span class="nf">_get_iterator</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s1">&#39;_BaseDataLoaderIter&#39;</span><span class="p">:</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
             <span class="k">return</span> <span class="n">_SingleProcessDataLoaderIter</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">check_worker_number_rationality</span><span class="p">()</span>
             <span class="k">return</span> <span class="n">_MultiProcessingDataLoaderIter</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
 
     <span class="nd">@property</span>
@@ -742,7 +746,84 @@
                     <span class="n">length</span> <span class="o">=</span> <span class="n">ceil</span><span class="p">(</span><span class="n">length</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">)</span>
             <span class="k">return</span> <span class="n">length</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_index_sampler</span><span class="p">)</span></div>
+            <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_index_sampler</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">check_worker_number_rationality</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="c1"># This function check whether the dataloader&#39;s worker number is rational based on</span>
+        <span class="c1"># current system&#39;s resource. Current rule is that if the number of workers this</span>
+        <span class="c1"># Dataloader will create is bigger than the number of logical cpus that is allowed to</span>
+        <span class="c1"># use, than we will pop up a warning to let user pay attention.</span>
+        <span class="c1">#</span>
+        <span class="c1"># eg. If current system has 2 physical CPUs with 16 cores each. And each core support 2</span>
+        <span class="c1">#     threads, then the total logical cpus here is 2 * 16 * 2 = 64. Let&#39;s say current</span>
+        <span class="c1">#     DataLoader process can use half of them which is 32, then the rational max number of</span>
+        <span class="c1">#     worker that initiated from this process is 32.</span>
+        <span class="c1">#     Now, let&#39;s say the created DataLoader has num_works = 40, which is bigger than 32.</span>
+        <span class="c1">#     So the warning message is triggered to notify the user to lower the worker number if</span>
+        <span class="c1">#     necessary.</span>
+        <span class="c1">#</span>
+        <span class="c1">#</span>
+        <span class="c1"># [Note] Please note that this function repects `cpuset` only when os.sched_getaffinity is</span>
+        <span class="c1">#        available (available in most of Linux system, but not OSX and Windows).</span>
+        <span class="c1">#        When os.sched_getaffinity is not available, os.cpu_count() is called instead, but</span>
+        <span class="c1">#        it doesn&#39;t repect cpuset.</span>
+        <span class="c1">#        We don&#39;t take threading into account since each worker process is single threaded</span>
+        <span class="c1">#        at this time.</span>
+        <span class="c1">#</span>
+        <span class="c1">#        We don&#39;t set any threading flags (eg. OMP_NUM_THREADS, MKL_NUM_THREADS, etc)</span>
+        <span class="c1">#        other than `torch.set_num_threads` to 1 in the worker process, if the passing</span>
+        <span class="c1">#        in functions use 3rd party modules that rely on those threading flags to determine</span>
+        <span class="c1">#        how many thread to create (eg. numpy, etc), then it is caller&#39;s responsibility to</span>
+        <span class="c1">#        set those flags correctly.</span>
+        <span class="k">def</span> <span class="nf">_create_warning_msg</span><span class="p">(</span><span class="n">num_worker_suggest</span><span class="p">,</span> <span class="n">num_worker_created</span><span class="p">,</span> <span class="n">cpuset_checked</span><span class="p">):</span>
+
+            <span class="n">suggested_max_worker_msg</span> <span class="o">=</span> <span class="p">((</span>
+                <span class="s2">&quot;Our suggested max number of worker in current system is </span><span class="si">{}{}</span><span class="s2">, which is smaller &quot;</span>
+                <span class="s2">&quot;than what this DataLoader is going to create.&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                    <span class="n">num_worker_suggest</span><span class="p">,</span>
+                    <span class="p">(</span><span class="s2">&quot;&quot;</span> <span class="k">if</span> <span class="n">cpuset_checked</span> <span class="k">else</span> <span class="s2">&quot; (`cpuset` is not taken into account)&quot;</span><span class="p">))</span>
+            <span class="p">)</span> <span class="k">if</span> <span class="n">num_worker_suggest</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="p">(</span>
+                <span class="s2">&quot;DataLoader is not able to compute a suggested max number of worker in current system.&quot;</span><span class="p">)</span>
+
+            <span class="n">warn_msg</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="s2">&quot;This DataLoader will create </span><span class="si">{}</span><span class="s2"> worker processes in total. </span><span class="si">{}</span><span class="s2"> &quot;</span>
+                <span class="s2">&quot;Please be aware that excessive worker creation might get DataLoader running slow or even freeze, &quot;</span>
+                <span class="s2">&quot;lower the worker number to avoid potential slowness/freeze if necessary.&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                    <span class="n">num_worker_created</span><span class="p">,</span>
+                    <span class="n">suggested_max_worker_msg</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">warn_msg</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span>
+
+        <span class="c1"># try to compute a suggested max number of worker based on system&#39;s resource</span>
+        <span class="n">max_num_worker_suggest</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="n">cpuset_checked</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">os</span><span class="p">,</span> <span class="s1">&#39;sched_getaffinity&#39;</span><span class="p">):</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">max_num_worker_suggest</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">sched_getaffinity</span><span class="p">(</span><span class="mi">0</span><span class="p">))</span>
+                <span class="n">cpuset_checked</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+                <span class="k">pass</span>
+        <span class="k">if</span> <span class="n">max_num_worker_suggest</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># os.cpu_count() could return Optional[int]</span>
+            <span class="c1"># get cpu count first and check None in order to satify mypy check</span>
+            <span class="n">cpu_count</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">cpu_count</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">cpu_count</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">max_num_worker_suggest</span> <span class="o">=</span> <span class="n">cpu_count</span>
+
+        <span class="k">if</span> <span class="n">max_num_worker_suggest</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="n">_create_warning_msg</span><span class="p">(</span>
+                <span class="n">max_num_worker_suggest</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span><span class="p">,</span>
+                <span class="n">cpuset_checked</span><span class="p">))</span>
+            <span class="k">return</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span> <span class="o">&gt;</span> <span class="n">max_num_worker_suggest</span><span class="p">:</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="n">_create_warning_msg</span><span class="p">(</span>
+                <span class="n">max_num_worker_suggest</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span><span class="p">,</span>
+                <span class="n">cpuset_checked</span><span class="p">))</span></div>
 
 
 <span class="k">class</span> <span class="nc">_BaseDataLoaderIter</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
@@ -1188,7 +1269,7 @@
         <span class="c1"># contains all `True`s if not using an iterable-style dataset</span>
         <span class="c1"># (i.e., if kind != Iterable).</span>
         <span class="c1"># Not that this indicates that a worker still has work to do *for this epoch*.</span>
-        <span class="c1"># It does not mean that a worker is dead. In case of `_persistent_workers`, </span>
+        <span class="c1"># It does not mean that a worker is dead. In case of `_persistent_workers`,</span>
         <span class="c1"># the worker will be reset to available in the next epoch.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_workers_status</span> <span class="o">=</span> <span class="p">[</span><span class="kc">True</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_num_workers</span><span class="p">)]</span>
         <span class="c1"># We resume the prefetching in case it was enabled</span>
