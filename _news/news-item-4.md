@@ -1,5 +1,5 @@
 ---
 order: 4
-link: https://pytorch.org/blog/pytorch-feature-classification-changes/
-summary: See the new PyTorch feature classification changes
+link: https://pytorch.org/blog/announcing-the-winners-of-the-2020-global-pytorch-summer-hackathon/
+summary: Announcing the Winners of the 2020 Global PyTorch Summer Hackathon
 ---
