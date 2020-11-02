@@ -4,11 +4,11 @@ title: 'Announcing PyTorch Developer Day 2020'
 author: Team PyTorch
 ---
 
+Starting this year, we plan to host two separate events for PyTorch: one for developers and users to discuss core technical development, ideas and roadmaps called **“Developer Day”**, and another for the PyTorch ecosystem and industry communities to showcase their work and discover opportunities to collaborate called **“Ecosystem Day”** (scheduled for early 2021).
+
 <div class="text-center">
   <img src="{{ site.url }}/assets/images/PTD2-social-asset.png" width="100%">
 </div>
-
-Starting this year, we plan to host two separate events for PyTorch: one for developers and users to discuss core technical development, ideas and roadmaps called **“Developer Day”**, and another for the PyTorch ecosystem and industry communities to showcase their work and discover opportunities to collaborate called **“Ecosystem Day”** (scheduled for early 2021).
 
 The **PyTorch Developer Day** (#PTD2) is kicking off on November 12, 2020, 8AM PST with a full day of technical talks on a variety of topics, including updates to the core framework, new tools and libraries to support development across a variety of domains. You'll also see talks covering the latest research around systems and tooling in ML.
 
