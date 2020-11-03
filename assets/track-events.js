@@ -1,21 +1,13 @@
 var trackEvents = {
   recordClick: function(eventCategory, eventLabel) {
-    if (typeof ga == "function") {
+    if (typeof gtag == "function") {
       var gaEventObject = {
         eventCategory: eventCategory,
         eventAction: "click",
         eventLabel: eventLabel
       };
 
-      ga('send', 'event', gaEventObject);
-
-      if (eventCategory == "Quick Start Module - Cloud Platforms") {
-        ga('newCampaignTracker.send', 'event', gaEventObject);
-      }
-
-      if (eventLabel == "Download") {
-        ga('newCampaignTracker.send', 'event', gaEventObject);
-      }
+      gtag('event', 'click', gaEventObject);
     }
 
     if (typeof fbq === "function" && eventLabel !== "Download") {
@@ -54,7 +46,7 @@ var trackEvents = {
 
     // Clicks on Ecosystem Project cards
     $(".ecosystem-card a").on("click", function() {
-      trackEvents.recordClick("Ecosystem Project Card", $(this).find("h4").text());
+      trackEvents.recordClick("Ecosystem Project Card", $(this).find(".card-title").text());
       return true;
     });
 
@@ -67,8 +59,6 @@ var trackEvents = {
     // Clicks on Cloud Platforms in Quick Start Module
     $(".cloud-option").on("click", function() {
       var platformName = $.trim($(this).find(".cloud-option-body").text());
-      //Tracking for SEM Campaign
-      ga("newCampaignTracker.send", "event", "Link", "Click", "Quickstart");
       trackEvents.recordClick("Quick Start Module - Cloud Platforms", platformName);
     });
 
@@ -92,8 +82,6 @@ var trackEvents = {
 
     // Clicks on options in Quick Start - Locally
     $(".quick-start-module .row .option").on("click", function() {
-      //Tracking for SEM Campaign
-      ga("newCampaignTracker.send", "event", "Link", "Click", "Quickstart");
       var selectedOption = $.trim($(this).text());
       var rowIndex = $(this).closest(".row").index();
       var selectedCategory = $(".quick-start-module .headings .title-block").
