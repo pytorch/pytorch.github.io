@@ -69,7 +69,6 @@ pip3 install torch torchvision
 To ensure that PyTorch was installed correctly, we can verify the installation by running sample PyTorch code. Here we will construct a randomly initialized tensor.
 
 ```python
-from __future__ import print_function
 import torch
 x = torch.rand(5, 3)
 print(x)
