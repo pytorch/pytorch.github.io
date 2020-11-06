@@ -43,11 +43,10 @@ ptbuild.on("click", function() {
 });
 
 // Pre-select user's operating system
-$(document).ready(function() {
+$(function() {
   var userOsOption = document.getElementById(opts.os);
-
   if (userOsOption) {
-    selectedOption(os, userOsOption, "os");
+    $(userOsOption).trigger("click")
   }
 });
 
