@@ -8,13 +8,10 @@ $([".alibaba", ".aws", ".microsoft-azure", ".google-cloud"]).each(function(index
   buildSidebarMenu(cloudPartner, "#get-started-cloud-sidebar-list");
 });
 
-// On start locally page load initially show the Mac OS menu
-showSidebar("macos", ".get-started-locally-sidebar li");
-
 $(["macos", "linux", "windows"]).each(function(index, osClass) {
-  $("#" + osClass).click(function() {
+  $("#" + osClass).on("click", function() {
     showSidebar(osClass, ".get-started-locally-sidebar li");
-  })
+  });
 });
 
 // Show cloud partner side nav on click or hide side nav if already open 
