@@ -78,3 +78,9 @@ The website is hosted on [Github Pages](https://pages.github.com/) at [https://p
 To deploy changes, merge your latest code into the `sites` branch. A build will be automatically built and committed to the `master` branch via a CircleCI job.
 
 To view the status of the build visit [https://circleci.com/gh/pytorch/pytorch.github.io](https://circleci.com/gh/pytorch/pytorch.github.io).
+
+## Contributing to PyTorch Documentation and Tutorials
+* You can find information about contributing to PyTorch documentation in the 
+PyTorch Repo [README.md](https://github.com/pytorch/pytorch/blob/master/README.md) file. 
+* Information about contributing to PyTorch Tutorials can be found in the 
+tutorials [README.md](https://github.com/pytorch/tutorials/blob/master/README.md)
