@@ -128,7 +128,7 @@ For the majority of PyTorch users, installing from a pre-built binary via a pack
 
 1. Install [Anaconda](#anaconda)
 2. Install [CUDA](https://developer.nvidia.com/cuda-downloads), if your machine has a [CUDA-enabled GPU](https://developer.nvidia.com/cuda-gpus).
-3. If you want to build on Windows, Visual Studio with MSVC toolset, and NVTX are also needed. The exact requirements of those dependencies could be found [here](https://github.com/pytorch/pytorch#from-source).
+3. If you want to build on Windows, Visual Studio with MSVC toolset, and NVTX are also needed. The exact requirements of those dependencies could be found out  [here](https://github.com/pytorch/pytorch#from-source).
 4. Follow the steps described here: https://github.com/pytorch/pytorch#from-source
 
 You can verify the installation as described [above](#windows-verification).
