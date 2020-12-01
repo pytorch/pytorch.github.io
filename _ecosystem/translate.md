@@ -40,7 +40,7 @@ Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor i
 
    Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
 
-   ![Here's an image](http://via.placeholder.com/1000x200/e44c2c/ffffff "Sample image")
+   ![Here's an image](https://via.placeholder.com/1000x200/e44c2c/ffffff "Sample image")
 
 5. #### Run this Command
 
