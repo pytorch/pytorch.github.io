@@ -158,7 +158,7 @@
               
               
                 <div class="version">
-                  <a href='http://pytorch.org/docs/versions.html'>1.8.0a0+c87acc2 &#x25BC</a>
+                  <a href='http://pytorch.org/docs/versions.html'>1.8.0a0+2e5c440 &#x25BC</a>
                 </div>
               
             
@@ -965,46 +965,72 @@
     <span class="c1">#      simple things like acquiring an internal lock of a queue may hang.</span>
     <span class="c1">#      Therefore, in this case, we actually need to prevent `__del__` from</span>
     <span class="c1">#      being executed, and rely on the automatic termination of daemonic</span>
-    <span class="c1">#      children. Thus, we register an `atexit` hook that sets a global flag</span>
+    <span class="c1">#      children.</span>
+    <span class="c1">#</span>
+    <span class="c1">#      Thus, we register an `atexit` hook that sets a global flag</span>
     <span class="c1">#      `_utils.python_exit_status`. Since `atexit` hooks are executed in the</span>
     <span class="c1">#      reverse order of registration, we are guaranteed that this flag is</span>
-    <span class="c1">#      set before library resources we use are freed. (Hooks freeing those</span>
-    <span class="c1">#      resources are registered at importing the Python core libraries at</span>
-    <span class="c1">#      the top of this file.) So in `__del__`, we check if</span>
-    <span class="c1">#      `_utils.python_exit_status` is set or `None` (freed), and perform</span>
-    <span class="c1">#      no-op if so.</span>
+    <span class="c1">#      set before library resources we use are freed (which, at least in</span>
+    <span class="c1">#      CPython, is done via an `atexit` handler defined in</span>
+    <span class="c1">#      `multiprocessing/util.py`</span>
+    <span class="c1">#      https://github.com/python/cpython/blob/c606624af8d4cb3b4a052fb263bb983b3f87585b/Lib/multiprocessing/util.py#L320-L362</span>
+    <span class="c1">#      registered when an object requiring this mechanism is first</span>
+    <span class="c1">#      created, e.g., `mp.Queue`</span>
+    <span class="c1">#      https://github.com/python/cpython/blob/c606624af8d4cb3b4a052fb263bb983b3f87585b/Lib/multiprocessing/context.py#L100-L103</span>
+    <span class="c1">#      https://github.com/python/cpython/blob/c606624af8d4cb3b4a052fb263bb983b3f87585b/Lib/multiprocessing/queues.py#L29</span>
+    <span class="c1">#      )</span>
     <span class="c1">#</span>
-    <span class="c1">#      Another problem with `__del__` is also related to the library cleanup</span>
-    <span class="c1">#      calls. When a process ends, it shuts the all its daemonic children</span>
-    <span class="c1">#      down with a SIGTERM (instead of joining them without a timeout).</span>
-    <span class="c1">#      Simiarly for threads, but by a different mechanism. This fact,</span>
-    <span class="c1">#      together with a few implementation details of multiprocessing, forces</span>
-    <span class="c1">#      us to make workers daemonic. All of our problems arise when a</span>
-    <span class="c1">#      DataLoader is used in a subprocess, and are caused by multiprocessing</span>
-    <span class="c1">#      code which looks more or less like this:</span>
+    <span class="c1">#      So in `__del__`, we check if `_utils.python_exit_status` is set or</span>
+    <span class="c1">#      `None` (freed), and perform no-op if so.</span>
     <span class="c1">#</span>
-    <span class="c1">#          try:</span>
-    <span class="c1">#              your_function_using_a_dataloader()</span>
-    <span class="c1">#          finally:</span>
-    <span class="c1">#              multiprocessing.util._exit_function()</span>
+    <span class="c1">#      However, simply letting library clean-up codes run can also be bad,</span>
+    <span class="c1">#      because such codes (i.e., `multiprocessing.util._exit_function()`)</span>
+    <span class="c1">#      include join putting threads for `mp.Queue`, which can be blocking.</span>
+    <span class="c1">#      Hence, the main process putting threads are called with</span>
+    <span class="c1">#      `cancel_join_thread` at creation.  See later section</span>
+    <span class="c1">#      [ 3b. A process won&#39;t hang when putting into a queue; ]</span>
+    <span class="c1">#      for more details.</span>
     <span class="c1">#</span>
-    <span class="c1">#      The joining/termination mentioned above happens inside</span>
-    <span class="c1">#      `_exit_function()`. Now, if `your_function_using_a_dataloader()`</span>
-    <span class="c1">#      throws, the stack trace stored in the exception will prevent the</span>
-    <span class="c1">#      frame which uses `DataLoaderIter` to be freed. If the frame has any</span>
-    <span class="c1">#      reference to the `DataLoaderIter` (e.g., in a method of the iter),</span>
-    <span class="c1">#      its  `__del__`, which starts the shutdown procedure, will not be</span>
-    <span class="c1">#      called. That, in turn, means that workers aren&#39;t notified. Attempting</span>
-    <span class="c1">#      to join in `_exit_function` will then result in a hang.</span>
+    <span class="c1">#      Here are two example cases where library clean-up codes can run</span>
+    <span class="c1">#      before `__del__` is called:</span>
     <span class="c1">#</span>
-    <span class="c1">#      For context, `_exit_function` is also registered as an `atexit` call.</span>
-    <span class="c1">#      So it is unclear to me (@ssnl) why this is needed in a finally block.</span>
-    <span class="c1">#      The code dates back to 2008 and there is no comment on the original</span>
-    <span class="c1">#      PEP 371 or patch https://bugs.python.org/issue3050 (containing both</span>
-    <span class="c1">#      the finally block and the `atexit` registration) that explains this.</span>
+    <span class="c1">#        1. If we hold onto a reference to the iterator, it more often</span>
+    <span class="c1">#           than not tries to do `multiprocessing` library cleaning before</span>
+    <span class="c1">#           clearing the alive referenced objects (https://github.com/pytorch/pytorch/issues/48666)</span>
+    <span class="c1">#           and thus prevents our cleaning-up code to run first.</span>
     <span class="c1">#</span>
-    <span class="c1">#      Another choice is to just shutdown workers with logic in 1 above</span>
-    <span class="c1">#      whenever we see an error in `next`. This isn&#39;t ideal because</span>
+    <span class="c1">#        2. A similar issue araises when a `DataLoader` is used in a subprocess.</span>
+    <span class="c1">#           When a process ends, it shuts the all its daemonic children</span>
+    <span class="c1">#           down with a SIGTERM (instead of joining them without a timeout).</span>
+    <span class="c1">#           Simiarly for threads, but by a different mechanism. This fact,</span>
+    <span class="c1">#           together with a few implementation details of multiprocessing, forces</span>
+    <span class="c1">#           us to make workers daemonic. All of our problems arise when a</span>
+    <span class="c1">#           DataLoader is used in a subprocess, and are caused by multiprocessing</span>
+    <span class="c1">#           code which looks more or less like this:</span>
+    <span class="c1">#</span>
+    <span class="c1">#               try:</span>
+    <span class="c1">#                   your_function_using_a_dataloader()</span>
+    <span class="c1">#               finally:</span>
+    <span class="c1">#                   multiprocessing.util._exit_function()</span>
+    <span class="c1">#</span>
+    <span class="c1">#           The joining/termination mentioned above happens inside</span>
+    <span class="c1">#           `_exit_function()`. Now, if `your_function_using_a_dataloader()`</span>
+    <span class="c1">#           throws, the stack trace stored in the exception will prevent the</span>
+    <span class="c1">#           frame which uses `DataLoaderIter` to be freed. If the frame has any</span>
+    <span class="c1">#           reference to the `DataLoaderIter` (e.g., in a method of the iter),</span>
+    <span class="c1">#           its  `__del__`, which starts the shutdown procedure, will not be</span>
+    <span class="c1">#           called. That, in turn, means that workers aren&#39;t notified. Attempting</span>
+    <span class="c1">#           to join in `_exit_function` will then result in a hang.</span>
+    <span class="c1">#</span>
+    <span class="c1">#           For context, `_exit_function` is also registered as an `atexit` call.</span>
+    <span class="c1">#           So it is unclear to me (@ssnl) why this is needed in a finally block.</span>
+    <span class="c1">#           The code dates back to 2008 and there is no comment on the original</span>
+    <span class="c1">#           PEP 371 or patch https://bugs.python.org/issue3050 (containing both</span>
+    <span class="c1">#           the finally block and the `atexit` registration) that explains this.</span>
+    <span class="c1">#</span>
+    <span class="c1">#</span>
+    <span class="c1">#      Finally, another choice is to just shutdown workers with logic in 1</span>
+    <span class="c1">#      above whenever we see an error in `next`. This isn&#39;t ideal because</span>
     <span class="c1">#        a. It prevents users from using try-catch to resume data loading.</span>
     <span class="c1">#        b. It doesn&#39;t prevent hanging if users have references to the</span>
     <span class="c1">#           iterator.</span>
@@ -1052,30 +1078,33 @@
     <span class="c1">#           We use `mp.Queue` which has a separate background thread to put</span>
     <span class="c1">#           objects from an unbounded buffer array. The background thread is</span>
     <span class="c1">#           daemonic and usually automatically joined when the process</span>
-    <span class="c1">#           exits.</span>
+    <span class="c1">#           *exits*.</span>
     <span class="c1">#</span>
-    <span class="c1">#           However, in case that the receiver has ended abruptly while</span>
-    <span class="c1">#           reading from the pipe, the join will hang forever. Therefore,</span>
-    <span class="c1">#           for both `worker_result_queue` (worker -&gt; main process/pin_memory_thread)</span>
-    <span class="c1">#           and each `index_queue` (main process -&gt; worker), we use</span>
-    <span class="c1">#           `q.cancel_join_thread()` in sender process before any `q.put` to</span>
-    <span class="c1">#           prevent this automatic join.</span>
-    <span class="c1">#</span>
-    <span class="c1">#           Moreover, having all queues called `cancel_join_thread` makes</span>
-    <span class="c1">#           implementing graceful shutdown logic in `__del__` much easier.</span>
-    <span class="c1">#           It won&#39;t need to get from any queue, which would also need to be</span>
-    <span class="c1">#           guarded by periodic status checks.</span>
+    <span class="c1">#           In case that the receiver has ended abruptly while</span>
+    <span class="c1">#           reading from the pipe, the join will hang forever.  The usual</span>
+    <span class="c1">#           solution for this in Python is calling  `q.cancel_join_thread`,</span>
+    <span class="c1">#           which prevents automatically joining it when finalizing</span>
+    <span class="c1">#           (exiting).</span>
     <span class="c1">#</span>
     <span class="c1">#           Nonetheless, `cancel_join_thread` must only be called when the</span>
     <span class="c1">#           queue is **not** going to be read from or write into by another</span>
     <span class="c1">#           process, because it may hold onto a lock or leave corrupted data</span>
     <span class="c1">#           in the queue, leading other readers/writers to hang.</span>
     <span class="c1">#</span>
-    <span class="c1">#           `pin_memory_thread`&#39;s `data_queue` is a `queue.Queue` that does</span>
-    <span class="c1">#           a blocking `put` if the queue is full. So there is no above</span>
-    <span class="c1">#           problem, but we do need to wrap the `put` in a loop that breaks</span>
-    <span class="c1">#           not only upon success, but also when the main process stops</span>
-    <span class="c1">#           reading, i.e., is shutting down.</span>
+    <span class="c1">#           Hence,</span>
+    <span class="c1">#             + For worker processes, we only do so (for their output</span>
+    <span class="c1">#               queues, i.e., `worker_result_queue`) before exiting.</span>
+    <span class="c1">#             + For `pin_memory_thread`, its output queue `data_queue` is a</span>
+    <span class="c1">#               `queue.Queue` that does blocking `put` if the queue is full.</span>
+    <span class="c1">#               So there is no above problem, but as a result, in</span>
+    <span class="c1">#               `_pin_memory_loop`, we do need to  wrap the `put` in a loop</span>
+    <span class="c1">#               that breaks not only upon success, but also when the main</span>
+    <span class="c1">#               process stops reading, i.e., is shutting down.</span>
+    <span class="c1">#             + For loader process, we `cancel_join_thread()` for all</span>
+    <span class="c1">#               `_index_queues` because the whole purpose of workers and</span>
+    <span class="c1">#               `pin_memory_thread` is to serve the loader process.  If</span>
+    <span class="c1">#               loader process is already exiting, we don&#39;t really care if</span>
+    <span class="c1">#               the queues are corrupted.</span>
     <span class="c1">#</span>
     <span class="c1">#</span>
     <span class="c1"># Now let&#39;s get back to 1:</span>
@@ -1214,7 +1243,9 @@
         <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_num_workers</span><span class="p">):</span>
             <span class="c1"># No certainty which module multiprocessing_context is</span>
             <span class="n">index_queue</span> <span class="o">=</span> <span class="n">multiprocessing_context</span><span class="o">.</span><span class="n">Queue</span><span class="p">()</span>  <span class="c1"># type: ignore</span>
-            <span class="c1"># index_queue.cancel_join_thread()</span>
+            <span class="c1"># Need to `cancel_join_thread` here!</span>
+            <span class="c1"># See sections (2) and (3b) above.</span>
+            <span class="n">index_queue</span><span class="o">.</span><span class="n">cancel_join_thread</span><span class="p">()</span>
             <span class="n">w</span> <span class="o">=</span> <span class="n">multiprocessing_context</span><span class="o">.</span><span class="n">Process</span><span class="p">(</span>
                 <span class="n">target</span><span class="o">=</span><span class="n">_utils</span><span class="o">.</span><span class="n">worker</span><span class="o">.</span><span class="n">_worker_loop</span><span class="p">,</span>
                 <span class="n">args</span><span class="o">=</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_dataset_kind</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dataset</span><span class="p">,</span> <span class="n">index_queue</span><span class="p">,</span>
@@ -1581,6 +1612,9 @@
         <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_shutdown</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_shutdown</span> <span class="o">=</span> <span class="kc">True</span>
             <span class="k">try</span><span class="p">:</span>
+                <span class="c1"># Normal exit when last reference is gone / iterator is depleted.</span>
+                <span class="c1"># See (1) and the second half of the note.</span>
+
                 <span class="c1"># Exit `pin_memory_thread` first because exiting workers may leave</span>
                 <span class="c1"># corrupted data in `worker_result_queue` which `pin_memory_thread`</span>
                 <span class="c1"># reads from.</span>
@@ -1605,13 +1639,10 @@
                     <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_persistent_workers</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">_workers_status</span><span class="p">[</span><span class="n">worker_id</span><span class="p">]:</span>
                         <span class="bp">self</span><span class="o">.</span><span class="n">_mark_worker_as_unavailable</span><span class="p">(</span><span class="n">worker_id</span><span class="p">,</span> <span class="n">shutdown</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
                 <span class="k">for</span> <span class="n">w</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_workers</span><span class="p">:</span>
+                    <span class="c1"># We should be able to join here, but in case anything went</span>
+                    <span class="c1"># wrong, we set a timeout and if the workers fail to join,</span>
+                    <span class="c1"># they are killed in the `finally` block.</span>
                     <span class="n">w</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="n">_utils</span><span class="o">.</span><span class="n">MP_STATUS_CHECK_INTERVAL</span><span class="p">)</span>
-                    <span class="k">if</span> <span class="n">w</span><span class="o">.</span><span class="n">is_alive</span><span class="p">():</span>
-                        <span class="c1"># Existing mechanisms try to make the workers exit</span>
-                        <span class="c1"># peacefully, but in case that we unfortunately reach</span>
-                        <span class="c1"># here, which we shouldn&#39;t, (e.g., pytorch/pytorch#39570),</span>
-                        <span class="c1"># we kill the worker.</span>
-                        <span class="n">w</span><span class="o">.</span><span class="n">terminate</span><span class="p">()</span>
                 <span class="k">for</span> <span class="n">q</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_index_queues</span><span class="p">:</span>
                     <span class="n">q</span><span class="o">.</span><span class="n">cancel_join_thread</span><span class="p">()</span>
                     <span class="n">q</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
@@ -1629,6 +1660,13 @@
                 <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_worker_pids_set</span><span class="p">:</span>
                     <span class="n">_utils</span><span class="o">.</span><span class="n">signal_handling</span><span class="o">.</span><span class="n">_remove_worker_pids</span><span class="p">(</span><span class="nb">id</span><span class="p">(</span><span class="bp">self</span><span class="p">))</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">_worker_pids_set</span> <span class="o">=</span> <span class="kc">False</span>
+                <span class="k">for</span> <span class="n">w</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_workers</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="n">w</span><span class="o">.</span><span class="n">is_alive</span><span class="p">():</span>
+                        <span class="c1"># Existing mechanisms try to make the workers exit</span>
+                        <span class="c1"># peacefully, but in case that we unfortunately reach</span>
+                        <span class="c1"># here, which we shouldn&#39;t, (e.g., pytorch/pytorch#39570),</span>
+                        <span class="c1"># we kill the worker.</span>
+                        <span class="n">w</span><span class="o">.</span><span class="n">terminate</span><span class="p">()</span>
 
     <span class="k">def</span> <span class="fm">__del__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_shutdown_workers</span><span class="p">()</span>
