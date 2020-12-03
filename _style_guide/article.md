@@ -55,7 +55,7 @@ This is body copy after an ordered list. Lorem ipsum dolor sit amet, consectetur
 
 ---
 
-![Here's an image](http://via.placeholder.com/1000x200/e44c2c/ffffff "Sample image")
+![Here's an image](https://via.placeholder.com/1000x200/e44c2c/ffffff "Sample image")
 
 ---
 
