@@ -71,9 +71,15 @@ torch.cuda.is_available()
 ## AWS Primer
 {: #aws-primer}
 
+Generally, you will be using Amazon Elastic Compute Cloud (or [EC2](https://aws.amazon.com/ec2/?ec2-whats-new.sort-by=item.additionalFields.postDateTime&ec2-whats-new.sort-order=desc){:target="_blank"}) to spin up your instances. Amazon has various [instance types](https://aws.amazon.com/ec2/instance-types/){:target="_blank"}, each of which are configured for specific use cases. For PyTorch, it is highly recommended that you use the accelerated computing instances that feature GPUs or custom AI/ML accelerators as they are tailored for the high compute needs of machine learning.
+
 In order to use AWS, you need to set up an [AWS account](https://aws.amazon.com/getting-started/){:target="_blank"}, if you do not have one already. You will create a username (your email address), password and an AWS account name (since you can create multiple AWS accounts for different purposes). You will also provide contact and billing information. The billing information is important because while AWS does provide what they call “free-tier” instances, to use PyTorch you will want more powerful, paid instances.
 
-Once you are logged in, you will be brought to your [AWS console](https://aws.amazon.com/console/){:target="_blank"}.  You can even learn more about AWS through a set of [simple tutorials](https://aws.amazon.com/getting-started/tutorials/){:target="_blank"}.
+Once you are logged in, you will be brought to your [AWS console](https://aws.amazon.com/console/){:target="_blank"}. You can even learn more about AWS through a set of [simple tutorials](https://aws.amazon.com/getting-started/tutorials/){:target="_blank"}.
+
+### AWS Inferentia-based instances
+
+[AWS Inferentia](https://aws.amazon.com/machine-learning/inferentia/){:target="_blank"} is a chip custom built by AWS to provide higher performance and low cost machine learning inference in the cloud. [Amazon EC2 Inf1 instances](https://aws.amazon.com/ec2/instance-types/inf1/){:target="_blank"} feature up to 16 AWS Inferentia chips, the latest second generation Intel Xeon Scalable processors, and up to 100 Gbps networking to enable high throughput and lowest cost inference in the cloud. You can use Inf1 instances with Amazon SageMaker for a fully managed workflow, or use the [AWS Neuron SDK](https://awsdocs-neuron.readthedocs-hosted.com/en/latest/){:target="_blank"} directly which is integrated with PyTorch.
 
 ### GPU-based instances
 
