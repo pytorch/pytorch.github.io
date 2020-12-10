@@ -83,9 +83,9 @@ Once you are logged in, you will be brought to your [AWS console](https://aws.am
 
 ### GPU-based instances
 
-Generally, you will be using Amazon Elastic Compute Cloud (or [EC2](https://aws.amazon.com/ec2/){:target="_blank"}) to spin up your instances. Amazon has various [instance types](https://aws.amazon.com/ec2/instance-types/){:target="_blank"}, each of which are configured for specific use cases. For PyTorch, it is highly recommended that you use the accelerated computing, or [p3](https://aws.amazon.com/ec2/instance-types/p3/){:target="_blank"}, instances. They are tailored for the high compute needs of machine learning.
+[Amazon EC2 P4d instances](https://aws.amazon.com/ec2/instance-types/p4/) deliver the highest performance for machine learning training on AWS. They are powered by the latest NVIDIA A100 Tensor Core GPUs and feature first in the cloud 400 Gbps instance networking. P4d instances are deployed in hyperscale clusters called EC2 UltraClusters that are comprised of more than 4,000 NVIDIA A100 GPUs, Petabit-scale non-blocking networking, and scalable low latency storage with FSx for Lustre. Each EC2 UltraCluster provides supercomputer-class performance to enable you to solve the most complex multi-node ML training tasks.
 
-The expense of your instance is directly correlated to the number of GPUs that it contains. The p3.2xlarge instance is the smallest, cheapest instance and can actually be suitable for many use cases.
+ For ML inference, AWS Inferentia-based [Inf1](https://aws.amazon.com/ec2/instance-types/inf1/) instances provide the lowest cost inference in the cloud. Additionally, [Amazon EC2 G4dn instances](https://aws.amazon.com/ec2/instance-types/g4/) featuring NVIDIA T4 GPUs are optimized for GPU-based machine learning inference and small scale training that leverage NVIDIA libraries.
 
 ### Creating and Launching an Instance
 
