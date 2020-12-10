@@ -70,15 +70,21 @@ torch.cuda.is_available()
 ## AWS Primer
 {: #aws-primer}
 
+Generally, you will be using Amazon Elastic Compute Cloud (or [EC2](https://aws.amazon.com/ec2/?ec2-whats-new.sort-by=item.additionalFields.postDateTime&ec2-whats-new.sort-order=desc){:target="_blank"}) to spin up your instances. Amazon has various [instance types](https://aws.amazon.com/ec2/instance-types/){:target="_blank"}, each of which are configured for specific use cases. For PyTorch, it is highly recommended that you use the accelerated computing instances that feature GPUs or custom AI/ML accelerators as they are tailored for the high compute needs of machine learning.
+
 In order to use AWS, you need to set up an [AWS account](https://aws.amazon.com/getting-started/){:target="_blank"}, if you do not have one already. You will create a username (your email address), password and an AWS account name (since you can create multiple AWS accounts for different purposes). You will also provide contact and billing information. The billing information is important because while AWS does provide what they call “free-tier” instances, to use PyTorch you will want more powerful, paid instances.
 
-Once you are logged in, you will be brought to your [AWS console](https://aws.amazon.com/console/){:target="_blank"}.  You can even learn more about AWS through a set of [simple tutorials](https://aws.amazon.com/getting-started/tutorials/){:target="_blank"}.
+Once you are logged in, you will be brought to your [AWS console](https://aws.amazon.com/console/){:target="_blank"}. You can even learn more about AWS through a set of [simple tutorials](https://aws.amazon.com/getting-started/tutorials/){:target="_blank"}.
+
+### AWS Inferentia-based instances
+
+[AWS Inferentia](https://aws.amazon.com/machine-learning/inferentia/){:target="_blank"} is a chip custom built by AWS to provide higher performance and low cost machine learning inference in the cloud. [Amazon EC2 Inf1 instances](https://aws.amazon.com/ec2/instance-types/inf1/){:target="_blank"} feature up to 16 AWS Inferentia chips, the latest second generation Intel Xeon Scalable processors, and up to 100 Gbps networking to enable high throughput and lowest cost inference in the cloud. You can use Inf1 instances with Amazon SageMaker for a fully managed workflow, or use the [AWS Neuron SDK](https://awsdocs-neuron.readthedocs-hosted.com/en/latest/){:target="_blank"} directly which is integrated with PyTorch.
 
 ### GPU-based instances
 
-Generally, you will be using Amazon Elastic Compute Cloud (or [EC2](https://aws.amazon.com/ec2/){:target="_blank"}) to spin up your instances. Amazon has various [instance types](https://aws.amazon.com/ec2/instance-types/){:target="_blank"}, each of which are configured for specific use cases. For PyTorch, it is highly recommended that you use the accelerated computing, or [p3](https://aws.amazon.com/ec2/instance-types/p3/){:target="_blank"}, instances. They are tailored for the high compute needs of machine learning.
+[Amazon EC2 P4d instances](https://aws.amazon.com/ec2/instance-types/p4/) deliver the highest performance for machine learning training on AWS. They are powered by the latest NVIDIA A100 Tensor Core GPUs and feature first in the cloud 400 Gbps instance networking. P4d instances are deployed in hyperscale clusters called EC2 UltraClusters that are comprised of more than 4,000 NVIDIA A100 GPUs, Petabit-scale non-blocking networking, and scalable low latency storage with FSx for Lustre. Each EC2 UltraCluster provides supercomputer-class performance to enable you to solve the most complex multi-node ML training tasks.
 
-The expense of your instance is directly correlated to the number of GPUs that it contains. The p3.2xlarge instance is the smallest, cheapest instance and can actually be suitable for many use cases.
+ For ML inference, AWS Inferentia-based [Inf1](https://aws.amazon.com/ec2/instance-types/inf1/) instances provide the lowest cost inference in the cloud. Additionally, [Amazon EC2 G4dn instances](https://aws.amazon.com/ec2/instance-types/g4/) featuring NVIDIA T4 GPUs are optimized for GPU-based machine learning inference and small scale training that leverage NVIDIA libraries.
 
 ### Creating and Launching an Instance
 
