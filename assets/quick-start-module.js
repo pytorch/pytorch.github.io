@@ -175,46 +175,46 @@ $("[data-toggle='cloud-dropdown']").on("click", function(e) {
 function commandMessage(key) {
   var object = {
     "stable,conda,linux,cuda9.2,python":
-      "conda install pytorch torchvision torchaudio cudatoolkit=9.2 -c pytorch",
+      "<b>NOTE:</b> Python 3.9 users will need to add '-c=conda-forge' for installation<br />conda install pytorch torchvision torchaudio cudatoolkit=9.2 -c pytorch",
 
     "stable,conda,linux,cuda10.1,python":
-      "conda install pytorch torchvision torchaudio cudatoolkit=10.1 -c pytorch",
+      "<b>NOTE:</b> Python 3.9 users will need to add '-c=conda-forge' for installation<br />conda install pytorch torchvision torchaudio cudatoolkit=10.1 -c pytorch",
 
     "stable,conda,linux,cuda10.2,python":
-      "conda install pytorch torchvision torchaudio cudatoolkit=10.2 -c pytorch",
+      "<b>NOTE:</b> Python 3.9 users will need to add '-c=conda-forge' for installation<br />conda install pytorch torchvision torchaudio cudatoolkit=10.2 -c pytorch",
 
     "stable,conda,linux,cuda11.0,python":
-      "conda install pytorch torchvision torchaudio cudatoolkit=11.0 -c pytorch",
+      "<b>NOTE:</b> Python 3.9 users will need to add '-c=conda-forge' for installation<br />conda install pytorch torchvision torchaudio cudatoolkit=11.0 -c pytorch",
 
     "stable,conda,linux,cudanone,python":
-      "conda install pytorch torchvision torchaudio cpuonly -c pytorch",
+      "<b>NOTE:</b> Python 3.9 users will need to add '-c=conda-forge' for installation<br />conda install pytorch torchvision torchaudio cpuonly -c pytorch",
 
     "stable,conda,macos,cuda9.2,python":
-      "conda install pytorch torchvision torchaudio -c pytorch<br /># MacOS Binaries dont support CUDA, install from source if CUDA is needed",
+      "<b>NOTE:</b> Python 3.9 users will need to add '-c=conda-forge' for installation<br />conda install pytorch torchvision torchaudio -c pytorch<br /># MacOS Binaries dont support CUDA, install from source if CUDA is needed",
 
     "stable,conda,macos,cuda10.1,python":
-      "conda install pytorch torchvision torchaudio -c pytorch<br /># MacOS Binaries dont support CUDA, install from source if CUDA is needed",
+      "<b>NOTE:</b> Python 3.9 users will need to add '-c=conda-forge' for installation<br />conda install pytorch torchvision torchaudio -c pytorch<br /># MacOS Binaries dont support CUDA, install from source if CUDA is needed",
 
     "stable,conda,macos,cuda10.2,python":
-      "conda install pytorch torchvision torchaudio -c pytorch<br /># MacOS Binaries dont support CUDA, install from source if CUDA is needed",
+      "<b>NOTE:</b> Python 3.9 users will need to add '-c=conda-forge' for installation<br />conda install pytorch torchvision torchaudio -c pytorch<br /># MacOS Binaries dont support CUDA, install from source if CUDA is needed",
 
     "stable,conda,macos,cuda11.0,python":
-      "conda install pytorch torchvision torchaudio -c pytorch<br /># MacOS Binaries dont support CUDA, install from source if CUDA is needed",
+      "<b>NOTE:</b> Python 3.9 users will need to add '-c=conda-forge' for installation<br />conda install pytorch torchvision torchaudio -c pytorch<br /># MacOS Binaries dont support CUDA, install from source if CUDA is needed",
 
     "stable,conda,macos,cudanone,python":
-      "conda install pytorch torchvision torchaudio -c pytorch",
+      "<b>NOTE:</b> Python 3.9 users will need to add '-c=conda-forge' for installation<br />conda install pytorch torchvision torchaudio -c pytorch",
 
     "stable,conda,windows,cuda10.1,python":
-      "conda install pytorch torchvision torchaudio cudatoolkit=10.1 -c pytorch",
+      "<b>NOTE:</b> Python 3.9 users will need to add '-c=conda-forge' for installation<br />conda install pytorch torchvision torchaudio cudatoolkit=10.1 -c pytorch",
 
     "stable,conda,windows,cuda10.2,python":
-      "conda install pytorch torchvision torchaudio cudatoolkit=10.2 -c pytorch",
+      "<b>NOTE:</b> Python 3.9 users will need to add '-c=conda-forge' for installation<br />conda install pytorch torchvision torchaudio cudatoolkit=10.2 -c pytorch",
 
     "stable,conda,windows,cuda11.0,python":
-      "conda install pytorch torchvision torchaudio cudatoolkit=11.0 -c pytorch",
+      "<b>NOTE:</b> Python 3.9 users will need to add '-c=conda-forge' for installation<br />conda install pytorch torchvision torchaudio cudatoolkit=11.0 -c pytorch",
 
     "stable,conda,windows,cudanone,python":
-      "conda install pytorch torchvision torchaudio cpuonly -c pytorch",
+      "<b>NOTE:</b> Python 3.9 users will need to add '-c=conda-forge' for installation<br />conda install pytorch torchvision torchaudio cpuonly -c pytorch",
 
     "stable,pip,macos,cuda9.2,python":
       "pip install torch torchvision torchaudio<br /># MacOS Binaries dont support CUDA, install from source if CUDA is needed",
@@ -300,49 +300,49 @@ function commandMessage(key) {
       "Windows binaries do not support Java. Support is only available for Linux and MacOS.  Download here for C++ (Release version): <br/><a href='https://download.pytorch.org/libtorch/cu110/libtorch-win-shared-with-deps-1.7.0%2Bcu110.zip'>https://download.pytorch.org/libtorch/cu110/libtorch-win-shared-with-deps-1.7.0%2Bcu110.zip</a><br/><br>  Download here for C++ (Debug version): <br/><a href='https://download.pytorch.org/libtorch/cu110/libtorch-win-shared-with-deps-debug-1.7.0%2Bcu110.zip'>https://download.pytorch.org/libtorch/cu110/libtorch-win-shared-with-deps-debug-1.7.0%2Bcu110.zip</a>",
 
     "preview,conda,linux,cuda9.2,python":
-      "conda install pytorch torchvision torchaudio cudatoolkit=9.2 -c pytorch-nightly",
+      "<b>NOTE:</b> Python 3.9 users will need to add '-c=conda-forge' for installation<br />conda install pytorch torchvision torchaudio cudatoolkit=9.2 -c pytorch-nightly",
 
     "preview,conda,linux,cuda10.1,python":
-      "conda install pytorch torchvision torchaudio cudatoolkit=10.1 -c pytorch-nightly",
+      "<b>NOTE:</b> Python 3.9 users will need to add '-c=conda-forge' for installation<br />conda install pytorch torchvision torchaudio cudatoolkit=10.1 -c pytorch-nightly",
 
     "preview,conda,linux,cuda10.2,python":
-      "conda install pytorch torchvision torchaudio cudatoolkit=10.2 -c pytorch-nightly",
+      "<b>NOTE:</b> Python 3.9 users will need to add '-c=conda-forge' for installation<br />conda install pytorch torchvision torchaudio cudatoolkit=10.2 -c pytorch-nightly",
 
     "preview,conda,linux,cuda11.0,python":
-      "conda install pytorch torchvision torchaudio cudatoolkit=11.0 -c pytorch-nightly",
+      "<b>NOTE:</b> Python 3.9 users will need to add '-c=conda-forge' for installation<br />conda install pytorch torchvision torchaudio cudatoolkit=11.0 -c pytorch-nightly",
 
     "preview,conda,linux,cudanone,python":
-      "conda install pytorch torchvision torchaudio cpuonly -c pytorch-nightly",
+      "<b>NOTE:</b> Python 3.9 users will need to add '-c=conda-forge' for installation<br />conda install pytorch torchvision torchaudio cpuonly -c pytorch-nightly",
 
     "preview,conda,macos,cuda9.2,python":
-      "conda install pytorch torchvision torchaudio -c pytorch-nightly",
+      "<b>NOTE:</b> Python 3.9 users will need to add '-c=conda-forge' for installation<br />conda install pytorch torchvision torchaudio -c pytorch-nightly",
 
     "preview,conda,macos,cuda10.1,python":
-      "conda install pytorch torchvision torchaudio -c pytorch-nightly",
+      "<b>NOTE:</b> Python 3.9 users will need to add '-c=conda-forge' for installation<br />conda install pytorch torchvision torchaudio -c pytorch-nightly",
 
     "preview,conda,macos,cuda10.2,python":
-      "conda install pytorch torchvision torchaudio -c pytorch-nightly",
+      "<b>NOTE:</b> Python 3.9 users will need to add '-c=conda-forge' for installation<br />conda install pytorch torchvision torchaudio -c pytorch-nightly",
 
     "preview,conda,macos,cuda11.0,python":
-      "conda install pytorch torchvision torchaudio -c pytorch-nightly",
+      "<b>NOTE:</b> Python 3.9 users will need to add '-c=conda-forge' for installation<br />conda install pytorch torchvision torchaudio -c pytorch-nightly",
 
     "preview,conda,macos,cudanone,python":
-      "conda install pytorch torchvision torchaudio -c pytorch-nightly",
+      "<b>NOTE:</b> Python 3.9 users will need to add '-c=conda-forge' for installation<br />conda install pytorch torchvision torchaudio -c pytorch-nightly",
 
     "preview,conda,windows,cuda9.2,python":
-      "conda install pytorch torchvision torchaudio cudatoolkit=9.2 -c pytorch-nightly -c defaults -c numba/label/dev",
+      "<b>NOTE:</b> Python 3.9 users will need to add '-c=conda-forge' for installation<br />conda install pytorch torchvision torchaudio cudatoolkit=9.2 -c pytorch-nightly -c defaults -c numba/label/dev",
 
     "preview,conda,windows,cuda10.1,python":
-      "conda install pytorch torchvision torchaudio cudatoolkit=10.1 -c pytorch-nightly",
+      "<b>NOTE:</b> Python 3.9 users will need to add '-c=conda-forge' for installation<br />conda install pytorch torchvision torchaudio cudatoolkit=10.1 -c pytorch-nightly",
 
     "preview,conda,windows,cuda10.2,python":
-      "conda install pytorch torchvision torchaudio cudatoolkit=10.2 -c pytorch-nightly",
+      "<b>NOTE:</b> Python 3.9 users will need to add '-c=conda-forge' for installation<br />conda install pytorch torchvision torchaudio cudatoolkit=10.2 -c pytorch-nightly",
 
     "preview,conda,windows,cuda11.0,python":
-      "conda install pytorch torchvision torchaudio cudatoolkit=11.0 -c pytorch-nightly",
+      "<b>NOTE:</b> Python 3.9 users will need to add '-c=conda-forge' for installation<br />conda install pytorch torchvision torchaudio cudatoolkit=11.0 -c pytorch-nightly",
 
     "preview,conda,windows,cudanone,python":
-      "conda install pytorch torchvision torchaudio cpuonly -c pytorch-nightly",
+      "<b>NOTE:</b> Python 3.9 users will need to add '-c=conda-forge' for installation<br />conda install pytorch torchvision torchaudio cpuonly -c pytorch-nightly",
 
     "preview,pip,macos,cuda9.2,python":
       "pip install numpy<br />pip install --pre torch torchvision torchaudio -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html<br /># On MacOS, we provide CPU-only packages, CUDA functionality is not provided",
