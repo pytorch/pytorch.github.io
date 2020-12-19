@@ -187,7 +187,7 @@
               
               
                 <div class="version">
-                  <a href='http://pytorch.org/docs/versions.html'>1.8.0a0+cfa557a &#x25BC</a>
+                  <a href='http://pytorch.org/docs/versions.html'>1.8.0a0+370cb23 &#x25BC</a>
                 </div>
               
             
@@ -264,6 +264,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../../../jit.html">torch.jit</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../linalg.html">torch.linalg</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../torch.overrides.html">torch.overrides</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../profiler.html">torch.profiler</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../nn.init.html">torch.nn.init</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../onnx.html">torch.onnx</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../optim.html">torch.optim</a></li>
@@ -381,6 +382,7 @@
 <span class="kn">import</span> <span class="nn">torch</span>
 <span class="kn">import</span> <span class="nn">warnings</span>
 <span class="kn">import</span> <span class="nn">contextlib</span>
+<span class="kn">import</span> <span class="nn">time</span>
 <span class="kn">from</span> <span class="nn">torch._six</span> <span class="kn">import</span> <span class="n">string_classes</span>
 <span class="kn">from</span> <span class="nn">datetime</span> <span class="kn">import</span> <span class="n">timedelta</span>
 <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Union</span>
@@ -551,6 +553,26 @@
 <span class="c1"># Process group count for default naming</span>
 <span class="n">_group_count</span> <span class="o">=</span> <span class="mi">0</span>
 
+<span class="n">STORE_BASED_BARRIER_PREFIX</span> <span class="o">=</span> <span class="s2">&quot;store_based_barrier_key&quot;</span>
+
+<span class="k">def</span> <span class="nf">_store_based_barrier</span><span class="p">(</span><span class="n">rank</span><span class="p">,</span> <span class="n">store</span><span class="p">,</span> <span class="n">timeout</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Barrier based on store which is used for synchronizing processes after</span>
+<span class="sd">    ``init_process_group`` or ``new_group``. Intended to be used only with</span>
+<span class="sd">    those two methods and is not a generic alternative to ``barrier()``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">store_key</span> <span class="o">=</span> <span class="s2">&quot;</span><span class="si">{}</span><span class="s2">:</span><span class="si">{}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">STORE_BASED_BARRIER_PREFIX</span><span class="p">,</span> <span class="n">_group_count</span><span class="p">)</span>
+    <span class="n">store</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">store_key</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+
+    <span class="c1"># Now wait for all workers to check in with the store.</span>
+    <span class="n">world_size</span> <span class="o">=</span> <span class="n">get_world_size</span><span class="p">()</span>
+    <span class="n">worker_count</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">store</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">store_key</span><span class="p">))</span>
+    <span class="n">start</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
+    <span class="k">while</span> <span class="n">worker_count</span> <span class="o">!=</span> <span class="n">world_size</span><span class="p">:</span>
+        <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">0.01</span><span class="p">)</span>
+        <span class="n">worker_count</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">store</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">store_key</span><span class="p">))</span>
+        <span class="k">if</span> <span class="n">timedelta</span><span class="p">(</span><span class="n">seconds</span><span class="o">=</span><span class="p">(</span><span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">-</span> <span class="n">start</span><span class="p">))</span> <span class="o">&gt;</span> <span class="n">timeout</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Timed out initializing process group&quot;</span><span class="p">)</span>
 
 <span class="k">def</span> <span class="nf">_rank_not_in_group</span><span class="p">(</span><span class="n">group</span><span class="p">:</span> <span class="n">ProcessGroup</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;</span>
@@ -854,7 +876,13 @@
     <span class="c1"># barrier at the end to ensure that once we return from this method, all</span>
     <span class="c1"># process groups including global variables are updated correctly on all</span>
     <span class="c1"># ranks.</span>
-    <span class="n">barrier</span><span class="p">()</span></div>
+    <span class="k">if</span> <span class="n">backend</span> <span class="o">==</span> <span class="n">Backend</span><span class="o">.</span><span class="n">MPI</span><span class="p">:</span>
+        <span class="c1"># MPI doesn&#39;t have store.</span>
+        <span class="n">barrier</span><span class="p">()</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="c1"># Use store based barrier here since barrier() used a bunch of</span>
+        <span class="c1"># default devices and messes up NCCL internal state.</span>
+        <span class="n">_store_based_barrier</span><span class="p">(</span><span class="n">rank</span><span class="p">,</span> <span class="n">store</span><span class="p">,</span> <span class="n">timeout</span><span class="p">)</span></div>
 
 <span class="k">def</span> <span class="nf">_new_process_group_helper</span><span class="p">(</span><span class="n">world_size</span><span class="p">,</span>
                               <span class="n">rank</span><span class="p">,</span>
@@ -2831,7 +2859,13 @@
     <span class="c1"># barrier at the end to ensure that once we return from this method, all</span>
     <span class="c1"># process groups including global variables are updated correctly on all</span>
     <span class="c1"># ranks.</span>
-    <span class="n">barrier</span><span class="p">()</span>
+    <span class="k">if</span> <span class="n">backend</span> <span class="o">==</span> <span class="n">Backend</span><span class="o">.</span><span class="n">MPI</span><span class="p">:</span>
+        <span class="c1"># MPI doesn&#39;t have store.</span>
+        <span class="n">barrier</span><span class="p">()</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="c1"># Use store based barrier here since barrier() used a bunch of</span>
+        <span class="c1"># default devices and messes up NCCL internal state.</span>
+        <span class="n">_store_based_barrier</span><span class="p">(</span><span class="n">group_rank</span><span class="p">,</span> <span class="n">default_store</span><span class="p">,</span> <span class="n">timeout</span><span class="p">)</span>
 
     <span class="k">return</span> <span class="n">pg</span></div>
 </pre></div>
