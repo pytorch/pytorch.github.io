@@ -223,7 +223,7 @@ torch::jit::GraphOptimizerEnabledGuard guard(false);
 
 ## iOS Tutorials
 
-Watch the following [video](https://www.youtube.com/watch?v=JFy3uHyqXn0) as PyTorch Partner Engineer Brad Heintz walks through steps for setting up the PyTorch Runtime for iOS projects:
+Watch the following [video](https://youtu.be/amTepUIR93k) as PyTorch Partner Engineer Brad Heintz walks through steps for setting up the PyTorch Runtime for iOS projects:
 
 [![PyTorch Mobile Runtime for iOS](https://i.ytimg.com/vi/JFy3uHyqXn0/maxresdefault.jpg){:height="75%" width="75%"}](https://www.youtube.com/watch?v=JFy3uHyqXn0 "PyTorch Mobile Runtime for iOS")
 
