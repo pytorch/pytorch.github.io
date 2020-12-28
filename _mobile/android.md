@@ -311,9 +311,9 @@ After successful build you can integrate the result aar files to your android gr
 
 ## Android Tutorials
 
-Watch the following [video](https://www.youtube.com/watch?v=O_2KBhkIvnc) as PyTorch Partner Engineer Brad Heintz walks through steps for setting up the PyTorch Runtime for Android projects:
+Watch the following [video](https://youtu.be/5Lxuu16_28o) as PyTorch Partner Engineer Brad Heintz walks through steps for setting up the PyTorch Runtime for Android projects:
 
-[![PyTorch Mobile Runtime for Android](https://i.ytimg.com/vi/O_2KBhkIvnc/maxresdefault.jpg){:height="75%" width="75%"}](https://www.youtube.com/watch?v=JFy3uHyqXn0 "PyTorch Mobile Runtime for Android")
+[![PyTorch Mobile Runtime for Android](https://i.ytimg.com/vi/O_2KBhkIvnc/maxresdefault.jpg){:height="75%" width="75%"}](https://youtu.be/5Lxuu16_28o "PyTorch Mobile Runtime for Android")
 
 The corresponding code can be found [here](https://github.com/pytorch/workshops/tree/master/PTMobileWalkthruAndroid).
 
