@@ -188,7 +188,7 @@
               
               
                 <div class="version">
-                  <a href='http://pytorch.org/docs/versions.html'>1.8.0a0+9984575 &#x25BC</a>
+                  <a href='http://pytorch.org/docs/versions.html'>1.8.0a0+52f6bba &#x25BC</a>
                 </div>
               
             
@@ -456,7 +456,265 @@ in the Graph printout.</p></li>
 </div>
 <div class="section" id="limitations-of-symbolic-tracing">
 <h2>Limitations of Symbolic Tracing<a class="headerlink" href="#limitations-of-symbolic-tracing" title="Permalink to this headline">¶</a></h2>
-<p>TODO</p>
+<p>FX uses a system of <strong>symbolic tracing</strong> (a.k.a <a class="reference external" href="https://en.wikipedia.org/wiki/Abstract_interpretation">abstract
+interpretation</a>)
+to capture the semantics of programs in a transformable/analyzable form.
+The system is <strong>tracing</strong> in that it executes the program (really an
+<code class="docutils literal notranslate"><span class="pre">nn.Module</span></code> or function) to gather this information. It is
+<strong>symbolic</strong> in that the data flowing through the program during this
+execution is not real data, but rather symbols (“Proxy” in FX parlance).</p>
+<p>Although symbolic tracing works for most neural net code, it has some
+limitations.</p>
+<div class="section" id="dynamic-control-flow">
+<h3>Dynamic Control Flow<a class="headerlink" href="#dynamic-control-flow" title="Permalink to this headline">¶</a></h3>
+<p>The main limitation of symbolic tracing is it does not currently support
+<em>dynamic control flow</em>. That is, loops or <code class="docutils literal notranslate"><span class="pre">if</span></code> statements where the
+condition may depend on the input values of the program.</p>
+<p>For example, let’s examine the following program:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="k">def</span> <span class="nf">func_to_trace</span><span class="p">(</span><span class="n">x</span><span class="p">):</span>
+    <span class="n">dim0</span> <span class="o">=</span> <span class="n">x</span><span class="o">.</span><span class="n">size</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="k">if</span> <span class="n">dim0</span> <span class="o">==</span> <span class="mi">3</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">relu</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">neg</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+
+<span class="n">traced</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">fx</span><span class="o">.</span><span class="n">symbolic_trace</span><span class="p">(</span><span class="n">func_to_trace</span><span class="p">)</span>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">  &lt;...&gt;</span>
+<span class="sd">  File &quot;dyn.py&quot;, line 6, in func_to_trace</span>
+<span class="sd">    if dim0 == 3:</span>
+<span class="sd">  File &quot;pytorch/torch/fx/proxy.py&quot;, line 155, in __bool__</span>
+<span class="sd">    return self.tracer.to_bool(self)</span>
+<span class="sd">  File &quot;pytorch/torch/fx/proxy.py&quot;, line 85, in to_bool</span>
+<span class="sd">    raise TraceError(&#39;symbolically traced variables cannot be used as inputs to control flow&#39;)</span>
+<span class="sd">torch.fx.proxy.TraceError: symbolically traced variables cannot be used as inputs to control flow</span>
+<span class="sd">&quot;&quot;&quot;</span>
+</pre></div>
+</div>
+<p>The condition to the <code class="docutils literal notranslate"><span class="pre">if</span></code> statement relies on the value of <code class="docutils literal notranslate"><span class="pre">dim0</span></code>,
+which eventually relies on the value of <code class="docutils literal notranslate"><span class="pre">x</span></code>, a function input. Since
+<code class="docutils literal notranslate"><span class="pre">x</span></code> can change (i.e. if you pass a new input tensor to the traced
+function), this is <em>dynamic control flow</em>. The traceback walks back up
+through your code to show you where this situation happens.</p>
+<div class="section" id="static-control-flow">
+<h4>Static Control Flow<a class="headerlink" href="#static-control-flow" title="Permalink to this headline">¶</a></h4>
+<p>On the other hand, so-called <em>static control flow</em> is supported. Static
+control flow is loops or <code class="docutils literal notranslate"><span class="pre">if</span></code> statements whose value cannot change
+across invocations. Typically, in PyTorch programs, this control flow
+arises for code making decisions about a model’s architecture based on
+hyper-parameters. As a concrete example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">import</span> <span class="nn">torch.fx</span>
+
+<span class="k">class</span> <span class="nc">MyModule</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">do_activation</span> <span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">do_activation</span> <span class="o">=</span> <span class="n">do_activation</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">linear</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="mi">512</span><span class="p">,</span> <span class="mi">512</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">):</span>
+        <span class="n">x</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">linear</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+        <span class="c1"># This if-statement is so-called static control flow.</span>
+        <span class="c1"># Its condition does not depend on any input values</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">do_activation</span><span class="p">:</span>
+            <span class="n">x</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">relu</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">x</span>
+
+<span class="n">without_activation</span> <span class="o">=</span> <span class="n">MyModule</span><span class="p">(</span><span class="n">do_activation</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<span class="n">with_activation</span> <span class="o">=</span> <span class="n">MyModule</span><span class="p">(</span><span class="n">do_activation</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+<span class="n">traced_without_activation</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">fx</span><span class="o">.</span><span class="n">symbolic_trace</span><span class="p">(</span><span class="n">without_activation</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">traced_without_activation</span><span class="o">.</span><span class="n">code</span><span class="p">)</span>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">def forward(self, x):</span>
+<span class="sd">    linear_1 = self.linear(x);  x = None</span>
+<span class="sd">    return linear_1</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="n">traced_with_activation</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">fx</span><span class="o">.</span><span class="n">symbolic_trace</span><span class="p">(</span><span class="n">with_activation</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">traced_with_activation</span><span class="o">.</span><span class="n">code</span><span class="p">)</span>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">import torch</span>
+<span class="sd">def forward(self, x):</span>
+<span class="sd">    linear_1 = self.linear(x);  x = None</span>
+<span class="sd">    relu_1 = torch.relu(linear_1);  linear_1 = None</span>
+<span class="sd">    return relu_1</span>
+<span class="sd">&quot;&quot;&quot;</span>
+</pre></div>
+</div>
+<p>The if-statement <code class="docutils literal notranslate"><span class="pre">if</span> <span class="pre">self.do_activation</span></code> does not depend on any
+function inputs, thus it is static. <code class="docutils literal notranslate"><span class="pre">do_activation</span></code> can be considered
+to be a hyper-parameter, and the traces of different instances of
+<code class="docutils literal notranslate"><span class="pre">MyModule</span></code> with different values for that parameter have different
+code. This is a valid pattern that is supported by symbolic tracing.</p>
+<p>Many instances of dynamic control flow are semantically static control
+flow. These instances can be made to support symbolic tracing by
+removing the data dependencies on input values, for example by moving
+values to <code class="docutils literal notranslate"><span class="pre">Module</span></code> attributes or by passing constant values during
+symbolic tracing:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="k">def</span> <span class="nf">f</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">flag</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">flag</span><span class="p">:</span> <span class="k">return</span> <span class="n">x</span>
+    <span class="k">else</span><span class="p">:</span> <span class="k">return</span> <span class="n">x</span><span class="o">*</span><span class="mi">2</span>
+
+<span class="n">fx</span><span class="o">.</span><span class="n">symbolic_trace</span><span class="p">(</span><span class="n">f</span><span class="p">)</span> <span class="c1"># Fails!</span>
+
+<span class="k">def</span> <span class="nf">g</span><span class="p">(</span><span class="n">flag</span><span class="p">):</span>
+    <span class="k">return</span> <span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">f</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">flag</span><span class="p">)</span>
+
+<span class="n">new_f</span> <span class="o">=</span> <span class="n">g</span><span class="p">(</span><span class="n">flag</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">fx</span><span class="o">.</span><span class="n">symbolic_trace</span><span class="p">(</span><span class="n">new_f</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>In the case of truly dynamic control flow, the sections of the program
+that contain this code can be traced as calls to the Method (see
+<a class="reference internal" href="#customizing-tracing"><span class="std std-ref">Customizing Tracing with the Tracer class</span></a>) or function (see
+<a class="reference internal" href="#torch.fx.wrap" title="torch.fx.wrap"><code class="xref py py-func docutils literal notranslate"><span class="pre">wrap()</span></code></a>) rather than tracing through them.</p>
+</div>
+</div>
+<div class="section" id="non-torch-functions">
+<h3>Non-<code class="docutils literal notranslate"><span class="pre">torch</span></code> Functions<a class="headerlink" href="#non-torch-functions" title="Permalink to this headline">¶</a></h3>
+<p>FX uses <code class="docutils literal notranslate"><span class="pre">__torch_function__</span></code> as the mechanism by which it intercepts
+calls (see the <a class="reference external" href="https://github.com/pytorch/pytorch/blob/master/torch/fx/OVERVIEW.md#technical-details">technical
+overview</a>
+for more information about this). Some functions, such as builtin Python
+functions or those in the <code class="docutils literal notranslate"><span class="pre">math</span></code> module, are things that are not
+covered by <code class="docutils literal notranslate"><span class="pre">__torch_function__</span></code>, but we would still like to capture
+them in symbolic tracing. For example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">math</span> <span class="kn">import</span> <span class="n">sqrt</span>
+
+<span class="k">def</span> <span class="nf">normalize</span><span class="p">(</span><span class="n">x</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Normalize `x` by the size of the batch dimension</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">x</span> <span class="o">/</span> <span class="n">sqrt</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">x</span><span class="p">))</span>
+
+<span class="c1"># It&#39;s valid Python code</span>
+<span class="n">normalize</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">rand</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">))</span>
+
+<span class="n">traced</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">fx</span><span class="o">.</span><span class="n">symbolic_trace</span><span class="p">(</span><span class="n">normalize</span><span class="p">)</span>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">  &lt;...&gt;</span>
+<span class="sd">  File &quot;sqrt.py&quot;, line 9, in normalize</span>
+<span class="sd">    return x / sqrt(len(x))</span>
+<span class="sd">  File &quot;pytorch/torch/fx/proxy.py&quot;, line 161, in __len__</span>
+<span class="sd">    raise RuntimeError(&quot;&#39;len&#39; is not supported in symbolic tracing by default. If you want &quot;</span>
+<span class="sd">RuntimeError: &#39;len&#39; is not supported in symbolic tracing by default. If you want this call to be recorded, please call torch.fx.wrap(&#39;len&#39;) at module scope</span>
+<span class="sd">&quot;&quot;&quot;</span>
+</pre></div>
+</div>
+<p>The error tells us that the built-in function <code class="docutils literal notranslate"><span class="pre">len</span></code> is not supported.
+We can make it so that functions like this are recorded in the trace as
+direct calls using the <a class="reference internal" href="#torch.fx.wrap" title="torch.fx.wrap"><code class="xref py py-func docutils literal notranslate"><span class="pre">wrap()</span></code></a> API:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">torch</span><span class="o">.</span><span class="n">fx</span><span class="o">.</span><span class="n">wrap</span><span class="p">(</span><span class="s1">&#39;len&#39;</span><span class="p">)</span>
+<span class="n">torch</span><span class="o">.</span><span class="n">fx</span><span class="o">.</span><span class="n">wrap</span><span class="p">(</span><span class="s1">&#39;sqrt&#39;</span><span class="p">)</span>
+
+<span class="n">traced</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">fx</span><span class="o">.</span><span class="n">symbolic_trace</span><span class="p">(</span><span class="n">normalize</span><span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">traced</span><span class="o">.</span><span class="n">code</span><span class="p">)</span>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">import math</span>
+<span class="sd">def forward(self, x):</span>
+<span class="sd">    len_1 = len(x)</span>
+<span class="sd">    sqrt_1 = math.sqrt(len_1);  len_1 = None</span>
+<span class="sd">    truediv = x / sqrt_1;  x = sqrt_1 = None</span>
+<span class="sd">    return truediv</span>
+<span class="sd">&quot;&quot;&quot;</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="customizing-tracing-with-the-tracer-class">
+<span id="customizing-tracing"></span><h3>Customizing Tracing with the <code class="docutils literal notranslate"><span class="pre">Tracer</span></code> class<a class="headerlink" href="#customizing-tracing-with-the-tracer-class" title="Permalink to this headline">¶</a></h3>
+<p>The <a class="reference internal" href="#torch.fx.Tracer" title="torch.fx.Tracer"><code class="xref py py-class docutils literal notranslate"><span class="pre">Tracer</span></code></a> class is the class that underlies the
+implementation of <code class="docutils literal notranslate"><span class="pre">symbolic_trace</span></code>. The behavior of tracing can be
+customized by subclassing Tracer, like so:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="k">class</span> <span class="nc">MyCustomTracer</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">fx</span><span class="o">.</span><span class="n">Tracer</span><span class="p">):</span>
+    <span class="c1"># Inside here you can override various methods</span>
+    <span class="c1"># to customize tracing. See the `Tracer` API</span>
+    <span class="c1"># reference</span>
+    <span class="k">pass</span>
+
+
+<span class="c1"># Let&#39;s use this custom tracer to trace through this module</span>
+<span class="k">class</span> <span class="nc">MyModule</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">relu</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="o">+</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">)</span>
+
+<span class="n">mod</span> <span class="o">=</span> <span class="n">MyModule</span><span class="p">()</span>
+
+<span class="n">traced_graph</span> <span class="o">=</span> <span class="n">MyCustomTracer</span><span class="p">()</span><span class="o">.</span><span class="n">trace</span><span class="p">(</span><span class="n">mod</span><span class="p">)</span>
+<span class="c1"># trace() returns a Graph. Let&#39;s wrap it up in a</span>
+<span class="c1"># GraphModule to make it runnable</span>
+<span class="n">traced</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">fx</span><span class="o">.</span><span class="n">GraphModule</span><span class="p">(</span><span class="n">mod</span><span class="p">,</span> <span class="n">traced_graph</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="section" id="leaf-modules">
+<h4>Leaf Modules<a class="headerlink" href="#leaf-modules" title="Permalink to this headline">¶</a></h4>
+<p>Leaf Modules are the modules that appear as calls in the symbolic trace
+rather than being traced through. The default set of leaf modules is the
+set of standard <code class="docutils literal notranslate"><span class="pre">torch.nn</span></code> module instances. For example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="k">class</span> <span class="nc">MySpecialSubmodule</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">neg</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+
+<span class="k">class</span> <span class="nc">MyModule</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">linear</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">submod</span> <span class="o">=</span> <span class="n">MySpecialSubmodule</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">submod</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">linear</span><span class="p">(</span><span class="n">x</span><span class="p">))</span>
+
+<span class="n">traced</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">fx</span><span class="o">.</span><span class="n">symbolic_trace</span><span class="p">(</span><span class="n">MyModule</span><span class="p">())</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">traced</span><span class="o">.</span><span class="n">code</span><span class="p">)</span>
+<span class="c1"># `linear` is preserved as a call, yet `submod` is traced though.</span>
+<span class="c1"># This is because the default set of &quot;Leaf Modules&quot; includes all</span>
+<span class="c1"># standard `torch.nn` modules.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">import torch</span>
+<span class="sd">def forward(self, x):</span>
+<span class="sd">    linear_1 = self.linear(x);  x = None</span>
+<span class="sd">    neg_1 = torch.neg(linear_1);  linear_1 = None</span>
+<span class="sd">    return neg_1</span>
+<span class="sd">&quot;&quot;&quot;</span>
+</pre></div>
+</div>
+<p>The set of leaf modules can be customized by overriding
+<a class="reference internal" href="#torch.fx.Tracer.is_leaf_module" title="torch.fx.Tracer.is_leaf_module"><code class="xref py py-meth docutils literal notranslate"><span class="pre">Tracer.is_leaf_module()</span></code></a>.</p>
+</div>
+</div>
+<div class="section" id="miscellanea">
+<h3>Miscellanea<a class="headerlink" href="#miscellanea" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li><p>Tensor constructors (e.g. <code class="docutils literal notranslate"><span class="pre">torch.zeros</span></code>, <code class="docutils literal notranslate"><span class="pre">torch.ones</span></code>,
+<code class="docutils literal notranslate"><span class="pre">torch.rand</span></code>, <code class="docutils literal notranslate"><span class="pre">torch.randn</span></code>, <code class="docutils literal notranslate"><span class="pre">torch.sparse_coo_tensor</span></code>)
+are currently not traceable.</p>
+<ul>
+<li><p>The deterministic constructors (<code class="docutils literal notranslate"><span class="pre">zeros</span></code>, <code class="docutils literal notranslate"><span class="pre">ones</span></code>) can be used
+and the value they produce will be embedded in the trace as a
+constant. This is only problematic if the arguments to these
+constructors refers to dynamic input sizes. In this case,
+<code class="docutils literal notranslate"><span class="pre">ones_like</span></code> or <code class="docutils literal notranslate"><span class="pre">zeros_like</span></code> may be a viable substitute.</p></li>
+<li><p>Nondeterministic constructors (<code class="docutils literal notranslate"><span class="pre">rand</span></code>, <code class="docutils literal notranslate"><span class="pre">randn</span></code>) will have a
+single random value embedded in the trace. This is likely not the
+intended behavior.</p></li>
+<li><p>This behavior may be fixed in a future release.</p></li>
+</ul>
+</li>
+<li><p>Type annotations</p>
+<ul>
+<li><p>Python 3-style type annotations (e.g.
+<code class="docutils literal notranslate"><span class="pre">func(x</span> <span class="pre">:</span> <span class="pre">torch.Tensor,</span> <span class="pre">y</span> <span class="pre">:</span> <span class="pre">int)</span> <span class="pre">-&gt;</span> <span class="pre">torch.Tensor</span></code>) are supported
+and will be preserved by symbolic tracing.</p></li>
+<li><p>Python 2-style comment type annotations
+<code class="docutils literal notranslate"><span class="pre">#</span> <span class="pre">type:</span> <span class="pre">(torch.Tensor,</span> <span class="pre">int)</span> <span class="pre">-&gt;</span> <span class="pre">torch.Tensor</span></code> are not currently
+supported.</p></li>
+<li><p>Annotations on local names within a function are not currently
+supported.</p></li>
+</ul>
+</li>
+</ul>
+</div>
 </div>
 <div class="section" id="writing-transformations">
 <h2>Writing Transformations<a class="headerlink" href="#writing-transformations" title="Permalink to this headline">¶</a></h2>
@@ -1315,7 +1573,19 @@ operators to add additional things to a <code class="docutils literal notranslat
               <ul>
 <li><a class="reference internal" href="#">torch.fx</a><ul>
 <li><a class="reference internal" href="#module-torch.fx">Overview</a></li>
-<li><a class="reference internal" href="#limitations-of-symbolic-tracing">Limitations of Symbolic Tracing</a></li>
+<li><a class="reference internal" href="#limitations-of-symbolic-tracing">Limitations of Symbolic Tracing</a><ul>
+<li><a class="reference internal" href="#dynamic-control-flow">Dynamic Control Flow</a><ul>
+<li><a class="reference internal" href="#static-control-flow">Static Control Flow</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#non-torch-functions">Non-<code class="docutils literal notranslate"><span class="pre">torch</span></code> Functions</a></li>
+<li><a class="reference internal" href="#customizing-tracing-with-the-tracer-class">Customizing Tracing with the <code class="docutils literal notranslate"><span class="pre">Tracer</span></code> class</a><ul>
+<li><a class="reference internal" href="#leaf-modules">Leaf Modules</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#miscellanea">Miscellanea</a></li>
+</ul>
+</li>
 <li><a class="reference internal" href="#writing-transformations">Writing Transformations</a></li>
 <li><a class="reference internal" href="#debugging-transformations">Debugging Transformations</a></li>
 <li><a class="reference internal" href="#api-reference">API Reference</a></li>
