@@ -203,7 +203,7 @@ After that, the code processes the output, finding classes with the highest scor
 
 ## Building PyTorch Android from Source
 
-In some cases you might want to use a local build of pytorch android, for example you may build custom libtorch binary with another set of operators or to make local changes.
+In some cases you might want to use a local build of PyTorch android, for example you may build custom libtorch binary with another set of operators or to make local changes, or try out the latest PyTorch code.
 
 For this you can use `./scripts/build_pytorch_android.sh` script.
 ```
@@ -218,11 +218,11 @@ The workflow contains several steps:
 
 2\. Create symbolic links to the results of those builds:
 `android/pytorch_android/src/main/jniLibs/${abi}` to the directory with output libraries
-`android/pytorch_android/src/main/cpp/libtorch_include/${abi}` to the directory with headers. These directories are used to build `libpytorch.so` library that will be loaded on android device.
+`android/pytorch_android/src/main/cpp/libtorch_include/${abi}` to the directory with headers. These directories are used to build `libpytorch_jni.so` library, as part of the `pytorch_android-release.aar` bundle, that will be loaded on android device.
 
 3\. And finally run `gradle` in `android/pytorch_android` directory with task `assembleRelease`
 
-Script requires that Android SDK, Android NDK and gradle are installed.
+Script requires that Android SDK, Android NDK, Java SDK, and gradle are installed.
 They are specified as environment variables:
 
 `ANDROID_HOME` - path to [Android SDK](https://developer.android.com/studio/command-line/sdkmanager.html)
@@ -231,17 +231,20 @@ They are specified as environment variables:
 
 `GRADLE_HOME` - path to [gradle](https://gradle.org/releases/)
 
+`JAVA_HOME` - path to [JAVA JDK](https://www.oracle.com/java/technologies/javase-downloads.html#javasejdk)
 
-After successful build you should see the result as aar file:
+
+After successful build, you should see the result as aar file:
 
 ```
-$ find pytorch_android/build/ -type f -name *aar
-pytorch_android/build/outputs/aar/pytorch_android.aar
-pytorch_android_torchvision/build/outputs/aar/pytorch_android.aar
-libs/fbjni_local/build/outputs/aar/pytorch_android_fbjni.aar
+$ find android -type f -name *aar
+android/pytorch_android/build/outputs/aar/pytorch_android-release.aar
+android/pytorch_android_torchvision/build/outputs/aar/pytorch_android_torchvision-release.aar
 ```
 
-It can be used directly in android projects, as a gradle dependency:
+## Using the PyTorch Android Libraries Built from Source or Nightly
+
+First add the two aar files built above, or downloaded from the nightly built PyTorch Android repos at [here](https://oss.sonatype.org/#nexus-search;quick~pytorch_android) and [here](https://oss.sonatype.org/#nexus-search;quick~torchvision_android), to the Android project's `lib` folder, then add in the project's `build.gradle` file:
 ```
 allprojects {
     repositories {
@@ -251,33 +254,25 @@ allprojects {
     }
 }
 
-android {
-    ...
-    packagingOptions {
-        pickFirst "**/libfbjni.so"
-    }
-    ...
-}
-
 dependencies {
-    implementation(name:'pytorch_android', ext:'aar')
-    implementation(name:'pytorch_android_torchvision', ext:'aar')
-    implementation(name:'pytorch_android_fbjni', ext:'aar')
+
+    // if using the libraries built from source
+    implementation(name:'pytorch_android-release', ext:'aar')
+    implementation(name:'pytorch_android_torchvision-release', ext:'aar')
+
+    // if using the nightly built libraries downloaded above
+    // implementation(name:'pytorch_android-1.8.0-20210121.092759-172', ext:'aar')
+    // implementation(name:'pytorch_android_torchvision-1.8.0-20210121.092817-173', ext:'aar')
+
     ...
     implementation 'com.android.support:appcompat-v7:28.0.0'
-    implementation 'com.facebook.soloader:nativeloader:0.8.0'
+    implementation 'com.facebook.fbjni:fbjni-java-only:0.0.3'
 }
 ```
 
-At the moment for the case of using aar files directly we need additional configuration due to packaging specific (`libfbjni.so` is packaged in both `pytorch_android_fbjni.aar` and `pytorch_android.aar`).
-```
-packagingOptions {
-    pickFirst "**/libfbjni.so"
-}
-```
+Also we have to add all transitive dependencies of our aars. As `pytorch_android` depends on `com.android.support:appcompat-v7:28.0.0` or `androidx.appcompat:appcompat:1.2.0`, we need to one of them. (In case of using maven dependencies they are added automatically from `pom.xml`).
 
-Also we have to add all transitive dependencies of our aars. As `pytorch_android` depends on `com.android.support:appcompat-v7:28.0.0` and `com.facebook.soloader:nativeloader:0.8.0`, we need to add them. (In case of using maven dependencies they are added automatically from `pom.xml`).
-
+If
 
 ## Custom Build
 
