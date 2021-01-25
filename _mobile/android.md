@@ -260,7 +260,7 @@ dependencies {
     implementation(name:'pytorch_android-release', ext:'aar')
     implementation(name:'pytorch_android_torchvision-release', ext:'aar')
 
-    // if using the nightly built libraries downloaded above
+    // if using the nightly built libraries downloaded above, for example the 1.8.0-snapshot on Jan. 21, 2021
     // implementation(name:'pytorch_android-1.8.0-20210121.092759-172', ext:'aar')
     // implementation(name:'pytorch_android_torchvision-1.8.0-20210121.092817-173', ext:'aar')
 
@@ -272,7 +272,6 @@ dependencies {
 
 Also we have to add all transitive dependencies of our aars. As `pytorch_android` depends on `com.android.support:appcompat-v7:28.0.0` or `androidx.appcompat:appcompat:1.2.0`, we need to one of them. (In case of using maven dependencies they are added automatically from `pom.xml`).
 
-If
 
 ## Custom Build
 
