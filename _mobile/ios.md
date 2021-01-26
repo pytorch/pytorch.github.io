@@ -162,7 +162,7 @@ git submodule update --init --recursive
 
 ### Build LibTorch for iOS Simulators
 
-Open terminal and navigate to the PyTorch root directory. Run the following command
+Open terminal and navigate to the PyTorch root directory. Run the following command (if you already build LibTorch for iOS devices (see below), run `rm -rf build_ios` first):
 
 ```
 BUILD_PYTORCH_MOBILE=1 IOS_PLATFORM=SIMULATOR ./scripts/build_ios.sh
@@ -171,7 +171,7 @@ After the build succeeds, all static libraries and header files will be generate
 
 ### Build LibTorch for arm64 Devices
 
-Open terminal and navigate to the PyTorch root directory. Run the following command
+Open terminal and navigate to the PyTorch root directory. Run the following command (if you already build LibTorch for iOS simulators, run `rm -rf build_ios` first):
 
 ```
 BUILD_PYTORCH_MOBILE=1 IOS_ARCH=arm64 ./scripts/build_ios.sh
@@ -180,14 +180,25 @@ After the build succeeds, all static libraries and header files will be generate
 
 ### XCode Setup
 
-Open your project in XCode, copy all the static libraries as well as header files to your project. Navigate to the project settings, set the value **Header Search Paths** to the path of header files you just copied.
+Open your project in XCode, go to your project Target's `Build Phases` - `Link Binaries With Libraries`, click the + sign and add all the library files located in `build_ios/install/lib`. Navigate to the project `Build Settings`, set the value **Header Search Paths** to `build_ios/install/include` and **Library Search Paths** to `build_ios/install/lib`.
 
 In the build settings, search for **other linker flags**.  Add a custom linker flag below
 
 ```
 -all_load
 ```
- Finally, disable bitcode for your target by selecting the Build Settings, searching for **Enable Bitcode**, and set the value to **No**.
+
+To use the custom built libraries the project, replace `#import <LibTorch/LibTorch.h>` (in `TorchModule.mm`) which is needed when using LibTorch via Cocoapods with the code below:
+```
+#include "ATen/ATen.h"
+#include "caffe2/core/timer.h"
+#include "caffe2/utils/string_utils.h"
+#include "torch/csrc/autograd/grad_mode.h"
+#include "torch/csrc/jit/serialization/import.h"
+#include "torch/script.h"
+```
+
+Finally, disable bitcode for your target by selecting the Build Settings, searching for **Enable Bitcode**, and set the value to **No**.
 
 
 
