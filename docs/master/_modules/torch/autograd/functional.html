@@ -187,7 +187,7 @@
               
               
                 <div class="version">
-                  <a href='http://pytorch.org/docs/versions.html'>1.8.0a0+8d56858 &#x25BC</a>
+                  <a href='http://pytorch.org/docs/versions.html'>1.8.0a0+470e6b3 &#x25BC</a>
                 </div>
               
             
@@ -292,8 +292,8 @@
 <p class="caption"><span class="caption-text">Libraries</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference external" href="https://pytorch.org/audio/stable">torchaudio</a></li>
-<li class="toctree-l1"><a class="reference external" href="https://pytorch.org/text">torchtext</a></li>
-<li class="toctree-l1"><a class="reference external" href="https://pytorch.org/vision">torchvision</a></li>
+<li class="toctree-l1"><a class="reference external" href="https://pytorch.org/text/stable">torchtext</a></li>
+<li class="toctree-l1"><a class="reference external" href="https://pytorch.org/vision/stable">torchvision</a></li>
 <li class="toctree-l1"><a class="reference external" href="https://pytorch.org/elastic/">TorchElastic</a></li>
 <li class="toctree-l1"><a class="reference external" href="https://pytorch.org/serve">TorchServe</a></li>
 <li class="toctree-l1"><a class="reference external" href="http://pytorch.org/xla/">PyTorch on XLA Devices</a></li>
@@ -381,6 +381,7 @@
   <h1>Source code for torch.autograd.functional</h1><div class="highlight"><pre>
 <span></span><span class="kn">import</span> <span class="nn">torch</span>
 <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">List</span>
+<span class="kn">from</span> <span class="nn">torch._vmap_internals</span> <span class="kn">import</span> <span class="n">vmap</span>
 
 <span class="c1"># Utility functions</span>
 
@@ -751,7 +752,37 @@
     <span class="k">return</span> <span class="n">_tuple_postprocess</span><span class="p">(</span><span class="n">outputs</span><span class="p">,</span> <span class="n">is_outputs_tuple</span><span class="p">),</span> <span class="n">_tuple_postprocess</span><span class="p">(</span><span class="n">jvp</span><span class="p">,</span> <span class="n">is_outputs_tuple</span><span class="p">)</span></div>
 
 
-<div class="viewcode-block" id="jacobian"><a class="viewcode-back" href="../../../autograd.html#torch.autograd.functional.jacobian">[docs]</a><span class="k">def</span> <span class="nf">jacobian</span><span class="p">(</span><span class="n">func</span><span class="p">,</span> <span class="n">inputs</span><span class="p">,</span> <span class="n">create_graph</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+<span class="k">def</span> <span class="nf">_construct_standard_basis_for</span><span class="p">(</span><span class="n">tensors</span><span class="p">:</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="o">...</span><span class="p">],</span> <span class="n">tensor_numels</span><span class="p">:</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="o">...</span><span class="p">]:</span>
+    <span class="c1"># This function:</span>
+    <span class="c1"># - constructs a N=sum(tensor_numels) standard basis. i.e. an NxN identity matrix.</span>
+    <span class="c1"># - Splits the identity matrix into chunks with each chunk size determined by `tensor_numels`.</span>
+    <span class="c1"># - Each chunk corresponds to one tensor. The chunk has the same dtype and</span>
+    <span class="c1">#   device as the tensor</span>
+    <span class="c1">#</span>
+    <span class="c1"># For example, with tensor_numels = [1, 2, 1], this function returns:</span>
+    <span class="c1"># ( tensor([[1],     tensor([[0, 0],      tensor([[0],</span>
+    <span class="c1">#           [0],             [1, 0],              [0],</span>
+    <span class="c1">#           [0],             [0, 1],              [0],</span>
+    <span class="c1">#           [0]])  ,         [0, 0]])  ,          [1]])  )</span>
+    <span class="c1">#</span>
+    <span class="c1"># Precondition: tensor_numels == tuple(tensor.numel() for tensor in tensors)</span>
+    <span class="c1"># Precondition: tensors always has at least one element.</span>
+    <span class="c1">#</span>
+    <span class="c1"># See NOTE: [Computing jacobian with vmap and grad for multiple tensors]</span>
+    <span class="c1"># for context behind this function. All the pre-conditions are guarded for</span>
+    <span class="c1"># in torch.autograd.functional.jacobian.</span>
+    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">tensors</span><span class="p">)</span> <span class="o">==</span> <span class="nb">len</span><span class="p">(</span><span class="n">tensor_numels</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">tensors</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span>
+    <span class="n">total_numel</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">tensor_numels</span><span class="p">)</span>
+    <span class="n">diag_start_indices</span> <span class="o">=</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="o">*</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">tensor_numels</span><span class="p">)</span><span class="o">.</span><span class="n">cumsum</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">neg</span><span class="p">()</span><span class="o">.</span><span class="n">unbind</span><span class="p">())</span>
+    <span class="n">chunks</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">tensor</span><span class="o">.</span><span class="n">new_zeros</span><span class="p">(</span><span class="n">total_numel</span><span class="p">,</span> <span class="n">tensor_numel</span><span class="p">)</span>
+                   <span class="k">for</span> <span class="n">tensor</span><span class="p">,</span> <span class="n">tensor_numel</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">tensors</span><span class="p">,</span> <span class="n">tensor_numels</span><span class="p">))</span>
+    <span class="k">for</span> <span class="n">chunk</span><span class="p">,</span> <span class="n">diag_start_idx</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">chunks</span><span class="p">,</span> <span class="n">diag_start_indices</span><span class="p">):</span>
+        <span class="n">chunk</span><span class="o">.</span><span class="n">diagonal</span><span class="p">(</span><span class="n">diag_start_idx</span><span class="p">)</span><span class="o">.</span><span class="n">fill_</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">chunks</span>
+
+
+<div class="viewcode-block" id="jacobian"><a class="viewcode-back" href="../../../autograd.html#torch.autograd.functional.jacobian">[docs]</a><span class="k">def</span> <span class="nf">jacobian</span><span class="p">(</span><span class="n">func</span><span class="p">,</span> <span class="n">inputs</span><span class="p">,</span> <span class="n">create_graph</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">vectorize</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
     <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Function that computes the Jacobian of a given function.</span>
 
 <span class="sd">    Args:</span>
@@ -767,6 +798,13 @@
 <span class="sd">            independent of it. If ``False``, we return a Tensor of zeros as the</span>
 <span class="sd">            jacobian for said inputs, which is the expected mathematical value.</span>
 <span class="sd">            Defaults to ``False``.</span>
+<span class="sd">        vectorize (bool, optional): This feature is experimental and may have</span>
+<span class="sd">            performance cliffs. When computing the jacobian, usually we invoke</span>
+<span class="sd">            ``autograd.grad`` once per row of the jacobian. If this flag is</span>
+<span class="sd">            ``True``, we use vmap as the backend to vectorize calls to</span>
+<span class="sd">            ``autograd.grad`` so we only invoke it once instead of once per row.</span>
+<span class="sd">            This should lead to performance improvements in many use cases.</span>
+<span class="sd">            Defaults to ``False``.</span>
 
 <span class="sd">    Returns:</span>
 <span class="sd">        Jacobian (Tensor or nested tuple of Tensors): if there is a single</span>
@@ -777,6 +815,7 @@
 <span class="sd">        Tensors where ``Jacobian[i][j]`` will contain the Jacobian of the</span>
 <span class="sd">        ``i``\th output and ``j``\th input and will have as size the</span>
 <span class="sd">        concatenation of the sizes of the corresponding output and the</span>
+<span class="sd">        corresponding input and will have same dtype and device as the</span>
 <span class="sd">        corresponding input.</span>
 
 <span class="sd">    Example:</span>
@@ -815,6 +854,89 @@
                                           <span class="s2">&quot;jacobian&quot;</span><span class="p">)</span>
     <span class="n">_check_requires_grad</span><span class="p">(</span><span class="n">outputs</span><span class="p">,</span> <span class="s2">&quot;outputs&quot;</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="n">strict</span><span class="p">)</span>
 
+
+    <span class="k">if</span> <span class="n">vectorize</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">strict</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s1">&#39;torch.autograd.functional.jacobian: `strict=True` &#39;</span>
+                               <span class="s1">&#39;and `vectorized=True` are not supported together. &#39;</span>
+                               <span class="s1">&#39;Please either set `strict=False` or &#39;</span>
+                               <span class="s1">&#39;`vectorize=False`.&#39;</span><span class="p">)</span>
+        <span class="c1"># NOTE: [Computing jacobian with vmap and grad for multiple outputs]</span>
+        <span class="c1">#</span>
+        <span class="c1"># Let&#39;s consider f(x) = (x**2, x.sum()) and let x = torch.randn(3).</span>
+        <span class="c1"># It turns out we can compute the jacobian of this function with a single</span>
+        <span class="c1"># call to autograd.grad by using vmap over the correct grad_outputs.</span>
+        <span class="c1">#</span>
+        <span class="c1"># Firstly, one way to compute the jacobian is to stack x**2 and x.sum()</span>
+        <span class="c1"># into a 4D vector. E.g., use g(x) = torch.stack([x**2, x.sum()])</span>
+        <span class="c1">#</span>
+        <span class="c1"># To get the first row of the jacobian, we call</span>
+        <span class="c1"># &gt;&gt;&gt; autograd.grad(g(x), x, grad_outputs=torch.tensor([1, 0, 0, 0]))</span>
+        <span class="c1"># To get the 2nd row of the jacobian, we call</span>
+        <span class="c1"># &gt;&gt;&gt; autograd.grad(g(x), x, grad_outputs=torch.tensor([0, 1, 0, 0]))</span>
+        <span class="c1"># and so on.</span>
+        <span class="c1">#</span>
+        <span class="c1"># Using vmap, we can vectorize all 4 of these computations into one by</span>
+        <span class="c1"># passing the standard basis for R^4 as the grad_output.</span>
+        <span class="c1"># vmap(partial(autograd.grad, g(x), x))(torch.eye(4)).</span>
+        <span class="c1">#</span>
+        <span class="c1"># Now, how do we compute the jacobian *without stacking the output*?</span>
+        <span class="c1"># We can just split the standard basis across the outputs. So to</span>
+        <span class="c1"># compute the jacobian of f(x), we&#39;d use</span>
+        <span class="c1"># &gt;&gt;&gt; autograd.grad(f(x), x, grad_outputs=_construct_standard_basis_for(...))</span>
+        <span class="c1"># The grad_outputs looks like the following:</span>
+        <span class="c1"># ( torch.tensor([[1, 0, 0],</span>
+        <span class="c1">#                 [0, 1, 0],</span>
+        <span class="c1">#                 [0, 0, 1],</span>
+        <span class="c1">#                 [0, 0, 0]]),</span>
+        <span class="c1">#   torch.tensor([[0],</span>
+        <span class="c1">#                 [0],</span>
+        <span class="c1">#                 [0],</span>
+        <span class="c1">#                 [1]]) )</span>
+        <span class="c1">#</span>
+        <span class="c1"># But we&#39;re not done yet!</span>
+        <span class="c1"># &gt;&gt;&gt; vmap(partial(autograd.grad(f(x), x, grad_outputs=...)))</span>
+        <span class="c1"># returns a Tensor of shape [4, 3]. We have to remember to split the</span>
+        <span class="c1"># jacobian of shape [4, 3] into two:</span>
+        <span class="c1"># - one of shape [3, 3] for the first output</span>
+        <span class="c1"># - one of shape [   3] for the second output</span>
+
+        <span class="c1"># Step 1: Construct grad_outputs by splitting the standard basis</span>
+        <span class="n">output_numels</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">output</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span> <span class="k">for</span> <span class="n">output</span> <span class="ow">in</span> <span class="n">outputs</span><span class="p">)</span>
+        <span class="n">grad_outputs</span> <span class="o">=</span> <span class="n">_construct_standard_basis_for</span><span class="p">(</span><span class="n">outputs</span><span class="p">,</span> <span class="n">output_numels</span><span class="p">)</span>
+        <span class="n">flat_outputs</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">output</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="k">for</span> <span class="n">output</span> <span class="ow">in</span> <span class="n">outputs</span><span class="p">)</span>
+
+        <span class="c1"># Step 2: Call vmap + autograd.grad</span>
+        <span class="k">def</span> <span class="nf">vjp</span><span class="p">(</span><span class="n">grad_output</span><span class="p">):</span>
+            <span class="n">vj</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">_autograd_grad</span><span class="p">(</span><span class="n">flat_outputs</span><span class="p">,</span> <span class="n">inputs</span><span class="p">,</span> <span class="n">grad_output</span><span class="p">,</span> <span class="n">create_graph</span><span class="o">=</span><span class="n">create_graph</span><span class="p">))</span>
+            <span class="k">for</span> <span class="n">el_idx</span><span class="p">,</span> <span class="n">vj_el</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">vj</span><span class="p">):</span>
+                <span class="k">if</span> <span class="n">vj_el</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="k">continue</span>
+                <span class="n">vj</span><span class="p">[</span><span class="n">el_idx</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">inputs</span><span class="p">[</span><span class="n">el_idx</span><span class="p">])</span>
+            <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">vj</span><span class="p">)</span>
+
+        <span class="n">jacobians_of_flat_output</span> <span class="o">=</span> <span class="n">vmap</span><span class="p">(</span><span class="n">vjp</span><span class="p">)(</span><span class="n">grad_outputs</span><span class="p">)</span>
+
+        <span class="c1"># Step 3: The returned jacobian is one big tensor per input. In this step,</span>
+        <span class="c1"># we split each Tensor by output.</span>
+        <span class="n">jacobian_input_output</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">jac</span><span class="p">,</span> <span class="n">input_i</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">jacobians_of_flat_output</span><span class="p">,</span> <span class="n">inputs</span><span class="p">):</span>
+            <span class="n">jacobian_input_i_output</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="k">for</span> <span class="n">jac</span><span class="p">,</span> <span class="n">output_j</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">jac</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">output_numels</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">),</span> <span class="n">outputs</span><span class="p">):</span>
+                <span class="n">jacobian_input_i_output_j</span> <span class="o">=</span> <span class="n">jac</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">output_j</span><span class="o">.</span><span class="n">shape</span> <span class="o">+</span> <span class="n">input_i</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+                <span class="n">jacobian_input_i_output</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">jacobian_input_i_output_j</span><span class="p">)</span>
+            <span class="n">jacobian_input_output</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">jacobian_input_i_output</span><span class="p">)</span>
+
+        <span class="c1"># Step 4: Right now, `jacobian` is a List[List[Tensor]].</span>
+        <span class="c1"># The outer List corresponds to the number of inputs,</span>
+        <span class="c1"># the inner List corresponds to the number of outputs.</span>
+        <span class="c1"># We need to exchange the order of these and convert to tuples</span>
+        <span class="c1"># before returning.</span>
+        <span class="n">jacobian_output_input</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="o">*</span><span class="n">jacobian_input_output</span><span class="p">))</span>
+
+        <span class="n">jacobian_output_input</span> <span class="o">=</span> <span class="n">_grad_postprocess</span><span class="p">(</span><span class="n">jacobian_output_input</span><span class="p">,</span> <span class="n">create_graph</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">_tuple_postprocess</span><span class="p">(</span><span class="n">jacobian_output_input</span><span class="p">,</span> <span class="p">(</span><span class="n">is_outputs_tuple</span><span class="p">,</span> <span class="n">is_inputs_tuple</span><span class="p">))</span>
+
     <span class="n">jacobian</span><span class="p">:</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">()</span>
     <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">out</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">outputs</span><span class="p">):</span>
 
@@ -848,7 +970,7 @@
     <span class="k">return</span> <span class="n">_tuple_postprocess</span><span class="p">(</span><span class="n">jacobian</span><span class="p">,</span> <span class="p">(</span><span class="n">is_outputs_tuple</span><span class="p">,</span> <span class="n">is_inputs_tuple</span><span class="p">))</span></div>
 
 
-<div class="viewcode-block" id="hessian"><a class="viewcode-back" href="../../../autograd.html#torch.autograd.functional.hessian">[docs]</a><span class="k">def</span> <span class="nf">hessian</span><span class="p">(</span><span class="n">func</span><span class="p">,</span> <span class="n">inputs</span><span class="p">,</span> <span class="n">create_graph</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+<div class="viewcode-block" id="hessian"><a class="viewcode-back" href="../../../autograd.html#torch.autograd.functional.hessian">[docs]</a><span class="k">def</span> <span class="nf">hessian</span><span class="p">(</span><span class="n">func</span><span class="p">,</span> <span class="n">inputs</span><span class="p">,</span> <span class="n">create_graph</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">vectorize</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
     <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Function that computes the Hessian of a given scalar function.</span>
 
 <span class="sd">    Args:</span>
@@ -863,6 +985,13 @@
 <span class="sd">            such that all the outputs are independent of it. If ``False``, we return a Tensor of zeros as the</span>
 <span class="sd">            hessian for said inputs, which is the expected mathematical value.</span>
 <span class="sd">            Defaults to ``False``.</span>
+<span class="sd">        vectorize (bool, optional): This feature is experimental and may have</span>
+<span class="sd">            performance cliffs. When computing the hessian, usually we invoke</span>
+<span class="sd">            ``autograd.grad`` once per row of the hessian. If this flag is</span>
+<span class="sd">            ``True``, we use vmap as the backend to vectorize calls to</span>
+<span class="sd">            ``autograd.grad`` so we only invoke it once instead of once per row.</span>
+<span class="sd">            This should lead to performance improvements in many use cases.</span>
+<span class="sd">            Defaults to ``False``.</span>
 
 <span class="sd">    Returns:</span>
 <span class="sd">        Hessian (Tensor or a tuple of tuple of Tensors): if there is a single input,</span>
@@ -870,7 +999,8 @@
 <span class="sd">        If it is a tuple, then the Hessian will be a tuple of tuples where</span>
 <span class="sd">        ``Hessian[i][j]`` will contain the Hessian of the ``i``\th input</span>
 <span class="sd">        and ``j``\th input with size the sum of the size of the ``i``\th input plus</span>
-<span class="sd">        the size of the ``j``\th input.</span>
+<span class="sd">        the size of the ``j``\th input. ``Hessian[i][j]`` will have the same</span>
+<span class="sd">        dtype and device as the corresponding ``i``\th input.</span>
 
 <span class="sd">    Example:</span>
 
@@ -932,7 +1062,7 @@
         <span class="n">_check_requires_grad</span><span class="p">(</span><span class="n">jac</span><span class="p">,</span> <span class="s2">&quot;jacobian&quot;</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="n">strict</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">jac</span>
 
-    <span class="n">res</span> <span class="o">=</span> <span class="n">jacobian</span><span class="p">(</span><span class="n">jac_func</span><span class="p">,</span> <span class="n">inputs</span><span class="p">,</span> <span class="n">create_graph</span><span class="o">=</span><span class="n">create_graph</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="n">strict</span><span class="p">)</span>
+    <span class="n">res</span> <span class="o">=</span> <span class="n">jacobian</span><span class="p">(</span><span class="n">jac_func</span><span class="p">,</span> <span class="n">inputs</span><span class="p">,</span> <span class="n">create_graph</span><span class="o">=</span><span class="n">create_graph</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="n">strict</span><span class="p">,</span> <span class="n">vectorize</span><span class="o">=</span><span class="n">vectorize</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">_tuple_postprocess</span><span class="p">(</span><span class="n">res</span><span class="p">,</span> <span class="p">(</span><span class="n">is_inputs_tuple</span><span class="p">,</span> <span class="n">is_inputs_tuple</span><span class="p">))</span></div>
 
 
