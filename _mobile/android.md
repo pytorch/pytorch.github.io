@@ -201,9 +201,32 @@ Tensor outputTensor = mModule.forward(IValue.from(inputTensor)).toTensor()
 
 After that, the code processes the output, finding classes with the highest scores.
 
+## More PyTorch Demo Apps
+
+### Image Segmentation
+
+[Image Segmentation](https://github.com/pytorch/android-demo-app/tree/master/ImageSegmentation) demonstrates a Python script that converts the PyTorch [DeepLabV3](https://pytorch.org/hub/pytorch_vision_deeplabv3_resnet101/) model and an Android app that uses the model to segment images.
+
+### Object Detection
+
+[Object Detection](https://github.com/pytorch/android-demo-app/tree/master/ObjectDetection) demonstrates how to convert the popular [YOLOv5](https://pytorch.org/hub/ultralytics_yolov5/) model and use it in an Android app that detects objects from pictures in your photos, taken with camera, or with live camera.
+
+### Neural Machine Translation
+
+[Neural Machine Translation](https://github.com/pytorch/android-demo-app/tree/master/Seq2SeqNMT) demonstrates how to convert a sequence-to-sequence neural machine translation model trained with the code in the [PyTorch NMT tutorial](https://pytorch.org/tutorials/intermediate/seq2seq_translation_tutorial.html) and use the model in an Android app to do French-English translation.
+
+### Question Answering
+
+[Question Answering](https://github.com/pytorch/android-demo-app/tree/master/QuestionAnswering) demonstrates how to convert a powerful transformer QA model and use the model in an Android app to answer questions about PyTorch Mobile and more.
+
+### Vision Transformer
+
+[Vision Transformer](https://github.com/pytorch/android-demo-app/tree/master/ViT4MNIST) demonstrates how to use Facebook's latest Vision Transformer [DeiT](https://github.com/facebookresearch/deit) model to do image classification, and how convert another Vision Transformer model and use it in an Android app to perform handwritten digit recognition.
+
+
 ## Building PyTorch Android from Source
 
-In some cases you might want to use a local build of PyTorch android, for example you may build custom libtorch binary with another set of operators or to make local changes, or try out the latest PyTorch code.
+In some cases you might want to use a local build of PyTorch android, for example you may build custom LibTorch binary with another set of operators or to make local changes, or try out the latest PyTorch code.
 
 For this you can use `./scripts/build_pytorch_android.sh` script.
 ```
@@ -244,7 +267,7 @@ android/pytorch_android_torchvision/build/outputs/aar/pytorch_android_torchvisio
 
 ## Using the PyTorch Android Libraries Built from Source or Nightly
 
-First add the two aar files built above, or downloaded from the nightly built PyTorch Android repos at [here](https://oss.sonatype.org/#nexus-search;quick~pytorch_android) and [here](https://oss.sonatype.org/#nexus-search;quick~torchvision_android), to the Android project's `lib` folder, then add in the project's `build.gradle` file:
+First add the two aar files built above, or downloaded from the nightly built PyTorch Android repos at [here](https://oss.sonatype.org/#nexus-search;quick~pytorch_android) and [here](https://oss.sonatype.org/#nexus-search;quick~torchvision_android), to the Android project's `lib` folder, then add in the project's app `build.gradle` file:
 ```
 allprojects {
     repositories {
@@ -272,6 +295,25 @@ dependencies {
 
 Also we have to add all transitive dependencies of our aars. As `pytorch_android` depends on `com.android.support:appcompat-v7:28.0.0` or `androidx.appcompat:appcompat:1.2.0`, we need to one of them. (In case of using maven dependencies they are added automatically from `pom.xml`).
 
+## Using the Nightly PyTorch Android Libraries
+
+Other than using the aar files built from source or downloaded from the links in the previous section, you can also use the nightly built Android PyTorch and TorchVision libraries by adding in your app `build.gradle` file the maven url and the nightly libraries implementation as follows:
+
+```
+repositories {
+    maven {
+        url "https://oss.sonatype.org/content/repositories/snapshots"
+    }
+}
+
+dependencies {
+    ...
+    implementation 'org.pytorch:pytorch_android:1.8.0-SNAPSHOT'
+    implementation 'org.pytorch:pytorch_android_torchvision:1.8.0-SNAPSHOT'
+}
+```
+
+This is the easiest way to try out the latest PyTorch code and the Android libraries, if you do not need to make any local changes. But be aware you may need to build the model used on mobile in the latest PyTorch - using either the latest PyTorch code or a quick nightly install with commands like `pip install --pre torch torchvision -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html` - to avoid possible model version mismatch errors when running the model on mobile.
 
 ## Custom Build
 

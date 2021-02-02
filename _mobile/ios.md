@@ -144,7 +144,29 @@ let sortedResults = zippedResults.sorted { $0.1.floatValue > $1.1.floatValue }.p
 
 ## PyTorch Demo App
 
-For more complex use cases, we recommend to check out the [PyTorch demo application](https://github.com/pytorch/ios-demo-app). The demo app contains two showcases. A camera app that runs a quantized model to predict the images coming from device’s rear-facing camera in real time. And a text-based app that uses a text classififcation model to predict the topic from the input string.
+For more complex use cases, we recommend to check out the [PyTorch demo application](https://github.com/pytorch/ios-demo-app). The demo app contains two showcases. A camera app that runs a quantized model to predict the images coming from device’s rear-facing camera in real time. And a text-based app that uses a text classification model to predict the topic from the input string.
+
+## More PyTorch Demo Apps
+
+### Image Segmentation
+
+[Image Segmentation](https://github.com/pytorch/ios-demo-app/tree/master/ImageSegmentation) demonstrates a Python script that converts the PyTorch [DeepLabV3](https://pytorch.org/hub/pytorch_vision_deeplabv3_resnet101/) model for mobile apps to use and an iOS app that uses the model to segment images.
+
+### Object Detection
+
+[Object Detection](https://github.com/pytorch/ios-demo-app/tree/master/ObjectDetection) demonstrates how to convert the popular [YOLOv5](https://pytorch.org/hub/ultralytics_yolov5/) model and use it on an iOS app that detects objects from pictures in your photos, taken with camera, or with live camera.
+
+### Neural Machine Translation
+
+[Neural Machine Translation](https://github.com/pytorch/ios-demo-app/tree/master/Seq2SeqNMT) demonstrates how to convert a sequence-to-sequence neural machine translation model trained with the code in the [PyTorch NMT tutorial](https://pytorch.org/tutorials/intermediate/seq2seq_translation_tutorial.html) and use the model in an iOS app to do French-English translation.
+
+### Question Answering
+
+[Question Answering](https://github.com/pytorch/ios-demo-app/tree/master/QuestionAnswering) demonstrates how to convert a powerful transformer QA model and use the model in an iOS app to answer questions about PyTorch Mobile and more.
+
+### Vision Transformer
+
+[Vision Transformer](https://github.com/pytorch/ios-demo-app/tree/master/ViT4MNIST) demonstrates how to use Facebook's latest Vision Transformer [DeiT](https://github.com/facebookresearch/deit) model to do image classification, and how convert another Vision Transformer model and use it in an iOS app to perform handwritten digit recognition.
 
 ## Build PyTorch iOS Libraries from Source
 
