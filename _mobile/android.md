@@ -201,7 +201,7 @@ Tensor outputTensor = mModule.forward(IValue.from(inputTensor)).toTensor()
 
 After that, the code processes the output, finding classes with the highest scores.
 
-## More PyTorch Demo Apps
+## More PyTorch Android Demo Apps
 
 ### Image Segmentation
 
@@ -223,6 +223,35 @@ After that, the code processes the output, finding classes with the highest scor
 
 [Vision Transformer](https://github.com/pytorch/android-demo-app/tree/master/ViT4MNIST) demonstrates how to use Facebook's latest Vision Transformer [DeiT](https://github.com/facebookresearch/deit) model to do image classification, and how convert another Vision Transformer model and use it in an Android app to perform handwritten digit recognition.
 
+## PyTorch Android Tutorial and Recipes
+
+### [Image Segmentation DeepLabV3 on Android](https://pytorch.org/tutorials/beginner/deeplabv3_on_android.html)
+
+A comprehensive step-by-step tutorial on how to prepare and run the PyTorch DeepLabV3 image segmentation model on Android.
+
+### [PyTorch Mobile Performance Recipes](https://pytorch.org/tutorials/recipes/mobile_perf.html)
+
+List of recipes for performance optimizations for using PyTorch on Mobile.
+
+### [Making Android Native Application That Uses PyTorch Android Prebuilt Libraries](https://pytorch.org/tutorials/recipes/android_native_app_with_custom_op.html)
+
+Learn how to make Android application from the scratch that uses LibTorch C++ API and uses TorchScript model with custom C++ operator.
+
+### [Fuse Modules recipe](https://pytorch.org/tutorials/recipes/fuse.html)
+
+Learn how to fuse a list of PyTorch modules into a single module to reduce the model size before quantization.
+
+### [Quantization for Mobile Recipe](https://pytorch.org/tutorials/recipes/quantization.html)
+
+Learn how to reduce the model size and make it run faster without losing much on accuracy.
+
+### [Script and Optimize for Mobile](https://pytorch.org/tutorials/recipes/script_optimized.html)
+
+Learn how to convert the model to TorchScipt and (optional) optimize it for mobile apps.
+
+### [Model Preparation for Android Recipe](https://pytorch.org/tutorials/recipes/model_preparation_android.html)
+
+Learn how to add the model in an Android project and use the PyTorch library for Android.
 
 ## Building PyTorch Android from Source
 
