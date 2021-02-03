@@ -188,7 +188,7 @@
               
               
                 <div class="version">
-                  <a href='http://pytorch.org/docs/versions.html'>1.8.0a0+d8fdfb6 &#x25BC</a>
+                  <a href='http://pytorch.org/docs/versions.html'>1.8.0a0+4b6fea9 &#x25BC</a>
                 </div>
               
             
@@ -449,18 +449,233 @@ which is an <code class="docutils literal notranslate"><span class="pre">nn.Modu
 <code class="docutils literal notranslate"><span class="pre">forward</span></code> method generated from the Graph.</p>
 <p>Taken together, this pipeline of components (symbolic tracing →
 intermediate representation → transforms → Python code generation)
-constitutes the Python-to-Python transformation pipeline of FX.</p>
+constitutes the Python-to-Python transformation pipeline of FX. In
+addition, these components can be used separately. For example,
+symbolic tracing can be used in isolation to capture a form of
+the code for analysis (and not transformation) purposes. Code
+generation can be used for programmatically generating models, for
+example from a config file. There are many uses for FX!</p>
 </div>
 <div class="section" id="writing-transformations">
-<h2>Writing Transformations<a class="headerlink" href="#writing-transformations" title="Permalink to this headline">¶</a></h2>
+<span id="id1"></span><h2>Writing Transformations<a class="headerlink" href="#writing-transformations" title="Permalink to this headline">¶</a></h2>
 <p>TODO</p>
 </div>
-<div class="section" id="debugging-transformations">
-<h2>Debugging Transformations<a class="headerlink" href="#debugging-transformations" title="Permalink to this headline">¶</a></h2>
-<p>TODO</p>
+<div class="section" id="debugging">
+<h2>Debugging<a class="headerlink" href="#debugging" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="introduction">
+<h3>Introduction<a class="headerlink" href="#introduction" title="Permalink to this headline">¶</a></h3>
+<p>After symbolically tracing an <code class="docutils literal notranslate"><span class="pre">nn.Module</span></code> and performing some number
+of transformations on the resulting GraphModule, we’ll want to verify
+that the proper semantics were preserved after those transforms. If they
+weren’t, we may need to do some debugging. The key is to work
+backwards: first, check the results of the generated module, then debug
+the generated code, then debug the process of transformations that lead
+to the generated code.</p>
+<p>If you’re not familiar with debuggers, please see the auxiliary section
+<a class="reference internal" href="#available-debuggers"><span class="std std-ref">Available Debuggers</span></a>.</p>
+</div>
+<div class="section" id="debugging-the-generated-code">
+<h3>Debugging the Generated Code<a class="headerlink" href="#debugging-the-generated-code" title="Permalink to this headline">¶</a></h3>
+<p>Because FX generates the <code class="docutils literal notranslate"><span class="pre">forward()</span></code> function on GraphModules, using
+traditional debugging techniques like <code class="docutils literal notranslate"><span class="pre">print</span></code> statements or <code class="docutils literal notranslate"><span class="pre">pdb</span></code> is
+not as straightfoward. Luckily, we have several techniques we can use
+for debugging the generated code.</p>
+<div class="section" id="use-pdb">
+<h4>Use <code class="docutils literal notranslate"><span class="pre">pdb</span></code><a class="headerlink" href="#use-pdb" title="Permalink to this headline">¶</a></h4>
+<p>Invoke <code class="docutils literal notranslate"><span class="pre">pdb</span></code> to step into the running program. Although the code that
+represents the FX graph is not in any source file, we can still step
+into it manually using <code class="docutils literal notranslate"><span class="pre">pdb</span></code> when the forward pass is invoked.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="k">def</span> <span class="nf">my_pass</span><span class="p">(</span><span class="ow">in</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">:</span>
+    <span class="n">traced</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">fx</span><span class="o">.</span><span class="n">symbolic_trace</span><span class="p">(</span><span class="ow">in</span><span class="p">)</span>
+    <span class="c1"># Transformation logic here</span>
+    <span class="k">return</span> <span class="n">traced</span>
+
+<span class="c1"># When this line is executed at runtime, we will be dropped into an</span>
+<span class="c1"># interactive `pdb` prompt. We can use the `step` or `s` command to</span>
+<span class="c1"># step into the execution of the next line</span>
+<span class="kn">import</span> <span class="nn">pdb</span><span class="p">;</span> <span class="n">pdb</span><span class="o">.</span><span class="n">set_trace</span><span class="p">()</span>
+
+<span class="n">my_pass</span><span class="p">(</span><span class="n">my_module</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="print-the-generated-code">
+<span id="id2"></span><h4>Print the Generated Code<a class="headerlink" href="#print-the-generated-code" title="Permalink to this headline">¶</a></h4>
+<p>If you’d like to run the same code multiple times, then it can be
+a bit tedious to step to the right code with <code class="docutils literal notranslate"><span class="pre">pdb</span></code>. In that case, one
+approach is to simply copy-paste the generated <code class="docutils literal notranslate"><span class="pre">forward</span></code> pass into
+your code and examine it from there.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="c1"># Assume that `traced` is a GraphModule that has undergone some</span>
+<span class="c1"># number of transforms</span>
+
+<span class="c1"># Print the code generated from symbolic tracing. This outputs:</span>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">def forward(self, y):</span>
+<span class="sd">    x = self.x</span>
+<span class="sd">    add_1 = x + y;  x = y = None</span>
+<span class="sd">    return add_1</span>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="c1"># Copy this code for later</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">traced</span><span class="p">)</span>
+
+<span class="c1"># Subclass the original Module</span>
+<span class="k">class</span> <span class="nc">SubclassM</span><span class="p">(</span><span class="n">M</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+
+    <span class="c1"># Paste the generated `forward` function (the one we printed and</span>
+    <span class="c1"># copied on line 22) here</span>
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">y</span><span class="p">):</span>
+        <span class="n">x</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">x</span>
+        <span class="n">add_1</span> <span class="o">=</span> <span class="n">x</span> <span class="o">+</span> <span class="n">y</span><span class="p">;</span>  <span class="n">x</span> <span class="o">=</span> <span class="n">y</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">return</span> <span class="n">add_1</span>
+
+<span class="c1"># Create an instance of the original, untraced Module. Then, create an</span>
+<span class="c1"># instance of the Module with the copied `forward` function. We can</span>
+<span class="c1"># now compare the output of both the original and the traced version.</span>
+<span class="n">pre_trace</span> <span class="o">=</span> <span class="n">M</span><span class="p">()</span>
+<span class="n">post_trace</span> <span class="o">=</span> <span class="n">SubclassM</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="use-the-to-folder-function-from-graphmodule">
+<h4>Use the <code class="docutils literal notranslate"><span class="pre">to_folder</span></code> Function From <code class="docutils literal notranslate"><span class="pre">GraphModule</span></code><a class="headerlink" href="#use-the-to-folder-function-from-graphmodule" title="Permalink to this headline">¶</a></h4>
+<p><a class="reference internal" href="#torch.fx.GraphModule.to_folder" title="torch.fx.GraphModule.to_folder"><code class="xref py py-meth docutils literal notranslate"><span class="pre">GraphModule.to_folder()</span></code></a> is a method in <code class="docutils literal notranslate"><span class="pre">GraphModule</span></code> that allows
+you to dump out the generated FX code to a folder. Although copying the
+forward pass into the code often suffices as in <a class="reference internal" href="#print-the-generated-code"><span class="std std-ref">Print the Generated Code</span></a>,
+it may be easier to examine modules and parameters using <code class="docutils literal notranslate"><span class="pre">to_folder</span></code>.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">m</span> <span class="o">=</span> <span class="n">symbolic_trace</span><span class="p">(</span><span class="n">M</span><span class="p">())</span>
+<span class="n">m</span><span class="o">.</span><span class="n">to_folder</span><span class="p">(</span><span class="s2">&quot;foo&quot;</span><span class="p">,</span> <span class="s2">&quot;Bar&quot;</span><span class="p">)</span>
+<span class="kn">from</span> <span class="nn">foo</span> <span class="kn">import</span> <span class="n">Bar</span>
+<span class="n">y</span> <span class="o">=</span> <span class="n">Bar</span><span class="p">()</span>
+</pre></div>
+</div>
+<p>After running the above example, we can then look at the code within
+<code class="docutils literal notranslate"><span class="pre">foo/module.py</span></code> and modify it as desired (e.g. adding <code class="docutils literal notranslate"><span class="pre">print</span></code>
+statements or using <code class="docutils literal notranslate"><span class="pre">pdb</span></code>) to debug the generated code.</p>
+</div>
+</div>
+<div class="section" id="debugging-the-transformation">
+<h3>Debugging the Transformation<a class="headerlink" href="#debugging-the-transformation" title="Permalink to this headline">¶</a></h3>
+<p>Now that we’ve identified that a transformation is creating incorrect
+code, it’s time to debug the transformation itself. First, we’ll check
+the <a class="reference internal" href="#limitations-of-symbolic-tracing"><span class="std std-ref">Limitations of Symbolic Tracing</span></a> section in the documentation.
+Once we verify that <code class="docutils literal notranslate"><span class="pre">symbolic_trace</span></code> is working as expected, the goal
+becomes figuring out what went wrong during our <code class="docutils literal notranslate"><span class="pre">GraphModule</span></code>
+transformation. There may be a quick answer in
+<a class="reference internal" href="#writing-transformations"><span class="std std-ref">Writing Transformations</span></a>, but, if not, there are several ways to
+examine our traced module:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="c1"># Sample Module</span>
+<span class="k">class</span> <span class="nc">M</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">x</span> <span class="o">+</span> <span class="n">y</span>
+
+<span class="c1"># Create an instance of `M`</span>
+<span class="n">m</span> <span class="o">=</span> <span class="n">M</span><span class="p">()</span>
+
+<span class="c1"># Symbolically trace an instance of `M` (returns a GraphModule). In</span>
+<span class="c1"># this example, we&#39;ll only be discussing how to inspect a</span>
+<span class="c1"># GraphModule, so we aren&#39;t showing any sample transforms for the</span>
+<span class="c1"># sake of brevity.</span>
+<span class="n">traced</span> <span class="o">=</span> <span class="n">symbolic_trace</span><span class="p">(</span><span class="n">m</span><span class="p">)</span>
+
+<span class="c1"># Print the code produced by tracing the module. The generated `forward`</span>
+<span class="c1"># function is:</span>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">def forward(self, x, y):</span>
+<span class="sd">    add_1 = x + y;  x = y = None</span>
+<span class="sd">    return add_1</span>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">traced</span><span class="p">)</span>
+
+<span class="c1"># Print the internal Graph. This representation returns:</span>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">graph(x, y):</span>
+<span class="sd">    %add_1 : [#users=1] = call_function[target=&lt;built-in function add&gt;](args = (%x, %y), kwargs = {})</span>
+<span class="sd">    return add_1</span>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">traced</span><span class="o">.</span><span class="n">graph</span><span class="p">)</span>
+
+<span class="c1"># Print a tabular representation of the internal Graph. This gives us:</span>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">opcode         name    target                   args      kwargs</span>
+<span class="sd">-------------  ------  -----------------------  --------  --------</span>
+<span class="sd">placeholder    x       x                        ()        {}</span>
+<span class="sd">placeholder    y       y                        ()        {}</span>
+<span class="sd">call_function  add_1   &lt;built-in function add&gt;  (x, y)    {}</span>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="n">traced</span><span class="o">.</span><span class="n">graph</span><span class="o">.</span><span class="n">print_tabular</span><span class="p">()</span>
+</pre></div>
+</div>
+<p>Using the utility functions above, we can compare our traced Module
+before and after we’ve apply our transformations. Sometimes, a
+simple visual comparison is enough to trace down a bug. If it’s still
+not clear what’s going wrong, a debugger like <code class="docutils literal notranslate"><span class="pre">pdb</span></code> can be a good
+next step.</p>
+<p>Going off of the example above, consider the following code:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="c1"># Sample user-defined function</span>
+<span class="k">def</span> <span class="nf">transform_graph</span><span class="p">(</span><span class="n">gm</span><span class="p">:</span> <span class="n">GraphModule</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+
+    <span class="c1"># Get the Graph from our traced Module</span>
+    <span class="n">g</span> <span class="o">=</span> <span class="n">gm</span><span class="o">.</span><span class="n">graph</span>
+
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Transformations on `g` go here</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="c1"># Recompile the GraphModule. This must be called after editing</span>
+    <span class="c1"># the Graph `g`, otherwise the generated code will still reflect</span>
+    <span class="c1"># the old Graph before any transforms</span>
+    <span class="n">gm</span><span class="o">.</span><span class="n">recompile</span><span class="p">()</span>
+
+<span class="c1"># Transform the Graph</span>
+<span class="n">transform_graph</span><span class="p">(</span><span class="n">traced</span><span class="p">)</span>
+
+<span class="c1"># Print the new code after our transforms. Check to see if it was</span>
+<span class="c1"># what we expected</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">traced</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Using the above example, let’s say that the call to <code class="docutils literal notranslate"><span class="pre">print(traced)</span></code>
+showed us that there was an error in our transforms. We want to find
+what goes wrong using a debugger. We start a <code class="docutils literal notranslate"><span class="pre">pdb</span></code> session. We can see
+what’s happening during the transform by breaking on
+<code class="docutils literal notranslate"><span class="pre">transform_graph(traced)</span></code>, then pressing <code class="docutils literal notranslate"><span class="pre">s</span></code> to “step into” the call
+to <code class="docutils literal notranslate"><span class="pre">transform_graph(traced)</span></code>.</p>
+<p>We may also have good luck by editing the <code class="docutils literal notranslate"><span class="pre">print_tabular</span></code> method to print
+different attributes of the Nodes in the Graph. (For example, we might
+want to see the Node’s <code class="docutils literal notranslate"><span class="pre">input_nodes</span></code> and <code class="docutils literal notranslate"><span class="pre">users</span></code>.)</p>
+</div>
+<div class="section" id="available-debuggers">
+<span id="id3"></span><h3>Available Debuggers<a class="headerlink" href="#available-debuggers" title="Permalink to this headline">¶</a></h3>
+<p>The most common Python debugger is
+<a class="reference external" href="https://docs.python.org/3/library/pdb.html">pdb</a>. You can start
+your program in “debug mode” with <code class="docutils literal notranslate"><span class="pre">pdb</span></code> by typing
+<code class="docutils literal notranslate"><span class="pre">python</span> <span class="pre">-m</span> <span class="pre">pdb</span> <span class="pre">FILENAME.py</span></code> into the command line, where <code class="docutils literal notranslate"><span class="pre">FILENAME</span></code>
+is the name of the file you want to debug. After that, you can use the
+<code class="docutils literal notranslate"><span class="pre">pdb</span></code> <a class="reference external" href="https://docs.python.org/3/library/pdb.html#debugger-commands">debugger commands</a>
+to move through your running program stepwise. It’s common to set a
+breakpoint (<code class="docutils literal notranslate"><span class="pre">b</span> <span class="pre">LINE-NUMBER</span></code>) when you start <code class="docutils literal notranslate"><span class="pre">pdb</span></code>, then call <code class="docutils literal notranslate"><span class="pre">c</span></code> to
+run the program until that point. This prevents you from having to step
+through each line of execution (using <code class="docutils literal notranslate"><span class="pre">s</span></code> or <code class="docutils literal notranslate"><span class="pre">n</span></code>) to get to the part
+of the code you want to examine. Alternatively, you can write
+<code class="docutils literal notranslate"><span class="pre">import</span> <span class="pre">pdb;</span> <span class="pre">pdb.set_trace()</span></code> before the line you want to break at.
+If you add <code class="docutils literal notranslate"><span class="pre">pdb.set_trace()</span></code>, your program will automatically start
+in debug mode when you run it. (In other words, you can just type
+<code class="docutils literal notranslate"><span class="pre">python</span> <span class="pre">FILENAME.py</span></code> into the command line instead of
+<code class="docutils literal notranslate"><span class="pre">python</span> <span class="pre">-m</span> <span class="pre">pdb</span> <span class="pre">FILENAME.py</span></code>.) Once you’re running your file in
+debug mode, you can step through the code and examine your program’s
+internal state using certain commands. There are many excellent
+tutorials on <code class="docutils literal notranslate"><span class="pre">pdb</span></code> online, including RealPython’s
+<a class="reference external" href="https://realpython.com/python-debugging-pdb/">“Python Debugging With Pdb”</a>.</p>
+<p>IDEs like PyCharm or VSCode usually have a debugger built in. In your
+IDE, you can choose to either a) use <code class="docutils literal notranslate"><span class="pre">pdb</span></code> by pulling up a terminal
+window in your IDE (e.g. View → Terminal in VSCode), or b) use the
+built-in debugger (usually a graphical wrapper around <code class="docutils literal notranslate"><span class="pre">pdb</span></code>).</p>
+</div>
 </div>
 <div class="section" id="limitations-of-symbolic-tracing">
-<h2>Limitations of Symbolic Tracing<a class="headerlink" href="#limitations-of-symbolic-tracing" title="Permalink to this headline">¶</a></h2>
+<span id="id4"></span><h2>Limitations of Symbolic Tracing<a class="headerlink" href="#limitations-of-symbolic-tracing" title="Permalink to this headline">¶</a></h2>
 <p>FX uses a system of <strong>symbolic tracing</strong> (a.k.a <a class="reference external" href="https://en.wikipedia.org/wiki/Symbolic_execution">symbolic
 execution</a>)
 to capture the semantics of programs in a transformable/analyzable form.
@@ -1901,6 +2116,101 @@ details on semantics</p></li>
 
 </dd></dl>
 
+<dl class="function">
+<dt id="torch.fx.replace_pattern">
+<code class="sig-prename descclassname">torch.fx.</code><code class="sig-name descname">replace_pattern</code><span class="sig-paren">(</span><em class="sig-param">gm</em>, <em class="sig-param">pattern</em>, <em class="sig-param">replacement</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/torch/fx/subgraph_rewriter.html#replace_pattern"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#torch.fx.replace_pattern" title="Permalink to this definition">¶</a></dt>
+<dd><p>Matches all possible non-overlapping sets of operators and their
+data dependencies (<code class="docutils literal notranslate"><span class="pre">pattern</span></code>) in the Graph of a GraphModule
+(<code class="docutils literal notranslate"><span class="pre">gm</span></code>), then replaces each of these matched subgraphs with another
+subgraph (<code class="docutils literal notranslate"><span class="pre">replacement</span></code>).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>gm</strong> – The GraphModule that wraps the Graph to operate on</p></li>
+<li><p><strong>pattern</strong> – The subgraph to match in <code class="docutils literal notranslate"><span class="pre">gm</span></code> for replacement</p></li>
+<li><p><strong>replacement</strong> – The subgraph to replace <code class="docutils literal notranslate"><span class="pre">pattern</span></code> with</p></li>
+</ul>
+</dd>
+</dl>
+<p>Examples:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">from</span> <span class="nn">torch.fx</span> <span class="kn">import</span> <span class="n">symbolic_trace</span><span class="p">,</span> <span class="n">subgraph_rewriter</span>
+
+<span class="k">class</span> <span class="nc">M</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">w1</span><span class="p">,</span> <span class="n">w2</span><span class="p">):</span>
+        <span class="n">m1</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">w1</span><span class="p">,</span> <span class="n">w2</span><span class="p">])</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
+        <span class="n">m2</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">w1</span><span class="p">,</span> <span class="n">w2</span><span class="p">])</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">x</span> <span class="o">+</span> <span class="n">torch</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">m1</span><span class="p">)</span> <span class="o">+</span> <span class="n">torch</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">m2</span><span class="p">)</span>
+
+<span class="k">def</span> <span class="nf">pattern</span><span class="p">(</span><span class="n">w1</span><span class="p">,</span> <span class="n">w2</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">w1</span><span class="p">,</span> <span class="n">w2</span><span class="p">])</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
+
+<span class="k">def</span> <span class="nf">replacement</span><span class="p">(</span><span class="n">w1</span><span class="p">,</span> <span class="n">w2</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">([</span><span class="n">w1</span><span class="p">,</span> <span class="n">w2</span><span class="p">])</span>
+
+<span class="n">traced_module</span> <span class="o">=</span> <span class="n">symbolic_trace</span><span class="p">(</span><span class="n">M</span><span class="p">())</span>
+
+<span class="n">subgraph_rewriter</span><span class="o">.</span><span class="n">replace_pattern</span><span class="p">(</span><span class="n">traced_module</span><span class="p">,</span> <span class="n">pattern</span><span class="p">,</span> <span class="n">replacement</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>The above code will first match <code class="docutils literal notranslate"><span class="pre">pattern</span></code> in the <code class="docutils literal notranslate"><span class="pre">forward</span></code>
+method of <code class="docutils literal notranslate"><span class="pre">traced_module</span></code>. Pattern-matching is done based on
+use-def relationships, not node names. For example, if you had
+<code class="docutils literal notranslate"><span class="pre">p</span> <span class="pre">=</span> <span class="pre">torch.cat([a,</span> <span class="pre">b])</span></code> in <code class="docutils literal notranslate"><span class="pre">pattern</span></code>, you could match
+<code class="docutils literal notranslate"><span class="pre">m</span> <span class="pre">=</span> <span class="pre">torch.cat([a,</span> <span class="pre">b])</span></code> in the original <code class="docutils literal notranslate"><span class="pre">forward</span></code> function,
+despite the variable names being different (<code class="docutils literal notranslate"><span class="pre">p</span></code> vs <code class="docutils literal notranslate"><span class="pre">m</span></code>).</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">return</span></code> statement in <code class="docutils literal notranslate"><span class="pre">pattern</span></code> is matched based on its
+value only; it may or may not match to the <code class="docutils literal notranslate"><span class="pre">return</span></code> statement in
+the larger graph. In other words, the pattern doesn’t have to extend
+to the end of the larger graph.</p>
+<p>When the pattern is matched, it will be removed from the larger
+function and replaced by <code class="docutils literal notranslate"><span class="pre">replacement</span></code>. If there are multiple
+matches for <code class="docutils literal notranslate"><span class="pre">pattern</span></code> in the larger function, each non-overlapping
+match will be replaced. In the case of a match overlap, the first
+found match in the set of overlapping matches will be replaced.
+(“First” here being defined as the first in a topological ordering
+of the Nodes’ use-def relationships. In most cases, the first Node
+is the parameter that appears directly after <code class="docutils literal notranslate"><span class="pre">self</span></code>, while the
+last Node is whatever the function returns.)</p>
+<p>One important thing to note is that the parameters of the
+<code class="docutils literal notranslate"><span class="pre">pattern</span></code> Callable must be used in the Callable itself,
+and the parameters of the <code class="docutils literal notranslate"><span class="pre">replacement</span></code> Callable must match
+the pattern. The first rule is why, in the above code block, the
+<code class="docutils literal notranslate"><span class="pre">forward</span></code> function has parameters <code class="docutils literal notranslate"><span class="pre">x,</span> <span class="pre">w1,</span> <span class="pre">w2</span></code>, but the
+<code class="docutils literal notranslate"><span class="pre">pattern</span></code> function only has parameters <code class="docutils literal notranslate"><span class="pre">w1,</span> <span class="pre">w2</span></code>. <code class="docutils literal notranslate"><span class="pre">pattern</span></code>
+doesn’t use <code class="docutils literal notranslate"><span class="pre">x</span></code>, so it shouldn’t specify <code class="docutils literal notranslate"><span class="pre">x</span></code> as a parameter.
+As an example of the second rule, consider replacing</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span> <span class="nf">pattern</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">neg</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="o">+</span> <span class="n">torch</span><span class="o">.</span><span class="n">relu</span><span class="p">(</span><span class="n">y</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>with</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span> <span class="nf">replacement</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">relu</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>In this case, <code class="docutils literal notranslate"><span class="pre">replacement</span></code> needs the same number of parameters
+as <code class="docutils literal notranslate"><span class="pre">pattern</span></code> (both <code class="docutils literal notranslate"><span class="pre">x</span></code> and <code class="docutils literal notranslate"><span class="pre">y</span></code>), even though the parameter
+<code class="docutils literal notranslate"><span class="pre">y</span></code> isn’t used in <code class="docutils literal notranslate"><span class="pre">replacement</span></code>.</p>
+<p>After calling <code class="docutils literal notranslate"><span class="pre">subgraph_rewriter.replace_pattern</span></code>, the generated
+Python code looks like this:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">w1</span><span class="p">,</span> <span class="n">w2</span><span class="p">):</span>
+    <span class="n">stack_1</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">([</span><span class="n">w1</span><span class="p">,</span> <span class="n">w2</span><span class="p">])</span>
+    <span class="n">sum_1</span> <span class="o">=</span> <span class="n">stack_1</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
+    <span class="n">stack_2</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">([</span><span class="n">w1</span><span class="p">,</span> <span class="n">w2</span><span class="p">])</span>
+    <span class="n">sum_2</span> <span class="o">=</span> <span class="n">stack_2</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
+    <span class="n">max_1</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">sum_1</span><span class="p">)</span>
+    <span class="n">add_1</span> <span class="o">=</span> <span class="n">x</span> <span class="o">+</span> <span class="n">max_1</span>
+    <span class="n">max_2</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">sum_2</span><span class="p">)</span>
+    <span class="n">add_2</span> <span class="o">=</span> <span class="n">add_1</span> <span class="o">+</span> <span class="n">max_2</span>
+    <span class="k">return</span> <span class="n">add_2</span>
+</pre></div>
+</div>
+</dd></dl>
+
 </div>
 </div>
 
@@ -1950,7 +2260,18 @@ details on semantics</p></li>
 <li><a class="reference internal" href="#">torch.fx</a><ul>
 <li><a class="reference internal" href="#module-torch.fx">Overview</a></li>
 <li><a class="reference internal" href="#writing-transformations">Writing Transformations</a></li>
-<li><a class="reference internal" href="#debugging-transformations">Debugging Transformations</a></li>
+<li><a class="reference internal" href="#debugging">Debugging</a><ul>
+<li><a class="reference internal" href="#introduction">Introduction</a></li>
+<li><a class="reference internal" href="#debugging-the-generated-code">Debugging the Generated Code</a><ul>
+<li><a class="reference internal" href="#use-pdb">Use <code class="docutils literal notranslate"><span class="pre">pdb</span></code></a></li>
+<li><a class="reference internal" href="#print-the-generated-code">Print the Generated Code</a></li>
+<li><a class="reference internal" href="#use-the-to-folder-function-from-graphmodule">Use the <code class="docutils literal notranslate"><span class="pre">to_folder</span></code> Function From <code class="docutils literal notranslate"><span class="pre">GraphModule</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#debugging-the-transformation">Debugging the Transformation</a></li>
+<li><a class="reference internal" href="#available-debuggers">Available Debuggers</a></li>
+</ul>
+</li>
 <li><a class="reference internal" href="#limitations-of-symbolic-tracing">Limitations of Symbolic Tracing</a><ul>
 <li><a class="reference internal" href="#dynamic-control-flow">Dynamic Control Flow</a><ul>
 <li><a class="reference internal" href="#static-control-flow">Static Control Flow</a></li>
