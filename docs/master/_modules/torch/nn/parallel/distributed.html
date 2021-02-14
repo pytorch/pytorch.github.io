@@ -187,7 +187,7 @@
               
               
                 <div class="version">
-                  <a href='http://pytorch.org/docs/versions.html'>1.9.0a0+08bda18 &#x25BC</a>
+                  <a href='http://pytorch.org/docs/versions.html'>1.9.0a0+6c8fea9 &#x25BC</a>
                 </div>
               
             
@@ -405,6 +405,7 @@
 <span class="kn">from</span> <span class="nn">.scatter_gather</span> <span class="kn">import</span> <span class="n">scatter_kwargs</span><span class="p">,</span> <span class="n">gather</span><span class="p">,</span> <span class="n">is_namedtuple</span>
 <span class="kn">from</span> <span class="nn">.parallel_apply</span> <span class="kn">import</span> <span class="n">parallel_apply</span>
 <span class="kn">from</span> <span class="nn">torch._utils</span> <span class="kn">import</span> <span class="n">_get_device_index</span><span class="p">,</span> <span class="n">_get_all_device_indices</span>
+<span class="kn">from</span> <span class="nn">._functions</span> <span class="kn">import</span> <span class="n">_get_stream</span>
 
 
 <span class="k">def</span> <span class="nf">_find_tensors</span><span class="p">(</span><span class="n">obj</span><span class="p">):</span>
@@ -819,6 +820,8 @@
 
         <span class="c1"># reduction bucket size</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">bucket_bytes_cap</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">bucket_cap_mb</span> <span class="o">*</span> <span class="mi">1024</span> <span class="o">*</span> <span class="mi">1024</span><span class="p">)</span>
+        <span class="c1"># Whether to perform input tensor CPU to GPU copies on a side-stream</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">use_side_stream_for_tensor_copies</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;PYTORCH_DDP_USE_SIDE_STREAM&quot;</span><span class="p">,</span> <span class="s2">&quot;1&quot;</span><span class="p">)</span> <span class="o">==</span> <span class="s2">&quot;1&quot;</span>
 
         <span class="c1"># Sync params and buffers</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_sync_params_and_buffers</span><span class="p">(</span><span class="n">authoritative_rank</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
@@ -1115,7 +1118,23 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">def</span> <span class="nf">to_map</span><span class="p">(</span><span class="n">obj</span><span class="p">):</span>
             <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
-                <span class="k">return</span> <span class="p">(</span><span class="n">obj</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">target_gpu</span><span class="p">),</span> <span class="p">)</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">use_side_stream_for_tensor_copies</span><span class="p">:</span>
+                    <span class="k">return</span> <span class="p">(</span><span class="n">obj</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">target_gpu</span><span class="p">),</span> <span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="c1"># Perform CPU -&gt; GPU copies in a background stream. This code is</span>
+                    <span class="c1"># motivated from similar logic in torch/nn/parallel/_functions.py</span>
+                    <span class="n">stream</span> <span class="o">=</span> <span class="n">_get_stream</span><span class="p">(</span><span class="n">target_gpu</span><span class="p">)</span>
+                    <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">stream</span><span class="p">(</span><span class="n">stream</span><span class="p">):</span>
+                        <span class="n">output</span> <span class="o">=</span> <span class="n">obj</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">target_gpu</span><span class="p">)</span>
+                    <span class="c1"># synchronize with the copy stream</span>
+                    <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="n">target_gpu</span><span class="p">):</span>
+                        <span class="n">current_stream</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">current_stream</span><span class="p">()</span>
+                        <span class="c1"># Sync the current stream with the copy stream</span>
+                        <span class="n">current_stream</span><span class="o">.</span><span class="n">wait_stream</span><span class="p">(</span><span class="n">stream</span><span class="p">)</span>
+                        <span class="c1"># Ensure tensor memory is not reused until work on</span>
+                        <span class="c1"># main stream is complete</span>
+                        <span class="n">output</span><span class="o">.</span><span class="n">record_stream</span><span class="p">(</span><span class="n">current_stream</span><span class="p">)</span>
+                    <span class="k">return</span> <span class="p">(</span><span class="n">output</span><span class="p">,</span> <span class="p">)</span>
             <span class="k">if</span> <span class="n">is_namedtuple</span><span class="p">(</span><span class="n">obj</span><span class="p">):</span>
                 <span class="k">return</span> <span class="p">[</span><span class="nb">type</span><span class="p">(</span><span class="n">obj</span><span class="p">)(</span><span class="o">*</span><span class="n">args</span><span class="p">)</span> <span class="k">for</span> <span class="n">args</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="o">*</span><span class="nb">map</span><span class="p">(</span><span class="n">to_map</span><span class="p">,</span> <span class="n">obj</span><span class="p">))]</span>
             <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">obj</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
