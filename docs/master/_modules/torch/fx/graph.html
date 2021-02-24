@@ -188,7 +188,7 @@
               
               
                 <div class="version">
-                  <a href='http://pytorch.org/docs/versions.html'>1.9.0a0+c89db19 &#x25BC</a>
+                  <a href='http://pytorch.org/docs/versions.html'>1.9.0a0+8b997aa &#x25BC</a>
                 </div>
               
             
@@ -382,14 +382,48 @@
   <h1>Source code for torch.fx.graph</h1><div class="highlight"><pre>
 <span></span><span class="kn">from</span> <span class="nn">.node</span> <span class="kn">import</span> <span class="n">Node</span><span class="p">,</span> <span class="n">Argument</span><span class="p">,</span> <span class="n">Target</span><span class="p">,</span> <span class="n">map_arg</span><span class="p">,</span> <span class="n">_type_repr</span><span class="p">,</span> <span class="n">_get_qualified_name</span>
 
-<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Set</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">NamedTuple</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Set</span><span class="p">,</span> <span class="n">FrozenSet</span>
+<span class="kn">from</span> <span class="nn">dataclasses</span> <span class="kn">import</span> <span class="n">dataclass</span>
+<span class="kn">from</span> <span class="nn">contextlib</span> <span class="kn">import</span> <span class="n">contextmanager</span>
 <span class="kn">import</span> <span class="nn">torch</span>
 <span class="kn">import</span> <span class="nn">keyword</span>
 <span class="kn">import</span> <span class="nn">re</span>
 <span class="kn">import</span> <span class="nn">builtins</span>
+<span class="kn">import</span> <span class="nn">math</span>
 
-<span class="k">def</span> <span class="nf">_shadows_builtin_name</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
-    <span class="k">return</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">builtins</span><span class="o">.</span><span class="vm">__dict__</span> <span class="ow">or</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">keyword</span><span class="o">.</span><span class="n">kwlist</span> <span class="ow">or</span> <span class="n">name</span> <span class="ow">in</span> <span class="p">{</span><span class="s1">&#39;inf&#39;</span><span class="p">,</span> <span class="s1">&#39;nan&#39;</span><span class="p">,</span> <span class="s1">&#39;NoneType&#39;</span><span class="p">}</span>
+<span class="c1"># Mapping of builtins to their `typing` equivalent.</span>
+<span class="n">_origin_type_map</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="nb">list</span><span class="p">:</span> <span class="n">List</span><span class="p">,</span>
+    <span class="nb">dict</span><span class="p">:</span> <span class="n">Dict</span><span class="p">,</span>
+    <span class="nb">set</span><span class="p">:</span> <span class="n">Set</span><span class="p">,</span>
+    <span class="nb">frozenset</span><span class="p">:</span> <span class="n">FrozenSet</span><span class="p">,</span>
+    <span class="nb">tuple</span><span class="p">:</span> <span class="n">Tuple</span><span class="p">,</span>
+<span class="p">}</span>
+
+<span class="k">class</span> <span class="nc">_CustomBuiltin</span><span class="p">(</span><span class="n">NamedTuple</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Additional objs that we add to every graph&#39;s globals.</span>
+
+<span class="sd">    The repr() for some standard library objects is not valid Python code without</span>
+<span class="sd">    an import. For common objects of this sort, we bundle them in the globals of</span>
+<span class="sd">    every FX graph.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># How to import this object from the standard library.</span>
+    <span class="n">import_str</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="c1"># The actual object, produced from that import string.</span>
+    <span class="n">obj</span><span class="p">:</span> <span class="n">Any</span>
+
+<span class="n">_custom_builtins</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">_CustomBuiltin</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+
+
+<span class="k">def</span> <span class="nf">_register_custom_builtin</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">import_str</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">obj</span><span class="p">:</span> <span class="n">Any</span><span class="p">):</span>
+    <span class="n">_custom_builtins</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">_CustomBuiltin</span><span class="p">(</span><span class="n">import_str</span><span class="p">,</span> <span class="n">obj</span><span class="p">)</span>
+
+
+<span class="n">_register_custom_builtin</span><span class="p">(</span><span class="s1">&#39;inf&#39;</span><span class="p">,</span> <span class="s1">&#39;from math import inf&#39;</span><span class="p">,</span> <span class="n">math</span><span class="o">.</span><span class="n">inf</span><span class="p">)</span>
+<span class="n">_register_custom_builtin</span><span class="p">(</span><span class="s1">&#39;nan&#39;</span><span class="p">,</span> <span class="s1">&#39;from math import nan&#39;</span><span class="p">,</span> <span class="n">math</span><span class="o">.</span><span class="n">nan</span><span class="p">)</span>
+<span class="n">_register_custom_builtin</span><span class="p">(</span><span class="s1">&#39;NoneType&#39;</span><span class="p">,</span> <span class="s1">&#39;NoneType = type(None)&#39;</span><span class="p">,</span> <span class="nb">type</span><span class="p">(</span><span class="kc">None</span><span class="p">))</span>
+<span class="n">_register_custom_builtin</span><span class="p">(</span><span class="s1">&#39;torch&#39;</span><span class="p">,</span> <span class="s1">&#39;import torch&#39;</span><span class="p">,</span> <span class="n">torch</span><span class="p">)</span>
+
 
 <span class="k">def</span> <span class="nf">_is_magic</span><span class="p">(</span><span class="n">x</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
     <span class="k">return</span> <span class="n">x</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s1">&#39;__&#39;</span><span class="p">)</span> <span class="ow">and</span> <span class="n">x</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s1">&#39;__&#39;</span><span class="p">)</span>
@@ -411,6 +445,101 @@
         <span class="n">chars</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">c</span><span class="o">.</span><span class="n">lower</span><span class="p">())</span>
         <span class="n">prev_lower</span> <span class="o">=</span> <span class="n">c</span><span class="o">.</span><span class="n">islower</span><span class="p">()</span>
     <span class="k">return</span> <span class="s1">&#39;&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">chars</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">_is_from_torch</span><span class="p">(</span><span class="n">obj</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+    <span class="n">module_name</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="s1">&#39;__module__&#39;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">module_name</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">base_module</span> <span class="o">=</span> <span class="n">module_name</span><span class="o">.</span><span class="n">partition</span><span class="p">(</span><span class="s1">&#39;.&#39;</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">return</span> <span class="n">base_module</span> <span class="o">==</span> <span class="s1">&#39;torch&#39;</span>
+
+    <span class="n">name</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="s1">&#39;__name__&#39;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="c1"># exclude torch because torch.torch.torch.torch works. idk mang</span>
+    <span class="k">if</span> <span class="n">name</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">name</span> <span class="o">!=</span> <span class="s1">&#39;torch&#39;</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">guess</span> <span class="ow">in</span> <span class="p">[</span><span class="n">torch</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">functional</span><span class="p">]:</span>
+            <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">guess</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">is</span> <span class="n">obj</span><span class="p">:</span>
+                <span class="k">return</span> <span class="kc">True</span>
+
+    <span class="k">return</span> <span class="kc">False</span>
+
+
+<span class="k">class</span> <span class="nc">_Namespace</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;A context for associating names uniquely with objects.</span>
+
+<span class="sd">    The following invariants are enforced:</span>
+<span class="sd">    - Each object gets a single name.</span>
+<span class="sd">    - Each name is unique within a given namespace.</span>
+<span class="sd">    - Names generated do not shadow builtins, unless the object is indeed that builtin.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_obj_to_name</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_unassociated_names</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_used_names</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+
+    <span class="k">def</span> <span class="nf">create_name</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">candidate</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">obj</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Create a unique name.</span>
+
+<span class="sd">        Arguments:</span>
+<span class="sd">            candidate: used as the basis for the unique name, relevant to the user.</span>
+<span class="sd">            obj: If not None, an object that will be associated with the unique name.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">obj</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">obj</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_obj_to_name</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_obj_to_name</span><span class="p">[</span><span class="n">obj</span><span class="p">]</span>
+
+        <span class="c1"># delete all characters that are illegal in a Python identifier</span>
+        <span class="n">candidate</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">sub</span><span class="p">(</span><span class="s1">&#39;[^0-9a-zA-Z_]+&#39;</span><span class="p">,</span> <span class="s1">&#39;_&#39;</span><span class="p">,</span> <span class="n">candidate</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">candidate</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">isdigit</span><span class="p">():</span>
+            <span class="n">candidate</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;_</span><span class="si">{</span><span class="n">candidate</span><span class="si">}</span><span class="s1">&#39;</span>
+
+        <span class="k">while</span> <span class="n">candidate</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_used_names</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_illegal_name</span><span class="p">(</span><span class="n">candidate</span><span class="p">,</span> <span class="n">obj</span><span class="p">):</span>
+            <span class="n">match</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="sa">r</span><span class="s2">&quot;(.*)_(\d+)$&quot;</span><span class="p">,</span> <span class="n">candidate</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">match</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">candidate</span> <span class="o">=</span> <span class="n">candidate</span> <span class="o">+</span> <span class="s1">&#39;_1&#39;</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">base</span><span class="p">,</span> <span class="n">num</span> <span class="o">=</span> <span class="n">match</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+                <span class="n">candidate</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">base</span><span class="si">}</span><span class="s1">_</span><span class="si">{</span><span class="nb">int</span><span class="p">(</span><span class="n">num</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="si">}</span><span class="s1">&#39;</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_used_names</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="n">candidate</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">obj</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_unassociated_names</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">candidate</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_obj_to_name</span><span class="p">[</span><span class="n">obj</span><span class="p">]</span> <span class="o">=</span> <span class="n">candidate</span>
+        <span class="k">return</span> <span class="n">candidate</span>
+
+    <span class="k">def</span> <span class="nf">associate_name_with_obj</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">obj</span><span class="p">:</span> <span class="n">Any</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Associate a unique name with an object.</span>
+
+<span class="sd">        Neither `name` nor `obj` should be associated already.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">assert</span> <span class="n">obj</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_obj_to_name</span>
+        <span class="k">assert</span> <span class="n">name</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_unassociated_names</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_obj_to_name</span><span class="p">[</span><span class="n">obj</span><span class="p">]</span> <span class="o">=</span> <span class="n">name</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_unassociated_names</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_is_illegal_name</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">obj</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="c1"># 1. keywords are never allowed as names.</span>
+        <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">keyword</span><span class="o">.</span><span class="n">kwlist</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">True</span>
+
+        <span class="c1"># 2. Can&#39;t shadow a builtin name, unless you *are* that builtin.</span>
+        <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">builtins</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">obj</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">builtins</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">[</span><span class="n">name</span><span class="p">]</span>
+
+        <span class="c1"># 3. Can&#39;t shadow our custom builtins either</span>
+        <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">_custom_builtins</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">obj</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">_custom_builtins</span><span class="p">[</span><span class="n">name</span><span class="p">]</span><span class="o">.</span><span class="n">obj</span>
+
+        <span class="k">return</span> <span class="kc">False</span>
+
+
+<span class="nd">@dataclass</span>
+<span class="k">class</span> <span class="nc">PythonCode</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;Represents all the information necessary to exec or save a graph as Python code.&quot;&quot;&quot;</span>
+    <span class="c1"># Python source code for the forward function definition.</span>
+    <span class="n">src</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="c1"># Values in global scope during exection of `src_def`.</span>
+    <span class="nb">globals</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span>
+
 
 <span class="k">def</span> <span class="nf">_format_args</span><span class="p">(</span><span class="n">args</span><span class="p">:</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">Argument</span><span class="p">,</span> <span class="o">...</span><span class="p">],</span> <span class="n">kwargs</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Argument</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
     <span class="n">args_s</span> <span class="o">=</span> <span class="s1">&#39;, &#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">repr</span><span class="p">(</span><span class="n">a</span><span class="p">)</span> <span class="k">for</span> <span class="n">a</span> <span class="ow">in</span> <span class="n">args</span><span class="p">)</span>
@@ -510,7 +639,8 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_root</span> <span class="p">:</span> <span class="n">Node</span> <span class="o">=</span> <span class="n">Node</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="p">,</span> <span class="s1">&#39;root&#39;</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="p">,</span> <span class="p">(),</span> <span class="p">{})</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_used_names</span> <span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>  <span class="c1"># base name -&gt; number</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_insert</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_root</span><span class="o">.</span><span class="n">prepend</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_len</span> <span class="o">=</span> <span class="mi">0</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_len</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_graph_namespace</span> <span class="o">=</span> <span class="n">_Namespace</span><span class="p">()</span></div>
 
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">nodes</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">_node_list</span><span class="p">:</span>
@@ -602,8 +732,13 @@
         <span class="n">kwargs</span> <span class="o">=</span> <span class="p">{}</span> <span class="k">if</span> <span class="n">kwargs</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">kwargs</span>
         <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">),</span> <span class="s2">&quot;args must be a tuple&quot;</span>
         <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">kwargs</span><span class="p">,</span> <span class="nb">dict</span><span class="p">),</span> <span class="s2">&quot;kwargs must be a dict&quot;</span>
-        <span class="n">unique_name</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_create_unique_name</span><span class="p">(</span><span class="n">name</span> <span class="k">if</span> <span class="n">name</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">_target_to_str</span><span class="p">(</span><span class="n">target</span><span class="p">))</span>
-        <span class="n">n</span> <span class="o">=</span> <span class="n">Node</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">unique_name</span><span class="p">,</span> <span class="n">op</span><span class="p">,</span> <span class="n">target</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">,</span> <span class="n">type_expr</span><span class="p">)</span>
+
+        <span class="n">candidate</span> <span class="o">=</span> <span class="n">name</span> <span class="k">if</span> <span class="n">name</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">_target_to_str</span><span class="p">(</span><span class="n">target</span><span class="p">)</span>
+        <span class="n">name</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_graph_namespace</span><span class="o">.</span><span class="n">create_name</span><span class="p">(</span><span class="n">candidate</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="n">n</span> <span class="o">=</span> <span class="n">Node</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">op</span><span class="p">,</span> <span class="n">target</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">,</span> <span class="n">type_expr</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_graph_namespace</span><span class="o">.</span><span class="n">associate_name_with_obj</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">n</span><span class="p">)</span>
+
         <span class="bp">self</span><span class="o">.</span><span class="n">_insert</span><span class="p">(</span><span class="n">n</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_len</span> <span class="o">+=</span> <span class="mi">1</span>
         <span class="k">return</span> <span class="n">n</span></div>
@@ -891,30 +1026,7 @@
         <span class="n">op</span> <span class="o">=</span> <span class="n">_snake_case</span><span class="p">(</span><span class="n">op</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">op</span>
 
-    <span class="k">def</span> <span class="nf">_create_unique_name</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">candidate</span> <span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-        <span class="c1"># delete all characters that are illegal in a Python identifier</span>
-        <span class="n">candidate</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">sub</span><span class="p">(</span><span class="s1">&#39;[^0-9a-zA-Z_]+&#39;</span><span class="p">,</span> <span class="s1">&#39;_&#39;</span><span class="p">,</span> <span class="n">candidate</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">candidate</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">isdigit</span><span class="p">():</span>
-            <span class="n">candidate</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;_</span><span class="si">{</span><span class="n">candidate</span><span class="si">}</span><span class="s1">&#39;</span>
-
-        <span class="k">def</span> <span class="nf">illegal_shadowing_name</span><span class="p">(</span><span class="n">name</span> <span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
-            <span class="k">return</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">torch</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span> <span class="ow">or</span> \
-                <span class="nb">hasattr</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">functional</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span> <span class="ow">or</span> \
-                <span class="nb">hasattr</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span> <span class="ow">or</span> \
-                <span class="n">_shadows_builtin_name</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
-
-        <span class="k">while</span> <span class="n">candidate</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_used_names</span> <span class="ow">or</span> <span class="n">illegal_shadowing_name</span><span class="p">(</span><span class="n">candidate</span><span class="p">):</span>
-            <span class="n">match</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="sa">r</span><span class="s2">&quot;(.*)_(\d+)$&quot;</span><span class="p">,</span> <span class="n">candidate</span><span class="p">)</span>
-            <span class="k">if</span> <span class="n">match</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="n">candidate</span> <span class="o">=</span> <span class="n">candidate</span> <span class="o">+</span> <span class="s1">&#39;_1&#39;</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="n">base</span><span class="p">,</span> <span class="n">num</span> <span class="o">=</span> <span class="n">match</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
-                <span class="n">candidate</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">base</span><span class="si">}</span><span class="s1">_</span><span class="si">{</span><span class="nb">int</span><span class="p">(</span><span class="n">num</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="si">}</span><span class="s1">&#39;</span>
-
-        <span class="bp">self</span><span class="o">.</span><span class="n">_used_names</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="n">candidate</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">candidate</span>
-
-<div class="viewcode-block" id="Graph.python_code"><a class="viewcode-back" href="../../../fx.html#torch.fx.Graph.python_code">[docs]</a>    <span class="k">def</span> <span class="nf">python_code</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">root_module</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<div class="viewcode-block" id="Graph.python_code"><a class="viewcode-back" href="../../../fx.html#torch.fx.Graph.python_code">[docs]</a>    <span class="k">def</span> <span class="nf">python_code</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">root_module</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">PythonCode</span><span class="p">:</span>
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Turn this ``Graph`` into valid Python code.</span>
 
@@ -925,32 +1037,105 @@
 
 <span class="sd">        Returns:</span>
 
-<span class="sd">            The string source code generated from this ``Graph``.</span>
+<span class="sd">            A PythonCode object, consisting of two fields:</span>
+<span class="sd">                src: the Python source code representing the object</span>
+<span class="sd">                globals: a dictionary of global names in `src` -&gt; the objects that they reference.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># NOTE: [Graph Namespaces]</span>
+        <span class="c1">#</span>
+        <span class="c1"># There are two types of symbols in generated Python source code:</span>
+        <span class="c1"># locals and globals.</span>
+        <span class="c1">#   Locals are locally defined by the output of a node in the Graph.</span>
+        <span class="c1">#   Globals are references to external objects, like functions or types.</span>
+        <span class="c1">#</span>
+        <span class="c1"># When generating Python code, we need to make sure to name things</span>
+        <span class="c1"># appropriately. In particular:</span>
+        <span class="c1"># - All names should be unique, to avoid weird shadowing bugs.</span>
+        <span class="c1"># - These names need to be consistent, e.g. a object should always be</span>
+        <span class="c1">#   referenced by the same name.</span>
+        <span class="c1">#</span>
+        <span class="c1"># To do this, we create a new namespace just for this source. All names</span>
+        <span class="c1"># that get printed must come from this namespace.</span>
+        <span class="c1">#</span>
+        <span class="c1"># Why can&#39;t we re-use node.name? Because it was generated within the</span>
+        <span class="c1"># namespace `self._graph_namespace`. In order to provide uniqueness</span>
+        <span class="c1"># over both locals (node.name) *and* globals, we create a completely</span>
+        <span class="c1"># new namespace to put all identifiers in.</span>
+        <span class="n">namespace</span> <span class="o">=</span> <span class="n">_Namespace</span><span class="p">()</span>
+
+        <span class="c1"># Override Node&#39;s repr to generate a valid name within our namespace.</span>
+        <span class="c1"># Since repr() is designed to produce a valid Python expression, it</span>
+        <span class="c1"># makes sense to re-use it. This way, it&#39;s easy to print something like</span>
+        <span class="c1"># Tuple[Node, Node] by simply calling repr() on it. Node&#39;s __repr__ is</span>
+        <span class="c1"># implemented cooperatively to allow this.</span>
+        <span class="k">def</span> <span class="nf">node_repr</span><span class="p">(</span><span class="n">n</span><span class="p">:</span> <span class="n">Node</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">namespace</span><span class="o">.</span><span class="n">create_name</span><span class="p">(</span><span class="n">n</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">n</span><span class="p">)</span>
+
+        <span class="nd">@contextmanager</span>
+        <span class="k">def</span> <span class="nf">override_node_repr</span><span class="p">(</span><span class="n">graph</span><span class="p">:</span> <span class="n">Graph</span><span class="p">):</span>
+            <span class="n">orig_repr_fns</span> <span class="o">=</span> <span class="p">{}</span>
+            <span class="k">for</span> <span class="n">node</span> <span class="ow">in</span> <span class="n">graph</span><span class="o">.</span><span class="n">nodes</span><span class="p">:</span>
+                <span class="n">orig_repr_fns</span><span class="p">[</span><span class="n">node</span><span class="p">]</span> <span class="o">=</span> <span class="n">node</span><span class="o">.</span><span class="n">_repr_fn</span>
+                <span class="n">node</span><span class="o">.</span><span class="n">_repr_fn</span> <span class="o">=</span> <span class="n">node_repr</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="k">yield</span> <span class="kc">None</span>
+            <span class="k">finally</span><span class="p">:</span>
+                <span class="c1"># restore the original repr functions</span>
+                <span class="k">for</span> <span class="n">node</span> <span class="ow">in</span> <span class="n">graph</span><span class="o">.</span><span class="n">nodes</span><span class="p">:</span>
+                    <span class="n">node</span><span class="o">.</span><span class="n">_repr_fn</span> <span class="o">=</span> <span class="n">orig_repr_fns</span><span class="p">[</span><span class="n">node</span><span class="p">]</span>
+
+        <span class="k">with</span> <span class="n">override_node_repr</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_python_code</span><span class="p">(</span><span class="n">root_module</span><span class="p">,</span> <span class="n">namespace</span><span class="p">)</span></div>
+
+    <span class="k">def</span> <span class="nf">_python_code</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">root_module</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">namespace</span><span class="p">:</span> <span class="n">_Namespace</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">PythonCode</span><span class="p">:</span>
         <span class="n">free_vars</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
-        <span class="n">modules_used</span> <span class="p">:</span> <span class="n">Set</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
         <span class="n">body</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">globals_</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
 
         <span class="c1"># Wrap string in list to pass by reference</span>
         <span class="n">maybe_return_annotation</span> <span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;&#39;</span><span class="p">]</span>
 
-        <span class="k">def</span> <span class="nf">register_modules_used</span><span class="p">(</span><span class="n">qualified_name</span> <span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
-            <span class="k">if</span> <span class="s1">&#39;.&#39;</span> <span class="ow">in</span> <span class="n">qualified_name</span><span class="p">:</span>
-                <span class="n">module_name</span> <span class="o">=</span> <span class="n">qualified_name</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;.&#39;</span><span class="p">,</span> <span class="n">maxsplit</span><span class="o">=</span><span class="mi">1</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
-                <span class="n">modules_used</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">module_name</span><span class="p">)</span>
+        <span class="k">def</span> <span class="nf">add_global</span><span class="p">(</span><span class="n">name_hint</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">obj</span><span class="p">:</span> <span class="n">Any</span><span class="p">):</span>
+            <span class="sd">&quot;&quot;&quot;Add an obj to be tracked as a global.</span>
+
+<span class="sd">            We call this for names that reference objects external to the</span>
+<span class="sd">            Graph, like functions or types.</span>
+
+<span class="sd">            Returns: the global name that should be used to reference &#39;obj&#39; in generated source.</span>
+<span class="sd">            &quot;&quot;&quot;</span>
+            <span class="k">if</span> <span class="n">_is_from_torch</span><span class="p">(</span><span class="n">obj</span><span class="p">):</span>
+                <span class="c1"># HACK: workaround for how torch custom ops are registered. We</span>
+                <span class="c1"># can&#39;t import them like normal modules so they must retain their</span>
+                <span class="c1"># fully qualified name.</span>
+                <span class="k">return</span> <span class="n">_get_qualified_name</span><span class="p">(</span><span class="n">obj</span><span class="p">)</span>
+
+            <span class="c1"># normalize the name hint to get a proper identifier</span>
+            <span class="n">global_name</span> <span class="o">=</span> <span class="n">namespace</span><span class="o">.</span><span class="n">create_name</span><span class="p">(</span><span class="n">name_hint</span><span class="p">,</span> <span class="n">obj</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">global_name</span> <span class="ow">in</span> <span class="n">globals_</span><span class="p">:</span>
+                <span class="k">assert</span> <span class="n">globals_</span><span class="p">[</span><span class="n">global_name</span><span class="p">]</span> <span class="ow">is</span> <span class="n">obj</span>
+                <span class="k">return</span> <span class="n">global_name</span>
+
+            <span class="n">globals_</span><span class="p">[</span><span class="n">global_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">obj</span>
+            <span class="k">return</span> <span class="n">global_name</span>
+
+        <span class="c1"># Pre-fill the globals table with registered builtins.</span>
+        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="p">(</span><span class="n">_</span><span class="p">,</span> <span class="n">obj</span><span class="p">)</span> <span class="ow">in</span> <span class="n">_custom_builtins</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">add_global</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">obj</span><span class="p">)</span>
 
         <span class="k">def</span> <span class="nf">type_repr</span><span class="p">(</span><span class="n">o</span> <span class="p">:</span> <span class="n">Any</span><span class="p">):</span>
             <span class="n">typename</span> <span class="o">=</span> <span class="n">_type_repr</span><span class="p">(</span><span class="n">o</span><span class="p">)</span>
-            <span class="k">if</span> <span class="nb">all</span><span class="p">(</span><span class="n">x</span><span class="o">.</span><span class="n">isidentifier</span><span class="p">()</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">typename</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;.&#39;</span><span class="p">)):</span>
-                <span class="n">register_modules_used</span><span class="p">(</span><span class="n">typename</span><span class="p">)</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="c1"># this is a constructor type, e.g. typing.List[torch.Tensor]</span>
-                <span class="n">modules_used</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">o</span><span class="o">.</span><span class="vm">__module__</span><span class="p">)</span>
-                <span class="k">for</span> <span class="n">sub_type</span> <span class="ow">in</span> <span class="n">o</span><span class="o">.</span><span class="n">__args__</span><span class="p">:</span>
-                    <span class="c1"># make sure we have torch.Tensor</span>
-                    <span class="n">type_repr</span><span class="p">(</span><span class="n">sub_type</span><span class="p">)</span>
-            <span class="k">return</span> <span class="n">typename</span>
 
+            <span class="c1"># This is a generic type, e.g. typing.List[torch.Tensor]</span>
+            <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">o</span><span class="p">,</span> <span class="s1">&#39;__origin__&#39;</span><span class="p">):</span>
+                <span class="n">origin_type</span> <span class="o">=</span> <span class="n">_origin_type_map</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">o</span><span class="o">.</span><span class="n">__origin__</span><span class="p">,</span> <span class="n">o</span><span class="o">.</span><span class="n">__origin__</span><span class="p">)</span>
+                <span class="n">origin_typename</span> <span class="o">=</span> <span class="n">add_global</span><span class="p">(</span><span class="n">_type_repr</span><span class="p">(</span><span class="n">origin_type</span><span class="p">),</span> <span class="n">origin_type</span><span class="p">)</span>
+
+                <span class="c1"># Assign global names for each of the inner type variables.</span>
+                <span class="n">args</span> <span class="o">=</span> <span class="p">[</span><span class="n">type_repr</span><span class="p">(</span><span class="n">arg</span><span class="p">)</span> <span class="k">for</span> <span class="n">arg</span> <span class="ow">in</span> <span class="n">o</span><span class="o">.</span><span class="n">__args__</span><span class="p">]</span>
+                <span class="k">return</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">origin_typename</span><span class="si">}</span><span class="s1">[</span><span class="si">{</span><span class="s2">&quot;,&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">args</span><span class="p">)</span><span class="si">}</span><span class="s1">]&#39;</span>
+
+            <span class="c1"># Common case: this is a regular module name like &#39;foo.bar.baz&#39;</span>
+            <span class="k">return</span> <span class="n">add_global</span><span class="p">(</span><span class="n">typename</span><span class="p">,</span> <span class="n">o</span><span class="p">)</span>
 
         <span class="c1"># Run through reverse nodes and record the first instance of a use</span>
         <span class="c1"># of a given node. This represents the *last* use of the node in the</span>
@@ -981,10 +1166,11 @@
                 <span class="k">return</span>
             <span class="n">nodes_to_delete</span> <span class="o">=</span> <span class="n">user_to_last_uses</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">user</span><span class="p">,</span> <span class="p">[])</span>
             <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">nodes_to_delete</span><span class="p">):</span>
-                <span class="n">to_delete_str</span> <span class="o">=</span> <span class="s1">&#39; = &#39;</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="n">n</span><span class="o">.</span><span class="n">name</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">nodes_to_delete</span><span class="p">]</span> <span class="o">+</span> <span class="p">[</span><span class="s1">&#39;None&#39;</span><span class="p">])</span>
+                <span class="n">to_delete_str</span> <span class="o">=</span> <span class="s1">&#39; = &#39;</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="nb">repr</span><span class="p">(</span><span class="n">n</span><span class="p">)</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">nodes_to_delete</span><span class="p">]</span> <span class="o">+</span> <span class="p">[</span><span class="s1">&#39;None&#39;</span><span class="p">])</span>
                 <span class="n">body</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;;  </span><span class="si">{</span><span class="n">to_delete_str</span><span class="si">}</span><span class="se">\n</span><span class="s1">&#39;</span><span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="n">body</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s1">&#39;</span><span class="se">\n</span><span class="s1">&#39;</span><span class="p">)</span>
+
 
         <span class="k">def</span> <span class="nf">emit_node</span><span class="p">(</span><span class="n">node</span> <span class="p">:</span> <span class="n">Node</span><span class="p">):</span>
             <span class="k">if</span> <span class="n">node</span><span class="o">.</span><span class="n">op</span> <span class="o">==</span> <span class="s1">&#39;placeholder&#39;</span><span class="p">:</span>
@@ -993,13 +1179,13 @@
                 <span class="n">maybe_default_arg</span> <span class="o">=</span> <span class="s1">&#39;&#39;</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">node</span><span class="o">.</span><span class="n">args</span> <span class="k">else</span> <span class="sa">f</span><span class="s1">&#39; = </span><span class="si">{</span><span class="nb">repr</span><span class="p">(</span><span class="n">node</span><span class="o">.</span><span class="n">args</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span><span class="si">}</span><span class="s1">&#39;</span>
                 <span class="n">free_vars</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">node</span><span class="o">.</span><span class="n">target</span><span class="si">}{</span><span class="n">maybe_type_annotation</span><span class="si">}{</span><span class="n">maybe_default_arg</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
                 <span class="n">raw_name</span> <span class="o">=</span> <span class="n">node</span><span class="o">.</span><span class="n">target</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s1">&#39;*&#39;</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="p">)</span>
-                <span class="k">if</span> <span class="n">raw_name</span> <span class="o">!=</span> <span class="n">node</span><span class="o">.</span><span class="n">name</span><span class="p">:</span>
-                    <span class="n">body</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">node</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s1"> = </span><span class="si">{</span><span class="n">raw_name</span><span class="si">}</span><span class="se">\n</span><span class="s1">&#39;</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">raw_name</span> <span class="o">!=</span> <span class="nb">repr</span><span class="p">(</span><span class="n">node</span><span class="p">):</span>
+                    <span class="n">body</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="nb">repr</span><span class="p">(</span><span class="n">node</span><span class="p">)</span><span class="si">}</span><span class="s1"> = </span><span class="si">{</span><span class="n">raw_name</span><span class="si">}</span><span class="se">\n</span><span class="s1">&#39;</span><span class="p">)</span>
                 <span class="k">return</span>
             <span class="k">elif</span> <span class="n">node</span><span class="o">.</span><span class="n">op</span> <span class="o">==</span> <span class="s1">&#39;call_method&#39;</span><span class="p">:</span>
                 <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">node</span><span class="o">.</span><span class="n">target</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span>
                 <span class="n">body</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-                    <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">node</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s1"> = </span><span class="si">{</span><span class="n">_format_target</span><span class="p">(</span><span class="nb">repr</span><span class="p">(</span><span class="n">node</span><span class="o">.</span><span class="n">args</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span> <span class="n">node</span><span class="o">.</span><span class="n">target</span><span class="p">)</span><span class="si">}</span><span class="s1">&#39;</span>
+                    <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="nb">repr</span><span class="p">(</span><span class="n">node</span><span class="p">)</span><span class="si">}</span><span class="s1"> = </span><span class="si">{</span><span class="n">_format_target</span><span class="p">(</span><span class="nb">repr</span><span class="p">(</span><span class="n">node</span><span class="o">.</span><span class="n">args</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span> <span class="n">node</span><span class="o">.</span><span class="n">target</span><span class="p">)</span><span class="si">}</span><span class="s1">&#39;</span>
                     <span class="sa">f</span><span class="s1">&#39;(</span><span class="si">{</span><span class="n">_format_args</span><span class="p">(</span><span class="n">node</span><span class="o">.</span><span class="n">args</span><span class="p">[</span><span class="mi">1</span><span class="p">:],</span> <span class="n">node</span><span class="o">.</span><span class="n">kwargs</span><span class="p">)</span><span class="si">}</span><span class="s1">)&#39;</span><span class="p">)</span>
                 <span class="k">return</span>
             <span class="k">elif</span> <span class="n">node</span><span class="o">.</span><span class="n">op</span> <span class="o">==</span> <span class="s1">&#39;call_function&#39;</span><span class="p">:</span>
@@ -1007,26 +1193,26 @@
                 <span class="c1"># pretty print operators</span>
                 <span class="k">if</span> <span class="n">node</span><span class="o">.</span><span class="n">target</span><span class="o">.</span><span class="vm">__module__</span> <span class="o">==</span> <span class="s1">&#39;_operator&#39;</span> <span class="ow">and</span> <span class="n">node</span><span class="o">.</span><span class="n">target</span><span class="o">.</span><span class="vm">__name__</span> <span class="ow">in</span> <span class="n">magic_methods</span><span class="p">:</span>
                     <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">node</span><span class="o">.</span><span class="n">args</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">)</span>
-                    <span class="n">body</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">node</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s1"> = </span><span class="si">{</span><span class="n">magic_methods</span><span class="p">[</span><span class="n">node</span><span class="o">.</span><span class="n">target</span><span class="o">.</span><span class="vm">__name__</span><span class="p">]</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="o">*</span><span class="p">(</span><span class="nb">repr</span><span class="p">(</span><span class="n">a</span><span class="p">)</span> <span class="k">for</span> <span class="n">a</span> <span class="ow">in</span> <span class="n">node</span><span class="o">.</span><span class="n">args</span><span class="p">))</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
+                    <span class="n">body</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="nb">repr</span><span class="p">(</span><span class="n">node</span><span class="p">)</span><span class="si">}</span><span class="s1"> = </span><span class="si">{</span><span class="n">magic_methods</span><span class="p">[</span><span class="n">node</span><span class="o">.</span><span class="n">target</span><span class="o">.</span><span class="vm">__name__</span><span class="p">]</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="o">*</span><span class="p">(</span><span class="nb">repr</span><span class="p">(</span><span class="n">a</span><span class="p">)</span> <span class="k">for</span> <span class="n">a</span> <span class="ow">in</span> <span class="n">node</span><span class="o">.</span><span class="n">args</span><span class="p">))</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
                     <span class="k">return</span>
                 <span class="n">qualified_name</span> <span class="o">=</span> <span class="n">_get_qualified_name</span><span class="p">(</span><span class="n">node</span><span class="o">.</span><span class="n">target</span><span class="p">)</span>
-                <span class="n">register_modules_used</span><span class="p">(</span><span class="n">qualified_name</span><span class="p">)</span>
-                <span class="k">if</span> <span class="n">qualified_name</span> <span class="o">==</span> <span class="s1">&#39;getattr&#39;</span> <span class="ow">and</span> \
+                <span class="n">global_name</span> <span class="o">=</span> <span class="n">add_global</span><span class="p">(</span><span class="n">qualified_name</span><span class="p">,</span> <span class="n">node</span><span class="o">.</span><span class="n">target</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">global_name</span> <span class="o">==</span> <span class="s1">&#39;getattr&#39;</span> <span class="ow">and</span> \
                    <span class="nb">isinstance</span><span class="p">(</span><span class="n">node</span><span class="o">.</span><span class="n">args</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">)</span> <span class="ow">and</span> \
                    <span class="nb">isinstance</span><span class="p">(</span><span class="n">node</span><span class="o">.</span><span class="n">args</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="nb">str</span><span class="p">)</span> <span class="ow">and</span> \
                    <span class="n">node</span><span class="o">.</span><span class="n">args</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">isidentifier</span><span class="p">():</span>
                     <span class="c1"># pretty print attribute access</span>
-                    <span class="n">body</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">node</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s1"> = </span><span class="si">{</span><span class="n">_format_target</span><span class="p">(</span><span class="nb">repr</span><span class="p">(</span><span class="n">node</span><span class="o">.</span><span class="n">args</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span> <span class="n">node</span><span class="o">.</span><span class="n">args</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
+                    <span class="n">body</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="nb">repr</span><span class="p">(</span><span class="n">node</span><span class="p">)</span><span class="si">}</span><span class="s1"> = </span><span class="si">{</span><span class="n">_format_target</span><span class="p">(</span><span class="nb">repr</span><span class="p">(</span><span class="n">node</span><span class="o">.</span><span class="n">args</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span> <span class="n">node</span><span class="o">.</span><span class="n">args</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
                     <span class="k">return</span>
-                <span class="n">body</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">node</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s1"> = </span><span class="si">{</span><span class="n">qualified_name</span><span class="si">}</span><span class="s1">(</span><span class="si">{</span><span class="n">_format_args</span><span class="p">(</span><span class="n">node</span><span class="o">.</span><span class="n">args</span><span class="p">,</span> <span class="n">node</span><span class="o">.</span><span class="n">kwargs</span><span class="p">)</span><span class="si">}</span><span class="s1">)&#39;</span><span class="p">)</span>
+                <span class="n">body</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="nb">repr</span><span class="p">(</span><span class="n">node</span><span class="p">)</span><span class="si">}</span><span class="s1"> = </span><span class="si">{</span><span class="n">global_name</span><span class="si">}</span><span class="s1">(</span><span class="si">{</span><span class="n">_format_args</span><span class="p">(</span><span class="n">node</span><span class="o">.</span><span class="n">args</span><span class="p">,</span> <span class="n">node</span><span class="o">.</span><span class="n">kwargs</span><span class="p">)</span><span class="si">}</span><span class="s1">)&#39;</span><span class="p">)</span>
                 <span class="k">return</span>
             <span class="k">elif</span> <span class="n">node</span><span class="o">.</span><span class="n">op</span> <span class="o">==</span> <span class="s1">&#39;call_module&#39;</span><span class="p">:</span>
                 <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">node</span><span class="o">.</span><span class="n">target</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span>
-                <span class="n">body</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">node</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s1"> = </span><span class="si">{</span><span class="n">_format_target</span><span class="p">(</span><span class="n">root_module</span><span class="p">,</span> <span class="n">node</span><span class="o">.</span><span class="n">target</span><span class="p">)</span><span class="si">}</span><span class="s1">(</span><span class="si">{</span><span class="n">_format_args</span><span class="p">(</span><span class="n">node</span><span class="o">.</span><span class="n">args</span><span class="p">,</span> <span class="n">node</span><span class="o">.</span><span class="n">kwargs</span><span class="p">)</span><span class="si">}</span><span class="s1">)&#39;</span><span class="p">)</span>
+                <span class="n">body</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="nb">repr</span><span class="p">(</span><span class="n">node</span><span class="p">)</span><span class="si">}</span><span class="s1"> = </span><span class="si">{</span><span class="n">_format_target</span><span class="p">(</span><span class="n">root_module</span><span class="p">,</span> <span class="n">node</span><span class="o">.</span><span class="n">target</span><span class="p">)</span><span class="si">}</span><span class="s1">(</span><span class="si">{</span><span class="n">_format_args</span><span class="p">(</span><span class="n">node</span><span class="o">.</span><span class="n">args</span><span class="p">,</span> <span class="n">node</span><span class="o">.</span><span class="n">kwargs</span><span class="p">)</span><span class="si">}</span><span class="s1">)&#39;</span><span class="p">)</span>
                 <span class="k">return</span>
             <span class="k">elif</span> <span class="n">node</span><span class="o">.</span><span class="n">op</span> <span class="o">==</span> <span class="s1">&#39;get_attr&#39;</span><span class="p">:</span>
                 <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">node</span><span class="o">.</span><span class="n">target</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span>
-                <span class="n">body</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">node</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s1"> = </span><span class="si">{</span><span class="n">_format_target</span><span class="p">(</span><span class="n">root_module</span><span class="p">,</span> <span class="n">node</span><span class="o">.</span><span class="n">target</span><span class="p">)</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
+                <span class="n">body</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="nb">repr</span><span class="p">(</span><span class="n">node</span><span class="p">)</span><span class="si">}</span><span class="s1"> = </span><span class="si">{</span><span class="n">_format_target</span><span class="p">(</span><span class="n">root_module</span><span class="p">,</span> <span class="n">node</span><span class="o">.</span><span class="n">target</span><span class="p">)</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
                 <span class="k">return</span>
             <span class="k">elif</span> <span class="n">node</span><span class="o">.</span><span class="n">op</span> <span class="o">==</span> <span class="s1">&#39;output&#39;</span><span class="p">:</span>
                 <span class="k">if</span> <span class="n">node</span><span class="o">.</span><span class="n">type</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
@@ -1041,11 +1227,6 @@
             <span class="n">emit_node</span><span class="p">(</span><span class="n">node</span><span class="p">)</span>
             <span class="n">delete_unused_values</span><span class="p">(</span><span class="n">node</span><span class="p">)</span>
 
-        <span class="c1"># repr() for inf and nan floating point values aren&#39;t parseable by</span>
-        <span class="c1"># python as literals. Explicitly import the names from the ``math`` module.</span>
-        <span class="n">import_strs</span> <span class="o">=</span> <span class="p">[</span><span class="sa">f</span><span class="s1">&#39;import </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s1">&#39;</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">modules_used</span><span class="p">)]</span>
-        <span class="n">import_block</span> <span class="o">=</span> <span class="s1">&#39;</span><span class="se">\n</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">import_strs</span><span class="p">)</span>
-
         <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">body</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
             <span class="c1"># If the Graph has no non-placeholder nodes, no lines for the body</span>
             <span class="c1"># have been emitted. To continue to have valid Python code, emit a</span>
@@ -1054,12 +1235,12 @@
 
         <span class="n">code</span> <span class="o">=</span> <span class="s1">&#39;&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">body</span><span class="p">)</span>
         <span class="n">code</span> <span class="o">=</span> <span class="s1">&#39;</span><span class="se">\n</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="s1">&#39;    &#39;</span> <span class="o">+</span> <span class="n">line</span> <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">code</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;</span><span class="se">\n</span><span class="s1">&#39;</span><span class="p">))</span>
-        <span class="n">fn_code</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;&quot;&quot;</span><span class="se">\</span>
-<span class="si">{</span><span class="n">import_block</span><span class="si">}</span><span class="s2"></span>
+        <span class="n">fn_code</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;&quot;&quot;</span>
 <span class="s2">def forward(self, </span><span class="si">{</span><span class="s1">&#39;, &#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">free_vars</span><span class="p">)</span><span class="si">}</span><span class="s2">)</span><span class="si">{</span><span class="n">maybe_return_annotation</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">}</span><span class="s2">:</span>
 <span class="si">{</span><span class="n">code</span><span class="si">}</span><span class="s2">&quot;&quot;&quot;</span>
 
-        <span class="k">return</span> <span class="n">fn_code</span></div>
+        <span class="k">return</span> <span class="n">PythonCode</span><span class="p">(</span><span class="n">fn_code</span><span class="p">,</span>
+                          <span class="n">globals_</span><span class="p">)</span>
 
     <span class="k">def</span> <span class="fm">__str__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
         <span class="sd">&quot;&quot;&quot;</span>

@@ -188,7 +188,7 @@
               
               
                 <div class="version">
-                  <a href='http://pytorch.org/docs/versions.html'>1.9.0a0+c89db19 &#x25BC</a>
+                  <a href='http://pytorch.org/docs/versions.html'>1.9.0a0+8b997aa &#x25BC</a>
                 </div>
               
             
@@ -384,13 +384,14 @@
 <span class="kn">import</span> <span class="nn">torch.nn</span> <span class="k">as</span> <span class="nn">nn</span>
 <span class="kn">import</span> <span class="nn">torch.overrides</span>
 <span class="kn">from</span> <span class="nn">torch.nn.modules.module</span> <span class="kn">import</span> <span class="n">_addindent</span>
+<span class="kn">from</span> <span class="nn">torch.package</span> <span class="kn">import</span> <span class="n">PackageImporter</span><span class="p">,</span> <span class="n">PackageExporter</span>
 <span class="kn">import</span> <span class="nn">linecache</span>
-<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Type</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Union</span><span class="p">,</span> <span class="n">Optional</span>
-<span class="kn">from</span> <span class="nn">.graph</span> <span class="kn">import</span> <span class="n">Graph</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Type</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Union</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Set</span>
+<span class="kn">from</span> <span class="nn">.graph</span> <span class="kn">import</span> <span class="n">Graph</span><span class="p">,</span> <span class="n">_is_from_torch</span><span class="p">,</span> <span class="n">_custom_builtins</span><span class="p">,</span> <span class="n">PythonCode</span>
+<span class="kn">from</span> <span class="nn">torch.package</span> <span class="kn">import</span> <span class="n">Importer</span><span class="p">,</span> <span class="n">sys_importer</span>
 <span class="kn">import</span> <span class="nn">copy</span>
 <span class="kn">import</span> <span class="nn">sys</span>
 <span class="kn">import</span> <span class="nn">traceback</span>
-<span class="kn">import</span> <span class="nn">math</span>
 <span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span>
 <span class="kn">import</span> <span class="nn">os</span>
 <span class="kn">import</span> <span class="nn">warnings</span>
@@ -417,14 +418,46 @@
     <span class="k">return</span> <span class="n">_orig_getlines</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 <span class="n">linecache</span><span class="o">.</span><span class="n">getlines</span> <span class="o">=</span> <span class="n">patched_getline</span>
 
-<span class="k">def</span> <span class="nf">_forward_from_src</span><span class="p">(</span><span class="n">src</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
-    <span class="c1"># If you add more globals here, remember to add their names to fx.graph._shadows_builtin_name!</span>
-    <span class="n">gbls</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;inf&#39;</span><span class="p">:</span> <span class="n">math</span><span class="o">.</span><span class="n">inf</span><span class="p">,</span> <span class="s1">&#39;nan&#39;</span><span class="p">:</span> <span class="n">math</span><span class="o">.</span><span class="n">nan</span><span class="p">,</span> <span class="s1">&#39;NoneType&#39;</span> <span class="p">:</span> <span class="nb">type</span><span class="p">(</span><span class="kc">None</span><span class="p">)}</span>
-    <span class="n">exec_with_source</span><span class="p">(</span><span class="n">src</span><span class="p">,</span> <span class="n">gbls</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">gbls</span><span class="p">[</span><span class="s1">&#39;forward&#39;</span><span class="p">]</span>
+<span class="k">def</span> <span class="nf">_forward_from_src</span><span class="p">(</span><span class="n">src</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="nb">globals</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]):</span>
+    <span class="c1"># avoid mutating the passed in dict</span>
+    <span class="nb">globals</span> <span class="o">=</span> <span class="nb">globals</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+    <span class="n">exec_with_source</span><span class="p">(</span><span class="n">src</span><span class="p">,</span> <span class="nb">globals</span><span class="p">)</span>
+    <span class="k">return</span> <span class="nb">globals</span><span class="p">[</span><span class="s1">&#39;forward&#39;</span><span class="p">]</span>
 
 
-<span class="k">def</span> <span class="nf">deserialize_graphmodule</span><span class="p">(</span><span class="n">body</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">:</span>
+<span class="k">def</span> <span class="nf">_format_import_statement</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">obj</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">importer</span><span class="p">:</span> <span class="n">Importer</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">_custom_builtins</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">_custom_builtins</span><span class="p">[</span><span class="n">name</span><span class="p">]</span><span class="o">.</span><span class="n">import_str</span>
+    <span class="k">if</span> <span class="n">_is_from_torch</span><span class="p">(</span><span class="n">name</span><span class="p">):</span>
+        <span class="k">return</span> <span class="s1">&#39;import torch&#39;</span>
+
+    <span class="n">module_name</span><span class="p">,</span> <span class="n">attr_name</span> <span class="o">=</span> <span class="n">importer</span><span class="o">.</span><span class="n">get_name</span><span class="p">(</span><span class="n">obj</span><span class="p">)</span>
+    <span class="k">return</span> <span class="sa">f</span><span class="s1">&#39;from </span><span class="si">{</span><span class="n">module_name</span><span class="si">}</span><span class="s1"> import </span><span class="si">{</span><span class="n">attr_name</span><span class="si">}</span><span class="s1"> as </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s1">&#39;</span>
+
+
+<span class="k">def</span> <span class="nf">_format_import_block</span><span class="p">(</span><span class="nb">globals</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="n">importer</span><span class="p">:</span> <span class="n">Importer</span><span class="p">):</span>
+    <span class="n">import_strs</span><span class="p">:</span> <span class="n">Set</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+    <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">obj</span> <span class="ow">in</span> <span class="nb">globals</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="n">import_strs</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">_format_import_statement</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">obj</span><span class="p">,</span> <span class="n">importer</span><span class="p">))</span>
+    <span class="k">return</span> <span class="s1">&#39;</span><span class="se">\n</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">import_strs</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">reduce_graph_module</span><span class="p">(</span><span class="n">body</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="n">import_block</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">:</span>
+    <span class="c1"># BC: attribute name was changed from `code` to `_code` to facilitate</span>
+    <span class="c1"># making `code` into a property and adding a docstring to it</span>
+    <span class="n">fn_src</span> <span class="o">=</span> <span class="n">body</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;_code&#39;</span><span class="p">)</span> <span class="ow">or</span> <span class="n">body</span><span class="p">[</span><span class="s1">&#39;code&#39;</span><span class="p">]</span>
+    <span class="n">forward</span> <span class="o">=</span> <span class="n">_forward_from_src</span><span class="p">(</span><span class="n">import_block</span> <span class="o">+</span> <span class="n">fn_src</span><span class="p">,</span> <span class="p">{})</span>
+    <span class="k">return</span> <span class="n">_deserialize_graph_module</span><span class="p">(</span><span class="n">forward</span><span class="p">,</span> <span class="n">body</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">reduce_package_graph_module</span><span class="p">(</span><span class="n">importer</span><span class="p">:</span> <span class="n">PackageImporter</span><span class="p">,</span>
+                                <span class="n">body</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
+                                <span class="n">generated_module_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">:</span>
+    <span class="n">forward</span> <span class="o">=</span> <span class="n">importer</span><span class="o">.</span><span class="n">import_module</span><span class="p">(</span><span class="n">generated_module_name</span><span class="p">)</span><span class="o">.</span><span class="n">forward</span>
+    <span class="k">return</span> <span class="n">_deserialize_graph_module</span><span class="p">(</span><span class="n">forward</span><span class="p">,</span> <span class="n">body</span><span class="p">,</span> <span class="n">importer</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">_deserialize_graph_module</span><span class="p">(</span><span class="n">forward</span><span class="p">,</span> <span class="n">body</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="n">importer</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">PackageImporter</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">:</span>
     <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Deserialize a GraphModule given the dictionary of the original module,</span>
 <span class="sd">    using the code to reconstruct the graph. We delete the actual graph before</span>
@@ -438,12 +471,8 @@
             <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
             <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span> <span class="o">=</span> <span class="n">body</span>
 
-    <span class="k">try</span><span class="p">:</span>
-        <span class="n">CodeOnlyModule</span><span class="o">.</span><span class="n">forward</span> <span class="o">=</span> <span class="n">_forward_from_src</span><span class="p">(</span><span class="n">body</span><span class="p">[</span><span class="s1">&#39;_code&#39;</span><span class="p">])</span>
-    <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
-        <span class="c1"># BC: attribute name was changed from `code` to `_code` to facilitate</span>
-        <span class="c1"># making `code` into a property and adding a docstring to it</span>
-        <span class="n">CodeOnlyModule</span><span class="o">.</span><span class="n">forward</span> <span class="o">=</span> <span class="n">_forward_from_src</span><span class="p">(</span><span class="n">body</span><span class="p">[</span><span class="s1">&#39;code&#39;</span><span class="p">])</span>
+    <span class="c1"># Try to retrieve the forward source in a backward-compatible way</span>
+    <span class="n">CodeOnlyModule</span><span class="o">.</span><span class="n">forward</span> <span class="o">=</span> <span class="n">forward</span>
 
     <span class="kn">from</span> <span class="nn">.symbolic_trace</span> <span class="kn">import</span> <span class="n">Tracer</span>
 
@@ -522,7 +551,10 @@
             <span class="k">pass</span>
         <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__new__</span><span class="p">(</span><span class="n">GraphModuleImpl</span><span class="p">)</span>
 
-<div class="viewcode-block" id="GraphModule.__init__"><a class="viewcode-back" href="../../../fx.html#torch.fx.GraphModule.__init__">[docs]</a>    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">root</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">,</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]],</span> <span class="n">graph</span><span class="p">:</span> <span class="n">Graph</span><span class="p">,</span> <span class="n">class_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s1">&#39;GraphModule&#39;</span><span class="p">):</span>
+<div class="viewcode-block" id="GraphModule.__init__"><a class="viewcode-back" href="../../../fx.html#torch.fx.GraphModule.__init__">[docs]</a>    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span>
+                 <span class="n">root</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">,</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]],</span>
+                 <span class="n">graph</span><span class="p">:</span> <span class="n">Graph</span><span class="p">,</span>
+                 <span class="n">class_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s1">&#39;GraphModule&#39;</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Construct a GraphModule.</span>
 
@@ -539,7 +571,7 @@
 
 <span class="sd">            graph (Graph): ``graph`` contains the nodes this GraphModule should use for code generation</span>
 
-<span class="sd">            name (str): ``name`` denotes the name of this GraphModule for debugging purposes. If it&#39;s unset, all</span>
+<span class="sd">            class_name (str): ``name`` denotes the name of this GraphModule for debugging purposes. If it&#39;s unset, all</span>
 <span class="sd">                error messages will report as originating from ``GraphModule``. It may be helpful to set this</span>
 <span class="sd">                to ``root``&#39;s original name or a name that makes sense within the context of your transform.</span>
 
@@ -669,15 +701,17 @@
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s1">&#39;Code has not been generated! Please report a bug to PyTorch&#39;</span><span class="p">)</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_code</span>
 
-<div class="viewcode-block" id="GraphModule.recompile"><a class="viewcode-back" href="../../../fx.html#torch.fx.GraphModule.recompile">[docs]</a>    <span class="k">def</span> <span class="nf">recompile</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<div class="viewcode-block" id="GraphModule.recompile"><a class="viewcode-back" href="../../../fx.html#torch.fx.GraphModule.recompile">[docs]</a>    <span class="k">def</span> <span class="nf">recompile</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">PythonCode</span><span class="p">:</span>
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Recompile this GraphModule from its ``graph`` attribute. This should be</span>
 <span class="sd">        called after editing the contained ``graph``, otherwise the generated</span>
 <span class="sd">        code of this ``GraphModule`` will be out of date.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_code</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_graph</span><span class="o">.</span><span class="n">python_code</span><span class="p">(</span><span class="n">root_module</span><span class="o">=</span><span class="s1">&#39;self&#39;</span><span class="p">)</span>
+        <span class="n">python_code</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_graph</span><span class="o">.</span><span class="n">python_code</span><span class="p">(</span><span class="n">root_module</span><span class="o">=</span><span class="s1">&#39;self&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_code</span> <span class="o">=</span> <span class="n">python_code</span><span class="o">.</span><span class="n">src</span>
+
         <span class="bp">cls</span> <span class="o">=</span> <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
-        <span class="bp">cls</span><span class="o">.</span><span class="n">forward</span> <span class="o">=</span> <span class="n">_forward_from_src</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_code</span><span class="p">)</span>
+        <span class="bp">cls</span><span class="o">.</span><span class="n">forward</span> <span class="o">=</span> <span class="n">_forward_from_src</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_code</span><span class="p">,</span> <span class="n">python_code</span><span class="o">.</span><span class="n">globals</span><span class="p">)</span>
 
         <span class="n">cls_call</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="fm">__call__</span>
 
@@ -720,7 +754,20 @@
                           <span class="n">file</span><span class="o">=</span><span class="n">sys</span><span class="o">.</span><span class="n">stderr</span><span class="p">)</span>
                 <span class="k">raise</span> <span class="n">e</span><span class="o">.</span><span class="n">with_traceback</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
 
-        <span class="bp">cls</span><span class="o">.</span><span class="fm">__call__</span> <span class="o">=</span> <span class="n">wrapped_call</span></div>
+        <span class="bp">cls</span><span class="o">.</span><span class="fm">__call__</span> <span class="o">=</span> <span class="n">wrapped_call</span>
+
+        <span class="k">return</span> <span class="n">python_code</span></div>
+
+    <span class="k">def</span> <span class="nf">__reduce_package__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">exporter</span><span class="p">:</span> <span class="n">PackageExporter</span><span class="p">):</span>
+        <span class="n">generated_module_name</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;fx-generated._</span><span class="si">{</span><span class="n">exporter</span><span class="o">.</span><span class="n">get_unique_id</span><span class="p">()</span><span class="si">}</span><span class="s1">&#39;</span>
+        <span class="n">python_code</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">recompile</span><span class="p">()</span>
+        <span class="n">import_block</span> <span class="o">=</span> <span class="n">_format_import_block</span><span class="p">(</span><span class="n">python_code</span><span class="o">.</span><span class="n">globals</span><span class="p">,</span> <span class="n">exporter</span><span class="o">.</span><span class="n">importer</span><span class="p">)</span>
+        <span class="n">module_code</span> <span class="o">=</span> <span class="n">import_block</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">code</span>
+        <span class="n">exporter</span><span class="o">.</span><span class="n">save_source_string</span><span class="p">(</span><span class="n">generated_module_name</span><span class="p">,</span> <span class="n">module_code</span><span class="p">)</span>
+
+        <span class="n">dict_without_graph</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="k">del</span> <span class="n">dict_without_graph</span><span class="p">[</span><span class="s1">&#39;_graph&#39;</span><span class="p">]</span>
+        <span class="k">return</span> <span class="p">(</span><span class="n">reduce_package_graph_module</span><span class="p">,</span> <span class="p">(</span><span class="n">dict_without_graph</span><span class="p">,</span> <span class="n">generated_module_name</span><span class="p">))</span>
 
     <span class="k">def</span> <span class="nf">__reduce__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
@@ -731,8 +778,10 @@
 <span class="sd">        code to regenerate the underlying ``Graph``</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">dict_without_graph</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="n">python_code</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">recompile</span><span class="p">()</span>
+        <span class="n">import_block</span> <span class="o">=</span> <span class="n">_format_import_block</span><span class="p">(</span><span class="n">python_code</span><span class="o">.</span><span class="n">globals</span><span class="p">,</span> <span class="n">sys_importer</span><span class="p">)</span>
         <span class="k">del</span> <span class="n">dict_without_graph</span><span class="p">[</span><span class="s1">&#39;_graph&#39;</span><span class="p">]</span>
-        <span class="k">return</span> <span class="p">(</span><span class="n">deserialize_graphmodule</span><span class="p">,</span> <span class="p">(</span><span class="n">dict_without_graph</span><span class="p">,))</span>
+        <span class="k">return</span> <span class="p">(</span><span class="n">reduce_graph_module</span><span class="p">,</span> <span class="p">(</span><span class="n">dict_without_graph</span><span class="p">,</span> <span class="n">import_block</span><span class="p">))</span>
 
     <span class="c1"># because __reduce__ is defined for serialization,</span>
     <span class="c1"># we need to define deepcopy otherwise it will call __reduce__</span>
