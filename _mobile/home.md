@@ -37,13 +37,6 @@ We have launched the following features in prototype, available in the PyTorch n
 * GPU support on [Android via Vulkan](https://pytorch.org/tutorials/prototype/vulkan_workflow.html)
 * DSP and NPU support on Android via [Google NNAPI](https://pytorch.org/tutorials/prototype/nnapi_mobilenetv2.html)
 
-## Models
-You can now access state of the art pre-trained models:
-* [MobileNetV3/V2](https://pytorch.org/hub/pytorch_vision_mobilenet_v2/)
-* D2Go
-* [PyTorch Hub](https://pytorch.org/hub/)
-* [PyTorch Tutorials](https://pytorch.org/tutorials)
-
 
 ## Deployment workflow
 
@@ -57,11 +50,18 @@ A typical workflow from training to mobile deployment with the optional model op
 * [PyTorch Mobile Runtime for iOS](https://www.youtube.com/watch?v=amTepUIR93k)
 * [PyTorch Mobile Runtime for Android](https://www.youtube.com/watch?v=5Lxuu16_28o)
 * [PyTorch Mobile Recipes in Tutorials](https://pytorch.org/tutorials/recipes/ptmobile_recipes_summary.html)
+* [Image Segmentation DeepLabV3 on iOS](https://pytorch.org/tutorials/beginner/deeplabv3_on_ios.html)
+* [Image Segmentation DeepLabV3 on Android](https://pytorch.org/tutorials/beginner/deeplabv3_on_android.html)
+
+## Demo apps
+
+Our new demo apps also include examples of image segmentation, object detection, neural machine translation, 
+question answering, and vision transformers. They are available on both iOS and Android:
+
+* [iOS demo app](https://github.com/pytorch/ios-demo-app)
+* [Android demo app](https://github.com/pytorch/android-demo-app)
 
 
-<!-- Do not remove the below script -->
-
-<script page-id="home" src="{{ site.baseurl }}/assets/menu-tab-selection.js"></script>
 
 <!-- Do not remove the below script -->
 
