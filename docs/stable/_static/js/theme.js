@@ -957,30 +957,50 @@ if (downloadNote.length >= 1) {
     $(".pytorch-call-to-action-links").hide();
 }
 
-//This code makes the Notes section of the Docs Left Nav collapsible
+//This code handles the Expand/Hide toggle for the Docs/Tutorials left nav items
 
-if ($("p.caption:first").text() == "Notes") {
-
-    $("p.caption:first").addClass("left-nav-top-caption");
-    $("span.caption-text:first").after("<span class='expand-menu'>[Expand]</span>");
-    $(".expand-menu").after("<span class='hide-menu'>[Hide]</span>");
-    $("p.caption:first").next("ul").hide();
-
-    $(".expand-menu").on("click", function() {
-        $(".hide-menu").toggle();
-        toggleList(this);
-    });
-
-    $(".hide-menu").on("click", function() {
-        $(".expand-menu").toggle();
-        toggleList(this);
-    });
-
-    function toggleList(menuCommand) {
-        $(menuCommand).toggle();
-        $("p.caption:first").next("ul").toggle();
+$(document).ready(function() {
+  var caption = "#pytorch-left-menu p.caption";
+  var collapseAdded = $(this).not("checked");
+  $(caption).each(function () {
+    var menuName = this.innerText.replace(/[^\w\s]/gi, "").trim();
+    $(this).find("span").addClass("checked");
+    if (collapsedSections.includes(menuName) == true && collapseAdded && sessionStorage.getItem(menuName) !== "expand" || sessionStorage.getItem(menuName) == "collapse") {
+      $(this.firstChild).after("<span class='expand-menu'>[ + ]</span>");
+      $(this.firstChild).after("<span class='hide-menu collapse'>[ - ]</span>");
+      $(this).next("ul").hide();
+    } else if ((collapsedSections.includes(menuName) == false && collapseAdded) || sessionStorage.getItem(menuName) == "expand") {
+      $(this.firstChild).after("<span class='expand-menu collapse'>[ + ]</span>");
+      $(this.firstChild).after("<span class='hide-menu'>[ - ]</span>");
     }
-}
+  });
+
+  $(".expand-menu").on("click", function () {
+    $(this).prev(".hide-menu").toggle();
+    $(this).parent().next("ul").toggle();
+    var menuName = $(this).parent().text().replace(/[^\w\s]/gi, "").trim();
+    if (sessionStorage.getItem(menuName) == "collapse") {
+      sessionStorage.removeItem(menuName);
+    }
+    sessionStorage.setItem(menuName, "expand");
+    toggleList(this);
+  });
+
+  $(".hide-menu").on("click", function () {
+    $(this).next(".expand-menu").toggle();
+    $(this).parent().next("ul").toggle();
+    var menuName = $(this).parent().text().replace(/[^\w\s]/gi, "").trim();
+    if (sessionStorage.getItem(menuName) == "expand") {
+      sessionStorage.removeItem(menuName);
+    }
+    sessionStorage.setItem(menuName, "collapse");
+    toggleList(this);
+  });
+
+  function toggleList(menuCommand) {
+    $(menuCommand).toggle();
+  }
+});
 
 // Get the card link from the card's link attribute
 
@@ -1054,5 +1074,21 @@ if (link.text() == "SyntaxError") {
     console.log("There is an issue with the intermediate/speech_command_recognition_with_torchaudio.html menu item.");
     link.text("Speech Command Recognition with torchaudio");
 }
+
+$(".stars-outer > i").hover(function() {
+    $(this).prevAll().addBack().toggleClass("fas star-fill");
+});
+
+$(".stars-outer > i").on("click", function() {
+    $(this).prevAll().each(function() {
+        $(this).addBack().addClass("fas star-fill");
+    });
+
+    $(".stars-outer > i").each(function() {
+        $(this).unbind("mouseenter mouseleave").css({
+            "pointer-events": "none"
+        });
+    });
+})
 
 },{"jquery":"jquery"}]},{},[1,2,3,4,5,6,7,8,9,10,"pytorch-sphinx-theme"]);
