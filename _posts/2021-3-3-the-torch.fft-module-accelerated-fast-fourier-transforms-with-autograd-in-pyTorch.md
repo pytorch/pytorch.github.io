@@ -10,7 +10,7 @@ As part of PyTorch’s goal to support hardware-accelerated deep learning and sc
 
 ## Getting started
 
-Getting started with the new ``torch.fft`` module is easy whether you are familiar with NumPy’s ``np.fft`` module or not. While complete documentation for each function in the module can be found [here](https://pytorch.org/docs/master/fft.html?highlight=fft), a breakdown of what it offers is:
+Getting started with the new ``torch.fft`` module is easy whether you are familiar with NumPy’s ``np.fft`` module or not. While complete documentation for each function in the module can be found [here](https://pytorch.org/docs/1.8.0/fft.html), a breakdown of what it offers is:
 
 * ``fft``, which computes a complex FFT over a single dimension, and ``ifft``, its inverse
 * the more general ``fftn`` and ``ifftn``, which support multiple dimensions
