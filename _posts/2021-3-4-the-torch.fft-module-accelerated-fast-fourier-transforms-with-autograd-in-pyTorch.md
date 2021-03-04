@@ -6,7 +6,7 @@ author: Mike Ruberry, Peter Bell, and Joe Spisak
 
 The Fast Fourier Transform (FFT) calculates the Discrete Fourier Transform in O(n log n) time. It is foundational to a wide variety of numerical algorithms and signal processing techniques since it makes working in signals’ “frequency domains” as tractable as working in their spatial or temporal domains.
 
-As part of PyTorch’s goal to support hardware-accelerated deep learning and scientific computing, we have invested in improving our FFT support, and with PyTorch 1.8, we are releasing the ``torch.fft`` module. This module implements the same functions as NumPy’s ``np.fft`` module, but with support for accelerators, like GPUs and autograd. 
+As part of PyTorch’s goal to support hardware-accelerated deep learning and scientific computing, we have invested in improving our FFT support, and with PyTorch 1.8, we are releasing the ``torch.fft`` module. This module implements the same functions as NumPy’s ``np.fft`` module, but with support for accelerators, like GPUs, and autograd. 
 
 ## Getting started
 
