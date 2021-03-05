@@ -1,6 +1,6 @@
 ---
 order: 3
-link: https://pytorch.org/blog/accelerating-training-on-nvidia-gpus-with-pytorch-automatic-mixed-precision/
-summary: Accelerating Training on NVIDIA GPUs with PyTorch Automatic Mixed Precision.
+link: https://pytorch.org/blog/the-torch.fft-module-accelerated-fast-fourier-transforms-with-autograd-in-pyTorch/
+summary: The torch.fft module: Accelerated Fast Fourier Transforms with Autograd in PyTorch
 ---
 
