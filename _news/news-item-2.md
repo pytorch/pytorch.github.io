@@ -1,6 +1,6 @@
 ---
 order: 2
-link: https://pytorch.org/blog/pytorch-developer-day-2020/
-summary: Announcing PyTorch Developer Day.
+link: https://pytorch.org/blog/pytorch-1.8-new-library-releases/
+summary: New PyTorch library releases including TorchVision Mobile, TorchAudio I/O, and more
 ---
 
