@@ -1,6 +1,6 @@
 ---
 layout: blog_detail
-title: 'The torch.fft module: Accelerated Fast Fourier Transforms with Autograd in PyTorch'
+title: 'Accelerated Fast Fourier Transforms in PyTorch with the torch.fft module'
 author: Mike Ruberry, Peter Bell, and Joe Spisak 
 ---
 
