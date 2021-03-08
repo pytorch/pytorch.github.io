@@ -231,7 +231,7 @@ function commandMessage(key) {
       "pip install torch==1.8.0+cu111 torchvision==0.9.0+cu111 torchaudio==0.8.0 -f https://download.pytorch.org/whl/torch_stable.html",
 
     "stable,pip,linux,rocm4.0,python":
-      "pip install torch -f https://download.pytorch.org/whl/rocm4.0.1/torch_stable.html",
+      "pip install torch -f https://download.pytorch.org/whl/rocm4.0.1/torch_stable.html<br />pip install ninja && pip install 'git+https://github.com/pytorch/vision.git@v0.9.0'",
 
     "stable,pip,windows,accnone,python":
       "pip install torch==1.8.0+cpu torchvision==0.9.0+cpu torchaudio===0.8.0 -f https://download.pytorch.org/whl/torch_stable.html",
