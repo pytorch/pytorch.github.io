@@ -245,12 +245,6 @@ function commandMessage(key) {
     "stable,pip,windows,rocm4.0,python":
       "<b>NOTE:</b> ROCm is not available on Windows",
 
-    "stable,source,macos,rocm4.0,python":
-      "<b>NOTE:</b> ROCm is not available on MacOS",
-
-    "stable,source,windows,rocm4.0,python":
-       "<b>NOTE:</b> ROCm is not available on Windows",
-
     "stable,libtorch,linux,accnone,cplusplus":
       "Download here (Pre-cxx11 ABI): <br/><a href='https://download.pytorch.org/libtorch/cpu/libtorch-shared-with-deps-1.8.0%2Bcpu.zip'>https://download.pytorch.org/libtorch/cpu/libtorch-shared-with-deps-1.8.0%2Bcpu.zip</a><br/><br> Download here (cxx11 ABI): <br/><a href='https://download.pytorch.org/libtorch/cpu/libtorch-cxx11-abi-shared-with-deps-1.8.0%2Bcpu.zip'>https://download.pytorch.org/libtorch/cpu/libtorch-cxx11-abi-shared-with-deps-1.8.0%2Bcpu.zip</a>",
 
@@ -261,7 +255,7 @@ function commandMessage(key) {
       "Download here (Pre-cxx11 ABI): <br/><a href='https://download.pytorch.org/libtorch/cu111/libtorch-shared-with-deps-1.8.0%2Bcu111.zip'>https://download.pytorch.org/libtorch/cu111/libtorch-shared-with-deps-1.8.0%2Bcu11.zip</a><br/><br> Download here (cxx11 ABI): <br/><a href='https://download.pytorch.org/libtorch/cu111/libtorch-cxx11-abi-shared-with-deps-1.8.0%2Bcu111.zip'>https://download.pytorch.org/libtorch/cu111/libtorch-cxx11-abi-shared-with-deps-1.8.0%2Bcu111.zip</a>",
 
     "stable,libtorch,linux,rocm4.0,cplusplus":
-      "LibTorch binaries are not yet available for ROCm",
+      "LibTorch binaries are not available for ROCm, please build it from source",
 
     "stable,libtorch,macos,accnone,cplusplus":
       "Download here: <br/><a href='https://download.pytorch.org/libtorch/cpu/libtorch-macos-1.8.0.zip'> https://download.pytorch.org/libtorch/cpu/libtorch-macos-1.8.0.zip </a>",
@@ -330,7 +324,7 @@ function commandMessage(key) {
       "pip install --pre torch torchvision torchaudio -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html<br /># On MacOS, we provide CPU-only packages, CUDA functionality is not provided",
 
     "preview,pip,macos,rocm4.0,python":
-      "<b>NOTE:</b> ROCm is not available on MacOS",
+      "pip install --pre torch torchvision torchaudio -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html<br /># ROCm is not available on MacOS",
 
     "preview,pip,macos,accnone,python":
       "pip install --pre torch torchvision torchaudio -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html",
@@ -369,7 +363,7 @@ function commandMessage(key) {
       "Download here (Pre-cxx11 ABI): <br/><a href='https://download.pytorch.org/libtorch/nightly/cu111/libtorch-shared-with-deps-latest.zip'>https://download.pytorch.org/libtorch/nightly/cu111/libtorch-shared-with-deps-latest.zip</a><br/><br> Download here (cxx11 ABI): <br/><a href='https://download.pytorch.org/libtorch/nightly/cu111/libtorch-cxx11-abi-shared-with-deps-latest.zip'>https://download.pytorch.org/libtorch/nightly/cu111/libtorch-cxx11-abi-shared-with-deps-latest.zip</a>",
 
     "preview,libtorch,linux,rocm4.0,cplusplus":
-      "LibTorch binaries are not yet available for ROCm",
+      "LibTorch binaries are not available for ROCm, please build it from source",
 
     "preview,libtorch,macos,accnone,cplusplus":
       "Download here: <br/><a href='https://download.pytorch.org/libtorch/nightly/cpu/libtorch-macos-latest.zip'> https://download.pytorch.org/libtorch/nightly/cpu/libtorch-macos-latest.zip </a>",
@@ -381,7 +375,7 @@ function commandMessage(key) {
       "MacOS binaries do not support CUDA. Download CPU libtorch here: <br/><a href='https://download.pytorch.org/libtorch/nightly/cpu/libtorch-macos-latest.zip'> https://download.pytorch.org/libtorch/nightly/cpu/libtorch-macos-latest.zip </a>",
 
     "preview,libtorch,macos,rocm4.0,cplusplus":
-      "<b>NOTE:</b> ROCm is not available on MacOS",
+      "ROCm is not available on MacOS. Download CPU libtorch here: <br/><a href='https://download.pytorch.org/libtorch/nightly/cpu/libtorch-macos-latest.zip'> https://download.pytorch.org/libtorch/nightly/cpu/libtorch-macos-latest.zip </a>",
 
     "preview,libtorch,windows,accnone,cplusplus":
       "Download here for C++ (Release version): <br/><a href='https://download.pytorch.org/libtorch/nightly/cpu/libtorch-win-shared-with-deps-latest.zip'>https://download.pytorch.org/libtorch/nightly/cpu/libtorch-win-shared-with-deps-latest.zip</a><br/><br>  Download here for C++ (Debug version): <br/><a href='https://download.pytorch.org/libtorch/nightly/cpu/libtorch-win-shared-with-deps-debug-latest.zip'>https://download.pytorch.org/libtorch/nightly/cpu/libtorch-win-shared-with-deps-debug-latest.zip</a>",
@@ -393,12 +387,6 @@ function commandMessage(key) {
       "Download here for C++ (Release version): <br/><a href='https://download.pytorch.org/libtorch/nightly/cu111/libtorch-win-shared-with-deps-latest.zip'>https://download.pytorch.org/libtorch/nightly/cu111/libtorch-win-shared-with-deps-latest.zip</a><br/><br>  Download here for C++ (Debug version): <br/><a href='https://download.pytorch.org/libtorch/nightly/cu111/libtorch-win-shared-with-deps-debug-latest.zip'>https://download.pytorch.org/libtorch/nightly/cu111/libtorch-win-shared-with-deps-debug-latest.zip</a>",
 
     "preview,libtorch,windows,rocm4.0,cplusplus":
-      "<b>NOTE:</b> ROCm is not available on Windows",
-
-    "preview,source,macos,rocm4.0,python":
-      "<b>NOTE:</b> ROCm is not available on MacOS",
-
-    "preview,source,windows,rocm4.0,python":
       "<b>NOTE:</b> ROCm is not available on Windows",
   };
 
