@@ -188,7 +188,7 @@
               
               
                 <div class="version">
-                  master (1.9.0a0+git8859a40 )
+                  master (1.9.0a0+git21d09ee )
                 </div>
               
             
@@ -833,10 +833,21 @@
         <span class="c1"># Whether to perform input tensor CPU to GPU copies on a side-stream</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">use_side_stream_for_tensor_copies</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;PYTORCH_DDP_USE_SIDE_STREAM&quot;</span><span class="p">,</span> <span class="s2">&quot;1&quot;</span><span class="p">)</span> <span class="o">==</span> <span class="s2">&quot;1&quot;</span>
 
-        <span class="c1"># Sync params and buffers</span>
+        <span class="c1"># Module replication within process (single-process multi device)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_module_copies</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_replicate_modules_within_process</span><span class="p">()</span>
+        <span class="c1"># Build parameters for reducer.</span>
+        <span class="n">parameters</span><span class="p">,</span> <span class="n">expect_sparse_gradient</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_build_params_for_reducer</span><span class="p">()</span>
+        <span class="c1"># Verify model equivalence.</span>
+        <span class="c1"># Corresponding params&#39; layouts (strides) must match across</span>
+        <span class="c1"># replicas within this process and across processes.</span>
+        <span class="c1"># see Note: &quot;Gradient Layout Contract&quot; in Reducer::initialize_buckets).</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">device_ids</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">device_ids</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">dist</span><span class="o">.</span><span class="n">_verify_replicas_within_process</span><span class="p">(</span><span class="n">parameters</span><span class="p">,</span> <span class="n">expect_sparse_gradient</span><span class="p">)</span>
+        <span class="n">dist</span><span class="o">.</span><span class="n">_verify_model_across_ranks</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">process_group</span><span class="p">,</span> <span class="n">parameters</span><span class="p">)</span>
+        <span class="c1"># Sync params and buffers. Ensures all DDP models start off at the same value.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_sync_params_and_buffers</span><span class="p">(</span><span class="n">authoritative_rank</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
-
-        <span class="bp">self</span><span class="o">.</span><span class="n">_ddp_init_helper</span><span class="p">()</span>
+        <span class="c1"># Builds reducer.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_ddp_init_helper</span><span class="p">(</span><span class="n">parameters</span><span class="p">,</span> <span class="n">expect_sparse_gradient</span><span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">_sync_params_and_buffers</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">authoritative_rank</span><span class="o">=</span><span class="mi">0</span><span class="p">):</span>
         <span class="n">module_states</span> <span class="o">=</span> <span class="p">[]</span>
@@ -850,134 +861,15 @@
                 <span class="bp">self</span><span class="o">.</span><span class="n">broadcast_bucket_size</span><span class="p">,</span>
                 <span class="n">authoritative_rank</span><span class="p">)</span>
 
-    <span class="k">def</span> <span class="nf">_ddp_init_helper</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_ddp_init_helper</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">parameters</span><span class="p">,</span> <span class="n">expect_sparse_gradient</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Initialization helper function that does the following:</span>
-
-<span class="sd">        (1) replicating the module from device[0] to the other devices</span>
-<span class="sd">        (2) bucketing the parameters for reductions</span>
-<span class="sd">        (3) resetting the bucketing states</span>
-<span class="sd">        (4) registering the grad hooks</span>
+<span class="sd">        (1) bucketing the parameters for reductions</span>
+<span class="sd">        (2) resetting the bucketing states</span>
+<span class="sd">        (3) registering the grad hooks</span>
+<span class="sd">        (4) Logging constructin-time DDP logging data</span>
 <span class="sd">        (5) passing a handle of DDP to SyncBatchNorm Layer</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-
-        <span class="k">def</span> <span class="nf">parameters</span><span class="p">(</span><span class="n">m</span><span class="p">,</span> <span class="n">recurse</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
-            <span class="k">def</span> <span class="nf">model_parameters</span><span class="p">(</span><span class="n">m</span><span class="p">):</span>
-                <span class="n">ps</span> <span class="o">=</span> <span class="n">m</span><span class="o">.</span><span class="n">_former_parameters</span><span class="o">.</span><span class="n">values</span><span class="p">()</span> \
-                    <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">m</span><span class="p">,</span> <span class="s2">&quot;_former_parameters&quot;</span><span class="p">)</span> \
-                    <span class="k">else</span> <span class="n">m</span><span class="o">.</span><span class="n">parameters</span><span class="p">(</span><span class="n">recurse</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-                <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">ps</span><span class="p">:</span>
-                    <span class="k">yield</span> <span class="n">p</span>
-
-            <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="n">m</span><span class="o">.</span><span class="n">modules</span><span class="p">()</span> <span class="k">if</span> <span class="n">recurse</span> <span class="k">else</span> <span class="p">[</span><span class="n">m</span><span class="p">]:</span>
-                <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">model_parameters</span><span class="p">(</span><span class="n">m</span><span class="p">):</span>
-                    <span class="k">yield</span> <span class="n">p</span>
-
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">device_ids</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">device_ids</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
-
-            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
-                <span class="s2">&quot;Single-Process Multi-GPU is not the recommended mode for &quot;</span>
-                <span class="s2">&quot;DDP. In this mode, each DDP instance operates on multiple &quot;</span>
-                <span class="s2">&quot;devices and creates multiple module replicas within one &quot;</span>
-                <span class="s2">&quot;process. The overhead of scatter/gather and GIL contention &quot;</span>
-                <span class="s2">&quot;in every forward pass can slow down training. &quot;</span>
-                <span class="s2">&quot;Please consider using one DDP instance per device or per &quot;</span>
-                <span class="s2">&quot;module replica by explicitly setting device_ids or &quot;</span>
-                <span class="s2">&quot;CUDA_VISIBLE_DEVICES. &quot;</span>
-            <span class="p">)</span>
-
-            <span class="c1"># only create replicas for single-device CUDA modules</span>
-            <span class="c1">#</span>
-            <span class="c1"># TODO: we don&#39;t need to replicate params in here. they&#39;re always going to</span>
-            <span class="c1"># be broadcasted using larger blocks in broadcast_coalesced, so it might be</span>
-            <span class="c1"># better to not pollute the caches with these small blocks</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_module_copies</span> <span class="o">=</span> <span class="n">replicate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">device_ids</span><span class="p">,</span> <span class="n">detach</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_module_copies</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">module</span>
-
-            <span class="k">for</span> <span class="n">module_copy</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_module_copies</span><span class="p">[</span><span class="mi">1</span><span class="p">:]:</span>
-                <span class="k">for</span> <span class="n">param</span><span class="p">,</span> <span class="n">copy_param</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="o">.</span><span class="n">parameters</span><span class="p">(),</span> <span class="n">parameters</span><span class="p">(</span><span class="n">module_copy</span><span class="p">)):</span>
-                    <span class="c1"># Reducer requires param copies have the same strides across replicas.</span>
-                    <span class="c1"># Fixes up copy_param strides in case replicate didn&#39;t match param strides.</span>
-                    <span class="k">if</span> <span class="n">param</span><span class="o">.</span><span class="n">layout</span> <span class="ow">is</span> <span class="n">torch</span><span class="o">.</span><span class="n">strided</span> <span class="ow">and</span> <span class="n">param</span><span class="o">.</span><span class="n">stride</span><span class="p">()</span> <span class="o">!=</span> <span class="n">copy_param</span><span class="o">.</span><span class="n">stride</span><span class="p">():</span>
-                        <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>
-                            <span class="n">copy_param</span><span class="o">.</span><span class="n">set_</span><span class="p">(</span><span class="n">copy_param</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
-                                                      <span class="o">.</span><span class="n">as_strided</span><span class="p">(</span><span class="n">param</span><span class="o">.</span><span class="n">size</span><span class="p">(),</span> <span class="n">param</span><span class="o">.</span><span class="n">stride</span><span class="p">())</span>
-                                                      <span class="o">.</span><span class="n">copy_</span><span class="p">(</span><span class="n">copy_param</span><span class="p">))</span>
-                    <span class="n">copy_param</span><span class="o">.</span><span class="n">requires_grad</span> <span class="o">=</span> <span class="n">param</span><span class="o">.</span><span class="n">requires_grad</span>
-
-        <span class="k">else</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_module_copies</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="p">]</span>
-
-        <span class="bp">self</span><span class="o">.</span><span class="n">modules_params</span> <span class="o">=</span> <span class="p">[</span><span class="nb">list</span><span class="p">(</span><span class="n">parameters</span><span class="p">(</span><span class="n">m</span><span class="p">))</span> <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_module_copies</span><span class="p">]</span>
-        <span class="c1"># Collect buffers for modules, filtering out buffers that should be ignored.</span>
-        <span class="n">named_module_buffers</span> <span class="o">=</span> <span class="p">[</span>
-            <span class="p">[(</span><span class="n">buffer</span><span class="p">,</span> <span class="n">buffer_name</span><span class="p">)</span> <span class="k">for</span> <span class="n">buffer_name</span><span class="p">,</span> <span class="n">buffer</span> <span class="ow">in</span> <span class="n">m</span><span class="o">.</span><span class="n">named_buffers</span><span class="p">()]</span>
-            <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_module_copies</span>
-        <span class="p">]</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">modules_buffers</span> <span class="o">=</span> <span class="p">[</span>
-            <span class="p">[</span>
-                <span class="n">buffer</span>
-                <span class="k">for</span> <span class="p">(</span><span class="n">buffer</span><span class="p">,</span> <span class="n">buffer_name</span><span class="p">)</span> <span class="ow">in</span> <span class="n">module_buffers</span>
-                <span class="k">if</span> <span class="n">buffer_name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">parameters_to_ignore</span>
-            <span class="p">]</span>
-            <span class="k">for</span> <span class="n">module_buffers</span> <span class="ow">in</span> <span class="n">named_module_buffers</span>
-        <span class="p">]</span>
-        <span class="c1"># Build tuple of (module, parameter) for all parameters that require grads.</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">device_ids</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">device_ids</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
-            <span class="c1"># Single-process multi-device mode,does not support self.parameters_to_ignore.</span>
-            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">parameters_to_ignore</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                    <span class="s2">&quot;Single-Process multi-device mode does not &quot;</span>
-                    <span class="s2">&quot;support ignoring parameters upfront. Please consider &quot;</span>
-                    <span class="s2">&quot;using one DDP instance per device.&quot;</span>
-                <span class="p">)</span>
-
-            <span class="n">modules_and_parameters</span> <span class="o">=</span> <span class="p">[</span>
-                <span class="p">[</span>
-                    <span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">parameter</span><span class="p">)</span>
-                    <span class="k">for</span> <span class="n">module</span> <span class="ow">in</span> <span class="n">replica</span><span class="o">.</span><span class="n">modules</span><span class="p">()</span>
-                    <span class="k">for</span> <span class="n">parameter</span> <span class="ow">in</span> <span class="nb">filter</span><span class="p">(</span>
-                        <span class="k">lambda</span> <span class="n">parameter</span><span class="p">:</span> <span class="n">parameter</span><span class="o">.</span><span class="n">requires_grad</span><span class="p">,</span>
-                        <span class="n">parameters</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">recurse</span><span class="o">=</span><span class="kc">False</span><span class="p">))</span>
-                <span class="p">]</span> <span class="k">for</span> <span class="n">replica</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_module_copies</span><span class="p">]</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">modules_and_parameters</span> <span class="o">=</span> <span class="p">[</span>
-                <span class="p">[</span>
-                    <span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">parameter</span><span class="p">)</span>
-                    <span class="k">for</span> <span class="n">module_name</span><span class="p">,</span> <span class="n">module</span> <span class="ow">in</span> <span class="n">replica</span><span class="o">.</span><span class="n">named_modules</span><span class="p">()</span>
-                    <span class="k">for</span> <span class="n">parameter</span> <span class="ow">in</span> <span class="p">[</span>
-                        <span class="n">param</span>
-                        <span class="c1"># Note that we access module.named_parameters instead of</span>
-                        <span class="c1"># parameters(module). parameters(module) is only needed in the</span>
-                        <span class="c1"># single-process multi device case, where it accesses replicated</span>
-                        <span class="c1"># parameters through _former_parameters.</span>
-                        <span class="k">for</span> <span class="n">param_name</span><span class="p">,</span> <span class="n">param</span> <span class="ow">in</span> <span class="n">module</span><span class="o">.</span><span class="n">named_parameters</span><span class="p">(</span><span class="n">recurse</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-                        <span class="k">if</span> <span class="n">param</span><span class="o">.</span><span class="n">requires_grad</span>
-                        <span class="ow">and</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">module_name</span><span class="si">}</span><span class="s2">.</span><span class="si">{</span><span class="n">param_name</span><span class="si">}</span><span class="s2">&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">parameters_to_ignore</span>
-                    <span class="p">]</span>
-                <span class="p">]</span>
-                <span class="k">for</span> <span class="n">replica</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_module_copies</span>
-            <span class="p">]</span>
-
-        <span class="c1"># Build list of parameters.</span>
-        <span class="n">parameters</span> <span class="o">=</span> <span class="p">[</span>
-            <span class="nb">list</span><span class="p">(</span><span class="n">parameter</span> <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">parameter</span> <span class="ow">in</span> <span class="n">replica</span><span class="p">)</span>
-            <span class="k">for</span> <span class="n">replica</span> <span class="ow">in</span> <span class="n">modules_and_parameters</span><span class="p">]</span>
-
-        <span class="c1"># Checks if a module will produce a sparse gradient.</span>
-        <span class="k">def</span> <span class="nf">produces_sparse_gradient</span><span class="p">(</span><span class="n">module</span><span class="p">):</span>
-            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Embedding</span><span class="p">):</span>
-                <span class="k">return</span> <span class="n">module</span><span class="o">.</span><span class="n">sparse</span>
-            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">EmbeddingBag</span><span class="p">):</span>
-                <span class="k">return</span> <span class="n">module</span><span class="o">.</span><span class="n">sparse</span>
-            <span class="k">return</span> <span class="kc">False</span>
-
-        <span class="c1"># Build list of booleans indicating whether or not to expect sparse</span>
-        <span class="c1"># gradients for the corresponding parameters.</span>
-        <span class="n">expect_sparse_gradient</span> <span class="o">=</span> <span class="p">[</span>
-            <span class="nb">list</span><span class="p">(</span><span class="n">produces_sparse_gradient</span><span class="p">(</span><span class="n">module</span><span class="p">)</span> <span class="k">for</span> <span class="n">module</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">replica</span><span class="p">)</span>
-            <span class="k">for</span> <span class="n">replica</span> <span class="ow">in</span> <span class="n">modules_and_parameters</span><span class="p">]</span>
-
         <span class="c1"># The bucket size limit is specified in the constructor.</span>
         <span class="c1"># Additionally, we allow for a single small bucket for parameters</span>
         <span class="c1"># that are defined first, such that their gradients don&#39;t spill into</span>
@@ -1026,7 +918,134 @@
         <span class="nb">super</span><span class="p">(</span><span class="n">DistributedDataParallel</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">__setstate__</span><span class="p">(</span><span class="n">state</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s1">&#39;require_forward_param_sync&#39;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s1">&#39;require_backward_grad_sync&#39;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_ddp_init_helper</span><span class="p">()</span>
+        <span class="n">parameters</span><span class="p">,</span> <span class="n">expect_sparse_gradient</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_build_params_for_reducer</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_ddp_init_helper</span><span class="p">(</span><span class="n">parameters</span><span class="p">,</span> <span class="n">expect_sparse_gradient</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_replicate_modules_within_process</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">device_ids</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">device_ids</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                <span class="s2">&quot;Single-Process Multi-GPU is not the recommended mode for &quot;</span>
+                <span class="s2">&quot;DDP. In this mode, each DDP instance operates on multiple &quot;</span>
+                <span class="s2">&quot;devices and creates multiple module replicas within one &quot;</span>
+                <span class="s2">&quot;process. The overhead of scatter/gather and GIL contention &quot;</span>
+                <span class="s2">&quot;in every forward pass can slow down training. &quot;</span>
+                <span class="s2">&quot;Please consider using one DDP instance per device or per &quot;</span>
+                <span class="s2">&quot;module replica by explicitly setting device_ids or &quot;</span>
+                <span class="s2">&quot;CUDA_VISIBLE_DEVICES. &quot;</span>
+            <span class="p">)</span>
+
+            <span class="c1"># only create replicas for single-device CUDA modules</span>
+            <span class="c1">#</span>
+            <span class="c1"># TODO: we don&#39;t need to replicate params in here. they&#39;re always going to</span>
+            <span class="c1"># be broadcasted using larger blocks in broadcast_coalesced, so it might be</span>
+            <span class="c1"># better to not pollute the caches with these small blocks</span>
+            <span class="n">module_copies</span> <span class="o">=</span> <span class="n">replicate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">device_ids</span><span class="p">,</span> <span class="n">detach</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="n">module_copies</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">module</span>
+
+            <span class="k">for</span> <span class="n">module_copy</span> <span class="ow">in</span> <span class="n">module_copies</span><span class="p">[</span><span class="mi">1</span><span class="p">:]:</span>
+                <span class="k">for</span> <span class="n">param</span><span class="p">,</span> <span class="n">copy_param</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="o">.</span><span class="n">parameters</span><span class="p">(),</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_parameters</span><span class="p">(</span><span class="n">module_copy</span><span class="p">)):</span>
+                    <span class="c1"># Reducer requires param copies have the same strides across replicas.</span>
+                    <span class="c1"># Fixes up copy_param strides in case replicate didn&#39;t match param strides.</span>
+                    <span class="k">if</span> <span class="n">param</span><span class="o">.</span><span class="n">layout</span> <span class="ow">is</span> <span class="n">torch</span><span class="o">.</span><span class="n">strided</span> <span class="ow">and</span> <span class="n">param</span><span class="o">.</span><span class="n">stride</span><span class="p">()</span> <span class="o">!=</span> <span class="n">copy_param</span><span class="o">.</span><span class="n">stride</span><span class="p">():</span>
+                        <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>
+                            <span class="n">copy_param</span><span class="o">.</span><span class="n">set_</span><span class="p">(</span><span class="n">copy_param</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+                                                      <span class="o">.</span><span class="n">as_strided</span><span class="p">(</span><span class="n">param</span><span class="o">.</span><span class="n">size</span><span class="p">(),</span> <span class="n">param</span><span class="o">.</span><span class="n">stride</span><span class="p">())</span>
+                                                      <span class="o">.</span><span class="n">copy_</span><span class="p">(</span><span class="n">copy_param</span><span class="p">))</span>
+                    <span class="n">copy_param</span><span class="o">.</span><span class="n">requires_grad</span> <span class="o">=</span> <span class="n">param</span><span class="o">.</span><span class="n">requires_grad</span>
+
+            <span class="k">return</span> <span class="n">module_copies</span>
+
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="p">]</span>
+
+    <span class="k">def</span> <span class="nf">_build_params_for_reducer</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="c1"># Build tuple of (module, parameter) for all parameters that require grads.</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">device_ids</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">device_ids</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="c1"># Single-process multi-device mode,does not support self.parameters_to_ignore.</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">parameters_to_ignore</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;Single-Process multi-device mode does not &quot;</span>
+                    <span class="s2">&quot;support ignoring parameters upfront. Please consider &quot;</span>
+                    <span class="s2">&quot;using one DDP instance per device.&quot;</span>
+                <span class="p">)</span>
+
+            <span class="n">modules_and_parameters</span> <span class="o">=</span> <span class="p">[</span>
+                <span class="p">[</span>
+                    <span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">parameter</span><span class="p">)</span>
+                    <span class="k">for</span> <span class="n">module</span> <span class="ow">in</span> <span class="n">replica</span><span class="o">.</span><span class="n">modules</span><span class="p">()</span>
+                    <span class="k">for</span> <span class="n">parameter</span> <span class="ow">in</span> <span class="nb">filter</span><span class="p">(</span>
+                        <span class="k">lambda</span> <span class="n">parameter</span><span class="p">:</span> <span class="n">parameter</span><span class="o">.</span><span class="n">requires_grad</span><span class="p">,</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">_get_parameters</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">recurse</span><span class="o">=</span><span class="kc">False</span><span class="p">))</span>
+                <span class="p">]</span> <span class="k">for</span> <span class="n">replica</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_module_copies</span><span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">modules_and_parameters</span> <span class="o">=</span> <span class="p">[</span>
+                <span class="p">[</span>
+                    <span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">parameter</span><span class="p">)</span>
+                    <span class="k">for</span> <span class="n">module_name</span><span class="p">,</span> <span class="n">module</span> <span class="ow">in</span> <span class="n">replica</span><span class="o">.</span><span class="n">named_modules</span><span class="p">()</span>
+                    <span class="k">for</span> <span class="n">parameter</span> <span class="ow">in</span> <span class="p">[</span>
+                        <span class="n">param</span>
+                        <span class="c1"># Note that we access module.named_parameters instead of</span>
+                        <span class="c1"># parameters(module). parameters(module) is only needed in the</span>
+                        <span class="c1"># single-process multi device case, where it accesses replicated</span>
+                        <span class="c1"># parameters through _former_parameters.</span>
+                        <span class="k">for</span> <span class="n">param_name</span><span class="p">,</span> <span class="n">param</span> <span class="ow">in</span> <span class="n">module</span><span class="o">.</span><span class="n">named_parameters</span><span class="p">(</span><span class="n">recurse</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+                        <span class="k">if</span> <span class="n">param</span><span class="o">.</span><span class="n">requires_grad</span>
+                        <span class="ow">and</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">module_name</span><span class="si">}</span><span class="s2">.</span><span class="si">{</span><span class="n">param_name</span><span class="si">}</span><span class="s2">&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">parameters_to_ignore</span>
+                    <span class="p">]</span>
+                <span class="p">]</span>
+                <span class="k">for</span> <span class="n">replica</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_module_copies</span>
+            <span class="p">]</span>
+
+        <span class="c1"># Build list of parameters.</span>
+        <span class="n">parameters</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="nb">list</span><span class="p">(</span><span class="n">parameter</span> <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">parameter</span> <span class="ow">in</span> <span class="n">replica</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">replica</span> <span class="ow">in</span> <span class="n">modules_and_parameters</span><span class="p">]</span>
+
+        <span class="c1"># Checks if a module will produce a sparse gradient.</span>
+        <span class="k">def</span> <span class="nf">produces_sparse_gradient</span><span class="p">(</span><span class="n">module</span><span class="p">):</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Embedding</span><span class="p">)</span> <span class="ow">or</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">EmbeddingBag</span><span class="p">):</span>
+                <span class="k">return</span> <span class="n">module</span><span class="o">.</span><span class="n">sparse</span>
+            <span class="k">return</span> <span class="kc">False</span>
+
+        <span class="c1"># Build list of booleans indicating whether or not to expect sparse</span>
+        <span class="c1"># gradients for the corresponding parameters.</span>
+        <span class="n">expect_sparse_gradient</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="nb">list</span><span class="p">(</span><span class="n">produces_sparse_gradient</span><span class="p">(</span><span class="n">module</span><span class="p">)</span> <span class="k">for</span> <span class="n">module</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">replica</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">replica</span> <span class="ow">in</span> <span class="n">modules_and_parameters</span><span class="p">]</span>
+
+        <span class="c1"># The following modules_params and modules_buffers are used for</span>
+        <span class="c1"># param/buffer sync in _sync_params.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">modules_params</span> <span class="o">=</span> <span class="p">[</span><span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_get_parameters</span><span class="p">(</span><span class="n">m</span><span class="p">))</span> <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_module_copies</span><span class="p">]</span>
+        <span class="c1"># Collect buffers for modules, filtering out buffers that should be ignored.</span>
+        <span class="n">named_module_buffers</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="p">[(</span><span class="n">buffer</span><span class="p">,</span> <span class="n">buffer_name</span><span class="p">)</span> <span class="k">for</span> <span class="n">buffer_name</span><span class="p">,</span> <span class="n">buffer</span> <span class="ow">in</span> <span class="n">m</span><span class="o">.</span><span class="n">named_buffers</span><span class="p">()]</span>
+            <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_module_copies</span>
+        <span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">modules_buffers</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="p">[</span>
+                <span class="n">buffer</span>
+                <span class="k">for</span> <span class="p">(</span><span class="n">buffer</span><span class="p">,</span> <span class="n">buffer_name</span><span class="p">)</span> <span class="ow">in</span> <span class="n">module_buffers</span>
+                <span class="k">if</span> <span class="n">buffer_name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">parameters_to_ignore</span>
+            <span class="p">]</span>
+            <span class="k">for</span> <span class="n">module_buffers</span> <span class="ow">in</span> <span class="n">named_module_buffers</span>
+        <span class="p">]</span>
+
+        <span class="k">return</span> <span class="n">parameters</span><span class="p">,</span> <span class="n">expect_sparse_gradient</span>
+
+    <span class="k">def</span> <span class="nf">_get_parameters</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">m</span><span class="p">,</span> <span class="n">recurse</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Returns a generator of module parameters</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">def</span> <span class="nf">model_parameters</span><span class="p">(</span><span class="n">m</span><span class="p">):</span>
+            <span class="n">ps</span> <span class="o">=</span> <span class="n">m</span><span class="o">.</span><span class="n">_former_parameters</span><span class="o">.</span><span class="n">values</span><span class="p">()</span> \
+                <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">m</span><span class="p">,</span> <span class="s2">&quot;_former_parameters&quot;</span><span class="p">)</span> \
+                <span class="k">else</span> <span class="n">m</span><span class="o">.</span><span class="n">parameters</span><span class="p">(</span><span class="n">recurse</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">ps</span><span class="p">:</span>
+                <span class="k">yield</span> <span class="n">p</span>
+
+        <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="n">m</span><span class="o">.</span><span class="n">modules</span><span class="p">()</span> <span class="k">if</span> <span class="n">recurse</span> <span class="k">else</span> <span class="p">[</span><span class="n">m</span><span class="p">]:</span>
+            <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">model_parameters</span><span class="p">(</span><span class="n">m</span><span class="p">):</span>
+                <span class="k">yield</span> <span class="n">p</span>
 
     <span class="k">def</span> <span class="nf">_check_default_group</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="n">pickle_not_supported</span> <span class="o">=</span> <span class="kc">False</span>
@@ -1507,6 +1526,7 @@
 <span class="sd">            &gt;&gt;&gt; ddp.register_comm_hook(state = None, hook = encode_and_decode)</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_check_comm_hook</span><span class="p">(</span><span class="n">hook</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">_set_comm_hook_name</span><span class="p">(</span><span class="n">hook</span><span class="o">.</span><span class="vm">__qualname__</span><span class="p">)</span>
         <span class="n">dist</span><span class="o">.</span><span class="n">_register_comm_hook</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">reducer</span><span class="p">,</span> <span class="n">state</span><span class="p">,</span> <span class="n">hook</span><span class="p">)</span></div>
 
     <span class="k">def</span> <span class="nf">_register_builtin_comm_hook</span><span class="p">(</span>
@@ -1541,6 +1561,7 @@
 <span class="sd">            &gt;&gt;&gt; ddp._register_builtin_comm_hook(dist.BuiltinCommHookType.FP16_COMPRESS)</span>
 
 <span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">_set_comm_hook_name</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">comm_hook_type</span><span class="p">))</span>
         <span class="n">dist</span><span class="o">.</span><span class="n">_register_builtin_comm_hook</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">reducer</span><span class="p">,</span> <span class="n">comm_hook_type</span><span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">_distributed_broadcast_coalesced</span><span class="p">(</span>
