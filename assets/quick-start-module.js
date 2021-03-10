@@ -202,7 +202,7 @@ function commandMessage(key) {
       "<b>NOTE:</b> Python 3.9 users will need to add '-c=conda-forge' for installation<br />conda install pytorch torchvision torchaudio cudatoolkit=10.2 -c pytorch",
 
     "stable,conda,windows,cuda11.1,python":
-      "<b>NOTE:</b> Python 3.9 users will need to add '-c=conda-forge' for installation<br />conda install pytorch torchvision torchaudio cudatoolkit=11.1 -c pytorch",
+      "<b>NOTE:</b> Python 3.9 users will need to add '-c=conda-forge' for installation<br />conda install pytorch torchvision torchaudio cudatoolkit=11.1 -c pytorch -c conda-forge",
 
     "stable,conda,windows,rocm4.0,python":
       "<b>NOTE:</b> ROCm is not available on Windows<br />",
@@ -309,7 +309,7 @@ function commandMessage(key) {
       "<b>NOTE:</b> Python 3.9 users will need to add '-c=conda-forge' for installation<br />conda install pytorch torchvision torchaudio cudatoolkit=10.2 -c pytorch-nightly",
 
     "preview,conda,windows,cuda11.1,python":
-      "<b>NOTE:</b> Python 3.9 users will need to add '-c=conda-forge' for installation<br />conda install pytorch torchvision torchaudio cudatoolkit=11.1 -c pytorch-nightly",
+      "<b>NOTE:</b> Python 3.9 users will need to add '-c=conda-forge' for installation<br />conda install pytorch torchvision torchaudio cudatoolkit=11.1 -c pytorch-nightly -c conda-forge",
 
     "preview,conda,windows,rocm4.0,python":
       "<b>NOTE:</b> ROCm is not available on Windows<br />",
