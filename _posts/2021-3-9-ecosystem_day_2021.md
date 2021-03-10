@@ -39,6 +39,6 @@ Poster Exhibition & Breakout Sessions - 3:00 pm-6:00 pm PT
 
 Call for posters now open! [Submit your proposal](https://pytorchecosystemday.fbreg.com/posters) today! Please send us the **title** and **summary** of your projects, tools, and libraries that could benefit PyTorch researchers in academia and industry, application developers, and ML engineers for consideration. The focus must be on academic papers, machine learning research, or open-source projects. Please no sales pitches. **Deadline for submission is March 18, 2021.** 
 
-Visit [pytorchecosystemday.fbreg.com](pytorchecosystemday.fbreg.com) for more information and we look forward to welcoming you to PyTorch Ecosystem Day on April 21st!
+Visit [pytorchecosystemday.fbreg.com](http://pytorchecosystemday.fbreg.com) for more information and we look forward to welcoming you to PyTorch Ecosystem Day on April 21st!
 
 
