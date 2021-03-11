@@ -75,7 +75,7 @@ This will build the static site at `./_site`. This directory is not tracked in g
 
 The website is hosted on [Github Pages](https://pages.github.com/) at [https://pytorch.org](https://pytorch.org).
 
-To deploy changes, merge your latest code into the `sites` branch. A build will be automatically built and committed to the `master` branch via a CircleCI job.
+To deploy changes, merge your latest code into the `site` branch. A build will be automatically built and committed to the `master` branch via a CircleCI job.
 
 To view the status of the build visit [https://circleci.com/gh/pytorch/pytorch.github.io](https://circleci.com/gh/pytorch/pytorch.github.io).
 
