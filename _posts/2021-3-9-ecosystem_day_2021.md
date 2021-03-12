@@ -10,7 +10,7 @@ We’re proud to announce our first PyTorch Ecosystem Day. The virtual, one-day 
 PyTorch is a deep learning framework of choice for academics and companies, all thanks to its rich ecosystem of tools and strong community. As with our developers, our ecosystem partners play a pivotal role in the development and growth of the community.
 
 <div class="text-center">
-  <img src="{{ site.url }}/assets/images/ecosystem_day2021.jpg" width="100%">
+  <img src="{{ site.url }}/assets/images/ecosystem_day.png" width="100%">
 </div>
 
 We will be hosting our first PyTorch Ecosystem Day, a virtual event designed for our ecosystem and industry communities to showcase their work and discover new opportunities to collaborate. 
