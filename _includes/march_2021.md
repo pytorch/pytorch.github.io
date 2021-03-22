@@ -1,7 +1,7 @@
 
 # Issue \#1
 
-Welcome to the first issue of the PyTorch Contributors newsletter! Keeping track of everything that’s happening in the PyTorch developer world is a big task; here you will find curated news including RFCs, feature roadmaps, notable PRs, editorials from developers, and more.  If you have questions or suggestions for the newsletter, just reply back to this email.
+Welcome to the first issue of the PyTorch Contributors newsletter! Keeping track of everything that’s happening in the PyTorch developer world is a big task; here you will find curated news including RFCs, feature roadmaps, notable PRs, editorials from developers, and more.  
 
 ## PyTorch 1.8.0
 
