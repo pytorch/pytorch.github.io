@@ -222,61 +222,61 @@ function commandMessage(key) {
     "stable,pip,macos,accnone,python": "pip install torch torchvision torchaudio",
 
     "stable,pip,linux,accnone,python":
-      "pip install torch==1.8.0+cpu torchvision==0.9.0+cpu torchaudio==0.8.0 -f https://download.pytorch.org/whl/torch_stable.html",
+      "pip install torch==1.8.1+cpu torchvision==0.9.1+cpu torchaudio==0.8.1 -f https://download.pytorch.org/whl/torch_stable.html",
 
     "stable,pip,linux,cuda10.2,python":
       "pip install torch torchvision torchaudio",
 
     "stable,pip,linux,cuda11.1,python":
-      "pip install torch==1.8.0+cu111 torchvision==0.9.0+cu111 torchaudio==0.8.0 -f https://download.pytorch.org/whl/torch_stable.html",
+      "pip install torch==1.8.1+cu111 torchvision==0.9.1+cu111 torchaudio==0.8.1 -f https://download.pytorch.org/whl/torch_stable.html",
 
     "stable,pip,linux,rocm4.0,python":
-      "pip install torch -f https://download.pytorch.org/whl/rocm4.0.1/torch_stable.html<br />pip install ninja && pip install 'git+https://github.com/pytorch/vision.git@v0.9.0'",
+      "pip install torch -f https://download.pytorch.org/whl/rocm4.0.1/torch_stable.html<br />pip install ninja && pip install 'git+https://github.com/pytorch/vision.git@v0.9.1'",
 
     "stable,pip,windows,accnone,python":
-      "pip install torch==1.8.0+cpu torchvision==0.9.0+cpu torchaudio===0.8.0 -f https://download.pytorch.org/whl/torch_stable.html",
+      "pip install torch==1.8.1+cpu torchvision==0.9.1+cpu torchaudio===0.8.1 -f https://download.pytorch.org/whl/torch_stable.html",
 
     "stable,pip,windows,cuda10.2,python":
-      "pip install torch==1.8.0+cu102 torchvision==0.9.0+cu102 torchaudio===0.8.0 -f https://download.pytorch.org/whl/torch_stable.html",
+      "pip install torch==1.8.1+cu102 torchvision==0.9.1+cu102 torchaudio===0.8.1 -f https://download.pytorch.org/whl/torch_stable.html",
 
     "stable,pip,windows,cuda11.1,python":
-      "pip install torch==1.8.0+cu111 torchvision==0.9.0+cu111 torchaudio===0.8.0 -f https://download.pytorch.org/whl/torch_stable.html",
+      "pip install torch==1.8.1+cu111 torchvision==0.9.1+cu111 torchaudio===0.8.1 -f https://download.pytorch.org/whl/torch_stable.html",
 
     "stable,pip,windows,rocm4.0,python":
       "<b>NOTE:</b> ROCm is not available on Windows",
 
     "stable,libtorch,linux,accnone,cplusplus":
-      "Download here (Pre-cxx11 ABI): <br/><a href='https://download.pytorch.org/libtorch/cpu/libtorch-shared-with-deps-1.8.0%2Bcpu.zip'>https://download.pytorch.org/libtorch/cpu/libtorch-shared-with-deps-1.8.0%2Bcpu.zip</a><br/><br> Download here (cxx11 ABI): <br/><a href='https://download.pytorch.org/libtorch/cpu/libtorch-cxx11-abi-shared-with-deps-1.8.0%2Bcpu.zip'>https://download.pytorch.org/libtorch/cpu/libtorch-cxx11-abi-shared-with-deps-1.8.0%2Bcpu.zip</a>",
+      "Download here (Pre-cxx11 ABI): <br/><a href='https://download.pytorch.org/libtorch/cpu/libtorch-shared-with-deps-1.8.1%2Bcpu.zip'>https://download.pytorch.org/libtorch/cpu/libtorch-shared-with-deps-1.8.0%2Bcpu.zip</a><br/><br> Download here (cxx11 ABI): <br/><a href='https://download.pytorch.org/libtorch/cpu/libtorch-cxx11-abi-shared-with-deps-1.8.0%2Bcpu.zip'>https://download.pytorch.org/libtorch/cpu/libtorch-cxx11-abi-shared-with-deps-1.8.0%2Bcpu.zip</a>",
 
     "stable,libtorch,linux,cuda10.2,cplusplus":
-      "Download here (Pre-cxx11 ABI): <br/><a href='https://download.pytorch.org/libtorch/cu102/libtorch-shared-with-deps-1.8.0.zip'>https://download.pytorch.org/libtorch/cu102/libtorch-shared-with-deps-1.8.0.zip</a><br/><br> Download here (cxx11 ABI): <br/><a href='https://download.pytorch.org/libtorch/cu102/libtorch-cxx11-abi-shared-with-deps-1.8.0.zip'>https://download.pytorch.org/libtorch/cu102/libtorch-cxx11-abi-shared-with-deps-1.8.0.zip</a>",
+      "Download here (Pre-cxx11 ABI): <br/><a href='https://download.pytorch.org/libtorch/cu102/libtorch-shared-with-deps-1.8.1.zip'>https://download.pytorch.org/libtorch/cu102/libtorch-shared-with-deps-1.8.0.zip</a><br/><br> Download here (cxx11 ABI): <br/><a href='https://download.pytorch.org/libtorch/cu102/libtorch-cxx11-abi-shared-with-deps-1.8.0.zip'>https://download.pytorch.org/libtorch/cu102/libtorch-cxx11-abi-shared-with-deps-1.8.0.zip</a>",
 
     "stable,libtorch,linux,cuda11.1,cplusplus":
-      "Download here (Pre-cxx11 ABI): <br/><a href='https://download.pytorch.org/libtorch/cu111/libtorch-shared-with-deps-1.8.0%2Bcu111.zip'>https://download.pytorch.org/libtorch/cu111/libtorch-shared-with-deps-1.8.0%2Bcu111.zip</a><br/><br> Download here (cxx11 ABI): <br/><a href='https://download.pytorch.org/libtorch/cu111/libtorch-cxx11-abi-shared-with-deps-1.8.0%2Bcu111.zip'>https://download.pytorch.org/libtorch/cu111/libtorch-cxx11-abi-shared-with-deps-1.8.0%2Bcu111.zip</a>",
+      "Download here (Pre-cxx11 ABI): <br/><a href='https://download.pytorch.org/libtorch/cu111/libtorch-shared-with-deps-1.8.1%2Bcu111.zip'>https://download.pytorch.org/libtorch/cu111/libtorch-shared-with-deps-1.8.0%2Bcu111.zip</a><br/><br> Download here (cxx11 ABI): <br/><a href='https://download.pytorch.org/libtorch/cu111/libtorch-cxx11-abi-shared-with-deps-1.8.0%2Bcu111.zip'>https://download.pytorch.org/libtorch/cu111/libtorch-cxx11-abi-shared-with-deps-1.8.0%2Bcu111.zip</a>",
 
     "stable,libtorch,linux,rocm4.0,cplusplus":
       "LibTorch binaries are not available for ROCm, please build it from source",
 
     "stable,libtorch,macos,accnone,cplusplus":
-      "Download here: <br/><a href='https://download.pytorch.org/libtorch/cpu/libtorch-macos-1.8.0.zip'> https://download.pytorch.org/libtorch/cpu/libtorch-macos-1.8.0.zip </a>",
+      "Download here: <br/><a href='https://download.pytorch.org/libtorch/cpu/libtorch-macos-1.8.1.zip'> https://download.pytorch.org/libtorch/cpu/libtorch-macos-1.8.0.zip </a>",
 
     "stable,libtorch,macos,cuda10.2,cplusplus":
-      "MacOS binaries do not support CUDA. Download CPU libtorch here: <br/><a href='https://download.pytorch.org/libtorch/cpu/libtorch-macos-1.8.0.zip'> https://download.pytorch.org/libtorch/cpu/libtorch-macos-1.8.0.zip </a>",
+      "MacOS binaries do not support CUDA. Download CPU libtorch here: <br/><a href='https://download.pytorch.org/libtorch/cpu/libtorch-macos-1.8.1.zip'> https://download.pytorch.org/libtorch/cpu/libtorch-macos-1.8.0.zip </a>",
 
     "stable,libtorch,macos,cuda11.1,cplusplus":
-      "MacOS binaries do not support CUDA. Download CPU libtorch here: <br/><a href='https://download.pytorch.org/libtorch/cpu/libtorch-macos-1.8.0.zip'> https://download.pytorch.org/libtorch/cpu/libtorch-macos-1.8.0.zip </a>",
+      "MacOS binaries do not support CUDA. Download CPU libtorch here: <br/><a href='https://download.pytorch.org/libtorch/cpu/libtorch-macos-1.8.1.zip'> https://download.pytorch.org/libtorch/cpu/libtorch-macos-1.8.0.zip </a>",
 
     "stable,libtorch,macos,rocm4.0,cplusplus":
       "<b>NOTE:</b> ROCm is not available on MacOS",
 
     "stable,libtorch,windows,accnone,cplusplus":
-      "Windows stable binaries do not support Java, but nighty binaries do. Support is only available for Linux and MacOS.  Download here for C++ (Release version): <br/><a href='https://download.pytorch.org/libtorch/cpu/libtorch-win-shared-with-deps-1.8.0%2Bcpu.zip'>https://download.pytorch.org/libtorch/cpu/libtorch-win-shared-with-deps-1.8.0%2Bcpu.zip</a><br/><br>  Download here for C++ (Debug version): <br/><a href='https://download.pytorch.org/libtorch/cpu/libtorch-win-shared-with-deps-debug-1.8.0%2Bcpu.zip'>https://download.pytorch.org/libtorch/cpu/libtorch-win-shared-with-deps-debug-1.8.0%2Bcpu.zip</a>",
+      "Windows stable binaries do not support Java, but nighty binaries do. Support is only available for Linux and MacOS.  Download here for C++ (Release version): <br/><a href='https://download.pytorch.org/libtorch/cpu/libtorch-win-shared-with-deps-1.8.1%2Bcpu.zip'>https://download.pytorch.org/libtorch/cpu/libtorch-win-shared-with-deps-1.8.0%2Bcpu.zip</a><br/><br>  Download here for C++ (Debug version): <br/><a href='https://download.pytorch.org/libtorch/cpu/libtorch-win-shared-with-deps-debug-1.8.0%2Bcpu.zip'>https://download.pytorch.org/libtorch/cpu/libtorch-win-shared-with-deps-debug-1.8.0%2Bcpu.zip</a>",
 
     "stable,libtorch,windows,cuda10.2,cplusplus":
-      "Windows stable binaries do not support Java, but nighty binaries do. Support is only available for Linux and MacOS.  Download here for C++ (Release version): <br/><a href='https://download.pytorch.org/libtorch/cu102/libtorch-win-shared-with-deps-1.8.0.zip'>https://download.pytorch.org/libtorch/cu102/libtorch-win-shared-with-deps-1.8.0.zip</a><br/><br>  Download here for C++ (Debug version): <br/><a href='https://download.pytorch.org/libtorch/cu102/libtorch-win-shared-with-deps-debug-1.8.0.zip'>https://download.pytorch.org/libtorch/cu102/libtorch-win-shared-with-deps-debug-1.8.0.zip</a>",
+      "Windows stable binaries do not support Java, but nighty binaries do. Support is only available for Linux and MacOS.  Download here for C++ (Release version): <br/><a href='https://download.pytorch.org/libtorch/cu102/libtorch-win-shared-with-deps-1.8.1.zip'>https://download.pytorch.org/libtorch/cu102/libtorch-win-shared-with-deps-1.8.0.zip</a><br/><br>  Download here for C++ (Debug version): <br/><a href='https://download.pytorch.org/libtorch/cu102/libtorch-win-shared-with-deps-debug-1.8.0.zip'>https://download.pytorch.org/libtorch/cu102/libtorch-win-shared-with-deps-debug-1.8.0.zip</a>",
 
     "stable,libtorch,windows,cuda11.1,cplusplus":
-      "Windows stable binaries do not support Java, but nighty binaries do. Support is only available for Linux and MacOS.  Download here for C++ (Release version): <br/><a href='https://download.pytorch.org/libtorch/cu111/libtorch-win-shared-with-deps-1.8.0%2Bcu111.zip'>https://download.pytorch.org/libtorch/cu111/libtorch-win-shared-with-deps-1.8.0%2Bcu111.zip</a><br/><br>  Download here for C++ (Debug version): <br/><a href='https://download.pytorch.org/libtorch/cu111/libtorch-win-shared-with-deps-debug-1.8.0%2Bcu111.zip'>https://download.pytorch.org/libtorch/cu111/libtorch-win-shared-with-deps-debug-1.8.0%2Bcu111.zip</a>",
+      "Windows stable binaries do not support Java, but nighty binaries do. Support is only available for Linux and MacOS.  Download here for C++ (Release version): <br/><a href='https://download.pytorch.org/libtorch/cu111/libtorch-win-shared-with-deps-1.8.1%2Bcu111.zip'>https://download.pytorch.org/libtorch/cu111/libtorch-win-shared-with-deps-1.8.0%2Bcu111.zip</a><br/><br>  Download here for C++ (Debug version): <br/><a href='https://download.pytorch.org/libtorch/cu111/libtorch-win-shared-with-deps-debug-1.8.0%2Bcu111.zip'>https://download.pytorch.org/libtorch/cu111/libtorch-win-shared-with-deps-debug-1.8.0%2Bcu111.zip</a>",
 
     "stable,libtorch,windows,rocm4.0,cplusplus":
       "<b>NOTE:</b> ROCm is not available on Windows",
