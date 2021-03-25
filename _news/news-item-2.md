@@ -1,6 +1,6 @@
 ---
 order: 2
-link: https://pytorch.org/blog/pytorch-1.8-new-library-releases/
-summary: New PyTorch library releases including TorchVision Mobile, TorchAudio I/O, and more
+link: https://github.com/pytorch/pytorch/releases/tag/v1.8.1
+summary: PyTorch 1.8.1 is now available with improvements and bug fixes
 ---
 
