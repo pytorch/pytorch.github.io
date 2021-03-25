@@ -17,6 +17,56 @@ your convenience.
 
 ## Commands for Versions >= 1.0.0
 
+### v1.8.0
+
+#### Conda
+
+##### OSX
+
+```
+# conda
+conda install pytorch==1.8.0 torchvision==0.9.0 torchaudio==0.8.0 -c pytorch
+```
+
+#####  Linux and Windows
+
+```
+# CUDA 10.2
+conda install pytorch==1.8.0 torchvision==0.9.0 torchaudio==0.8.0 cudatoolkit=10.2 -c pytorch
+
+# CUDA 11.1
+conda install pytorch==1.8.0 torchvision==0.9.0 torchaudio==0.8.0 cudatoolkit=11.1 -c pytorch -c conda-forge
+
+# CPU Only
+conda install pytorch==1.8.0 torchvision==0.9.0 torchaudio==0.8.0 cpuonly -c pytorch
+```
+
+#### Wheel
+
+##### OSX
+
+```
+pip install torch==1.8.0 torchvision==0.9.0 torchaudio=0.8.0
+```
+
+##### Linux and Windows
+
+```
+# RocM 4.0.1 (Linux only)
+pip install torch -f https://download.pytorch.org/whl/rocm4.0.1/torch_stable.html
+pip install ninja
+pip install 'git+https://github.com/pytorch/vision.git@v0.9.0'
+
+# CUDA 11.0
+pip install torch==1.8.0+cu111 torchvision==0.9.0+cu111 torchaudio==0.8.0 -f https://download.pytorch.org/whl/torch_stable.html
+
+# CUDA 10.2
+pip install torch==1.8.0 torchvision==0.9.0 torchaudio==0.8.0
+
+# CPU only
+pip install torch==1.8.0+cpu torchvision==0.9.0+cpu torchaudio==0.8.0 -f https://download.pytorch.org/whl/torch_stable.html
+```
+
 ### v1.7.1
 
 #### Conda
