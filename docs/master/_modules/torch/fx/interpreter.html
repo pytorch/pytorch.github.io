@@ -184,7 +184,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href='https://pytorch.org/docs/versions.html'>master (1.9.0a0+gitcae5d72 ) &#x25BC</a>
+      <a href='https://pytorch.org/docs/versions.html'>master (1.9.0a0+git6f95b09 ) &#x25BC</a>
     </div>
     
 
@@ -381,7 +381,7 @@
 <span class="kn">from</span> <span class="nn">.node</span> <span class="kn">import</span> <span class="n">Argument</span><span class="p">,</span> <span class="n">Node</span><span class="p">,</span> <span class="n">Target</span><span class="p">,</span> <span class="n">map_arg</span><span class="p">,</span> <span class="n">map_aggregate</span>
 <span class="kn">from</span> <span class="nn">.proxy</span> <span class="kn">import</span> <span class="n">Proxy</span>
 <span class="kn">from</span> <span class="nn">.symbolic_trace</span> <span class="kn">import</span> <span class="n">Tracer</span>
-<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">Iterator</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Union</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">Iterator</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Union</span>
 
 <div class="viewcode-block" id="Interpreter"><a class="viewcode-back" href="../../../fx.html#torch.fx.Interpreter">[docs]</a><span class="k">class</span> <span class="nc">Interpreter</span><span class="p">:</span>
     <span class="sd">&quot;&quot;&quot;</span>
@@ -432,12 +432,35 @@
 
 <span class="sd">    Args:</span>
 <span class="sd">        module (GraphModule): The module to be executed</span>
+<span class="sd">        garbage_collect_values (bool): Whether to delete values after their last</span>
+<span class="sd">            use within the Module&#39;s execution. This ensures optimal memory usage during</span>
+<span class="sd">            execution. This can be disabled to, for example, examine all of the intermediate</span>
+<span class="sd">            values in the execution by looking at the ``Interpreter.env`` attribute.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">module</span> <span class="p">:</span> <span class="n">GraphModule</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">module</span> <span class="p">:</span> <span class="n">GraphModule</span><span class="p">,</span> <span class="n">garbage_collect_values</span> <span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">):</span>
         <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">GraphModule</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">module</span> <span class="o">=</span> <span class="n">module</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">submodules</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="o">.</span><span class="n">named_modules</span><span class="p">())</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">env</span> <span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="n">Node</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">garbage_collect_values</span> <span class="o">=</span> <span class="n">garbage_collect_values</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">garbage_collect_values</span><span class="p">:</span>
+            <span class="c1"># Run through reverse nodes and record the first instance of a use</span>
+            <span class="c1"># of a given node. This represents the *last* use of the node in the</span>
+            <span class="c1"># execution order of the program, which we will use to free unused</span>
+            <span class="c1"># values</span>
+            <span class="n">node_to_last_use</span> <span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="n">Node</span><span class="p">,</span> <span class="n">Node</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">user_to_last_uses</span> <span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="n">Node</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="n">Node</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{}</span>
+
+            <span class="k">def</span> <span class="nf">register_last_uses</span><span class="p">(</span><span class="n">n</span> <span class="p">:</span> <span class="n">Node</span><span class="p">,</span> <span class="n">user</span> <span class="p">:</span> <span class="n">Node</span><span class="p">):</span>
+                <span class="k">if</span> <span class="n">n</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">node_to_last_use</span><span class="p">:</span>
+                    <span class="n">node_to_last_use</span><span class="p">[</span><span class="n">n</span><span class="p">]</span> <span class="o">=</span> <span class="n">user</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">user_to_last_uses</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="n">user</span><span class="p">,</span> <span class="p">[])</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">n</span><span class="p">)</span>
+
+            <span class="k">for</span> <span class="n">node</span> <span class="ow">in</span> <span class="nb">reversed</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="o">.</span><span class="n">graph</span><span class="o">.</span><span class="n">nodes</span><span class="p">):</span>
+                <span class="n">map_arg</span><span class="p">(</span><span class="n">node</span><span class="o">.</span><span class="n">args</span><span class="p">,</span> <span class="k">lambda</span> <span class="n">n</span><span class="p">:</span> <span class="n">register_last_uses</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">node</span><span class="p">))</span>
+                <span class="n">map_arg</span><span class="p">(</span><span class="n">node</span><span class="o">.</span><span class="n">kwargs</span><span class="p">,</span> <span class="k">lambda</span> <span class="n">n</span><span class="p">:</span> <span class="n">register_last_uses</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">node</span><span class="p">))</span>
 
 <div class="viewcode-block" id="Interpreter.run"><a class="viewcode-back" href="../../../fx.html#torch.fx.Interpreter.run">[docs]</a>    <span class="k">def</span> <span class="nf">run</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="n">initial_env</span> <span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="n">Node</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
         <span class="sd">&quot;&quot;&quot;</span>
@@ -469,6 +492,10 @@
                 <span class="k">continue</span>
 
             <span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="p">[</span><span class="n">node</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">run_node</span><span class="p">(</span><span class="n">node</span><span class="p">)</span>
+
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">garbage_collect_values</span><span class="p">:</span>
+                <span class="k">for</span> <span class="n">to_delete</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">user_to_last_uses</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">node</span><span class="p">,</span> <span class="p">[]):</span>
+                    <span class="k">del</span> <span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="p">[</span><span class="n">to_delete</span><span class="p">]</span>
 
             <span class="k">if</span> <span class="n">node</span><span class="o">.</span><span class="n">op</span> <span class="o">==</span> <span class="s1">&#39;output&#39;</span><span class="p">:</span>
                 <span class="n">output_val</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="p">[</span><span class="n">node</span><span class="p">]</span>
