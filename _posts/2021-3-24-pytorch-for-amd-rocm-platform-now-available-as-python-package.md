@@ -41,7 +41,7 @@ supported by ROCm include all of AMD’s Instinct family of compute-focused data
 with some other select GPUs. A current list of supported GPUs can be found in the [ROCm Github
 repository](https://github.com/RadeonOpenCompute/ROCm#supported-gpus). After confirming that the target system includes supported GPUs and the current 4.0.1
 release of ROCm, installation of PyTorch follows the same simple Pip-based installation as any other
-Python package. As with PyTorch builds for other platforms, the configurator at [https://pytorch.org/get-started/locally/](https://pytorch.org/getstarted/locally/) provides the specific command line to be run.
+Python package. As with PyTorch builds for other platforms, the configurator at [https://pytorch.org/get-started/locally/](https://pytorch.org/get-started/locally/) provides the specific command line to be run.
 
 PyTorch for ROCm is built from the upstream PyTorch repository, and is a full featured implementation.
 Notably, it includes support for distributed training across multiple GPUs and supports accelerated
