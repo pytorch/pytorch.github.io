@@ -339,7 +339,7 @@ function commandMessage(key) {
       "pip install --pre torch torchvision torchaudio -f https://download.pytorch.org/whl/nightly/cu111/torch_nightly.html",
 
     "preview,pip,linux,rocm4.0,python":
-      "pip install --pre torch -f https://download.pytorch.org/whl/nightly/rocm4.0.1/torch_nightly.html",
+      "pip install --pre torch torchvision -f https://download.pytorch.org/whl/nightly/rocm4.0.1/torch_nightly.html",
 
     "preview,pip,windows,accnone,python":
       "pip install --pre torch torchvision torchaudio -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html",
