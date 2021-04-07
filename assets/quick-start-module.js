@@ -231,7 +231,7 @@ function commandMessage(key) {
       "pip install torch==1.8.1+cu111 torchvision==0.9.1+cu111 torchaudio==0.8.1 -f https://download.pytorch.org/whl/torch_stable.html",
 
     "stable,pip,linux,rocm4.0,python":
-      "pip install torch -f https://download.pytorch.org/whl/rocm4.0.1/torch_stable.html<br />pip install ninja && pip install 'git+https://github.com/pytorch/vision.git@v0.9.1'",
+      "pip3 install torch -f https://download.pytorch.org/whl/rocm4.0.1/torch_stable.html<br />pip3 install ninja && pip3 install 'git+https://github.com/pytorch/vision.git@v0.9.1'",
 
     "stable,pip,windows,accnone,python":
       "pip install torch==1.8.1+cpu torchvision==0.9.1+cpu torchaudio===0.8.1 -f https://download.pytorch.org/whl/torch_stable.html",
@@ -339,7 +339,7 @@ function commandMessage(key) {
       "pip install --pre torch torchvision torchaudio -f https://download.pytorch.org/whl/nightly/cu111/torch_nightly.html",
 
     "preview,pip,linux,rocm4.0,python":
-      "pip install --pre torch torchvision -f https://download.pytorch.org/whl/nightly/rocm4.0.1/torch_nightly.html",
+      "pip3 install --pre torch torchvision -f https://download.pytorch.org/whl/nightly/rocm4.0.1/torch_nightly.html",
 
     "preview,pip,windows,accnone,python":
       "pip install --pre torch torchvision torchaudio -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html",
