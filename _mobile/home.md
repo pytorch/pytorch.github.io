@@ -52,7 +52,14 @@ A typical workflow from training to mobile deployment with the optional model op
 * [PyTorch Mobile Recipes in Tutorials](https://pytorch.org/tutorials/recipes/ptmobile_recipes_summary.html)
 * [Image Segmentation DeepLabV3 on iOS](https://pytorch.org/tutorials/beginner/deeplabv3_on_ios.html)
 * [Image Segmentation DeepLabV3 on Android](https://pytorch.org/tutorials/beginner/deeplabv3_on_android.html)
-* [D2Go on Android](https://github.com/pytorch/android-demo-app/tree/master/D2Go)
+* [D2Go Object Detection on iOS](https://github.com/pytorch/ios-demo-app/tree/master/D2Go)
+* [D2Go Object Detection on Android](https://github.com/pytorch/android-demo-app/tree/master/D2Go)
+* [PyTorchVideo on iOS](https://github.com/pytorch/ios-demo-app/tree/master/TorchVideo)
+* [PyTorchVideo on Android](https://github.com/pytorch/android-demo-app/tree/master/TorchVideo)
+* [Speech Recognition on iOS](https://github.com/pytorch/ios-demo-app/tree/master/SpeechRecognition)
+* [Speech Recognition on Android](https://github.com/pytorch/android-demo-app/tree/master/SpeechRecognition)
+* [Question Answering on iOS](https://github.com/pytorch/ios-demo-app/tree/master/QuestionAnswering)
+* [Question Answering on Android](https://github.com/pytorch/android-demo-app/tree/master/QuestionAnswering)
 
 ## Demo apps
 
