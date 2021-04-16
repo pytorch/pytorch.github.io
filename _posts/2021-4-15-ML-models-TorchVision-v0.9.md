@@ -18,8 +18,8 @@ model.eval()
 predictions = model(img)
 ```
 ### Object Detection
-*Faster R-CNN MobileNetV3-Large FPN:* Combining the MobileNetV3 Large backbone with a Faster R-CNN detector and a Feature Pyramid Network leads to a highly accurate and fast object detector. The pre-trained weights are fitted on COCO 2017 using the provided reference [scripts](https://github.com/pytorch/vision/tree/master/references/detection#faster-r-cnn-mobilenetv3-large-fpn) and the model is 5x faster on CPU than the equivalent ResNet50 detector while remaining competitive in [terms of accuracy](https://github.com/pytorch/vision/blob/master/docs/source/models.rst#object-detection-instance-segmentation-and-person-keypoint-detection). 
-* *Faster R-CNN MobileNetV3-Large 320 FPN:* This is an iteration of the previous model that uses reduced resolution (min_size=320 pixel) and sacrifices accuracy for speed. It is 25x faster on CPU than the equivalent ResNet50 detector and thus it is good for real mobile use-cases.
+**-Faster R-CNN MobileNetV3-Large FPN:** Combining the MobileNetV3 Large backbone with a Faster R-CNN detector and a Feature Pyramid Network leads to a highly accurate and fast object detector. The pre-trained weights are fitted on COCO 2017 using the provided reference [scripts](https://github.com/pytorch/vision/tree/master/references/detection#faster-r-cnn-mobilenetv3-large-fpn) and the model is 5x faster on CPU than the equivalent ResNet50 detector while remaining competitive in [terms of accuracy](https://github.com/pytorch/vision/blob/master/docs/source/models.rst#object-detection-instance-segmentation-and-person-keypoint-detection). 
+**-Faster R-CNN MobileNetV3-Large 320 FPN:** This is an iteration of the previous model that uses reduced resolution (min_size=320 pixel) and sacrifices accuracy for speed. It is 25x faster on CPU than the equivalent ResNet50 detector and thus it is good for real mobile use-cases.
 
 **Usage:**
 ```model = torchvision.models.detection.fasterrcnn_mobilenet_v3_large_fpn(pretrained=True)
@@ -28,9 +28,10 @@ model.eval()
 predictions = model(img)
 ```
 ### Semantic Segmentation
-* *DeepLabV3 with Dilated MobileNetV3 Large Backbone:* A dilated version of the MobileNetV3 Large backbone combined with DeepLabV3 helps us build a highly accurate and fast semantic segmentation model. The pre-trained weights are fitted on COCO 2017 using our [standard training recipes](https://github.com/pytorch/vision/tree/master/references/segmentation#deeplabv3_mobilenet_v3_large). The final model has the [same accuracy](https://github.com/pytorch/vision/blob/master/docs/source/models.rst#semantic-segmentation) as the FCN ResNet50 but it is 8.5x faster on CPU and thus making it an excellent replacement for the majority of applications.
-* *Lite R-ASPP with Dilated MobileNetV3 Large Backbone:* We introduce the implementation of a new segmentation head called Lite R-ASPP and combine it with the dilated MobileNetV3 Large backbone to build a very fast segmentation model. The new model sacrifices some accuracy to achieve a 15x speed improvement comparing to the previously most lightweight segmentation model which was the FCN ResNet50.
-Usage:
+**-DeepLabV3 with Dilated MobileNetV3 Large Backbone:** A dilated version of the MobileNetV3 Large backbone combined with DeepLabV3 helps us build a highly accurate and fast semantic segmentation model. The pre-trained weights are fitted on COCO 2017 using our [standard training recipes](https://github.com/pytorch/vision/tree/master/references/segmentation#deeplabv3_mobilenet_v3_large). The final model has the [same accuracy](https://github.com/pytorch/vision/blob/master/docs/source/models.rst#semantic-segmentation) as the FCN ResNet50 but it is 8.5x faster on CPU and thus making it an excellent replacement for the majority of applications.
+**-Lite R-ASPP with Dilated MobileNetV3 Large Backbone:** We introduce the implementation of a new segmentation head called Lite R-ASPP and combine it with the dilated MobileNetV3 Large backbone to build a very fast segmentation model. The new model sacrifices some accuracy to achieve a 15x speed improvement comparing to the previously most lightweight segmentation model which was the FCN ResNet50.
+
+**Usage:**
 ```model = torchvision.models.segmentation.deeplabv3_mobilenet_v3_large(pretrained=True)
 # model = torchvision.models.segmentation.lraspp_mobilenet_v3_large(pretrained=True)
 model.eval()
