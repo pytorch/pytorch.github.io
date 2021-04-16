@@ -11,7 +11,8 @@ TorchVision v0.9 has been [released](https://github.com/pytorch/vision/releases)
 * **Quantized MobileNetV3 Large:** The quantized version of MobilNetV3 Large reduces the number of parameters by 45% and it is roughly 2.5x faster than the non-quantized version while remaining competitive in [terms of accuracy](https://github.com/pytorch/vision/blob/master/docs/source/models.rst#quantized-models). It was fitted on ImageNet using Quantization Aware Training by iterating on the non-quantized version and it can be trained from scratch using the existing [reference scripts](https://github.com/pytorch/vision/tree/master/references/classification#quantized).
 
 **Usage:**
-```model = torchvision.models.mobilenet_v3_large(pretrained=True)
+```
+model = torchvision.models.mobilenet_v3_large(pretrained=True)
 # model = torchvision.models.mobilenet_v3_small(pretrained=True)
 # model = torchvision.models.quantization.mobilenet_v3_large(pretrained=True)
 model.eval()
@@ -22,7 +23,8 @@ predictions = model(img)
 * **Faster R-CNN MobileNetV3-Large 320 FPN:** This is an iteration of the previous model that uses reduced resolution (min_size=320 pixel) and sacrifices accuracy for speed. It is 25x faster on CPU than the equivalent ResNet50 detector and thus it is good for real mobile use-cases.
 
 **Usage:**
-```model = torchvision.models.detection.fasterrcnn_mobilenet_v3_large_fpn(pretrained=True)
+```
+model = torchvision.models.detection.fasterrcnn_mobilenet_v3_large_fpn(pretrained=True)
 # model = torchvision.models.detection.fasterrcnn_mobilenet_v3_large_320_fpn(pretrained=True)
 model.eval()
 predictions = model(img)
@@ -32,7 +34,8 @@ predictions = model(img)
 * **Lite R-ASPP with Dilated MobileNetV3 Large Backbone:** We introduce the implementation of a new segmentation head called Lite R-ASPP and combine it with the dilated MobileNetV3 Large backbone to build a very fast segmentation model. The new model sacrifices some accuracy to achieve a 15x speed improvement comparing to the previously most lightweight segmentation model which was the FCN ResNet50.
 
 **Usage:**
-```model = torchvision.models.segmentation.deeplabv3_mobilenet_v3_large(pretrained=True)
+```
+model = torchvision.models.segmentation.deeplabv3_mobilenet_v3_large(pretrained=True)
 # model = torchvision.models.segmentation.lraspp_mobilenet_v3_large(pretrained=True)
 model.eval()
 predictions = model(img)
