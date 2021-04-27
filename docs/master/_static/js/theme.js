@@ -969,7 +969,7 @@ $(document).ready(function() {
       $(this.firstChild).after("<span class='expand-menu'>[ + ]</span>");
       $(this.firstChild).after("<span class='hide-menu collapse'>[ - ]</span>");
       $(this).next("ul").hide();
-    } else if ((collapsedSections.includes(menuName) == false && collapseAdded) || sessionStorage.getItem(menuName) == "expand") {
+    } else if (collapsedSections.includes(menuName) == false && collapseAdded || sessionStorage.getItem(menuName) == "expand") {
       $(this.firstChild).after("<span class='expand-menu collapse'>[ + ]</span>");
       $(this.firstChild).after("<span class='hide-menu'>[ - ]</span>");
     }
@@ -1017,7 +1017,7 @@ var tagList = $(".tutorials-card-container").map(function() {
 }).get();
 
 function unique(value, index, self) {
-      return self.indexOf(value) == index && value != ""
+      return self.indexOf(value) == index && value != ""
     }
 
 // Only return unique tags

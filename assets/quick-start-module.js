@@ -211,36 +211,36 @@ function commandMessage(key) {
       "<b>NOTE:</b> Python 3.9 users will need to add '-c=conda-forge' for installation<br />conda install pytorch torchvision torchaudio cpuonly -c pytorch",
 
     "stable,pip,macos,cuda10.2,python":
-      "pip install torch torchvision torchaudio<br /># MacOS Binaries dont support CUDA, install from source if CUDA is needed",
+      "pip3 install torch torchvision torchaudio<br /># MacOS Binaries dont support CUDA, install from source if CUDA is needed",
 
     "stable,pip,macos,cuda11.1,python":
-      "pip install torch torchvision torchaudio<br /># MacOS Binaries dont support CUDA, install from source if CUDA is needed",
+      "pip3 install torch torchvision torchaudio<br /># MacOS Binaries dont support CUDA, install from source if CUDA is needed",
 
     "stable,pip,macos,rocm4.0,python":
       "<b>NOTE:</b> ROCm is not available on MacOS",
 
-    "stable,pip,macos,accnone,python": "pip install torch torchvision torchaudio",
+    "stable,pip,macos,accnone,python": "pip3 install torch torchvision torchaudio",
 
     "stable,pip,linux,accnone,python":
-      "pip install torch==1.8.1+cpu torchvision==0.9.1+cpu torchaudio==0.8.1 -f https://download.pytorch.org/whl/torch_stable.html",
+      "pip3 install torch==1.8.1+cpu torchvision==0.9.1+cpu torchaudio==0.8.1 -f https://download.pytorch.org/whl/torch_stable.html",
 
     "stable,pip,linux,cuda10.2,python":
-      "pip install torch torchvision torchaudio",
+      "pip3 install torch torchvision torchaudio",
 
     "stable,pip,linux,cuda11.1,python":
-      "pip install torch==1.8.1+cu111 torchvision==0.9.1+cu111 torchaudio==0.8.1 -f https://download.pytorch.org/whl/torch_stable.html",
+      "pip3 install torch==1.8.1+cu111 torchvision==0.9.1+cu111 torchaudio==0.8.1 -f https://download.pytorch.org/whl/torch_stable.html",
 
     "stable,pip,linux,rocm4.0,python":
-      "pip install torch -f https://download.pytorch.org/whl/rocm4.0.1/torch_stable.html<br />pip install ninja && pip install 'git+https://github.com/pytorch/vision.git@v0.9.1'",
+      "pip3 install torch -f https://download.pytorch.org/whl/rocm4.0.1/torch_stable.html<br />pip3 install ninja && pip3 install 'git+https://github.com/pytorch/vision.git@v0.9.1'",
 
     "stable,pip,windows,accnone,python":
-      "pip install torch==1.8.1+cpu torchvision==0.9.1+cpu torchaudio===0.8.1 -f https://download.pytorch.org/whl/torch_stable.html",
+      "pip3 install torch==1.8.1+cpu torchvision==0.9.1+cpu torchaudio===0.8.1 -f https://download.pytorch.org/whl/torch_stable.html",
 
     "stable,pip,windows,cuda10.2,python":
-      "pip install torch==1.8.1+cu102 torchvision==0.9.1+cu102 torchaudio===0.8.1 -f https://download.pytorch.org/whl/torch_stable.html",
+      "pip3 install torch==1.8.1+cu102 torchvision==0.9.1+cu102 torchaudio===0.8.1 -f https://download.pytorch.org/whl/torch_stable.html",
 
     "stable,pip,windows,cuda11.1,python":
-      "pip install torch==1.8.1+cu111 torchvision==0.9.1+cu111 torchaudio===0.8.1 -f https://download.pytorch.org/whl/torch_stable.html",
+      "pip3 install torch==1.8.1+cu111 torchvision==0.9.1+cu111 torchaudio===0.8.1 -f https://download.pytorch.org/whl/torch_stable.html",
 
     "stable,pip,windows,rocm4.0,python":
       "<b>NOTE:</b> ROCm is not available on Windows",
@@ -249,7 +249,7 @@ function commandMessage(key) {
       "Download here (Pre-cxx11 ABI): <br/><a href='https://download.pytorch.org/libtorch/cpu/libtorch-shared-with-deps-1.8.1%2Bcpu.zip'>https://download.pytorch.org/libtorch/cpu/libtorch-shared-with-deps-1.8.1%2Bcpu.zip</a><br/><br> Download here (cxx11 ABI): <br/><a href='https://download.pytorch.org/libtorch/cpu/libtorch-cxx11-abi-shared-with-deps-1.8.1%2Bcpu.zip'>https://download.pytorch.org/libtorch/cpu/libtorch-cxx11-abi-shared-with-deps-1.8.1%2Bcpu.zip</a>",
 
     "stable,libtorch,linux,cuda10.2,cplusplus":
-      "Download here (Pre-cxx11 ABI): <br/><a href='https://download.pytorch.org/libtorch/cu102/libtorch-shared-with-deps-1.8.1.zip'>https://download.pytorch.org/libtorch/cu102/libtorch-shared-with-deps-1.8.1.zip</a><br/><br> Download here (cxx11 ABI): <br/><a href='https://download.pytorch.org/libtorch/cu102/libtorch-cxx11-abi-shared-with-deps-1.8.1.zip'>https://download.pytorch.org/libtorch/cu102/libtorch-cxx11-abi-shared-with-deps-1.8.1.zip</a>",
+      "Download here (Pre-cxx11 ABI): <br/><a href='https://download.pytorch.org/libtorch/cu102/libtorch-shared-with-deps-1.8.1%2Bcu102.zip'>https://download.pytorch.org/libtorch/cu102/libtorch-shared-with-deps-1.8.1%2Bcu102.zip</a><br/><br> Download here (cxx11 ABI): <br/><a href='https://download.pytorch.org/libtorch/cu102/libtorch-cxx11-abi-shared-with-deps-1.8.1%2Bcu102.zip'>https://download.pytorch.org/libtorch/cu102/libtorch-cxx11-abi-shared-with-deps-1.8.1%2Bcu102.zip</a>",
 
     "stable,libtorch,linux,cuda11.1,cplusplus":
       "Download here (Pre-cxx11 ABI): <br/><a href='https://download.pytorch.org/libtorch/cu111/libtorch-shared-with-deps-1.8.1%2Bcu111.zip'>https://download.pytorch.org/libtorch/cu111/libtorch-shared-with-deps-1.8.1%2Bcu111.zip</a><br/><br> Download here (cxx11 ABI): <br/><a href='https://download.pytorch.org/libtorch/cu111/libtorch-cxx11-abi-shared-with-deps-1.8.1%2Bcu111.zip'>https://download.pytorch.org/libtorch/cu111/libtorch-cxx11-abi-shared-with-deps-1.8.1%2Bcu111.zip</a>",
@@ -273,7 +273,7 @@ function commandMessage(key) {
       "Windows stable binaries do not support Java, but nighty binaries do. Support is only available for Linux and MacOS.  Download here for C++ (Release version): <br/><a href='https://download.pytorch.org/libtorch/cpu/libtorch-win-shared-with-deps-1.8.1%2Bcpu.zip'>https://download.pytorch.org/libtorch/cpu/libtorch-win-shared-with-deps-1.8.1%2Bcpu.zip</a><br/><br>  Download here for C++ (Debug version): <br/><a href='https://download.pytorch.org/libtorch/cpu/libtorch-win-shared-with-deps-debug-1.8.1%2Bcpu.zip'>https://download.pytorch.org/libtorch/cpu/libtorch-win-shared-with-deps-debug-1.8.1%2Bcpu.zip</a>",
 
     "stable,libtorch,windows,cuda10.2,cplusplus":
-      "Windows stable binaries do not support Java, but nighty binaries do. Support is only available for Linux and MacOS.  Download here for C++ (Release version): <br/><a href='https://download.pytorch.org/libtorch/cu102/libtorch-win-shared-with-deps-1.8.1.zip'>https://download.pytorch.org/libtorch/cu102/libtorch-win-shared-with-deps-1.8.1.zip</a><br/><br>  Download here for C++ (Debug version): <br/><a href='https://download.pytorch.org/libtorch/cu102/libtorch-win-shared-with-deps-debug-1.8.1.zip'>https://download.pytorch.org/libtorch/cu102/libtorch-win-shared-with-deps-debug-1.8.1.zip</a>",
+      "Windows stable binaries do not support Java, but nighty binaries do. Support is only available for Linux and MacOS.  Download here for C++ (Release version): <br/><a href='https://download.pytorch.org/libtorch/cu102/libtorch-win-shared-with-deps-1.8.1%2Bcu102.zip'>https://download.pytorch.org/libtorch/cu102/libtorch-win-shared-with-deps-1.8.1%2Bcu102.zip</a><br/><br>  Download here for C++ (Debug version): <br/><a href='https://download.pytorch.org/libtorch/cu102/libtorch-win-shared-with-deps-debug-1.8.1%2Bcu102.zip'>https://download.pytorch.org/libtorch/cu102/libtorch-win-shared-with-deps-debug-1.8.1%2Bcu102.zip</a>",
 
     "stable,libtorch,windows,cuda11.1,cplusplus":
       "Windows stable binaries do not support Java, but nighty binaries do. Support is only available for Linux and MacOS.  Download here for C++ (Release version): <br/><a href='https://download.pytorch.org/libtorch/cu111/libtorch-win-shared-with-deps-1.8.1%2Bcu111.zip'>https://download.pytorch.org/libtorch/cu111/libtorch-win-shared-with-deps-1.8.1%2Bcu111.zip</a><br/><br>  Download here for C++ (Debug version): <br/><a href='https://download.pytorch.org/libtorch/cu111/libtorch-win-shared-with-deps-debug-1.8.1%2Bcu111.zip'>https://download.pytorch.org/libtorch/cu111/libtorch-win-shared-with-deps-debug-1.8.1%2Bcu111.zip</a>",
@@ -318,37 +318,37 @@ function commandMessage(key) {
       "<b>NOTE:</b> Python 3.9 users will need to add '-c=conda-forge' for installation<br />conda install pytorch torchvision torchaudio cpuonly -c pytorch-nightly",
 
     "preview,pip,macos,cuda10.2,python":
-      "pip install --pre torch torchvision torchaudio -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html<br /># On MacOS, we provide CPU-only packages, CUDA functionality is not provided",
+      "pip3 install --pre torch torchvision torchaudio -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html<br /># On MacOS, we provide CPU-only packages, CUDA functionality is not provided",
 
     "preview,pip,macos,cuda11.1,python":
-      "pip install --pre torch torchvision torchaudio -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html<br /># On MacOS, we provide CPU-only packages, CUDA functionality is not provided",
+      "pip3 install --pre torch torchvision torchaudio -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html<br /># On MacOS, we provide CPU-only packages, CUDA functionality is not provided",
 
     "preview,pip,macos,rocm4.0,python":
-      "pip install --pre torch torchvision torchaudio -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html<br /># ROCm is not available on MacOS",
+      "pip3 install --pre torch torchvision torchaudio -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html<br /># ROCm is not available on MacOS",
 
     "preview,pip,macos,accnone,python":
-      "pip install --pre torch torchvision torchaudio -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html",
+      "pip3 install --pre torch torchvision torchaudio -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html",
 
     "preview,pip,linux,accnone,python":
-      "pip install --pre torch torchvision torchaudio -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html",
+      "pip3 install --pre torch torchvision torchaudio -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html",
 
     "preview,pip,linux,cuda10.2,python":
-      "pip install --pre torch torchvision torchaudio -f https://download.pytorch.org/whl/nightly/cu102/torch_nightly.html",
+      "pip3 install --pre torch torchvision torchaudio -f https://download.pytorch.org/whl/nightly/cu102/torch_nightly.html",
 
     "preview,pip,linux,cuda11.1,python":
-      "pip install --pre torch torchvision torchaudio -f https://download.pytorch.org/whl/nightly/cu111/torch_nightly.html",
+      "pip3 install --pre torch torchvision torchaudio -f https://download.pytorch.org/whl/nightly/cu111/torch_nightly.html",
 
     "preview,pip,linux,rocm4.0,python":
-      "pip install --pre torch -f https://download.pytorch.org/whl/nightly/rocm4.0.1/torch_nightly.html",
+      "pip3 install --pre torch torchvision -f https://download.pytorch.org/whl/nightly/rocm4.0.1/torch_nightly.html",
 
     "preview,pip,windows,accnone,python":
-      "pip install --pre torch torchvision torchaudio -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html",
+      "pip3 install --pre torch torchvision torchaudio -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html",
 
     "preview,pip,windows,cuda10.2,python":
-      "pip install --pre torch torchvision torchaudio -f https://download.pytorch.org/whl/nightly/cu102/torch_nightly.html",
+      "pip3 install --pre torch torchvision torchaudio -f https://download.pytorch.org/whl/nightly/cu102/torch_nightly.html",
 
     "preview,pip,windows,cuda11.1,python":
-      "pip install --pre torch torchvision torchaudio -f https://download.pytorch.org/whl/nightly/cu111/torch_nightly.html",
+      "pip3 install --pre torch torchvision torchaudio -f https://download.pytorch.org/whl/nightly/cu111/torch_nightly.html",
 
     "preview,pip,windows,rocm4.0,python":
       "<b>NOTE:</b> ROCm is not available on Windows",
