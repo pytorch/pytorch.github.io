@@ -188,7 +188,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href='https://pytorch.org/docs/versions.html'>master (1.9.0a0+git0fd1dbc ) &#x25BC</a>
+      <a href='https://pytorch.org/docs/versions.html'>master (1.9.0a0+git6ea0136 ) &#x25BC</a>
     </div>
     
 
@@ -231,6 +231,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../../../../../notes/ddp.html">Distributed Data Parallel</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../../notes/extending.html">Extending PyTorch</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../../notes/faq.html">Frequently Asked Questions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../notes/gradcheck.html">Gradcheck mechanics</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../../notes/large_scale_deployments.html">Features for large-scale deployments</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../../notes/modules.html">Modules</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../../notes/multiprocessing.html">Multiprocessing best practices</a></li>
@@ -502,6 +503,86 @@
 <span class="k">class</span> <span class="nc">_ResumeIteration</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
     <span class="k">pass</span>
 
+<span class="c1"># The function `_generate_state` is adapted from `numpy.random.SeedSequence`</span>
+<span class="c1"># from https://github.com/numpy/numpy/blob/main/numpy/random/bit_generator.pyx</span>
+<span class="c1"># It&#39;s MIT licensed, here is the copyright:</span>
+
+<span class="c1"># Copyright (c) 2015 Melissa E. O&#39;Neill</span>
+<span class="c1"># Copyright (c) 2019 NumPy Developers</span>
+<span class="c1">#</span>
+<span class="c1"># Permission is hereby granted, free of charge, to any person obtaining a copy</span>
+<span class="c1"># of this software and associated documentation files (the &quot;Software&quot;), to deal</span>
+<span class="c1"># in the Software without restriction, including without limitation the rights</span>
+<span class="c1"># to use, copy, modify, merge, publish, distribute, sublicense, and/or sell</span>
+<span class="c1"># copies of the Software, and to permit persons to whom the Software is</span>
+<span class="c1"># furnished to do so, subject to the following conditions:</span>
+<span class="c1">#</span>
+<span class="c1"># The above copyright notice and this permission notice shall be included in</span>
+<span class="c1"># all copies or substantial portions of the Software.</span>
+<span class="c1">#</span>
+<span class="c1"># THE SOFTWARE IS PROVIDED &quot;AS IS&quot;, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR</span>
+<span class="c1"># IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,</span>
+<span class="c1"># FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE</span>
+<span class="c1"># AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER</span>
+<span class="c1"># LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,</span>
+<span class="c1"># OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE</span>
+<span class="c1"># SOFTWARE.</span>
+
+<span class="c1"># This function generates an array of int32 as the seed for</span>
+<span class="c1"># `numpy.random`, in order to prevent state collision due to same</span>
+<span class="c1"># seed and algorithm for `numpy.random` and `random` modules.</span>
+<span class="c1"># TODO: Implement `SeedSequence` like object for `torch.random`</span>
+<span class="k">def</span> <span class="nf">_generate_state</span><span class="p">(</span><span class="n">base_seed</span><span class="p">,</span> <span class="n">worker_id</span><span class="p">):</span>
+    <span class="n">INIT_A</span> <span class="o">=</span> <span class="mh">0x43b0d7e5</span>
+    <span class="n">MULT_A</span> <span class="o">=</span> <span class="mh">0x931e8875</span>
+    <span class="n">INIT_B</span> <span class="o">=</span> <span class="mh">0x8b51f9dd</span>
+    <span class="n">MULT_B</span> <span class="o">=</span> <span class="mh">0x58f38ded</span>
+    <span class="n">MIX_MULT_L</span> <span class="o">=</span> <span class="mh">0xca01f9dd</span>
+    <span class="n">MIX_MULT_R</span> <span class="o">=</span> <span class="mh">0x4973f715</span>
+    <span class="n">XSHIFT</span> <span class="o">=</span> <span class="mi">4</span> <span class="o">*</span> <span class="mi">8</span> <span class="o">//</span> <span class="mi">2</span>
+    <span class="n">MASK32</span> <span class="o">=</span> <span class="mh">0xFFFFFFFF</span>
+
+    <span class="n">entropy</span> <span class="o">=</span> <span class="p">[</span><span class="n">worker_id</span><span class="p">,</span> <span class="n">base_seed</span> <span class="o">&amp;</span> <span class="n">MASK32</span><span class="p">,</span> <span class="n">base_seed</span> <span class="o">&gt;&gt;</span> <span class="mi">32</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span>
+    <span class="n">pool</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="mi">4</span>
+
+    <span class="n">hash_const_A</span> <span class="o">=</span> <span class="n">INIT_A</span>
+
+    <span class="k">def</span> <span class="nf">hash</span><span class="p">(</span><span class="n">value</span><span class="p">):</span>
+        <span class="k">nonlocal</span> <span class="n">hash_const_A</span>
+        <span class="n">value</span> <span class="o">=</span> <span class="p">(</span><span class="n">value</span> <span class="o">^</span> <span class="n">hash_const_A</span><span class="p">)</span> <span class="o">&amp;</span> <span class="n">MASK32</span>
+        <span class="n">hash_const_A</span> <span class="o">=</span> <span class="p">(</span><span class="n">hash_const_A</span> <span class="o">*</span> <span class="n">MULT_A</span><span class="p">)</span> <span class="o">&amp;</span> <span class="n">MASK32</span>
+        <span class="n">value</span> <span class="o">=</span> <span class="p">(</span><span class="n">value</span> <span class="o">*</span> <span class="n">hash_const_A</span><span class="p">)</span> <span class="o">&amp;</span> <span class="n">MASK32</span>
+        <span class="n">value</span> <span class="o">=</span> <span class="p">(</span><span class="n">value</span> <span class="o">^</span> <span class="p">(</span><span class="n">value</span> <span class="o">&gt;&gt;</span> <span class="n">XSHIFT</span><span class="p">))</span> <span class="o">&amp;</span> <span class="n">MASK32</span>
+        <span class="k">return</span> <span class="n">value</span>
+
+    <span class="k">def</span> <span class="nf">mix</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">):</span>
+        <span class="n">result_x</span> <span class="o">=</span> <span class="p">(</span><span class="n">MIX_MULT_L</span> <span class="o">*</span> <span class="n">x</span><span class="p">)</span> <span class="o">&amp;</span> <span class="n">MASK32</span>
+        <span class="n">result_y</span> <span class="o">=</span> <span class="p">(</span><span class="n">MIX_MULT_R</span> <span class="o">*</span> <span class="n">y</span><span class="p">)</span> <span class="o">&amp;</span> <span class="n">MASK32</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="p">(</span><span class="n">result_x</span> <span class="o">-</span> <span class="n">result_y</span><span class="p">)</span> <span class="o">&amp;</span> <span class="n">MASK32</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="p">(</span><span class="n">result</span> <span class="o">^</span> <span class="p">(</span><span class="n">result</span> <span class="o">&gt;&gt;</span> <span class="n">XSHIFT</span><span class="p">))</span> <span class="o">&amp;</span> <span class="n">MASK32</span>
+        <span class="k">return</span> <span class="n">result</span>
+
+    <span class="c1"># Add in the entropy to the pool.</span>
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">pool</span><span class="p">)):</span>
+        <span class="n">pool</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="nb">hash</span><span class="p">(</span><span class="n">entropy</span><span class="p">[</span><span class="n">i</span><span class="p">])</span>
+
+    <span class="c1"># Mix all bits together so late bits can affect earlier bits.</span>
+    <span class="k">for</span> <span class="n">i_src</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">pool</span><span class="p">)):</span>
+        <span class="k">for</span> <span class="n">i_dst</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">pool</span><span class="p">)):</span>
+            <span class="k">if</span> <span class="n">i_src</span> <span class="o">!=</span> <span class="n">i_dst</span><span class="p">:</span>
+                <span class="n">pool</span><span class="p">[</span><span class="n">i_dst</span><span class="p">]</span> <span class="o">=</span> <span class="n">mix</span><span class="p">(</span><span class="n">pool</span><span class="p">[</span><span class="n">i_dst</span><span class="p">],</span> <span class="nb">hash</span><span class="p">(</span><span class="n">pool</span><span class="p">[</span><span class="n">i_src</span><span class="p">]))</span>
+
+    <span class="n">hash_const_B</span> <span class="o">=</span> <span class="n">INIT_B</span>
+    <span class="n">state</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">i_dst</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">4</span><span class="p">):</span>
+        <span class="n">data_val</span> <span class="o">=</span> <span class="n">pool</span><span class="p">[</span><span class="n">i_dst</span><span class="p">]</span>
+        <span class="n">data_val</span> <span class="o">=</span> <span class="p">(</span><span class="n">data_val</span> <span class="o">^</span> <span class="n">hash_const_B</span><span class="p">)</span> <span class="o">&amp;</span> <span class="n">MASK32</span>
+        <span class="n">hash_const_B</span> <span class="o">=</span> <span class="p">(</span><span class="n">hash_const_B</span> <span class="o">*</span> <span class="n">MULT_B</span><span class="p">)</span> <span class="o">&amp;</span> <span class="n">MASK32</span>
+        <span class="n">data_val</span> <span class="o">=</span> <span class="p">(</span><span class="n">data_val</span> <span class="o">*</span> <span class="n">hash_const_B</span><span class="p">)</span> <span class="o">&amp;</span> <span class="n">MASK32</span>
+        <span class="n">data_val</span> <span class="o">=</span> <span class="p">(</span><span class="n">data_val</span> <span class="o">^</span> <span class="p">(</span><span class="n">data_val</span> <span class="o">&gt;&gt;</span> <span class="n">XSHIFT</span><span class="p">))</span> <span class="o">&amp;</span> <span class="n">MASK32</span>
+        <span class="n">state</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">data_val</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">state</span>
+
 <span class="k">def</span> <span class="nf">_worker_loop</span><span class="p">(</span><span class="n">dataset_kind</span><span class="p">,</span> <span class="n">dataset</span><span class="p">,</span> <span class="n">index_queue</span><span class="p">,</span> <span class="n">data_queue</span><span class="p">,</span> <span class="n">done_event</span><span class="p">,</span>
                  <span class="n">auto_collation</span><span class="p">,</span> <span class="n">collate_fn</span><span class="p">,</span> <span class="n">drop_last</span><span class="p">,</span> <span class="n">base_seed</span><span class="p">,</span> <span class="n">init_fn</span><span class="p">,</span> <span class="n">worker_id</span><span class="p">,</span>
                  <span class="n">num_workers</span><span class="p">,</span> <span class="n">persistent_workers</span><span class="p">):</span>
@@ -521,9 +602,9 @@
         <span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="n">seed</span><span class="p">)</span>
         <span class="n">torch</span><span class="o">.</span><span class="n">manual_seed</span><span class="p">(</span><span class="n">seed</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">HAS_NUMPY</span><span class="p">:</span>
+            <span class="n">np_seed</span> <span class="o">=</span> <span class="n">_generate_state</span><span class="p">(</span><span class="n">base_seed</span><span class="p">,</span> <span class="n">worker_id</span><span class="p">)</span>
             <span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
-            <span class="n">ss</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">SeedSequence</span><span class="p">([</span><span class="n">worker_id</span><span class="p">,</span> <span class="n">base_seed</span><span class="p">])</span>
-            <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="n">ss</span><span class="o">.</span><span class="n">generate_state</span><span class="p">(</span><span class="mi">4</span><span class="p">))</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="n">np_seed</span><span class="p">)</span>
 
         <span class="k">global</span> <span class="n">_worker_info</span>
         <span class="n">_worker_info</span> <span class="o">=</span> <span class="n">WorkerInfo</span><span class="p">(</span><span class="nb">id</span><span class="o">=</span><span class="n">worker_id</span><span class="p">,</span> <span class="n">num_workers</span><span class="o">=</span><span class="n">num_workers</span><span class="p">,</span>
