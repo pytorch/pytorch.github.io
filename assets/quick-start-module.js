@@ -178,7 +178,7 @@ function commandMessage(key) {
       "<b>NOTE:</b> Python 3.9 users will need to add '-c=conda-forge' for installation<br />conda install pytorch torchvision torchaudio cudatoolkit=10.2 -c pytorch",
 
     "stable,conda,linux,cuda11.1,python":
-      "<b>NOTE:</b> 'conda-forge' channel is required for cudatoolkit 11.1<br />conda install pytorch torchvision torchaudio cudatoolkit=11.1 -c pytorch -c conda-forge",
+      "<b>NOTE:</b> 'nvidia' channel is required for cudatoolkit 11.1<br />conda install pytorch torchvision torchaudio cudatoolkit=11.1 -c pytorch nvidia",
 
     "stable,conda,linux,rocm4.0,python":
       "<b>NOTE:</b> Conda packages are not currently available for ROCm, please use pip instead<br />",
@@ -202,7 +202,7 @@ function commandMessage(key) {
       "<b>NOTE:</b> Python 3.9 users will need to add '-c=conda-forge' for installation<br />conda install pytorch torchvision torchaudio cudatoolkit=10.2 -c pytorch",
 
     "stable,conda,windows,cuda11.1,python":
-      "<b>NOTE:</b> 'conda-forge' channel is required for cudatoolkit 11.1<br />conda install pytorch torchvision torchaudio cudatoolkit=11.1 -c pytorch -c conda-forge",
+      "<b>NOTE:</b> 'nvidia' channel is required for cudatoolkit 11.1<br />conda install pytorch torchvision torchaudio cudatoolkit=11.1 -c pytorch nvidia",
 
     "stable,conda,windows,rocm4.0,python":
       "<b>NOTE:</b> ROCm is not available on Windows",
@@ -285,7 +285,7 @@ function commandMessage(key) {
       "<b>NOTE:</b> Python 3.9 users will need to add '-c=conda-forge' for installation<br />conda install pytorch torchvision torchaudio cudatoolkit=10.2 -c pytorch-nightly",
 
     "preview,conda,linux,cuda11.1,python":
-      "<b>NOTE:</b> 'conda-forge' channel is required for cudatoolkit 11.1<br />conda install pytorch torchvision torchaudio cudatoolkit=11.1 -c pytorch-nightly -c conda-forge",
+      "<b>NOTE:</b> 'nvidia' channel is required for cudatoolkit 11.1<br />conda install pytorch torchvision torchaudio cudatoolkit=11.1 -c pytorch-nightly nvidia",
 
     "preview,conda,linux,rocm4.0,python":
       "<b>NOTE:</b> Conda packages are not currently available for ROCm, please use pip instead<br />",
@@ -309,7 +309,7 @@ function commandMessage(key) {
       "<b>NOTE:</b> Python 3.9 users will need to add '-c=conda-forge' for installation<br />conda install pytorch torchvision torchaudio cudatoolkit=10.2 -c pytorch-nightly",
 
     "preview,conda,windows,cuda11.1,python":
-      "<b>NOTE:</b> 'conda-forge' channel is required for cudatoolkit 11.1<br />conda install pytorch torchvision torchaudio cudatoolkit=11.1 -c pytorch-nightly -c conda-forge",
+      "<b>NOTE:</b> 'nvidia' channel is required for cudatoolkit 11.1<br />conda install pytorch torchvision torchaudio cudatoolkit=11.1 -c pytorch-nightly nvidia",
 
     "preview,conda,windows,rocm4.0,python":
       "<b>NOTE:</b> ROCm is not available on Windows",
