@@ -178,7 +178,7 @@ function commandMessage(key) {
       "conda install pytorch torchvision torchaudio cudatoolkit=10.2 -c pytorch",
 
     "stable,conda,linux,cuda11.1,python":
-      "<b>NOTE:</b> 'nvidia' channel is required for cudatoolkit 11.1<br />conda install pytorch torchvision torchaudio cudatoolkit=11.1 -c pytorch nvidia",
+      "<b>NOTE:</b> 'nvidia' channel is required for cudatoolkit 11.1<br />conda install pytorch torchvision torchaudio cudatoolkit=11.1 -c pytorch -c nvidia",
 
     "stable,conda,linux,rocm4.0,python":
       "<b>NOTE:</b> Conda packages are not currently available for ROCm, please use pip instead<br />",
@@ -202,7 +202,7 @@ function commandMessage(key) {
       "conda install pytorch torchvision torchaudio cudatoolkit=10.2 -c pytorch",
 
     "stable,conda,windows,cuda11.1,python":
-      "<b>NOTE:</b> 'nvidia' channel is required for cudatoolkit 11.1<br />conda install pytorch torchvision torchaudio cudatoolkit=11.1 -c pytorch nvidia",
+      "<b>NOTE:</b> 'nvidia' channel is required for cudatoolkit 11.1<br />conda install pytorch torchvision torchaudio cudatoolkit=11.1 -c pytorch -c nvidia",
 
     "stable,conda,windows,rocm4.0,python":
       "<b>NOTE:</b> ROCm is not available on Windows",
@@ -285,7 +285,7 @@ function commandMessage(key) {
       "conda install pytorch torchvision torchaudio cudatoolkit=10.2 -c pytorch-nightly",
 
     "preview,conda,linux,cuda11.1,python":
-      "<b>NOTE:</b> 'nvidia' channel is required for cudatoolkit 11.1<br />conda install pytorch torchvision torchaudio cudatoolkit=11.1 -c pytorch-nightly nvidia",
+      "<b>NOTE:</b> 'nvidia' channel is required for cudatoolkit 11.1<br />conda install pytorch torchvision torchaudio cudatoolkit=11.1 -c pytorch-nightly -c nvidia",
 
     "preview,conda,linux,rocm4.0,python":
       "<b>NOTE:</b> Conda packages are not currently available for ROCm, please use pip instead<br />",
@@ -309,7 +309,7 @@ function commandMessage(key) {
       "conda install pytorch torchvision torchaudio cudatoolkit=10.2 -c pytorch-nightly",
 
     "preview,conda,windows,cuda11.1,python":
-      "<b>NOTE:</b> 'nvidia' channel is required for cudatoolkit 11.1<br />conda install pytorch torchvision torchaudio cudatoolkit=11.1 -c pytorch-nightly nvidia",
+      "<b>NOTE:</b> 'nvidia' channel is required for cudatoolkit 11.1<br />conda install pytorch torchvision torchaudio cudatoolkit=11.1 -c pytorch-nightly -c nvidia",
 
     "preview,conda,windows,rocm4.0,python":
       "<b>NOTE:</b> ROCm is not available on Windows",
