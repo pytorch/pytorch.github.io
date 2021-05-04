@@ -26,7 +26,7 @@ PyTorch Profiler is the next version of the PyTorch autograd profiler. It has a 
         active=6,
         repeat=1),
     on_trace_ready=tensorboard_trace_handler,
-    with_trace=True
+    with_stack=True
 ) as profiler:
     for step, data in enumerate(trainloader, 0):
         print("step:{}".format(step))
