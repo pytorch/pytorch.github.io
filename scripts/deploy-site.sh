@@ -28,7 +28,8 @@ mkdir master-branch
 cd master-branch
 # now lets setup a new repo so we can update the master branch
 git init
-git remote add --fetch origin "$remote"
+git remote add origin "$remote"
+git fetch --depth 1
 
 # switch into the the master branch
 if git rev-parse --verify origin/master > /dev/null 2>&1
