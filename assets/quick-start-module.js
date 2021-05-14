@@ -425,16 +425,16 @@ function commandMessage(key) {
       "<b>NOTE:</b> ROCm is not available on Windows",
 
     "lts,conda,linux,cuda10.2,python":
-      "conda install pytorch torchvision torchaudio cudatoolkit=10.2 -c pytorch",
+      "conda install pytorch torchvision torchaudio cudatoolkit=10.2 -c pytorch-lts",
 
     "lts,conda,linux,cuda11.1,python":
-      "<b>NOTE:</b> 'nvidia' channel is required for cudatoolkit 11.1<br />conda install pytorch torchvision torchaudio cudatoolkit=11.1 -c pytorch -c nvidia",
+      "<b>NOTE:</b> 'nvidia' channel is required for cudatoolkit 11.1<br />conda install pytorch torchvision torchaudio cudatoolkit=11.1 -c pytorch-lts -c nvidia",
 
     "lts,conda,linux,rocm4.0,python":
       "<b>NOTE:</b> ROCm is not supported in LTS",
 
     "lts,conda,linux,accnone,python":
-      "conda install pytorch torchvision torchaudio cpuonly -c pytorch",
+      "conda install pytorch torchvision torchaudio cpuonly -c pytorch-lts",
 
     "lts,conda,macos,cuda10.2,python":
       "conda install pytorch torchvision torchaudio -c pytorch<br /># MacOS Binaries dont support CUDA, install from source if CUDA is needed",
@@ -446,51 +446,51 @@ function commandMessage(key) {
       "<b>NOTE:</b> ROCm is not supported in LTS",
 
     "lts,conda,macos,accnone,python":
-      "conda install pytorch torchvision torchaudio -c pytorch",
+      "conda install pytorch torchvision torchaudio -c pytorch-lts",
 
     "lts,conda,windows,cuda10.2,python":
-      "conda install pytorch torchvision torchaudio cudatoolkit=10.2 -c pytorch",
+      "conda install pytorch torchvision torchaudio cudatoolkit=10.2 -c pytorch-lts",
 
     "lts,conda,windows,cuda11.1,python":
-      "<b>NOTE:</b> 'nvidia' channel is required for cudatoolkit 11.1<br />conda install pytorch torchvision torchaudio cudatoolkit=11.1 -c pytorch -c nvidia",
+      "<b>NOTE:</b> 'nvidia' channel is required for cudatoolkit 11.1<br />conda install pytorch torchvision torchaudio cudatoolkit=11.1 -c pytorch-lts -c nvidia",
 
     "lts,conda,windows,rocm4.0,python":
       "<b>NOTE:</b> ROCm is not supported in LTS",
 
     "lts,conda,windows,accnone,python":
-      "conda install pytorch torchvision torchaudio cpuonly -c pytorch",
+      "conda install pytorch torchvision torchaudio cpuonly -c pytorch-lts",
 
     "lts,pip,macos,cuda10.2,python":
-      "pip3 install torch torchvision torchaudio<br /># MacOS Binaries dont support CUDA, install from source if CUDA is needed",
+      "pip3 install torch torchvision torchaudio -f https://download.pytorch.org/whl/lts/1.8/torch_lts.html<br /># MacOS Binaries dont support CUDA, install from source if CUDA is needed",
 
     "lts,pip,macos,cuda11.1,python":
-      "pip3 install torch torchvision torchaudio<br /># MacOS Binaries dont support CUDA, install from source if CUDA is needed",
+      "pip3 install torch torchvision torchaudio -f https://download.pytorch.org/whl/lts/1.8/torch_lts.html<br /># MacOS Binaries dont support CUDA, install from source if CUDA is needed",
 
     "lts,pip,macos,rocm4.0,python":
       "<b>NOTE:</b> ROCm is not supported in LTS",
 
-    "lts,pip,macos,accnone,python": "pip3 install torch torchvision torchaudio",
+    "lts,pip,macos,accnone,python": "pip3 install torch torchvision torchaudio -f https://download.pytorch.org/whl/lts/1.8/torch_lts.html",
 
     "lts,pip,linux,accnone,python":
-      "pip3 install torch==1.8.1+cpu torchvision==0.9.1+cpu torchaudio==0.8.1 -f https://download.pytorch.org/whl/torch_stable.html",
+      "pip3 install torch==1.8.1+cpu torchvision==0.9.1+cpu torchaudio==0.8.1 -f https://download.pytorch.org/whl/lts/1.8/torch_lts.html",
 
     "lts,pip,linux,cuda10.2,python":
-      "pip3 install torch torchvision torchaudio",
+      "pip3 install torch torchvision torchaudio -f https://download.pytorch.org/whl/lts/1.8/torch_lts.html",
 
     "lts,pip,linux,cuda11.1,python":
-      "pip3 install torch==1.8.1+cu111 torchvision==0.9.1+cu111 torchaudio==0.8.1 -f https://download.pytorch.org/whl/torch_stable.html",
+      "pip3 install torch==1.8.1+cu111 torchvision==0.9.1+cu111 torchaudio==0.8.1 -f https://download.pytorch.org/whl/lts/1.8/torch_lts.html",
 
     "lts,pip,linux,rocm4.0,python":
       "<b>NOTE:</b> ROCm is not supported in LTS",
 
     "lts,pip,windows,accnone,python":
-      "pip3 install torch==1.8.1+cpu torchvision==0.9.1+cpu torchaudio===0.8.1 -f https://download.pytorch.org/whl/torch_stable.html",
+      "pip3 install torch==1.8.1+cpu torchvision==0.9.1+cpu torchaudio===0.8.1 -f https://download.pytorch.org/whl/lts/1.8/torch_lts.html",
 
     "lts,pip,windows,cuda10.2,python":
-      "pip3 install torch==1.8.1+cu102 torchvision==0.9.1+cu102 torchaudio===0.8.1 -f https://download.pytorch.org/whl/torch_stable.html",
+      "pip3 install torch==1.8.1+cu102 torchvision==0.9.1+cu102 torchaudio===0.8.1 -f https://download.pytorch.org/whl/lts/1.8/torch_lts.html",
 
     "lts,pip,windows,cuda11.1,python":
-      "pip3 install torch==1.8.1+cu111 torchvision==0.9.1+cu111 torchaudio===0.8.1 -f https://download.pytorch.org/whl/torch_stable.html",
+      "pip3 install torch==1.8.1+cu111 torchvision==0.9.1+cu111 torchaudio===0.8.1 -f https://download.pytorch.org/whl/lts/1.8/torch_lts.html",
 
     "lts,pip,windows,rocm4.0,python":
       "<b>NOTE:</b> ROCm is not supported in LTS",
@@ -531,11 +531,14 @@ function commandMessage(key) {
     "lts,libtorch,windows,rocm4.0,cplusplus":
       "<b>NOTE:</b> ROCm is not supported in LTS",
   };
+  var lts_notice = "<div class='alert-secondary'<b>Note</b>: Additional support for these binaries may be provided by PyTorch Enterprise Support Program Participants <a href='/enterprise-support-program'>here</a> for details.</div>";
 
   if (!object.hasOwnProperty(key)) {
     $("#command").html(
       "<pre> # Follow instructions at this URL: https://github.com/pytorch/pytorch#from-source </pre>"
     );
+  } else if (key.indexOf("lts") == 0  && key.indexOf('rocm') < 0) {
+    $("#command").html("<pre>" + object[key] + "</pre>" + lts_notice);
   } else {
     $("#command").html("<pre>" + object[key] + "</pre>");
   }
