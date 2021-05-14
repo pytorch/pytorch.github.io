@@ -197,7 +197,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href='https://pytorch.org/docs/versions.html'>master (1.9.0a0+git40b7867 ) &#x25BC</a>
+      <a href='https://pytorch.org/docs/versions.html'>master (1.9.0a0+git4fb06c9 ) &#x25BC</a>
     </div>
     
 
@@ -241,6 +241,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../../../notes/extending.html">Extending PyTorch</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../notes/faq.html">Frequently Asked Questions</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../notes/gradcheck.html">Gradcheck mechanics</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../notes/hip.html">HIP (ROCm) semantics</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../notes/large_scale_deployments.html">Features for large-scale deployments</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../notes/modules.html">Modules</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../notes/multiprocessing.html">Multiprocessing best practices</a></li>
@@ -393,11 +394,16 @@
               
   <h1>Source code for torch.package.package_exporter</h1><div class="highlight"><pre>
 <span></span><span class="kn">import</span> <span class="nn">collections</span>
+<span class="kn">import</span> <span class="nn">importlib.machinery</span>
 <span class="kn">import</span> <span class="nn">io</span>
 <span class="kn">import</span> <span class="nn">linecache</span>
 <span class="kn">import</span> <span class="nn">pickletools</span>
+<span class="kn">import</span> <span class="nn">pprint</span>
+<span class="kn">import</span> <span class="nn">textwrap</span>
 <span class="kn">import</span> <span class="nn">types</span>
 <span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">OrderedDict</span>
+<span class="kn">from</span> <span class="nn">dataclasses</span> <span class="kn">import</span> <span class="n">dataclass</span>
+<span class="kn">from</span> <span class="nn">enum</span> <span class="kn">import</span> <span class="n">Enum</span>
 <span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span>
 <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">Any</span><span class="p">,</span>
@@ -408,7 +414,6 @@
     <span class="n">Optional</span><span class="p">,</span>
     <span class="n">Sequence</span><span class="p">,</span>
     <span class="n">Set</span><span class="p">,</span>
-    <span class="n">Tuple</span><span class="p">,</span>
     <span class="n">Union</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span> <span class="nn">urllib.parse</span> <span class="kn">import</span> <span class="n">quote</span>
@@ -426,6 +431,37 @@
 <span class="kn">from</span> <span class="nn">.glob_group</span> <span class="kn">import</span> <span class="n">GlobGroup</span><span class="p">,</span> <span class="n">GlobPattern</span>
 <span class="kn">from</span> <span class="nn">.importer</span> <span class="kn">import</span> <span class="n">Importer</span><span class="p">,</span> <span class="n">OrderedImporter</span><span class="p">,</span> <span class="n">sys_importer</span>
 
+<span class="n">ActionHook</span> <span class="o">=</span> <span class="n">Callable</span><span class="p">[[</span><span class="s2">&quot;PackageExporter&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">],</span> <span class="kc">None</span><span class="p">]</span>
+
+
+<span class="k">class</span> <span class="nc">_ModuleProviderAction</span><span class="p">(</span><span class="n">Enum</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Represents one of the actions that exporter can take on a module.</span>
+
+<span class="sd">    See :meth:`PackageExporter.extern` and friends for a description of what the actions do.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">INTERN</span> <span class="o">=</span> <span class="mi">1</span>
+    <span class="n">EXTERN</span> <span class="o">=</span> <span class="mi">2</span>
+    <span class="n">MOCK</span> <span class="o">=</span> <span class="mi">3</span>
+    <span class="n">DENY</span> <span class="o">=</span> <span class="mi">4</span>
+
+
+<span class="nd">@dataclass</span>
+<span class="k">class</span> <span class="nc">_PatternInfo</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;Holds :class:`PackageExporter`-specific info about how to execute matches against&quot;&quot;&quot;</span>
+
+    <span class="c1"># What action to take on a module that matches this pattern.</span>
+    <span class="n">action</span><span class="p">:</span> <span class="n">_ModuleProviderAction</span>
+    <span class="c1"># The value of `allow_empty` the user gave when specifying the pattern.</span>
+    <span class="n">allow_empty</span><span class="p">:</span> <span class="nb">bool</span>
+    <span class="c1"># Whether this pattern has been matched during packaging.</span>
+    <span class="n">was_matched</span><span class="p">:</span> <span class="nb">bool</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">action</span><span class="p">,</span> <span class="n">allow_empty</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">action</span> <span class="o">=</span> <span class="n">action</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">allow_empty</span> <span class="o">=</span> <span class="n">allow_empty</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">was_matched</span> <span class="o">=</span> <span class="kc">False</span>
+
 
 <div class="viewcode-block" id="EmptyMatchError"><a class="viewcode-back" href="../../../package.html#torch.package.EmptyMatchError">[docs]</a><span class="k">class</span> <span class="nc">EmptyMatchError</span><span class="p">(</span><span class="ne">Exception</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;This is an exception that is thrown when a mock or extern is marked as</span>
@@ -435,12 +471,67 @@
     <span class="k">pass</span></div>
 
 
-<div class="viewcode-block" id="DeniedModuleError"><a class="viewcode-back" href="../../../package.html#torch.package.DeniedModuleError">[docs]</a><span class="k">class</span> <span class="nc">DeniedModuleError</span><span class="p">(</span><span class="ne">Exception</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;This is an exception that is thrown when a pattern added with deny matches</span>
-<span class="sd">    a module required during the packaging process.</span>
+<div class="viewcode-block" id="PackagingError"><a class="viewcode-back" href="../../../package.html#torch.package.PackagingError">[docs]</a><span class="k">class</span> <span class="nc">PackagingError</span><span class="p">(</span><span class="ne">Exception</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;This exception is raised when there is an issue with exporting a package.</span>
+<span class="sd">    ``PackageExporter`` will attempt to gather up all the errors and present</span>
+<span class="sd">    them to you at once.</span>
+
+<span class="sd">    To make error information more understandable, the exception message will</span>
+<span class="sd">    only show modules that you ``intern``&#39;d or direct dependencies of</span>
+<span class="sd">    ``intern``&#39;d modules. To see the full list of error modules, consult the</span>
+<span class="sd">    attributes on this exception.</span>
+
+<span class="sd">    Attributes:</span>
+<span class="sd">        denied (Set[str]): modules that have been marked as denied by the exporter.</span>
+<span class="sd">        broken (Dict[str, str]): modules for which the exporter could not retrieve source info,</span>
+<span class="sd">            along with the reason that retrieving it failed.</span>
+<span class="sd">        unhandled (Set[str]): modules for which there is no user-specified action.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
-    <span class="k">pass</span></div>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">denied</span><span class="p">:</span> <span class="n">Set</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
+        <span class="n">broken</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">],</span>
+        <span class="n">unhandled</span><span class="p">:</span> <span class="n">Set</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
+        <span class="n">include_filter</span><span class="p">:</span> <span class="n">Set</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
+    <span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">denied</span> <span class="o">=</span> <span class="n">denied</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">broken</span> <span class="o">=</span> <span class="n">broken</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">unhandled</span> <span class="o">=</span> <span class="n">unhandled</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">filtered_denied</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="n">module</span> <span class="k">for</span> <span class="n">module</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">denied</span> <span class="k">if</span> <span class="n">module</span> <span class="ow">in</span> <span class="n">include_filter</span>
+        <span class="p">}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">filtered_broken</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="n">module</span><span class="p">:</span> <span class="n">reason</span>
+            <span class="k">for</span> <span class="n">module</span><span class="p">,</span> <span class="n">reason</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">broken</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">module</span> <span class="ow">in</span> <span class="n">include_filter</span>
+        <span class="p">}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">filtered_unhandled</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="n">module</span> <span class="k">for</span> <span class="n">module</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">unhandled</span> <span class="k">if</span> <span class="n">module</span> <span class="ow">in</span> <span class="n">include_filter</span>
+        <span class="p">}</span>
+
+        <span class="n">message</span> <span class="o">=</span> <span class="n">io</span><span class="o">.</span><span class="n">StringIO</span><span class="p">(</span><span class="s2">&quot;Errors raised while packaging:&quot;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">filtered_denied</span><span class="p">:</span>
+            <span class="n">message</span><span class="o">.</span><span class="n">write</span><span class="p">(</span>
+                <span class="s2">&quot;</span><span class="se">\n\n</span><span class="s2">* The following modules were detected as dependencies but have been denied:</span><span class="se">\n</span><span class="s2">&quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">textwrap</span><span class="o">.</span><span class="n">indent</span><span class="p">(</span><span class="n">pprint</span><span class="o">.</span><span class="n">pformat</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">filtered_denied</span><span class="p">),</span> <span class="n">prefix</span><span class="o">=</span><span class="s1">&#39;  &#39;</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">filtered_broken</span><span class="p">:</span>
+            <span class="n">message</span><span class="o">.</span><span class="n">write</span><span class="p">(</span>
+                <span class="s2">&quot;</span><span class="se">\n\n</span><span class="s2">* The following modules did not have source information. &quot;</span>
+                <span class="s2">&quot;Extern, mock, or refactor to remove the dependency:</span><span class="se">\n</span><span class="s2">&quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">textwrap</span><span class="o">.</span><span class="n">indent</span><span class="p">(</span><span class="n">pprint</span><span class="o">.</span><span class="n">pformat</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">filtered_broken</span><span class="p">),</span> <span class="n">prefix</span><span class="o">=</span><span class="s1">&#39;  &#39;</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">filtered_unhandled</span><span class="p">:</span>
+            <span class="n">message</span><span class="o">.</span><span class="n">write</span><span class="p">(</span>
+                <span class="s2">&quot;</span><span class="se">\n\n</span><span class="s2">* The following modules did not match against any patterns. &quot;</span>
+                <span class="s2">&quot;Intern, extern, or mock them:</span><span class="se">\n</span><span class="s2">&quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">textwrap</span><span class="o">.</span><span class="n">indent</span><span class="p">(</span><span class="n">pprint</span><span class="o">.</span><span class="n">pformat</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">filtered_unhandled</span><span class="p">),</span> <span class="n">prefix</span><span class="o">=</span><span class="s1">&#39;  &#39;</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">message</span><span class="o">.</span><span class="n">getvalue</span><span class="p">())</span></div>
 
 
 <div class="viewcode-block" id="PackageExporter"><a class="viewcode-back" href="../../../package.html#torch.package.PackageExporter">[docs]</a><span class="k">class</span> <span class="nc">PackageExporter</span><span class="p">:</span>
@@ -465,8 +556,8 @@
 
 <span class="sd">    When source code is added to the package, the exporter optionally can scan it</span>
 <span class="sd">    for further code dependencies (``dependencies=True``). It looks for import statements,</span>
-<span class="sd">    resolves relative references to qualified module names, and calls :meth:`require_module`</span>
-<span class="sd">    on each it finds, recursively resolving dependencies.</span>
+<span class="sd">    resolves relative references to qualified module names, and performs an action specified by the user</span>
+<span class="sd">    (See: :meth:`extern`, :meth:`mock`, and :meth:`intern`).</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="sd">&quot;&quot;&quot;A importer that will be searched in order to find the modules referenced by other modules or by</span>
@@ -500,11 +591,13 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">zip_file</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">PyTorchFileWriter</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">zip_file</span><span class="o">.</span><span class="n">set_min_version</span><span class="p">(</span><span class="mi">6</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">serialized_storages</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
-        <span class="c1"># Only a dict for uniquing and deterministic ordering, the value is meaningless</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">extern_modules</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">bool</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
 
+        <span class="c1"># A graph tracking all the modules and pickle objects added to this</span>
+        <span class="c1"># package and the dependencies between them.</span>
+        <span class="c1"># - Each node is a module name (or a pickle name that looks like &#39;&lt;foo.obj.pkl&gt;&#39;)</span>
+        <span class="c1"># - Each directed edge (u, v) means u depends on v.</span>
+        <span class="c1"># - Nodes may contain metadata that describe how to write the thing to the zipfile.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">dependency_graph</span> <span class="o">=</span> <span class="n">DiGraph</span><span class="p">()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">provided</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">bool</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span> <span class="o">=</span> <span class="n">verbose</span>
 
         <span class="c1"># These are OrderedDicts for compatibility with RemovableHandle.</span>
@@ -512,6 +605,7 @@
         <span class="c1"># The real type signature is OrderedDict[int, Callable[[PackageExporter, str], None]]</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_extern_hooks</span><span class="p">:</span> <span class="n">OrderedDict</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_mock_hooks</span><span class="p">:</span> <span class="n">OrderedDict</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_intern_hooks</span><span class="p">:</span> <span class="n">OrderedDict</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">()</span>
 
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">importer</span><span class="p">,</span> <span class="n">Importer</span><span class="p">):</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">importer</span> <span class="o">=</span> <span class="n">importer</span>
@@ -523,10 +617,7 @@
                 <span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">importer</span> <span class="o">=</span> <span class="n">OrderedImporter</span><span class="p">(</span><span class="o">*</span><span class="n">importer</span><span class="p">)</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">patterns</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span>
-            <span class="n">Tuple</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="n">Callable</span><span class="p">[[</span><span class="nb">str</span><span class="p">],</span> <span class="kc">None</span><span class="p">],</span> <span class="nb">bool</span><span class="p">]</span>
-        <span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>  <span class="c1"># &#39;any&#39; is &#39;re.Pattern&#39; but breaks old mypy</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">matched_patterns</span><span class="p">:</span> <span class="n">Set</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">patterns</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="n">GlobGroup</span><span class="p">,</span> <span class="n">_PatternInfo</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_unique_id</span> <span class="o">=</span> <span class="mi">0</span></div>
 
 <div class="viewcode-block" id="PackageExporter.get_unique_id"><a class="viewcode-back" href="../../../package.html#torch.package.PackageExporter.get_unique_id">[docs]</a>    <span class="k">def</span> <span class="nf">get_unique_id</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
@@ -595,17 +686,35 @@
 <span class="sd">                (e.g. my_package.my_subpackage.my_subsubpackage), and resources can be saved inside them. Defaults to ``False``.</span>
 <span class="sd">            dependencies (bool, optional): If True, we scan the source for dependencies.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">provided</span><span class="p">[</span><span class="n">module_name</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
-        <span class="n">extension</span> <span class="o">=</span> <span class="s2">&quot;/__init__.py&quot;</span> <span class="k">if</span> <span class="n">is_package</span> <span class="k">else</span> <span class="s2">&quot;.py&quot;</span>
-        <span class="n">filename</span> <span class="o">=</span> <span class="n">module_name</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot;.&quot;</span><span class="p">,</span> <span class="s2">&quot;/&quot;</span><span class="p">)</span> <span class="o">+</span> <span class="n">extension</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_write</span><span class="p">(</span><span class="n">filename</span><span class="p">,</span> <span class="n">src</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dependency_graph</span><span class="o">.</span><span class="n">add_node</span><span class="p">(</span>
+            <span class="n">module_name</span><span class="p">,</span>
+            <span class="n">source</span><span class="o">=</span><span class="n">src</span><span class="p">,</span>
+            <span class="n">is_package</span><span class="o">=</span><span class="n">is_package</span><span class="p">,</span>
+            <span class="n">provided</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">action</span><span class="o">=</span><span class="n">_ModuleProviderAction</span><span class="o">.</span><span class="n">INTERN</span><span class="p">,</span>
+        <span class="p">)</span>
+
         <span class="k">if</span> <span class="n">dependencies</span><span class="p">:</span>
             <span class="n">deps</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_dependencies</span><span class="p">(</span><span class="n">src</span><span class="p">,</span> <span class="n">module_name</span><span class="p">,</span> <span class="n">is_package</span><span class="p">)</span>
-            <span class="k">for</span> <span class="n">dep</span> <span class="ow">in</span> <span class="n">deps</span><span class="p">:</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">dependency_graph</span><span class="o">.</span><span class="n">add_edge</span><span class="p">(</span><span class="n">module_name</span><span class="p">,</span> <span class="n">dep</span><span class="p">)</span>
 
             <span class="k">for</span> <span class="n">dep</span> <span class="ow">in</span> <span class="n">deps</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">dependency_graph</span><span class="o">.</span><span class="n">add_edge</span><span class="p">(</span><span class="n">module_name</span><span class="p">,</span> <span class="n">dep</span><span class="p">)</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">require_module_if_not_provided</span><span class="p">(</span><span class="n">dep</span><span class="p">)</span></div>
+
+    <span class="k">def</span> <span class="nf">_write_source_string</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">module_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">src</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">is_package</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Write ``src`` as the source code for ``module_name`` in the zip archive.</span>
+
+<span class="sd">        Arguments are otherwise the same as for :meth:`save_source_string`.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">extension</span> <span class="o">=</span> <span class="s2">&quot;/__init__.py&quot;</span> <span class="k">if</span> <span class="n">is_package</span> <span class="k">else</span> <span class="s2">&quot;.py&quot;</span>
+        <span class="n">filename</span> <span class="o">=</span> <span class="n">module_name</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot;.&quot;</span><span class="p">,</span> <span class="s2">&quot;/&quot;</span><span class="p">)</span> <span class="o">+</span> <span class="n">extension</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_write</span><span class="p">(</span><span class="n">filename</span><span class="p">,</span> <span class="n">src</span><span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">_import_module</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">module_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
         <span class="k">try</span><span class="p">:</span>
@@ -640,77 +749,99 @@
         <span class="n">arg</span> <span class="o">=</span> <span class="n">quote</span><span class="p">(</span><span class="n">template</span><span class="p">,</span> <span class="n">safe</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">)</span>
         <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;https://dreampuf.github.io/GraphvizOnline/#</span><span class="si">{</span><span class="n">arg</span><span class="si">}</span><span class="s2">&quot;</span>
 
-    <span class="k">def</span> <span class="nf">_get_source_of_module</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">module</span><span class="p">:</span> <span class="n">types</span><span class="o">.</span><span class="n">ModuleType</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+    <span class="k">def</span> <span class="nf">_get_source_of_module</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">module</span><span class="p">:</span> <span class="n">types</span><span class="o">.</span><span class="n">ModuleType</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
         <span class="n">filename</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="s2">&quot;__file__&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
         <span class="n">result</span> <span class="o">=</span> <span class="p">(</span>
             <span class="kc">None</span>
             <span class="k">if</span> <span class="n">filename</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">filename</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s2">&quot;.py&quot;</span><span class="p">)</span>
             <span class="k">else</span> <span class="n">linecache</span><span class="o">.</span><span class="n">getlines</span><span class="p">(</span><span class="n">filename</span><span class="p">,</span> <span class="n">module</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">)</span>
         <span class="p">)</span>
+
         <span class="k">if</span> <span class="n">result</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">extra</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
-            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span><span class="p">:</span>
-                <span class="n">extra</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot; See the dependency graph for more info: </span><span class="se">\n</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_write_dep_graph</span><span class="p">(</span><span class="n">module</span><span class="o">.</span><span class="vm">__name__</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s1">&#39;cannot save source for module &quot;</span><span class="si">{</span><span class="n">module</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s1">&quot; because &#39;</span>
-                <span class="sa">f</span><span class="s1">&#39;its source file &quot;</span><span class="si">{</span><span class="n">filename</span><span class="si">}</span><span class="s1">&quot; could not be found.</span><span class="si">{</span><span class="n">extra</span><span class="si">}</span><span class="s1">&#39;</span>
-            <span class="p">)</span>
+            <span class="k">return</span> <span class="kc">None</span>
+
         <span class="k">return</span> <span class="s2">&quot;&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">require_module_if_not_provided</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">module_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">dependencies</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_module_is_already_provided</span><span class="p">(</span><span class="n">module_name</span><span class="p">):</span>
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="n">module_name</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">dependency_graph</span>
+            <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">dependency_graph</span><span class="o">.</span><span class="n">nodes</span><span class="p">[</span><span class="n">module_name</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;provided&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="kc">True</span>
+        <span class="p">):</span>
             <span class="k">return</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">require_module</span><span class="p">(</span><span class="n">module_name</span><span class="p">,</span> <span class="n">dependencies</span><span class="p">)</span>
 
-<div class="viewcode-block" id="PackageExporter.require_module"><a class="viewcode-back" href="../../../package.html#torch.package.PackageExporter.require_module">[docs]</a>    <span class="k">def</span> <span class="nf">require_module</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">module_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">dependencies</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;This is called by dependencies resolution when it finds that something in the package</span>
-<span class="sd">        depends on the module and it is not already present. It then decides how to provide that module.</span>
-<span class="sd">        The default resolution rules will mark the module as extern if it is part of the standard library,</span>
-<span class="sd">        and call :meth:`save_module` otherwise. Clients can subclass this object</span>
-<span class="sd">        and override this method to provide other behavior, such as automatically mocking out a whole class</span>
-<span class="sd">        of modules&quot;&quot;&quot;</span>
-
-        <span class="n">root_name</span> <span class="o">=</span> <span class="n">module_name</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;.&quot;</span><span class="p">,</span> <span class="n">maxsplit</span><span class="o">=</span><span class="mi">1</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_can_implicitly_extern</span><span class="p">(</span><span class="n">root_name</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_can_implicitly_extern</span><span class="p">(</span><span class="n">module_name</span><span class="p">):</span>
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span><span class="p">:</span>
                 <span class="nb">print</span><span class="p">(</span>
-                    <span class="sa">f</span><span class="s2">&quot;implicitly adding </span><span class="si">{</span><span class="n">root_name</span><span class="si">}</span><span class="s2"> to external modules &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;implicitly adding </span><span class="si">{</span><span class="n">module_name</span><span class="si">}</span><span class="s2"> to external modules &quot;</span>
                     <span class="sa">f</span><span class="s2">&quot;since it is part of the standard library and is a dependency.&quot;</span>
                 <span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_save_extern_module</span><span class="p">(</span><span class="n">root_name</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">dependency_graph</span><span class="o">.</span><span class="n">add_node</span><span class="p">(</span>
+                <span class="n">module_name</span><span class="p">,</span> <span class="n">action</span><span class="o">=</span><span class="n">_ModuleProviderAction</span><span class="o">.</span><span class="n">EXTERN</span><span class="p">,</span> <span class="n">provided</span><span class="o">=</span><span class="kc">True</span>
+            <span class="p">)</span>
             <span class="k">return</span>
 
-        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="p">(</span><span class="n">pattern</span><span class="p">,</span> <span class="n">action</span><span class="p">,</span> <span class="n">_</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">patterns</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">pattern</span><span class="p">,</span> <span class="n">pattern_info</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">patterns</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
             <span class="k">if</span> <span class="n">pattern</span><span class="o">.</span><span class="n">matches</span><span class="p">(</span><span class="n">module_name</span><span class="p">):</span>
-                <span class="n">action</span><span class="p">(</span><span class="n">module_name</span><span class="p">)</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">matched_patterns</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">i</span><span class="p">)</span>
+                <span class="n">pattern_info</span><span class="o">.</span><span class="n">was_matched</span> <span class="o">=</span> <span class="kc">True</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">dependency_graph</span><span class="o">.</span><span class="n">add_node</span><span class="p">(</span>
+                    <span class="n">module_name</span><span class="p">,</span> <span class="n">action</span><span class="o">=</span><span class="n">pattern_info</span><span class="o">.</span><span class="n">action</span><span class="p">,</span> <span class="n">provided</span><span class="o">=</span><span class="kc">True</span>
+                <span class="p">)</span>
+
+                <span class="c1"># If we are interning this module, we need to retrieve its</span>
+                <span class="c1"># dependencies and package those as well.</span>
+                <span class="k">if</span> <span class="n">pattern_info</span><span class="o">.</span><span class="n">action</span> <span class="o">==</span> <span class="n">_ModuleProviderAction</span><span class="o">.</span><span class="n">INTERN</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_add_module_to_dependency_graph</span><span class="p">(</span><span class="n">module_name</span><span class="p">,</span> <span class="n">dependencies</span><span class="p">)</span>
                 <span class="k">return</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">save_module</span><span class="p">(</span><span class="n">module_name</span><span class="p">,</span> <span class="n">dependencies</span><span class="p">)</span></div>
-
-<div class="viewcode-block" id="PackageExporter.save_module"><a class="viewcode-back" href="../../../package.html#torch.package.PackageExporter.save_module">[docs]</a>    <span class="k">def</span> <span class="nf">save_module</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">module</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">types</span><span class="o">.</span><span class="n">ModuleType</span><span class="p">],</span> <span class="n">dependencies</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+<div class="viewcode-block" id="PackageExporter.save_module"><a class="viewcode-back" href="../../../package.html#torch.package.PackageExporter.save_module">[docs]</a>    <span class="k">def</span> <span class="nf">save_module</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">module_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">dependencies</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Save the code for ``module`` into the package. Code for the module is resolved using the ``importers`` path to find the</span>
 <span class="sd">        module object, and then using its ``__file__`` attribute to find the source code.</span>
 
 <span class="sd">        Args:</span>
-<span class="sd">            module (Union[str, types.ModuleType]): e.g. `my_package.my_subpackage`, code will be saved to provide code</span>
+<span class="sd">            module_name (str): e.g. `my_package.my_subpackage`, code will be saved to provide code</span>
 <span class="sd">                for this package.</span>
 <span class="sd">            dependencies (bool, optional): If ``True``, we scan the source for dependencies.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
-            <span class="n">module_name</span> <span class="o">=</span> <span class="n">module</span>
-            <span class="n">module_obj</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_import_module</span><span class="p">(</span><span class="n">module_name</span><span class="p">)</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">module_name</span> <span class="o">=</span> <span class="n">module</span><span class="o">.</span><span class="vm">__name__</span>
-            <span class="n">module_obj</span> <span class="o">=</span> <span class="n">module</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">module_name</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                <span class="s2">&quot;save_module() expects a string input, did you perhaps mean to pass `__name__`?&quot;</span>
+            <span class="p">)</span>
 
+        <span class="bp">self</span><span class="o">.</span><span class="n">dependency_graph</span><span class="o">.</span><span class="n">add_node</span><span class="p">(</span>
+            <span class="n">module_name</span><span class="p">,</span> <span class="n">provided</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">action</span><span class="o">=</span><span class="n">_ModuleProviderAction</span><span class="o">.</span><span class="n">INTERN</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_add_module_to_dependency_graph</span><span class="p">(</span><span class="n">module_name</span><span class="p">,</span> <span class="n">dependencies</span><span class="p">)</span></div>
+
+    <span class="k">def</span> <span class="nf">_add_module_to_dependency_graph</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">module_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">dependencies</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="n">module_obj</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_import_module</span><span class="p">(</span><span class="n">module_name</span><span class="p">)</span>
+
+        <span class="c1"># Find dependencies of this module and require them as well.</span>
+        <span class="n">is_package</span> <span class="o">=</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">module_obj</span><span class="p">,</span> <span class="s2">&quot;__path__&quot;</span><span class="p">)</span>
         <span class="n">source</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_source_of_module</span><span class="p">(</span><span class="n">module_obj</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">save_source_string</span><span class="p">(</span>
-            <span class="n">module_name</span><span class="p">,</span>
-            <span class="n">source</span><span class="p">,</span>
-            <span class="nb">hasattr</span><span class="p">(</span><span class="n">module_obj</span><span class="p">,</span> <span class="s2">&quot;__path__&quot;</span><span class="p">),</span>
-            <span class="n">dependencies</span><span class="p">,</span>
-        <span class="p">)</span></div>
+        <span class="k">if</span> <span class="n">source</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># Couldn&#39;t find a source!  Add it to our dependency graph as broken</span>
+            <span class="c1"># and continue.</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">dependency_graph</span><span class="o">.</span><span class="n">add_node</span><span class="p">(</span>
+                <span class="n">module_name</span><span class="p">,</span>
+                <span class="n">is_package</span><span class="o">=</span><span class="n">is_package</span><span class="p">,</span>
+                <span class="n">broken</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                <span class="n">filename</span><span class="o">=</span><span class="nb">getattr</span><span class="p">(</span><span class="n">module_obj</span><span class="p">,</span> <span class="s2">&quot;__file__&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">),</span>
+            <span class="p">)</span>
+            <span class="k">return</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">dependency_graph</span><span class="o">.</span><span class="n">add_node</span><span class="p">(</span>
+            <span class="n">module_name</span><span class="p">,</span> <span class="n">is_package</span><span class="o">=</span><span class="n">is_package</span><span class="p">,</span> <span class="n">source</span><span class="o">=</span><span class="n">source</span><span class="p">,</span> <span class="n">provided</span><span class="o">=</span><span class="kc">True</span>
+        <span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">dependencies</span><span class="p">:</span>
+            <span class="n">deps</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_dependencies</span><span class="p">(</span><span class="n">source</span><span class="p">,</span> <span class="n">module_name</span><span class="p">,</span> <span class="n">is_package</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">dep</span> <span class="ow">in</span> <span class="n">deps</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">dependency_graph</span><span class="o">.</span><span class="n">add_edge</span><span class="p">(</span><span class="n">module_name</span><span class="p">,</span> <span class="n">dep</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">require_module_if_not_provided</span><span class="p">(</span><span class="n">dep</span><span class="p">)</span>
 
 <div class="viewcode-block" id="PackageExporter.save_pickle"><a class="viewcode-back" href="../../../package.html#torch.package.PackageExporter.save_pickle">[docs]</a>    <span class="k">def</span> <span class="nf">save_pickle</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="n">package</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">resource</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">obj</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">dependencies</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
@@ -739,6 +870,14 @@
         <span class="n">pickler</span><span class="o">.</span><span class="n">dump</span><span class="p">(</span><span class="n">obj</span><span class="p">)</span>
         <span class="n">data_value</span> <span class="o">=</span> <span class="n">data_buf</span><span class="o">.</span><span class="n">getvalue</span><span class="p">()</span>
 
+        <span class="n">name_in_dependency_graph</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;&lt;</span><span class="si">{</span><span class="n">package</span><span class="si">}</span><span class="s2">.</span><span class="si">{</span><span class="n">resource</span><span class="si">}</span><span class="s2">&gt;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dependency_graph</span><span class="o">.</span><span class="n">add_node</span><span class="p">(</span>
+            <span class="n">name_in_dependency_graph</span><span class="p">,</span>
+            <span class="n">action</span><span class="o">=</span><span class="n">_ModuleProviderAction</span><span class="o">.</span><span class="n">INTERN</span><span class="p">,</span>
+            <span class="n">provided</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">is_pickle</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="p">)</span>
+
         <span class="k">if</span> <span class="n">dependencies</span><span class="p">:</span>
             <span class="n">all_dependencies</span> <span class="o">=</span> <span class="p">[]</span>
             <span class="k">for</span> <span class="n">opcode</span><span class="p">,</span> <span class="n">arg</span><span class="p">,</span> <span class="n">pos</span> <span class="ow">in</span> <span class="n">pickletools</span><span class="o">.</span><span class="n">genops</span><span class="p">(</span><span class="n">data_value</span><span class="p">):</span>
@@ -748,14 +887,12 @@
                     <span class="k">if</span> <span class="n">module</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">all_dependencies</span><span class="p">:</span>
                         <span class="n">all_dependencies</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">module</span><span class="p">)</span>
 
-            <span class="k">for</span> <span class="n">dep</span> <span class="ow">in</span> <span class="n">all_dependencies</span><span class="p">:</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">dependency_graph</span><span class="o">.</span><span class="n">add_edge</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;&lt;</span><span class="si">{</span><span class="n">package</span><span class="si">}</span><span class="s2">.</span><span class="si">{</span><span class="n">resource</span><span class="si">}</span><span class="s2">&gt;&quot;</span><span class="p">,</span> <span class="n">dep</span><span class="p">)</span>
-
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span><span class="p">:</span>
                 <span class="n">dep_string</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;  </span><span class="si">{</span><span class="n">dep</span><span class="si">}</span><span class="se">\n</span><span class="s2">&quot;</span> <span class="k">for</span> <span class="n">dep</span> <span class="ow">in</span> <span class="n">all_dependencies</span><span class="p">)</span>
                 <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">resource</span><span class="si">}</span><span class="s2"> depends on:</span><span class="se">\n</span><span class="si">{</span><span class="n">dep_string</span><span class="si">}</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">)</span>
 
             <span class="k">for</span> <span class="n">module_name</span> <span class="ow">in</span> <span class="n">all_dependencies</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">dependency_graph</span><span class="o">.</span><span class="n">add_edge</span><span class="p">(</span><span class="n">name_in_dependency_graph</span><span class="p">,</span> <span class="n">module_name</span><span class="p">)</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">require_module_if_not_provided</span><span class="p">(</span><span class="n">module_name</span><span class="p">)</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_write</span><span class="p">(</span><span class="n">filename</span><span class="p">,</span> <span class="n">data_value</span><span class="p">)</span></div>
@@ -781,9 +918,7 @@
         <span class="n">filename</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_filename</span><span class="p">(</span><span class="n">package</span><span class="p">,</span> <span class="n">resource</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_write</span><span class="p">(</span><span class="n">filename</span><span class="p">,</span> <span class="n">binary</span><span class="p">)</span></div>
 
-<div class="viewcode-block" id="PackageExporter.register_extern_hook"><a class="viewcode-back" href="../../../package.html#torch.package.PackageExporter.register_extern_hook">[docs]</a>    <span class="k">def</span> <span class="nf">register_extern_hook</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">hook</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="s2">&quot;PackageExporter&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">],</span> <span class="kc">None</span><span class="p">]</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">RemovableHandle</span><span class="p">:</span>
+<div class="viewcode-block" id="PackageExporter.register_extern_hook"><a class="viewcode-back" href="../../../package.html#torch.package.PackageExporter.register_extern_hook">[docs]</a>    <span class="k">def</span> <span class="nf">register_extern_hook</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">hook</span><span class="p">:</span> <span class="n">ActionHook</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">RemovableHandle</span><span class="p">:</span>
         <span class="sd">&quot;&quot;&quot;Registers an extern hook on the exporter.</span>
 
 <span class="sd">        The hook will be called each time a module matches against an :meth:`extern` pattern.</span>
@@ -802,9 +937,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_extern_hooks</span><span class="p">[</span><span class="n">handle</span><span class="o">.</span><span class="n">id</span><span class="p">]</span> <span class="o">=</span> <span class="n">hook</span>
         <span class="k">return</span> <span class="n">handle</span></div>
 
-<div class="viewcode-block" id="PackageExporter.register_mock_hook"><a class="viewcode-back" href="../../../package.html#torch.package.PackageExporter.register_mock_hook">[docs]</a>    <span class="k">def</span> <span class="nf">register_mock_hook</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">hook</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="s2">&quot;PackageExporter&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">],</span> <span class="kc">None</span><span class="p">]</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">RemovableHandle</span><span class="p">:</span>
+<div class="viewcode-block" id="PackageExporter.register_mock_hook"><a class="viewcode-back" href="../../../package.html#torch.package.PackageExporter.register_mock_hook">[docs]</a>    <span class="k">def</span> <span class="nf">register_mock_hook</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">hook</span><span class="p">:</span> <span class="n">ActionHook</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">RemovableHandle</span><span class="p">:</span>
         <span class="sd">&quot;&quot;&quot;Registers a mock hook on the exporter.</span>
 
 <span class="sd">        The hook will be called each time a module matches against a :meth:`mock` pattern.</span>
@@ -822,6 +955,37 @@
         <span class="n">handle</span> <span class="o">=</span> <span class="n">RemovableHandle</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_mock_hooks</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_mock_hooks</span><span class="p">[</span><span class="n">handle</span><span class="o">.</span><span class="n">id</span><span class="p">]</span> <span class="o">=</span> <span class="n">hook</span>
         <span class="k">return</span> <span class="n">handle</span></div>
+
+<div class="viewcode-block" id="PackageExporter.register_intern_hook"><a class="viewcode-back" href="../../../package.html#torch.package.PackageExporter.register_intern_hook">[docs]</a>    <span class="k">def</span> <span class="nf">register_intern_hook</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">hook</span><span class="p">:</span> <span class="n">ActionHook</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">RemovableHandle</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Registers an intern hook on the exporter.</span>
+
+<span class="sd">        The hook will be called each time a module matches against an :meth:`intern` pattern.</span>
+<span class="sd">        It should have the following signature::</span>
+
+<span class="sd">            hook(exporter: PackageExporter, module_name: str) -&gt; None</span>
+
+<span class="sd">        Hooks will be called in order of registration.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            :class:`torch.utils.hooks.RemovableHandle`:</span>
+<span class="sd">                a handle that can be used to remove the added hook by calling</span>
+<span class="sd">                ``handle.remove()``</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">handle</span> <span class="o">=</span> <span class="n">RemovableHandle</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_intern_hooks</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_intern_hooks</span><span class="p">[</span><span class="n">handle</span><span class="o">.</span><span class="n">id</span><span class="p">]</span> <span class="o">=</span> <span class="n">hook</span>
+        <span class="k">return</span> <span class="n">handle</span></div>
+
+<div class="viewcode-block" id="PackageExporter.intern"><a class="viewcode-back" href="../../../package.html#torch.package.PackageExporter.intern">[docs]</a>    <span class="k">def</span> <span class="nf">intern</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">include</span><span class="p">:</span> <span class="s2">&quot;GlobPattern&quot;</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">exclude</span><span class="p">:</span> <span class="s2">&quot;GlobPattern&quot;</span> <span class="o">=</span> <span class="p">(),</span>
+        <span class="n">allow_empty</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;TODO DOC&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">patterns</span><span class="p">[</span><span class="n">GlobGroup</span><span class="p">(</span><span class="n">include</span><span class="p">,</span> <span class="n">exclude</span><span class="o">=</span><span class="n">exclude</span><span class="p">)]</span> <span class="o">=</span> <span class="n">_PatternInfo</span><span class="p">(</span>
+            <span class="n">_ModuleProviderAction</span><span class="o">.</span><span class="n">INTERN</span><span class="p">,</span> <span class="n">allow_empty</span>
+        <span class="p">)</span></div>
 
 <div class="viewcode-block" id="PackageExporter.mock"><a class="viewcode-back" href="../../../package.html#torch.package.PackageExporter.mock">[docs]</a>    <span class="k">def</span> <span class="nf">mock</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -855,8 +1019,8 @@
 <span class="sd">                used by the package being exported, an exception is thrown. If allow_empty=True, no such exception is thrown.</span>
 
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">patterns</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-            <span class="p">(</span><span class="n">GlobGroup</span><span class="p">(</span><span class="n">include</span><span class="p">,</span> <span class="n">exclude</span><span class="o">=</span><span class="n">exclude</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">_save_mock_module</span><span class="p">,</span> <span class="n">allow_empty</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">patterns</span><span class="p">[</span><span class="n">GlobGroup</span><span class="p">(</span><span class="n">include</span><span class="p">,</span> <span class="n">exclude</span><span class="o">=</span><span class="n">exclude</span><span class="p">)]</span> <span class="o">=</span> <span class="n">_PatternInfo</span><span class="p">(</span>
+            <span class="n">_ModuleProviderAction</span><span class="o">.</span><span class="n">MOCK</span><span class="p">,</span> <span class="n">allow_empty</span>
         <span class="p">)</span></div>
 
 <div class="viewcode-block" id="PackageExporter.extern"><a class="viewcode-back" href="../../../package.html#torch.package.PackageExporter.extern">[docs]</a>    <span class="k">def</span> <span class="nf">extern</span><span class="p">(</span>
@@ -883,13 +1047,13 @@
 <span class="sd">                pattern, an exception is thrown. If allow_empty=True, no such exception is thrown.</span>
 
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">patterns</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-            <span class="p">(</span><span class="n">GlobGroup</span><span class="p">(</span><span class="n">include</span><span class="p">,</span> <span class="n">exclude</span><span class="o">=</span><span class="n">exclude</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">_save_extern_module</span><span class="p">,</span> <span class="n">allow_empty</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">patterns</span><span class="p">[</span><span class="n">GlobGroup</span><span class="p">(</span><span class="n">include</span><span class="p">,</span> <span class="n">exclude</span><span class="o">=</span><span class="n">exclude</span><span class="p">)]</span> <span class="o">=</span> <span class="n">_PatternInfo</span><span class="p">(</span>
+            <span class="n">_ModuleProviderAction</span><span class="o">.</span><span class="n">EXTERN</span><span class="p">,</span> <span class="n">allow_empty</span>
         <span class="p">)</span></div>
 
 <div class="viewcode-block" id="PackageExporter.deny"><a class="viewcode-back" href="../../../package.html#torch.package.PackageExporter.deny">[docs]</a>    <span class="k">def</span> <span class="nf">deny</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">include</span><span class="p">:</span> <span class="s2">&quot;GlobPattern&quot;</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">exclude</span><span class="p">:</span> <span class="s2">&quot;GlobPattern&quot;</span> <span class="o">=</span> <span class="p">()):</span>
         <span class="sd">&quot;&quot;&quot;Blocklist modules who names match the given glob patterns from the list of modules the package can import.</span>
-<span class="sd">        If a dependency on any matching packages is found, a :class:`DeniedModuleError` is thrown.</span>
+<span class="sd">        If a dependency on any matching packages is found, a :class:`PackagingError` is raised.</span>
 
 <span class="sd">        Args:</span>
 <span class="sd">            include (Union[List[str], str]): A string e.g. &quot;my_package.my_subpackage&quot;, or list of strings</span>
@@ -897,53 +1061,9 @@
 
 <span class="sd">            exclude (Union[List[str], str]): An optional pattern that excludes some patterns that match the include string.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">patterns</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-            <span class="p">(</span><span class="n">GlobGroup</span><span class="p">(</span><span class="n">include</span><span class="p">,</span> <span class="n">exclude</span><span class="o">=</span><span class="n">exclude</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">_reject_denied_module</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">patterns</span><span class="p">[</span><span class="n">GlobGroup</span><span class="p">(</span><span class="n">include</span><span class="p">,</span> <span class="n">exclude</span><span class="o">=</span><span class="n">exclude</span><span class="p">)]</span> <span class="o">=</span> <span class="n">_PatternInfo</span><span class="p">(</span>
+            <span class="n">_ModuleProviderAction</span><span class="o">.</span><span class="n">DENY</span><span class="p">,</span> <span class="n">allow_empty</span><span class="o">=</span><span class="kc">True</span>
         <span class="p">)</span></div>
-
-    <span class="k">def</span> <span class="nf">_save_extern_module</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">module_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;Add `module_name` to the list of external modules, regardless of whether it is</span>
-<span class="sd">        required by other modules.</span>
-
-<span class="sd">        Prefer using :meth:`extern` to only mark modules extern if they are actually required by the packaged code.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">for</span> <span class="n">hook</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_extern_hooks</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
-            <span class="n">hook</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">module_name</span><span class="p">)</span>
-
-        <span class="bp">self</span><span class="o">.</span><span class="n">extern_modules</span><span class="p">[</span><span class="n">module_name</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
-
-    <span class="k">def</span> <span class="nf">_save_mock_module</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">module_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;Add `module_name` to the package, implemented it with a mocked out version that</span>
-<span class="sd">        can be imported but does not include any implementations.</span>
-
-<span class="sd">        Prefer using `mock` to only include this module if it is required by other modules.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">for</span> <span class="n">hook</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_mock_hooks</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
-            <span class="n">hook</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">module_name</span><span class="p">)</span>
-
-        <span class="k">if</span> <span class="s2">&quot;_mock&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">provided</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">save_source_string</span><span class="p">(</span>
-                <span class="s2">&quot;_mock&quot;</span><span class="p">,</span>
-                <span class="n">_read_file</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="vm">__file__</span><span class="p">)</span><span class="o">.</span><span class="n">parent</span> <span class="o">/</span> <span class="s2">&quot;_mock.py&quot;</span><span class="p">)),</span>
-                <span class="n">is_package</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-                <span class="n">dependencies</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-            <span class="p">)</span>
-        <span class="n">is_package</span> <span class="o">=</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_import_module</span><span class="p">(</span><span class="n">module_name</span><span class="p">),</span> <span class="s2">&quot;__path__&quot;</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">save_source_string</span><span class="p">(</span><span class="n">module_name</span><span class="p">,</span> <span class="n">_MOCK_IMPL</span><span class="p">,</span> <span class="n">is_package</span><span class="p">,</span> <span class="n">dependencies</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-
-    <span class="k">def</span> <span class="nf">_reject_denied_module</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">module_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;Throw an exception containing a message that `module_name` was explicitly blocklisted via</span>
-<span class="sd">        `deny` and was still required during packaging.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">raise</span> <span class="n">DeniedModuleError</span><span class="p">(</span>
-            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">module_name</span><span class="si">}</span><span class="s2"> was required during packaging but has been explicitly blocklisted&quot;</span>
-        <span class="p">)</span>
-
-    <span class="k">def</span> <span class="nf">_module_is_already_provided</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">qualified_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
-        <span class="k">for</span> <span class="n">mod</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">extern_modules</span><span class="p">:</span>
-            <span class="k">if</span> <span class="n">qualified_name</span> <span class="o">==</span> <span class="n">mod</span> <span class="ow">or</span> <span class="n">qualified_name</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="n">mod</span> <span class="o">+</span> <span class="s2">&quot;.&quot;</span><span class="p">):</span>
-                <span class="k">return</span> <span class="kc">True</span>
-        <span class="k">return</span> <span class="n">qualified_name</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">provided</span>
 
     <span class="k">def</span> <span class="nf">_persistent_id</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">obj</span><span class="p">):</span>
         <span class="k">if</span> <span class="n">torch</span><span class="o">.</span><span class="n">is_storage</span><span class="p">(</span><span class="n">obj</span><span class="p">):</span>
@@ -982,6 +1102,112 @@
             <span class="n">str_or_bytes</span> <span class="o">=</span> <span class="n">str_or_bytes</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="s2">&quot;utf-8&quot;</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">zip_file</span><span class="o">.</span><span class="n">write_record</span><span class="p">(</span><span class="n">filename</span><span class="p">,</span> <span class="n">str_or_bytes</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">str_or_bytes</span><span class="p">))</span>
 
+    <span class="k">def</span> <span class="nf">_validate_dependency_graph</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="c1"># 1. No modules should be denied.</span>
+        <span class="c1"># 2. No broken modules (we should have been able to retrieve source for everything interned).</span>
+        <span class="c1"># 3. All modules should have an associated action.</span>
+        <span class="c1"># 4. All patterns for which allow_empty=False have been matched at least once.</span>
+        <span class="n">denied</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+        <span class="n">broken</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">unhandled</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">module_name</span><span class="p">,</span> <span class="n">attrs</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">dependency_graph</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">attrs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;action&quot;</span><span class="p">)</span> <span class="o">==</span> <span class="n">_ModuleProviderAction</span><span class="o">.</span><span class="n">DENY</span><span class="p">:</span>
+                <span class="n">denied</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">module_name</span><span class="p">)</span>
+
+            <span class="k">if</span> <span class="n">attrs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;broken&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="kc">True</span><span class="p">:</span>
+                <span class="n">filename</span> <span class="o">=</span> <span class="n">attrs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;filename&quot;</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">filename</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="n">broken_reason</span> <span class="o">=</span> <span class="s2">&quot;Module does not have a __file__ attribute set.&quot;</span>
+                <span class="k">elif</span> <span class="n">filename</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="nb">tuple</span><span class="p">(</span><span class="n">importlib</span><span class="o">.</span><span class="n">machinery</span><span class="o">.</span><span class="n">EXTENSION_SUFFIXES</span><span class="p">)):</span>
+                    <span class="n">broken_reason</span> <span class="o">=</span> <span class="p">(</span>
+                        <span class="s2">&quot;Module is an C extension module, which is not supported in packaging. &quot;</span>
+                        <span class="s2">&quot;Extern/mock it, or refactor your code to avoid the dependency.&quot;</span>
+                    <span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">broken_reason</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;Source file </span><span class="si">{</span><span class="n">filename</span><span class="si">}</span><span class="s2"> not found.&quot;</span>
+                <span class="n">broken</span><span class="p">[</span><span class="n">module_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">broken_reason</span>
+
+            <span class="k">if</span> <span class="n">attrs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;action&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">unhandled</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">module_name</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">denied</span> <span class="ow">or</span> <span class="n">broken</span> <span class="ow">or</span> <span class="n">unhandled</span><span class="p">:</span>
+            <span class="c1"># build up the filter set</span>
+            <span class="n">interns</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+            <span class="k">for</span> <span class="n">module_name</span><span class="p">,</span> <span class="n">attrs</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">dependency_graph</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="k">if</span> <span class="n">attrs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;action&quot;</span><span class="p">)</span> <span class="o">==</span> <span class="n">_ModuleProviderAction</span><span class="o">.</span><span class="n">INTERN</span><span class="p">:</span>
+                    <span class="n">interns</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">module_name</span><span class="p">)</span>
+
+            <span class="n">include_filter</span> <span class="o">=</span> <span class="n">interns</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+            <span class="k">for</span> <span class="n">intern</span> <span class="ow">in</span> <span class="n">interns</span><span class="p">:</span>
+                <span class="k">for</span> <span class="n">dep</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">dependency_graph</span><span class="o">.</span><span class="n">successors</span><span class="p">(</span><span class="n">intern</span><span class="p">):</span>
+                    <span class="n">include_filter</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">dep</span><span class="p">)</span>
+
+            <span class="k">raise</span> <span class="n">PackagingError</span><span class="p">(</span><span class="n">denied</span><span class="p">,</span> <span class="n">broken</span><span class="p">,</span> <span class="n">unhandled</span><span class="p">,</span> <span class="n">include_filter</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">pattern</span><span class="p">,</span> <span class="n">pattern_info</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">patterns</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">pattern_info</span><span class="o">.</span><span class="n">allow_empty</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">pattern_info</span><span class="o">.</span><span class="n">was_matched</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="n">EmptyMatchError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Exporter did not match any modules to </span><span class="si">{</span><span class="n">pattern</span><span class="si">}</span><span class="s2">, which was marked as allow_empty=False&quot;</span>
+                <span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_execute_dependency_graph</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Takes a finalized dependency graph describing how to package all</span>
+<span class="sd">        modules and executes it, writing to the ZIP archive.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_validate_dependency_graph</span><span class="p">()</span>
+
+        <span class="n">extern_modules</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">_mock_written</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="k">for</span> <span class="n">module_name</span><span class="p">,</span> <span class="n">attrs</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">dependency_graph</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">action</span> <span class="o">=</span> <span class="n">attrs</span><span class="p">[</span><span class="s2">&quot;action&quot;</span><span class="p">]</span>
+
+            <span class="k">if</span> <span class="n">action</span> <span class="o">==</span> <span class="n">_ModuleProviderAction</span><span class="o">.</span><span class="n">EXTERN</span><span class="p">:</span>
+                <span class="k">for</span> <span class="n">hook</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_extern_hooks</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+                    <span class="n">hook</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">module_name</span><span class="p">)</span>
+
+                <span class="n">extern_modules</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">module_name</span><span class="p">)</span>
+
+            <span class="k">elif</span> <span class="n">action</span> <span class="o">==</span> <span class="n">_ModuleProviderAction</span><span class="o">.</span><span class="n">MOCK</span><span class="p">:</span>
+                <span class="k">for</span> <span class="n">hook</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_mock_hooks</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+                    <span class="n">hook</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">module_name</span><span class="p">)</span>
+
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">_mock_written</span><span class="p">:</span>
+                    <span class="n">mock_file</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="vm">__file__</span><span class="p">)</span><span class="o">.</span><span class="n">parent</span> <span class="o">/</span> <span class="s2">&quot;_mock.py&quot;</span><span class="p">)</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_write_source_string</span><span class="p">(</span>
+                        <span class="s2">&quot;_mock&quot;</span><span class="p">,</span> <span class="n">_read_file</span><span class="p">(</span><span class="n">mock_file</span><span class="p">),</span> <span class="n">is_package</span><span class="o">=</span><span class="kc">False</span>
+                    <span class="p">)</span>
+                    <span class="n">_mock_written</span> <span class="o">=</span> <span class="kc">True</span>
+
+                <span class="n">is_package</span> <span class="o">=</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_import_module</span><span class="p">(</span><span class="n">module_name</span><span class="p">),</span> <span class="s2">&quot;__path__&quot;</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_write_source_string</span><span class="p">(</span><span class="n">module_name</span><span class="p">,</span> <span class="n">_MOCK_IMPL</span><span class="p">,</span> <span class="n">is_package</span><span class="p">)</span>
+
+            <span class="k">elif</span> <span class="n">action</span> <span class="o">==</span> <span class="n">_ModuleProviderAction</span><span class="o">.</span><span class="n">INTERN</span><span class="p">:</span>
+                <span class="k">for</span> <span class="n">hook</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_intern_hooks</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+                    <span class="n">hook</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">module_name</span><span class="p">)</span>
+
+                <span class="c1"># The node in the dependency graph contains metadata that tells us</span>
+                <span class="c1"># how to intern the module.</span>
+                <span class="k">if</span> <span class="s2">&quot;provided&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">attrs</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">AssertionError</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;Module was marked `intern` but not provided: </span><span class="si">{</span><span class="n">module_name</span><span class="si">}</span><span class="s2">&quot;</span>
+                    <span class="p">)</span>
+
+                <span class="k">if</span> <span class="n">attrs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;is_pickle&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="kc">True</span><span class="p">:</span>
+                    <span class="c1"># This node came from save_source_pickle, we don&#39;t need to write any source for it.</span>
+                    <span class="k">continue</span>
+
+                <span class="n">is_package</span> <span class="o">=</span> <span class="n">attrs</span><span class="p">[</span><span class="s2">&quot;is_package&quot;</span><span class="p">]</span>
+                <span class="n">source</span> <span class="o">=</span> <span class="n">attrs</span><span class="p">[</span><span class="s2">&quot;source&quot;</span><span class="p">]</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_write_source_string</span><span class="p">(</span><span class="n">module_name</span><span class="p">,</span> <span class="n">source</span><span class="p">,</span> <span class="n">is_package</span><span class="p">)</span>
+
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">AssertionError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Invalid action: </span><span class="si">{</span><span class="n">module_name</span><span class="si">}</span><span class="s2">, </span><span class="si">{</span><span class="n">action</span><span class="si">}</span><span class="s2">. Please report a bug to PyTorch.&quot;</span>
+                <span class="p">)</span>
+
+        <span class="n">extern_file_contents</span> <span class="o">=</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">extern_modules</span><span class="p">)</span> <span class="o">+</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_write</span><span class="p">(</span><span class="s2">&quot;.data/extern_modules&quot;</span><span class="p">,</span> <span class="n">extern_file_contents</span><span class="p">)</span>
+
 <div class="viewcode-block" id="PackageExporter.close"><a class="viewcode-back" href="../../../package.html#torch.package.PackageExporter.close">[docs]</a>    <span class="k">def</span> <span class="nf">close</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Write the package to the filesystem. Any calls after :meth:`close` are now invalid.</span>
 <span class="sd">        It is preferable to use resource guard syntax instead::</span>
@@ -992,12 +1218,7 @@
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span><span class="p">:</span>
             <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Dependency graph for exported package: </span><span class="se">\n</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_write_dep_graph</span><span class="p">()</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 
-        <span class="c1"># Check that all mock and extern modules with allow_empty=False were matched.</span>
-        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="p">(</span><span class="n">pattern</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">allow_empty</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">patterns</span><span class="p">):</span>
-            <span class="k">if</span> <span class="ow">not</span> <span class="n">allow_empty</span> <span class="ow">and</span> <span class="n">i</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">matched_patterns</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="n">EmptyMatchError</span><span class="p">(</span>
-                    <span class="sa">f</span><span class="s2">&quot;Exporter did not match any modules to </span><span class="si">{</span><span class="n">pattern</span><span class="si">}</span><span class="s2">, which was marked as allow_empty=False&quot;</span>
-                <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_execute_dependency_graph</span><span class="p">()</span>
 
         <span class="c1"># Write each tensor to a file named tensor/the_tensor_key in the zip archive</span>
         <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">serialized_storages</span><span class="o">.</span><span class="n">keys</span><span class="p">()):</span>
@@ -1009,8 +1230,6 @@
                 <span class="n">storage</span> <span class="o">=</span> <span class="n">storage</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span>
             <span class="n">num_bytes</span> <span class="o">=</span> <span class="n">storage</span><span class="o">.</span><span class="n">size</span><span class="p">()</span> <span class="o">*</span> <span class="n">storage</span><span class="o">.</span><span class="n">element_size</span><span class="p">()</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">zip_file</span><span class="o">.</span><span class="n">write_record</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">storage</span><span class="o">.</span><span class="n">data_ptr</span><span class="p">(),</span> <span class="n">num_bytes</span><span class="p">)</span>
-        <span class="n">contents</span> <span class="o">=</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">extern_modules</span><span class="p">)</span> <span class="o">+</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_write</span><span class="p">(</span><span class="s2">&quot;.data/extern_modules&quot;</span><span class="p">,</span> <span class="n">contents</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_finalize_zip</span><span class="p">()</span></div>
 
     <span class="k">def</span> <span class="nf">_finalize_zip</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -1025,8 +1244,10 @@
         <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">package_path</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">resource</span><span class="si">}</span><span class="s2">&quot;</span>
 
     <span class="k">def</span> <span class="nf">_can_implicitly_extern</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">module_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
-        <span class="k">return</span> <span class="n">module_name</span> <span class="o">==</span> <span class="s2">&quot;torch&quot;</span> <span class="ow">or</span> <span class="p">(</span>
-            <span class="n">module_name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">_DISALLOWED_MODULES</span> <span class="ow">and</span> <span class="n">is_stdlib_module</span><span class="p">(</span><span class="n">module_name</span><span class="p">)</span>
+        <span class="n">top_level_package_name</span> <span class="o">=</span> <span class="n">module_name</span><span class="o">.</span><span class="n">partition</span><span class="p">(</span><span class="s2">&quot;.&quot;</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">return</span> <span class="n">top_level_package_name</span> <span class="o">==</span> <span class="s2">&quot;torch&quot;</span> <span class="ow">or</span> <span class="p">(</span>
+            <span class="n">top_level_package_name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">_DISALLOWED_MODULES</span>
+            <span class="ow">and</span> <span class="n">is_stdlib_module</span><span class="p">(</span><span class="n">top_level_package_name</span><span class="p">)</span>
         <span class="p">)</span></div>
 
 

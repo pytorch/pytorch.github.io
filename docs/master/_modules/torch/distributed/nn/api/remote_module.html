@@ -197,7 +197,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href='https://pytorch.org/docs/versions.html'>master (1.9.0a0+git40b7867 ) &#x25BC</a>
+      <a href='https://pytorch.org/docs/versions.html'>master (1.9.0a0+git4fb06c9 ) &#x25BC</a>
     </div>
     
 
@@ -241,6 +241,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../../../../../notes/extending.html">Extending PyTorch</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../../notes/faq.html">Frequently Asked Questions</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../../notes/gradcheck.html">Gradcheck mechanics</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../notes/hip.html">HIP (ROCm) semantics</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../../notes/large_scale_deployments.html">Features for large-scale deployments</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../../notes/modules.html">Modules</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../../notes/multiprocessing.html">Multiprocessing best practices</a></li>
@@ -395,6 +396,8 @@
               
   <h1>Source code for torch.distributed.nn.api.remote_module</h1><div class="highlight"><pre>
 <span></span><span class="ch">#!/usr/bin/python3</span>
+<span class="kn">import</span> <span class="nn">collections</span>
+<span class="kn">import</span> <span class="nn">sys</span>
 <span class="kn">import</span> <span class="nn">types</span>
 <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">Any</span><span class="p">,</span>
@@ -413,6 +416,7 @@
 <span class="kn">import</span> <span class="nn">torch.distributed.rpc</span> <span class="k">as</span> <span class="nn">rpc</span>
 <span class="kn">from</span> <span class="nn">torch</span> <span class="kn">import</span> <span class="n">Tensor</span><span class="p">,</span> <span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="p">,</span> <span class="n">nn</span>
 <span class="kn">from</span> <span class="nn">torch.distributed.nn.jit</span> <span class="kn">import</span> <span class="n">instantiator</span>
+<span class="kn">from</span> <span class="nn">torch.distributed.rpc.internal</span> <span class="kn">import</span> <span class="n">_internal_rpc_pickler</span>
 <span class="kn">from</span> <span class="nn">torch.distributed.rpc.utils</span> <span class="kn">import</span> <span class="n">_parse_remote_device</span>
 <span class="kn">from</span> <span class="nn">torch.nn</span> <span class="kn">import</span> <span class="n">Module</span>
 <span class="kn">from</span> <span class="nn">torch.nn.parameter</span> <span class="kn">import</span> <span class="n">Parameter</span>
@@ -437,6 +441,8 @@
     <span class="s2">&quot;generated_methods&quot;</span><span class="p">,</span>
     <span class="s2">&quot;module_rref&quot;</span><span class="p">,</span>
 <span class="p">)</span>
+
+<span class="n">_SerializedRemoteModule</span> <span class="o">=</span> <span class="n">collections</span><span class="o">.</span><span class="n">namedtuple</span><span class="p">(</span><span class="s2">&quot;_SerializedRemoteModule&quot;</span><span class="p">,</span> <span class="n">_REMOTE_MODULE_PICKLED_ATTRIBUTES</span><span class="p">)</span>  <span class="c1"># type: ignore[misc]</span>
 
 <span class="c1"># These attributes are mostly from RemoteModule&#39;s parent class and are not pickled.</span>
 <span class="c1"># A new attribute of RemoteModule must be either in _REMOTE_MODULE_PICKLED_ATTRIBUTES</span>
@@ -465,16 +471,20 @@
     <span class="p">)</span>
 
 
-<span class="k">def</span> <span class="nf">_create_module</span><span class="p">(</span><span class="n">module_cls</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cpu&quot;</span><span class="p">,</span> <span class="n">module_interface_cls</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="k">def</span> <span class="nf">_create_module</span><span class="p">(</span><span class="n">module_cls</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">,</span> <span class="n">device</span><span class="p">):</span>
     <span class="n">module</span> <span class="o">=</span> <span class="n">module_cls</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
             <span class="s2">&quot;Expect `module_cls(*args, **kwargs)` returns an instance of &lt;class nn.Module&gt;, &quot;</span>
             <span class="sa">f</span><span class="s2">&quot;but it returns an instance of </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">module</span><span class="p">)</span><span class="si">}</span><span class="s2">.&quot;</span>
         <span class="p">)</span>
+    <span class="n">module</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">module</span>
+
+<span class="k">def</span> <span class="nf">_create_module_with_interface</span><span class="p">(</span><span class="n">module_cls</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">,</span> <span class="n">device</span><span class="p">,</span> <span class="n">module_interface_cls</span><span class="p">):</span>
+    <span class="n">module</span> <span class="o">=</span> <span class="n">_create_module</span><span class="p">(</span><span class="n">module_cls</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">,</span> <span class="n">device</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">module_interface_cls</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">module</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">jit</span><span class="o">.</span><span class="n">script</span><span class="p">(</span><span class="n">module</span><span class="p">)</span>
-    <span class="n">module</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">rpc</span><span class="o">.</span><span class="n">RRef</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">module_interface_cls</span><span class="p">)</span>
 
 
@@ -630,18 +640,26 @@
 
             <span class="c1"># Create the module on the remote side.</span>
             <span class="n">fut</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span>  <span class="c1"># Ensure remote_module_cls is available on remote side.</span>
+
+            <span class="c1"># TODO: We need to change this to rpc.remote, and make it async (see the else branch below).</span>
+            <span class="c1"># For that we need to be able to apply _module_interface_cls to the RRef returned by rpc.remote</span>
+            <span class="c1"># See https://github.com/pytorch/pytorch/issues/58098 for more context.</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">module_rref</span> <span class="o">=</span> <span class="n">rpc</span><span class="o">.</span><span class="n">rpc_sync</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">on</span><span class="p">,</span>
+                <span class="n">_create_module_with_interface</span><span class="p">,</span>
+                <span class="p">(</span><span class="n">module_cls</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">_module_interface_cls</span><span class="p">),</span>
+            <span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">is_scriptable</span> <span class="o">=</span> <span class="kc">False</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">generated_methods</span> <span class="o">=</span> <span class="p">(</span>
                 <span class="n">_NON_SCRIPTABLE_REMOTE_MODULE_MODULE</span><span class="o">.</span><span class="n">_generated_methods</span>
             <span class="p">)</span>
-
-        <span class="c1"># Create the module on the remote side.</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">module_rref</span> <span class="o">=</span> <span class="n">rpc</span><span class="o">.</span><span class="n">rpc_sync</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">on</span><span class="p">,</span>
-            <span class="n">_create_module</span><span class="p">,</span>
-            <span class="p">(</span><span class="n">module_cls</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">_module_interface_cls</span><span class="p">),</span>
-        <span class="p">)</span>
+            <span class="c1"># Create the module on the remote side.</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">module_rref</span> <span class="o">=</span> <span class="n">rpc</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">on</span><span class="p">,</span>
+                <span class="n">_create_module</span><span class="p">,</span>
+                <span class="p">(</span><span class="n">module_cls</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">),</span>
+            <span class="p">)</span>
 
         <span class="c1"># Install generated methods.</span>
         <span class="k">for</span> <span class="n">method</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">generated_methods</span><span class="p">:</span>
@@ -675,28 +693,14 @@
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">module_rref</span>
 
     <span class="k">def</span> <span class="nf">__getstate__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="c1"># Only pickle the attributes in _REMOTE_MODULE_PICKLED_ATTRIBUTES,</span>
-        <span class="c1"># and check if unpickled attributes are all in _REMOTE_MODULE_ATTRIBUTES_IGNORE_FOR_PICKLING.</span>
-        <span class="n">attrs</span> <span class="o">=</span> <span class="p">{}</span>
-        <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-            <span class="k">if</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">_REMOTE_MODULE_PICKLED_ATTRIBUTES</span><span class="p">:</span>
-                <span class="n">attrs</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">v</span>
-            <span class="k">elif</span> <span class="n">k</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">_REMOTE_MODULE_ATTRIBUTES_IGNORE_FOR_PICKLING</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
-                    <span class="s2">&quot;Attribute ``</span><span class="si">{}</span><span class="s2">`` of RemoteModule must be either in ``_REMOTE_MODULE_PICKLED_ATTRIBUTES`` &quot;</span>
-                    <span class="s2">&quot; or ``_REMOTE_MODULE_ATTRIBUTES_IGNORE_FOR_PICKLING``.&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">k</span><span class="p">)</span>
-                <span class="p">)</span>
-
-        <span class="k">return</span> <span class="n">attrs</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+            <span class="s2">&quot;Cannot pickle RemoteModule in python pickler. RemoteModule can only be pickled when using RPC&quot;</span>
+        <span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">__setstate__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">):</span>
-        <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">state</span><span class="p">)</span>
-
-        <span class="c1"># Install generated methods when unpickled.</span>
-        <span class="k">for</span> <span class="n">method</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">generated_methods</span><span class="p">:</span>
-            <span class="n">method_name</span> <span class="o">=</span> <span class="n">method</span><span class="o">.</span><span class="vm">__name__</span>
-            <span class="n">method</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">jit</span><span class="o">.</span><span class="n">export</span><span class="p">(</span><span class="n">method</span><span class="p">)</span>
-            <span class="nb">setattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">method_name</span><span class="p">,</span> <span class="n">types</span><span class="o">.</span><span class="n">MethodType</span><span class="p">(</span><span class="n">method</span><span class="p">,</span> <span class="bp">self</span><span class="p">))</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+            <span class="s2">&quot;Cannot unpickle RemoteModule in python pickler. RemoteModule can only be unpickled when using RPC&quot;</span>
+        <span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">register_buffer</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">tensor</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Tensor</span><span class="p">],</span> <span class="n">persistent</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
@@ -896,6 +900,58 @@
         <span class="n">kwargs</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">remote_device</span><span class="p">,</span> <span class="n">module_cls</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">)</span></div>
+
+
+<span class="k">def</span> <span class="nf">_remote_module_receiver</span><span class="p">(</span>
+    <span class="o">*</span><span class="n">remote_module_pickled_attrs</span><span class="p">,</span>
+<span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Deserializes a RemoteModule.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">serialized_remote_module</span> <span class="o">=</span> <span class="n">_SerializedRemoteModule</span><span class="o">.</span><span class="n">_make</span><span class="p">(</span>
+        <span class="n">remote_module_pickled_attrs</span>
+    <span class="p">)</span>
+    <span class="n">m</span> <span class="o">=</span> <span class="nb">object</span><span class="o">.</span><span class="fm">__new__</span><span class="p">(</span><span class="n">RemoteModule</span><span class="p">)</span>  <span class="c1"># type: ignore[attr-defined]</span>
+    <span class="n">m</span><span class="o">.</span><span class="vm">__dict__</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">serialized_remote_module</span><span class="o">.</span><span class="n">_asdict</span><span class="p">())</span>
+
+    <span class="c1"># Unpickling the attribute `module_rref` must invoke RRef&#39;s `_deserialize()` method.</span>
+    <span class="n">m</span><span class="o">.</span><span class="n">module_rref</span> <span class="o">=</span> <span class="n">rpc</span><span class="o">.</span><span class="n">PyRRef</span><span class="o">.</span><span class="n">_deserialize</span><span class="p">(</span><span class="n">m</span><span class="o">.</span><span class="n">module_rref</span><span class="p">)</span>
+
+    <span class="c1"># Install generated methods when unpickled.</span>
+    <span class="k">for</span> <span class="n">method</span> <span class="ow">in</span> <span class="n">m</span><span class="o">.</span><span class="n">generated_methods</span><span class="p">:</span>
+        <span class="n">method_name</span> <span class="o">=</span> <span class="n">method</span><span class="o">.</span><span class="vm">__name__</span>
+        <span class="n">method</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">jit</span><span class="o">.</span><span class="n">export</span><span class="p">(</span><span class="n">method</span><span class="p">)</span>
+        <span class="nb">setattr</span><span class="p">(</span><span class="n">m</span><span class="p">,</span> <span class="n">method_name</span><span class="p">,</span> <span class="n">types</span><span class="o">.</span><span class="n">MethodType</span><span class="p">(</span><span class="n">method</span><span class="p">,</span> <span class="n">m</span><span class="p">))</span>
+
+    <span class="k">return</span> <span class="n">m</span>
+
+
+<span class="k">def</span> <span class="nf">_remote_module_reducer</span><span class="p">(</span><span class="n">remote_module</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Serializes a RemoteModule.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">pickled_attrs</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">remote_module</span><span class="o">.</span><span class="vm">__dict__</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="c1"># Pickling the attribute `module_rref` must invoke RRef&#39;s `_serialize()` method.</span>
+        <span class="k">if</span> <span class="n">k</span> <span class="o">==</span> <span class="s2">&quot;module_rref&quot;</span><span class="p">:</span>
+            <span class="n">pickled_attrs</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">v</span><span class="o">.</span><span class="n">_serialize</span><span class="p">()</span>
+        <span class="k">elif</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">_REMOTE_MODULE_PICKLED_ATTRIBUTES</span><span class="p">:</span>  <span class="c1"># type: ignore[attr-defined]</span>
+            <span class="n">pickled_attrs</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">v</span>
+        <span class="c1"># Check if unpickled attributes are all in _REMOTE_MODULE_ATTRIBUTES_IGNORE_FOR_PICKLING.</span>
+        <span class="k">elif</span> <span class="n">k</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">_REMOTE_MODULE_ATTRIBUTES_IGNORE_FOR_PICKLING</span><span class="p">:</span>  <span class="c1"># type: ignore[attr-defined]</span>
+            <span class="nb">print</span><span class="p">(</span>
+                <span class="s2">&quot;The new attribute ``</span><span class="si">{}</span><span class="s2">`` of RemoteModule is ignored during RPC pickling. &quot;</span>
+                <span class="s2">&quot;To pickle this attribute, it must be either in ``_REMOTE_MODULE_PICKLED_ATTRIBUTES`` or &quot;</span>
+                <span class="s2">&quot;``_REMOTE_MODULE_ATTRIBUTES_IGNORE_FOR_PICKLING``.&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">k</span><span class="p">),</span>
+                <span class="n">file</span><span class="o">=</span><span class="n">sys</span><span class="o">.</span><span class="n">stderr</span><span class="p">,</span>
+            <span class="p">)</span>
+
+    <span class="k">return</span> <span class="p">(</span>
+        <span class="n">_remote_module_receiver</span><span class="p">,</span>
+        <span class="nb">tuple</span><span class="p">(</span><span class="n">pickled_attrs</span><span class="o">.</span><span class="n">values</span><span class="p">()),</span>
+    <span class="p">)</span>
+
+<span class="n">_internal_rpc_pickler</span><span class="o">.</span><span class="n">_register_reducer</span><span class="p">(</span><span class="n">RemoteModule</span><span class="p">,</span> <span class="n">_remote_module_reducer</span><span class="p">)</span>
 </pre></div>
 
              </article>
