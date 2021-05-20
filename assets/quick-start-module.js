@@ -53,8 +53,12 @@ ptbuild.on("click", function() {
 // Pre-select user's operating system
 $(function() {
   var userOsOption = document.getElementById(opts.os);
+  var userCudaOption = document.getElementById(opts.cuda);
   if (userOsOption) {
-    $(userOsOption).trigger("click")
+    $(userOsOption).trigger("click");
+  }
+  if (userCudaOption) {
+    $(userCudaOption).trigger("click");
   }
 });
 
