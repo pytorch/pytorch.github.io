@@ -5,9 +5,10 @@ var supportedOperatingSystems = new Map([
   ['win', 'windows'],
 ]);
 
+var default_selected_os = getAnchorSelectedOS() || getDefaultSelectedOS();
 var opts = {
-  cuda: 'cuda10.2',
-  os: getAnchorSelectedOS() || getDefaultSelectedOS(),
+  cuda: getPreferredCuda(default_selected_os),
+  os: default_selected_os,
   pm: 'conda',
   language: 'python',
   ptbuild: 'stable',
@@ -79,6 +80,15 @@ function getAnchorSelectedOS() {
     }
   }
   return false;
+}
+
+// determine CUDA version based on OS
+function getPreferredCuda(os) {
+  // Only CPU builds are currently available for MacOS
+  if (os == 'macos') {
+    return 'accnone';
+  }
+  return 'cuda10.2';
 }
 
 function selectedOption(option, selection, category) {
