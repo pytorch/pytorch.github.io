@@ -5,9 +5,17 @@ var supportedOperatingSystems = new Map([
   ['win', 'windows'],
 ]);
 
+var supportedComputePlatforms = new Map([
+  ['cuda10.2', new Set(['linux', 'windows'])],
+  ['cuda11.1', new Set(['linux', 'windows'])],
+  ['rocm4.0', new Set(['linux'])],
+  ['accnone', new Set(['linux', 'macos', 'windows'])],
+]);
+
+var default_selected_os = getAnchorSelectedOS() || getDefaultSelectedOS();
 var opts = {
-  cuda: 'cuda10.2',
-  os: getAnchorSelectedOS() || getDefaultSelectedOS(),
+  cuda: getPreferredCuda(default_selected_os),
+  os: default_selected_os,
   pm: 'conda',
   language: 'python',
   ptbuild: 'stable',
@@ -45,8 +53,12 @@ ptbuild.on("click", function() {
 // Pre-select user's operating system
 $(function() {
   var userOsOption = document.getElementById(opts.os);
+  var userCudaOption = document.getElementById(opts.cuda);
   if (userOsOption) {
-    $(userOsOption).trigger("click")
+    $(userOsOption).trigger("click");
+  }
+  if (userCudaOption) {
+    $(userCudaOption).trigger("click");
   }
 });
 
@@ -79,6 +91,28 @@ function getAnchorSelectedOS() {
     }
   }
   return false;
+}
+
+// determine CUDA version based on OS
+function getPreferredCuda(os) {
+  // Only CPU builds are currently available for MacOS
+  if (os == 'macos') {
+    return 'accnone';
+  }
+  return 'cuda10.2';
+}
+
+// Disable compute platform not supported on OS
+function disableUnsupportedPlatforms(os) {
+  supportedComputePlatforms.forEach( (oses, platform, arr) => {
+    var element = document.getElementById(platform);
+    if (element == null) {
+      console.log("Failed to find element for platform " + platform);
+      return;
+    }
+    var supported = oses.has(os);
+    element.style.textDecoration = supported ? "" : "line-through";
+  });
 }
 
 function selectedOption(option, selection, category) {
@@ -120,6 +154,7 @@ function selectedOption(option, selection, category) {
   }
   commandMessage(buildMatcher());
   if (category === "os") {
+    disableUnsupportedPlatforms(opts.os);
     display(opts.os, 'installation', 'os');
   }
 }
