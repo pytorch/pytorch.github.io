@@ -1,5 +1,5 @@
 ---
 order: 4
-link: https://pytorch.org/blog/pytorch-1.8-released/
-summary: PyTorch 1.8 Release, including Compiler and Distributed Training updates, and New Mobile Tutorials
+link: https://pytorch.org/blog/introducing-pytorch-profiler-the-new-and-improved-performance-tool/
+summary: Introducing Pytorch Profiler - The New and Improved Performance Tool
 ---
