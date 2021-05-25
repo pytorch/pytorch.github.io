@@ -11,7 +11,7 @@ The PyTorch Enterprise Support Program is available to any service provider. It 
 To benefit the open source community, all hotfixes developed by Participants will be tested and fed back to the LTS releases of PyTorch regularly through PyTorch’s standard pull request process. To participate in the program, a service provider must apply and meet a set of program terms and certification requirements. Once accepted, the service provider becomes a program Participant and can offer a packaged PyTorch Enterprise support service with LTS, prioritized troubleshooting, useful integrations, and more.
 
 <div class="col-md-5 enterprise-azure-logo-container">
-  <img src="{{ site.baseurl }}/assets/images/microsoft-azure.png" width="100%">
+  <img src="{{ site.baseurl }}/assets/images/pte-azure-lockup-stacked.png" width="100%">
 </div>
 
 As one of the founding members and an inaugural member of the PyTorch Enterprise Support Program, Microsoft is launching [PyTorch Enterprise on Microsoft Azure](https://Aka.ms/PyTorchEnterpriseHeroBlog) to deliver a reliable production experience for PyTorch users. Microsoft will support each PyTorch release for as long as it is current. In addition, it will support selected releases for two years, enabling a stable production experience. Microsoft Premier and Unified Support customers can access prioritized troubleshooting for hotfixes, bugs, and security patches at no additional cost. Microsoft will extensively test PyTorch releases for performance regression. The latest release of PyTorch will be integrated with [Azure Machine Learning](https://azure.microsoft.com/en-us/services/machine-learning/) and other PyTorch add-ons including [ONNX Runtime](https://www.onnxruntime.ai/) for faster inference.
