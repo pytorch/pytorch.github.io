@@ -1,6 +1,6 @@
 ---
 order: 2
-link: https://github.com/pytorch/pytorch/releases/tag/v1.8.1
-summary: PyTorch 1.8.1 is now available with improvements and bug fixes
+link: https://pytorch.org/blog/ml-models-torchvision-v0.9/
+summary: An Overview of the ML Models Introduced in Torchvision v0.9
 ---
 
