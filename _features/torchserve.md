@@ -1,5 +1,5 @@
 ---
-title: TorchServe (Experimental)
+title: TorchServe
 order: 2
 snippet: >
   ```python
