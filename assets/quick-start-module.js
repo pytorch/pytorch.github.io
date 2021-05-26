@@ -531,7 +531,7 @@ function commandMessage(key) {
     "lts,libtorch,windows,rocm4.0,cplusplus":
       "<b>NOTE:</b> ROCm is not supported in LTS",
   };
-  var lts_notice = "<div class='alert-secondary'><b>Note</b>: Additional support for these binaries may be provided by <a href='/enterprise-support-program'>PyTorch Enterprise Support Program Participants</a>.</div>";
+  var lts_notice = "<div class='alert-secondary'><b>Note</b>: Additional support for these binaries may be provided by <a href='/enterprise-support-program' style='font-size:100%'>PyTorch Enterprise Support Program Participants</a>.</div>";
 
   if (!object.hasOwnProperty(key)) {
     $("#command").html(
