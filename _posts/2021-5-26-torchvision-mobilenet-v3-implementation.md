@@ -120,7 +120,8 @@ In this section, we will first provide benchmarks of the released models, and th
 
 Here is how the models are initialized:
 ```
-high_res = torchvision.models.detection.fasterrcnn_mobilenet_v3_large_fpn(pretrained=T low_res = torchvision.models.detection.fasterrcnn_mobilenet_v3_large_320_fpn(pretraine
+high_res = torchvision.models.detection.fasterrcnn_mobilenet_v3_large_fpn(pretrained=True) 
+low_res = torchvision.models.detection.fasterrcnn_mobilenet_v3_large_320_fpn(pretrained=True)
 ```
 
 Below are some benchmarks between new and selected previous models. As we can see the high resolution Faster R-CNN with MobileNetV3-Large FPN backbone seems a viable replacement of the equivalent ResNet50 model for those users who are willing to sacrifice few accuracy points for a 5x speed-up:
@@ -166,7 +167,8 @@ In this section we will start by providing some benchmarks of the released pre-t
 This is how to initialize the pre-trained models:
 
 ```
-lraspp = torchvision.models.segmentation.lraspp_mobilenet_v3_large(pretrained=True) deeplabv3 = torchvision.models.segmentation.deeplabv3_mobilenet_v3_large(pretrained=Tr
+lraspp = torchvision.models.segmentation.lraspp_mobilenet_v3_large(pretrained=True) 
+deeplabv3 = torchvision.models.segmentation.deeplabv3_mobilenet_v3_large(pretrained=True)
 ```
 
 Below are the detailed benchmarks between new and selected existing models. As we can see, the DeepLabV3 with a MobileNetV3-Large backbone is a viable replacement of FCN with ResNet50 for the majority of applications as it achieves similar accuracy with a 8.5x speed-up. We also observe that the LR-ASPP network supersedes the equivalent FCN in all metrics:
