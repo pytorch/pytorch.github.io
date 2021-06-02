@@ -452,7 +452,7 @@ function commandMessage(key) {
       "conda install pytorch torchvision torchaudio cudatoolkit=10.2 -c pytorch-lts",
 
     "lts,conda,windows,cuda11.1,python":
-      "<b>NOTE:</b> 'nvidia' channel is required for cudatoolkit 11.1<br />conda install pytorch torchvision torchaudio cudatoolkit=11.1 -c pytorch-lts -c nvidia",
+      "<b>NOTE:</b> 'conda-forge' channel is required for cudatoolkit 11.1<br />conda install pytorch torchvision torchaudio cudatoolkit=11.1 -c pytorch-lts -c conda-forge",
 
     "lts,conda,windows,rocm4.0,python":
       "<b>NOTE:</b> ROCm is not supported in LTS",
