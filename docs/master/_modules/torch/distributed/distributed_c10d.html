@@ -192,7 +192,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href='https://pytorch.org/docs/versions.html'>master (1.9.0a0+gitba9b756 ) &#x25BC</a>
+      <a href='https://pytorch.org/docs/versions.html'>master (1.10.0a0+git93404aa ) &#x25BC</a>
     </div>
     
 
@@ -691,9 +691,7 @@
     <span class="k">if</span> <span class="n">group</span> <span class="ow">is</span> <span class="n">GroupMember</span><span class="o">.</span><span class="n">WORLD</span> <span class="ow">or</span> <span class="n">group</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">default_pg</span> <span class="o">=</span> <span class="n">_get_default_group</span><span class="p">()</span>
         <span class="k">return</span> <span class="n">default_pg</span><span class="o">.</span><span class="n">size</span><span class="p">()</span>
-    <span class="k">if</span> <span class="n">group</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">_pg_group_ranks</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;The given group does not exist&quot;</span><span class="p">)</span>
-    <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="n">_pg_group_ranks</span><span class="p">[</span><span class="n">group</span><span class="p">])</span>
+    <span class="k">return</span> <span class="n">group</span><span class="o">.</span><span class="n">size</span><span class="p">()</span>
 
 
 <span class="k">def</span> <span class="nf">_check_single_tensor</span><span class="p">(</span><span class="n">param</span><span class="p">,</span> <span class="n">param_name</span><span class="p">):</span>
@@ -1950,10 +1948,8 @@
         <span class="k">return</span>
 
     <span class="n">input_tensor</span><span class="p">,</span> <span class="n">local_size</span> <span class="o">=</span> <span class="n">_object_to_tensor</span><span class="p">(</span><span class="n">obj</span><span class="p">)</span>
-    <span class="n">group_backend</span> <span class="o">=</span> <span class="n">get_backend</span><span class="p">(</span><span class="n">group</span><span class="p">)</span>
-    <span class="n">is_nccl_backend</span> <span class="o">=</span> <span class="n">group_backend</span> <span class="o">==</span> <span class="n">Backend</span><span class="o">.</span><span class="n">NCCL</span>
     <span class="n">current_device</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s2">&quot;cpu&quot;</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">is_nccl_backend</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">is_nccl_available</span><span class="p">()</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">group</span> <span class="ow">or</span> <span class="n">_get_default_group</span><span class="p">(),</span> <span class="n">ProcessGroupNCCL</span><span class="p">):</span>
         <span class="c1"># See note about using torch.cuda.current_device() here in docstring.</span>
         <span class="c1"># We cannot simply use my_rank since rank == device is not necessarily</span>
         <span class="c1"># true.</span>
@@ -2731,6 +2727,46 @@
         <span class="k">return</span> <span class="n">work</span>
     <span class="k">else</span><span class="p">:</span>
         <span class="n">work</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span></div>
+
+<span class="k">def</span> <span class="nf">_reduce_scatter_base</span><span class="p">(</span><span class="n">output</span><span class="p">,</span>
+                         <span class="nb">input</span><span class="p">,</span>
+                         <span class="n">op</span><span class="o">=</span><span class="n">ReduceOp</span><span class="o">.</span><span class="n">SUM</span><span class="p">,</span>
+                         <span class="n">group</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                         <span class="n">async_op</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Reduces, then scatters a flattened tensor to all processes in a group.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        output (Tensor): Output tensor.</span>
+<span class="sd">        input (Tensor): Input tensor that is of size output tensor size times world size</span>
+<span class="sd">        group (ProcessGroup, optional): The process group to work on. If None,</span>
+<span class="sd">            the default process group will be used.</span>
+<span class="sd">        async_op (bool, optional): Whether this op should be an async op.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Async work handle, if async_op is set to True.</span>
+<span class="sd">        None, if not async_op or if not part of the group.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">_check_single_tensor</span><span class="p">(</span><span class="n">output</span><span class="p">,</span> <span class="s2">&quot;output&quot;</span><span class="p">)</span>
+    <span class="n">_check_single_tensor</span><span class="p">(</span><span class="nb">input</span><span class="p">,</span> <span class="s2">&quot;input&quot;</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">_rank_not_in_group</span><span class="p">(</span><span class="n">group</span><span class="p">):</span>
+        <span class="k">return</span>
+
+    <span class="n">opts</span> <span class="o">=</span> <span class="n">ReduceScatterOptions</span><span class="p">()</span>
+    <span class="n">opts</span><span class="o">.</span><span class="n">reduceOp</span> <span class="o">=</span> <span class="n">op</span>
+
+    <span class="k">if</span> <span class="n">group</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">default_pg</span> <span class="o">=</span> <span class="n">_get_default_group</span><span class="p">()</span>
+        <span class="n">work</span> <span class="o">=</span> <span class="n">default_pg</span><span class="o">.</span><span class="n">_reduce_scatter_base</span><span class="p">(</span><span class="n">output</span><span class="p">,</span> <span class="nb">input</span><span class="p">,</span> <span class="n">opts</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">work</span> <span class="o">=</span> <span class="n">group</span><span class="o">.</span><span class="n">_reduce_scatter_base</span><span class="p">(</span><span class="n">output</span><span class="p">,</span> <span class="nb">input</span><span class="p">,</span> <span class="n">opts</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">async_op</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">work</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">work</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span>
 
 
 <span class="k">def</span> <span class="nf">all_to_all_single</span><span class="p">(</span>
