@@ -1,12 +1,12 @@
 ---
 layout: blog_detail
 title: 'Overview of PyTorch Autograd Engine'
-author: Vasilis Vryniotis and Francisco Massa
+author: Preferred Networks, Inc.
 ---
 
 This blog post is based on PyTorch version 1.8, although it should apply for older versions too, since most of the mechanics have remained constant.
 
-To help understand the concepts explained here, it is recommended that you read the awesome blog post by @ezyang: [PyTorch internals](http://blog.ezyang.com/2019/05/pytorch-internals/) if you are not familiar with PyTorch architecture components such as ATen or c10d.
+To help understand the concepts explained here, it is recommended that you read the awesome blog post by [@ezyang](https://twitter.com/ezyang): [PyTorch internals](http://blog.ezyang.com/2019/05/pytorch-internals/) if you are not familiar with PyTorch architecture components such as ATen or c10d.
 
 ### What is autograd?
 
