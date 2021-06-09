@@ -291,7 +291,7 @@ torch::jit::GraphOptimizerEnabledGuard guard(false);
 ```
 
 ## Use PyTorch JIT interpreter
-PyTorch Jit interpreter is the default interpreter before 1.9 (a version of our PyTorch interpreter that is not as size-efficient). It will still be supported in 1.9, and can be achived in CocoaPods:
+PyTorch JIT interpreter is the default interpreter before 1.9 (a version of our PyTorch interpreter that is not as size-efficient). It will still be supported in 1.9, and can be used in CocoaPods:
 ```
 pod 'LibTorch', '~>1.9.0'
 ```
