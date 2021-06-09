@@ -9,6 +9,13 @@ Azure [provides](https://azure.microsoft.com/en-us/services/machine-learning-ser
 * dedicated, pre-built [machine learning virtual machines](https://azure.microsoft.com/en-us/services/virtual-machines/data-science-virtual-machines/){:target="_blank"}, complete with PyTorch.
 * bare Linux and Windows virtual machines for you to do a custom install of PyTorch.
 
+## PyTorch Enterprise on Azure
+{: #pytorch-enterprise-on-azure}
+
+Microsoft is one of the founding members and also the inaugural participant of the [PyTorch Enterprise Support Program](https://pytorch.org/enterprise-support-program). Microsoft offers PyTorch Enterprise on Azure as a part of Microsoft [Premier](https://www.microsoft.com/en-us/msservices/premier-support) and [Unified](https://www.microsoft.com/en-us/msservices/unified-support-solutions?activetab=pivot1:primaryr4) Support. The PyTorch Enterprise support service includes long-term support to selected versions of PyTorch for up to 2 years, prioritized troubleshooting, and the latest integration with [Azure Machine Learning](https://azure.microsoft.com/en-us/services/machine-learning/) and other PyTorch add-ons including ONNX Runtime for faster inference. 
+
+To learn more and get started with PyTorch Enterprise on Microsoft Azure, [visit here](https://azure.microsoft.com/en-us/develop/pytorch/).
+
 ## Azure Primer
 {: #microsoft-azure-primer}
 
