@@ -290,7 +290,7 @@ SELECTED_OP_LIST=MobileNetV2.yaml BUILD_PYTORCH_MOBILE=1 IOS_ARCH=arm64 ./script
 torch::jit::GraphOptimizerEnabledGuard guard(false);
 ```
 
-## Use PyTorch Jit interpreter
+## Use PyTorch JIT interpreter
 PyTorch Jit interpreter is the default interpreter before 1.9 (a version of our PyTorch interpreter that is not as size-efficient). It will still be supported in 1.9, and can be achived in CocoaPods:
 ```
 pod 'LibTorch', '~>1.9.0'
