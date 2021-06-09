@@ -390,7 +390,7 @@ SELECTED_OP_LIST=MobileNetV2.yaml scripts/build_pytorch_android.sh arm64-v8a
 
 After successful build you can integrate the result aar files to your android gradle project, following the steps from previous section of this tutorial (Building PyTorch Android from Source).
 
-## Use PyTorch Jit interpreter
+## Use PyTorch JIT interpreter
 
 PyTorch JIT interpreter is the default interpreter before 1.9 (a version of our PyTorch interpreter that is not as size-efficient). It will still be supported in 1.9, and can be used via `build.gradle`:
 ```
