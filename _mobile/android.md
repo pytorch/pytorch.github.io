@@ -392,7 +392,7 @@ After successful build you can integrate the result aar files to your android gr
 
 ## Use PyTorch Jit interpreter
 
-PyTorch Jit interpreter is the default interpreter before 1.9 (a version of our PyTorch interpreter that is not as size-efficient). It will still be supported in 1.9, and can be achived in `build.gradle`:
+PyTorch JIT interpreter is the default interpreter before 1.9 (a version of our PyTorch interpreter that is not as size-efficient). It will still be supported in 1.9, and can be used via `build.gradle`:
 ```
 repositories {
     jcenter()
