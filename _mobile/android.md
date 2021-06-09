@@ -27,14 +27,16 @@ To serialize the model you can use python [script](https://github.com/pytorch/an
 ```
 import torch
 import torchvision
+from torch.utils.mobile_optimizer import optimize_for_mobile
 
 model = torchvision.models.resnet18(pretrained=True)
 model.eval()
 example = torch.rand(1, 3, 224, 224)
 traced_script_module = torch.jit.trace(model, example)
-traced_script_module.save("app/src/main/assets/model.pt")
+traced_script_module_optimized = optimize_for_mobile(traced_script_module)
+traced_script_module_optimized._save_for_lite_interpreter("app/src/main/assets/model.ptl")
 ```
-If everything works well, we should have our model - `model.pt` generated in the assets folder of android application.
+If everything works well, we should have our model - `model.ptl` generated in the assets folder of android application.
 That will be packaged inside android application as `asset` and can be used on the device.
 
 More details about TorchScript you can find in [tutorials on pytorch.org](https://pytorch.org/docs/stable/jit.html)
@@ -62,8 +64,8 @@ repositories {
 }
 
 dependencies {
-    implementation 'org.pytorch:pytorch_android:1.4.0'
-    implementation 'org.pytorch:pytorch_android_torchvision:1.4.0'
+    implementation 'org.pytorch:pytorch_android_lite:1.9.0'
+    implementation 'org.pytorch:pytorch_android_torchvision:1.9.0'
 }
 ```
 Where `org.pytorch:pytorch_android` is the main dependency with PyTorch Android API, including libtorch native library for all 4 android abis (armeabi-v7a, arm64-v8a, x86, x86_64).
@@ -79,11 +81,11 @@ As a first step we read `image.jpg` to `android.graphics.Bitmap` using the stand
 Bitmap bitmap = BitmapFactory.decodeStream(getAssets().open("image.jpg"));
 ```
 
-#### 5. Loading TorchScript Module
+#### 5. Loading Mobile Module
 ```
-Module module = Module.load(assetFilePath(this, "model.pt"));
+Module module = Module.load(assetFilePath(this, "model.ptl"));
 ```
-`org.pytorch.Module` represents `torch::jit::script::Module` that can be loaded with `load` method specifying file path to the serialized to file model.
+`org.pytorch.Module` represents `torch::jit::mobile::Module` that can be loaded with `load` method specifying file path to the serialized to file model.
 
 #### 6. Preparing Input
 ```
@@ -386,6 +388,21 @@ SELECTED_OP_LIST=MobileNetV2.yaml scripts/build_pytorch_android.sh arm64-v8a
 ```
 
 After successful build you can integrate the result aar files to your android gradle project, following the steps from previous section of this tutorial (Building PyTorch Android from Source).
+
+## Use PyTorch Jit interpreter
+
+PyTorch Jit interpreter is the default interpreter before 1.9 (a version of our PyTorch interpreter that is not as size-efficient). It will still be supported in 1.9, and can be achived in `build.gradle`:
+```
+repositories {
+    jcenter()
+}
+
+dependencies {
+    implementation 'org.pytorch:pytorch_android:1.9.0'
+    implementation 'org.pytorch:pytorch_android_torchvision:1.9.0'
+}
+```
+
 
 ## Android Tutorials
 

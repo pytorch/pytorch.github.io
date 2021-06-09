@@ -24,7 +24,7 @@ PyTorch Mobile is in beta stage right now, and is already in wide scale producti
 * Support for tracing and scripting via TorchScript IR
 * Support for XNNPACK floating point kernel libraries for Arm CPUs
 * Integration of QNNPACK for 8-bit quantized kernels. Includes support for per-channel quantization, dynamic quantization and more
-* Build level optimization and selective compilation depending on the operators needed for user applications, i.e., the final binary size of the app is determined by the actual operators the app needs
+* Provide [efficient mobile interpreter in Android and iOS](https://pytorch.org/tutorials/prototype/lite_interpreter.html). Also supports build level optimization and selective compilation depending on the operators needed for user applications, i.e., the final binary size of the app is determined by the actual operators the app needs
 * Streamline model optimization via optimize_for_mobile
 * Support for hardware backends like GPU, DSP, and NPU will be available soon in Beta
 
@@ -32,7 +32,6 @@ PyTorch Mobile is in beta stage right now, and is already in wide scale producti
 ## Prototypes
 We have launched the following features in prototype, available in the PyTorch nightly releases, and would love to get your feedback on the [PyTorch forums](https://discuss.pytorch.org/c/mobile/18):
 
-* Runtime binary size reduction via our [Lite Interpreter](https://pytorch.org/tutorials/prototype/lite_interpreter.html)
 * GPU support on [iOS via Metal](https://pytorch.org/tutorials/prototype/ios_gpu_workflow.html)
 * GPU support on [Android via Vulkan](https://pytorch.org/tutorials/prototype/vulkan_workflow.html)
 * DSP and NPU support on Android via [Google NNAPI](https://pytorch.org/tutorials/prototype/nnapi_mobilenetv2.html)
