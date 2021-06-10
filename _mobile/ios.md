@@ -94,10 +94,10 @@ private lazy var module: TorchModule = {
     }
 }()
 ```
-Note that the `TorchModule` Class is an Objective-C wrapper of `torch::jit::script::Module`.
+Note that the `TorchModule` Class is an Objective-C wrapper of `torch::jit::mobile::Module`.
 
 ```cpp
-torch::jit::script::Module module = torch::jit::load(filePath.UTF8String);
+torch::jit::mobile::Module module = torch::jit::_load_for_mobile(filePath.UTF8String);
 ```
 Since Swift can not talk to C++ directly, we have to either use an Objective-C class as a bridge, or create a C wrapper for the C++ library. For demo purpose, we're going to wrap everything in this Objective-C class.
 
@@ -251,7 +251,8 @@ To use the custom built libraries the project, replace `#import <LibTorch/LibTor
 #include "caffe2/core/timer.h"
 #include "caffe2/utils/string_utils.h"
 #include "torch/csrc/autograd/grad_mode.h"
-#include "torch/csrc/jit/serialization/import.h"
+#include "torch/csrc/jit/mobile/import.h"
+#include "torch/csrc/jit/mobile/module.h"
 #include "torch/script.h"
 ```
 
@@ -287,6 +288,12 @@ SELECTED_OP_LIST=MobileNetV2.yaml BUILD_PYTORCH_MOBILE=1 IOS_ARCH=arm64 ./script
 
 ```cpp
 torch::jit::GraphOptimizerEnabledGuard guard(false);
+```
+
+## Use PyTorch JIT interpreter
+PyTorch JIT interpreter is the default interpreter before 1.9 (a version of our PyTorch interpreter that is not as size-efficient). It will still be supported in 1.9, and can be used in CocoaPods:
+```
+pod 'LibTorch', '~>1.9.0'
 ```
 
 ## iOS Tutorials
