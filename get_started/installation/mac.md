@@ -96,6 +96,6 @@ For the majority of PyTorch users, installing from a pre-built binary via a pack
 
 1. Install [Anaconda](#anaconda)
 2. Install [CUDA](https://developer.nvidia.com/cuda-downloads), if your machine has a [CUDA-enabled GPU](https://developer.nvidia.com/cuda-gpus).
-3. Follow the steps described here: https://github.com/pytorch/pytorch#from-source
+3. Follow the steps described here: [https://github.com/pytorch/pytorch#from-source](https://github.com/pytorch/pytorch#from-source)
 
 You can verify the installation as described [above](#mac-verification).
