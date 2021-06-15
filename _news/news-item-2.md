@@ -1,6 +1,6 @@
 ---
 order: 2
-link: https://github.com/pytorch/pytorch/releases/tag/v1.8.1
-summary: PyTorch 1.8.1 is now available with improvements and bug fixes
+link: https://pytorch.org/blog/pytorch-1.9-new-library-releases
+summary: New PyTorch Library Releases in PyTorch 1.9, including TorchVision, TorchAudio, and more
 ---
 
