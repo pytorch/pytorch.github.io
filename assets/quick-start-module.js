@@ -8,7 +8,7 @@ var supportedOperatingSystems = new Map([
 var supportedComputePlatforms = new Map([
   ['cuda10.2', new Set(['linux', 'windows'])],
   ['cuda11.1', new Set(['linux', 'windows'])],
-  ['rocm4.0', new Set(['linux'])],
+  ['rocm4.2', new Set(['linux'])],
   ['accnone', new Set(['linux', 'macos', 'windows'])],
 ]);
 
@@ -215,7 +215,7 @@ function commandMessage(key) {
     "stable,conda,linux,cuda11.1,python":
       "<b>NOTE:</b> 'nvidia' channel is required for cudatoolkit 11.1<br />conda install pytorch torchvision torchaudio cudatoolkit=11.1 -c pytorch -c nvidia",
 
-    "stable,conda,linux,rocm4.0,python":
+    "stable,conda,linux,rocm4.2,python":
       "<b>NOTE:</b> Conda packages are not currently available for ROCm, please use pip instead<br />",
 
     "stable,conda,linux,accnone,python":
@@ -227,7 +227,7 @@ function commandMessage(key) {
     "stable,conda,macos,cuda11.1,python":
       "conda install pytorch torchvision torchaudio -c pytorch<br /># MacOS Binaries dont support CUDA, install from source if CUDA is needed",
 
-    "stable,conda,macos,rocm4.0,python":
+    "stable,conda,macos,rocm4.2,python":
       "<b>NOTE:</b> ROCm is not available on MacOS",
 
     "stable,conda,macos,accnone,python":
@@ -239,7 +239,7 @@ function commandMessage(key) {
     "stable,conda,windows,cuda11.1,python":
       "<b>NOTE:</b> 'conda-forge' channel is required for cudatoolkit 11.1<br />conda install pytorch torchvision torchaudio cudatoolkit=11.1 -c pytorch -c conda-forge",
 
-    "stable,conda,windows,rocm4.0,python":
+    "stable,conda,windows,rocm4.2,python":
       "<b>NOTE:</b> ROCm is not available on Windows",
 
     "stable,conda,windows,accnone,python":
@@ -251,7 +251,7 @@ function commandMessage(key) {
     "stable,pip,macos,cuda11.1,python":
       "pip3 install torch torchvision torchaudio<br /># MacOS Binaries dont support CUDA, install from source if CUDA is needed",
 
-    "stable,pip,macos,rocm4.0,python":
+    "stable,pip,macos,rocm4.2,python":
       "<b>NOTE:</b> ROCm is not available on MacOS",
 
     "stable,pip,macos,accnone,python": "pip3 install torch torchvision torchaudio",
@@ -265,8 +265,8 @@ function commandMessage(key) {
     "stable,pip,linux,cuda11.1,python":
       "pip3 install torch==1.9.0+cu111 torchvision==0.10.0+cu111 torchaudio==0.9.0 -f https://download.pytorch.org/whl/torch_stable.html",
 
-    "stable,pip,linux,rocm4.0,python":
-      "pip3 install torch -f https://download.pytorch.org/whl/rocm4.0.1/torch_stable.html<br />pip3 install ninja && pip3 install 'git+https://github.com/pytorch/vision.git@v0.10.0'",
+    "stable,pip,linux,rocm4.2,python":
+      "pip3 install torch -f https://download.pytorch.org/whl/rocm4.2/torch_stable.html<br />pip3 install ninja && pip3 install 'git+https://github.com/pytorch/vision.git@v0.10.0'",
 
     "stable,pip,windows,accnone,python":
       "pip3 install torch==1.9.0+cpu torchvision==0.10.0+cpu torchaudio===0.9.0 -f https://download.pytorch.org/whl/torch_stable.html",
@@ -277,7 +277,7 @@ function commandMessage(key) {
     "stable,pip,windows,cuda11.1,python":
       "pip3 install torch==1.9.0+cu111 torchvision==0.10.0+cu111 torchaudio===0.9.0 -f https://download.pytorch.org/whl/torch_stable.html",
 
-    "stable,pip,windows,rocm4.0,python":
+    "stable,pip,windows,rocm4.2,python":
       "<b>NOTE:</b> ROCm is not available on Windows",
 
     "stable,libtorch,linux,accnone,cplusplus":
@@ -289,7 +289,7 @@ function commandMessage(key) {
     "stable,libtorch,linux,cuda11.1,cplusplus":
       "Download here (Pre-cxx11 ABI): <br/><a href='https://download.pytorch.org/libtorch/cu111/libtorch-shared-with-deps-1.9.0%2Bcu111.zip'>https://download.pytorch.org/libtorch/cu111/libtorch-shared-with-deps-1.9.0%2Bcu111.zip</a><br/><br> Download here (cxx11 ABI): <br/><a href='https://download.pytorch.org/libtorch/cu111/libtorch-cxx11-abi-shared-with-deps-1.9.0%2Bcu111.zip'>https://download.pytorch.org/libtorch/cu111/libtorch-cxx11-abi-shared-with-deps-1.9.0%2Bcu111.zip</a>",
 
-    "stable,libtorch,linux,rocm4.0,cplusplus":
+    "stable,libtorch,linux,rocm4.2,cplusplus":
       "LibTorch binaries are not available for ROCm, please build it from source",
 
     "stable,libtorch,macos,accnone,cplusplus":
@@ -301,7 +301,7 @@ function commandMessage(key) {
     "stable,libtorch,macos,cuda11.1,cplusplus":
       "MacOS binaries do not support CUDA. Download CPU libtorch here: <br/><a href='https://download.pytorch.org/libtorch/cpu/libtorch-macos-1.9.0.zip'> https://download.pytorch.org/libtorch/cpu/libtorch-macos-1.9.0.zip </a>",
 
-    "stable,libtorch,macos,rocm4.0,cplusplus":
+    "stable,libtorch,macos,rocm4.2,cplusplus":
       "<b>NOTE:</b> ROCm is not available on MacOS",
 
     "stable,libtorch,windows,accnone,cplusplus":
@@ -313,7 +313,7 @@ function commandMessage(key) {
     "stable,libtorch,windows,cuda11.1,cplusplus":
       "Download here for C++ (Release version): <br/><a href='https://download.pytorch.org/libtorch/cu111/libtorch-win-shared-with-deps-1.9.0%2Bcu111.zip'>https://download.pytorch.org/libtorch/cu111/libtorch-win-shared-with-deps-1.9.0%2Bcu111.zip</a><br/><br>  Download here for C++ (Debug version): <br/><a href='https://download.pytorch.org/libtorch/cu111/libtorch-win-shared-with-deps-debug-1.9.0%2Bcu111.zip'>https://download.pytorch.org/libtorch/cu111/libtorch-win-shared-with-deps-debug-1.9.0%2Bcu111.zip</a>",
 
-    "stable,libtorch,windows,rocm4.0,cplusplus":
+    "stable,libtorch,windows,rocm4.2,cplusplus":
       "<b>NOTE:</b> ROCm is not available on Windows",
 
     "preview,conda,linux,cuda10.2,python":
@@ -322,7 +322,7 @@ function commandMessage(key) {
     "preview,conda,linux,cuda11.1,python":
       "<b>NOTE:</b> 'nvidia' channel is required for cudatoolkit 11.1<br />conda install pytorch torchvision torchaudio cudatoolkit=11.1 -c pytorch-nightly -c nvidia",
 
-    "preview,conda,linux,rocm4.0,python":
+    "preview,conda,linux,rocm4.2,python":
       "<b>NOTE:</b> Conda packages are not currently available for ROCm, please use pip instead<br />",
 
     "preview,conda,linux,accnone,python":
@@ -334,7 +334,7 @@ function commandMessage(key) {
     "preview,conda,macos,cuda11.1,python":
       "conda install pytorch torchvision torchaudio -c pytorch-nightly",
 
-    "preview,conda,macos,rocm4.0,python":
+    "preview,conda,macos,rocm4.2,python":
       "<b>NOTE:</b> ROCm is not available on MacOS",
 
     "preview,conda,macos,accnone,python":
@@ -346,7 +346,7 @@ function commandMessage(key) {
     "preview,conda,windows,cuda11.1,python":
       "<b>NOTE:</b> 'conda-forge' channel is required for cudatoolkit 11.1<br />conda install pytorch torchvision torchaudio cudatoolkit=11.1 -c pytorch-nightly -c conda-forge",
 
-    "preview,conda,windows,rocm4.0,python":
+    "preview,conda,windows,rocm4.2,python":
       "<b>NOTE:</b> ROCm is not available on Windows",
 
     "preview,conda,windows,accnone,python":
@@ -358,7 +358,7 @@ function commandMessage(key) {
     "preview,pip,macos,cuda11.1,python":
       "pip3 install --pre torch torchvision torchaudio -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html<br /># On MacOS, we provide CPU-only packages, CUDA functionality is not provided",
 
-    "preview,pip,macos,rocm4.0,python":
+    "preview,pip,macos,rocm4.2,python":
       "pip3 install --pre torch torchvision torchaudio -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html<br /># ROCm is not available on MacOS",
 
     "preview,pip,macos,accnone,python":
@@ -373,8 +373,8 @@ function commandMessage(key) {
     "preview,pip,linux,cuda11.1,python":
       "pip3 install --pre torch torchvision torchaudio -f https://download.pytorch.org/whl/nightly/cu111/torch_nightly.html",
 
-    "preview,pip,linux,rocm4.0,python":
-      "pip3 install --pre torch torchvision -f https://download.pytorch.org/whl/nightly/rocm4.0.1/torch_nightly.html",
+    "preview,pip,linux,rocm4.2,python":
+      "pip3 install --pre torch torchvision -f https://download.pytorch.org/whl/nightly/rocm4.2/torch_nightly.html",
 
     "preview,pip,windows,accnone,python":
       "pip3 install --pre torch torchvision torchaudio -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html",
@@ -385,7 +385,7 @@ function commandMessage(key) {
     "preview,pip,windows,cuda11.1,python":
       "pip3 install --pre torch torchvision torchaudio -f https://download.pytorch.org/whl/nightly/cu111/torch_nightly.html",
 
-    "preview,pip,windows,rocm4.0,python":
+    "preview,pip,windows,rocm4.2,python":
       "<b>NOTE:</b> ROCm is not available on Windows",
 
     "preview,libtorch,linux,accnone,cplusplus":
@@ -397,7 +397,7 @@ function commandMessage(key) {
     "preview,libtorch,linux,cuda11.1,cplusplus":
       "Download here (Pre-cxx11 ABI): <br/><a href='https://download.pytorch.org/libtorch/nightly/cu111/libtorch-shared-with-deps-latest.zip'>https://download.pytorch.org/libtorch/nightly/cu111/libtorch-shared-with-deps-latest.zip</a><br/><br> Download here (cxx11 ABI): <br/><a href='https://download.pytorch.org/libtorch/nightly/cu111/libtorch-cxx11-abi-shared-with-deps-latest.zip'>https://download.pytorch.org/libtorch/nightly/cu111/libtorch-cxx11-abi-shared-with-deps-latest.zip</a>",
 
-    "preview,libtorch,linux,rocm4.0,cplusplus":
+    "preview,libtorch,linux,rocm4.2,cplusplus":
       "LibTorch binaries are not available for ROCm, please build it from source",
 
     "preview,libtorch,macos,accnone,cplusplus":
@@ -409,7 +409,7 @@ function commandMessage(key) {
     "preview,libtorch,macos,cuda11.1,cplusplus":
       "MacOS binaries do not support CUDA. Download CPU libtorch here: <br/><a href='https://download.pytorch.org/libtorch/nightly/cpu/libtorch-macos-latest.zip'> https://download.pytorch.org/libtorch/nightly/cpu/libtorch-macos-latest.zip </a>",
 
-    "preview,libtorch,macos,rocm4.0,cplusplus":
+    "preview,libtorch,macos,rocm4.2,cplusplus":
       "ROCm is not available on MacOS. Download CPU libtorch here: <br/><a href='https://download.pytorch.org/libtorch/nightly/cpu/libtorch-macos-latest.zip'> https://download.pytorch.org/libtorch/nightly/cpu/libtorch-macos-latest.zip </a>",
 
     "preview,libtorch,windows,accnone,cplusplus":
@@ -421,7 +421,7 @@ function commandMessage(key) {
     "preview,libtorch,windows,cuda11.1,cplusplus":
       "Download here for C++ (Release version): <br/><a href='https://download.pytorch.org/libtorch/nightly/cu111/libtorch-win-shared-with-deps-latest.zip'>https://download.pytorch.org/libtorch/nightly/cu111/libtorch-win-shared-with-deps-latest.zip</a><br/><br>  Download here for C++ (Debug version): <br/><a href='https://download.pytorch.org/libtorch/nightly/cu111/libtorch-win-shared-with-deps-debug-latest.zip'>https://download.pytorch.org/libtorch/nightly/cu111/libtorch-win-shared-with-deps-debug-latest.zip</a>",
 
-    "preview,libtorch,windows,rocm4.0,cplusplus":
+    "preview,libtorch,windows,rocm4.2,cplusplus":
       "<b>NOTE:</b> ROCm is not available on Windows",
 
     "lts,conda,linux,cuda10.2,python":
@@ -430,7 +430,7 @@ function commandMessage(key) {
     "lts,conda,linux,cuda11.1,python":
       "<b>NOTE:</b> 'nvidia' channel is required for cudatoolkit 11.1<br />conda install pytorch torchvision torchaudio cudatoolkit=11.1 -c pytorch-lts -c nvidia",
 
-    "lts,conda,linux,rocm4.0,python":
+    "lts,conda,linux,rocm4.2,python":
       "<b>NOTE:</b> ROCm is not supported in LTS",
 
     "lts,conda,linux,accnone,python":
@@ -442,7 +442,7 @@ function commandMessage(key) {
     "lts,conda,macos,cuda11.1,python":
       "conda install pytorch torchvision torchaudio -c pytorch<br /># MacOS Binaries dont support CUDA, install from source if CUDA is needed",
 
-    "lts,conda,macos,rocm4.0,python":
+    "lts,conda,macos,rocm4.2,python":
       "<b>NOTE:</b> ROCm is not supported in LTS",
 
     "lts,conda,macos,accnone,python":
@@ -454,7 +454,7 @@ function commandMessage(key) {
     "lts,conda,windows,cuda11.1,python":
       "<b>NOTE:</b> 'conda-forge' channel is required for cudatoolkit 11.1<br />conda install pytorch torchvision torchaudio cudatoolkit=11.1 -c pytorch-lts -c conda-forge",
 
-    "lts,conda,windows,rocm4.0,python":
+    "lts,conda,windows,rocm4.2,python":
       "<b>NOTE:</b> ROCm is not supported in LTS",
 
     "lts,conda,windows,accnone,python":
@@ -466,7 +466,7 @@ function commandMessage(key) {
     "lts,pip,macos,cuda11.1,python":
       "pip3 install torch torchvision torchaudio -f https://download.pytorch.org/whl/lts/1.8/torch_lts.html<br /># MacOS Binaries dont support CUDA, install from source if CUDA is needed",
 
-    "lts,pip,macos,rocm4.0,python":
+    "lts,pip,macos,rocm4.2,python":
       "<b>NOTE:</b> ROCm is not supported in LTS",
 
     "lts,pip,macos,accnone,python": "pip3 install torch torchvision torchaudio -f https://download.pytorch.org/whl/lts/1.8/torch_lts.html",
@@ -480,7 +480,7 @@ function commandMessage(key) {
     "lts,pip,linux,cuda11.1,python":
       "pip3 install torch==1.8.1+cu111 torchvision==0.9.1+cu111 torchaudio==0.8.1 -f https://download.pytorch.org/whl/lts/1.8/torch_lts.html",
 
-    "lts,pip,linux,rocm4.0,python":
+    "lts,pip,linux,rocm4.2,python":
       "<b>NOTE:</b> ROCm is not supported in LTS",
 
     "lts,pip,windows,accnone,python":
@@ -492,7 +492,7 @@ function commandMessage(key) {
     "lts,pip,windows,cuda11.1,python":
       "pip3 install torch==1.8.1+cu111 torchvision==0.9.1+cu111 torchaudio===0.8.1 -f https://download.pytorch.org/whl/lts/1.8/torch_lts.html",
 
-    "lts,pip,windows,rocm4.0,python":
+    "lts,pip,windows,rocm4.2,python":
       "<b>NOTE:</b> ROCm is not supported in LTS",
 
     "lts,libtorch,linux,accnone,cplusplus":
@@ -504,7 +504,7 @@ function commandMessage(key) {
     "lts,libtorch,linux,cuda11.1,cplusplus":
       "Download here (Pre-cxx11 ABI): <br/><a href='https://download.pytorch.org/libtorch/cu111/libtorch-shared-with-deps-1.8.1%2Bcu111.zip'>https://download.pytorch.org/libtorch/cu111/libtorch-shared-with-deps-1.8.1%2Bcu111.zip</a><br/><br> Download here (cxx11 ABI): <br/><a href='https://download.pytorch.org/libtorch/cu111/libtorch-cxx11-abi-shared-with-deps-1.8.1%2Bcu111.zip'>https://download.pytorch.org/libtorch/cu111/libtorch-cxx11-abi-shared-with-deps-1.8.1%2Bcu111.zip</a>",
 
-    "lts,libtorch,linux,rocm4.0,cplusplus":
+    "lts,libtorch,linux,rocm4.2,cplusplus":
       "<b>NOTE:</b> ROCm is not supported in LTS",
 
     "lts,libtorch,macos,accnone,cplusplus":
@@ -516,7 +516,7 @@ function commandMessage(key) {
     "lts,libtorch,macos,cuda11.1,cplusplus":
       "MacOS binaries do not support CUDA. Download CPU libtorch here: <br/><a href='https://download.pytorch.org/libtorch/cpu/libtorch-macos-1.8.1.zip'> https://download.pytorch.org/libtorch/cpu/libtorch-macos-1.8.1.zip </a>",
 
-    "lts,libtorch,macos,rocm4.0,cplusplus":
+    "lts,libtorch,macos,rocm4.2,cplusplus":
       "<b>NOTE:</b> ROCm is not supported in LTS",
 
     "lts,libtorch,windows,accnone,cplusplus":
@@ -528,7 +528,7 @@ function commandMessage(key) {
     "lts,libtorch,windows,cuda11.1,cplusplus":
       "Download here for C++ (Release version): <br/><a href='https://download.pytorch.org/libtorch/cu111/libtorch-win-shared-with-deps-1.8.1%2Bcu111.zip'>https://download.pytorch.org/libtorch/cu111/libtorch-win-shared-with-deps-1.8.1%2Bcu111.zip</a><br/><br>  Download here for C++ (Debug version): <br/><a href='https://download.pytorch.org/libtorch/cu111/libtorch-win-shared-with-deps-debug-1.8.1%2Bcu111.zip'>https://download.pytorch.org/libtorch/cu111/libtorch-win-shared-with-deps-debug-1.8.1%2Bcu111.zip</a>",
 
-    "lts,libtorch,windows,rocm4.0,cplusplus":
+    "lts,libtorch,windows,rocm4.2,cplusplus":
       "<b>NOTE:</b> ROCm is not supported in LTS",
   };
   var lts_notice = "<div class='alert-secondary'><b>Note</b>: Additional support for these binaries may be provided by <a href='/enterprise-support-program' style='font-size:100%'>PyTorch Enterprise Support Program Participants</a>.</div>";
