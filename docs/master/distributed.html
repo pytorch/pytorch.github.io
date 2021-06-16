@@ -193,7 +193,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href='https://pytorch.org/docs/versions.html'>master (1.10.0a0+git210259b ) &#x25BC</a>
+      <a href='https://pytorch.org/docs/versions.html'>master (1.10.0a0+gitd7ab600 ) &#x25BC</a>
     </div>
     
 
@@ -1281,8 +1281,8 @@ corresponding to the default process group will be used. Default is
 <li><p><strong>pg_options</strong> (<em>ProcessGroupOptions</em><em>, </em><em>optional</em>) – process group options
 specifying what additional options need to be passed in during
 the construction of specific process groups. i.e. for the <code class="docutils literal notranslate"><span class="pre">nccl</span></code>
-backend, is_high_priority_stream can be specified so that process
-group can pick up high priority cuda streams.</p></li>
+backend, <code class="docutils literal notranslate"><span class="pre">is_high_priority_stream</span></code> can be specified so that
+process group can pick up high priority cuda streams.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns</dt>
@@ -2237,8 +2237,8 @@ all the distributed processes calling this function.</p></li>
 <li><p><strong>op</strong> (<em>optional</em>) – One of the values from
 <code class="docutils literal notranslate"><span class="pre">torch.distributed.ReduceOp</span></code>
 enum.  Specifies an operation used for element-wise reductions.</p></li>
-<li><p><strong>group</strong> (<em>ProcessGroup</em><em>, </em><em>optional</em>) – The process group to work on. If None,
-the default process group will be used.</p></li>
+<li><p><strong>group</strong> (<em>ProcessGroup</em><em>, </em><em>optional</em>) – The process group to work on. If
+<code class="docutils literal notranslate"><span class="pre">None</span></code>, the default process group will be used.</p></li>
 <li><p><strong>async_op</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.9)"><em>bool</em></a><em>, </em><em>optional</em>) – Whether this op should be an async op</p></li>
 </ul>
 </dd>
@@ -2516,6 +2516,191 @@ can be used for multiprocess distributed training as well.</p>
 implementation</a></p>
 <p>Note that this function requires Python 3.4 or higher.</p>
 </div>
+<div class="section" id="debugging-torch-distributed-applications">
+<h2>Debugging <code class="docutils literal notranslate"><span class="pre">torch.distributed</span></code> applications<a class="headerlink" href="#debugging-torch-distributed-applications" title="Permalink to this headline">¶</a></h2>
+<p>Debugging distributed applications can be challenging due to hard to understand hangs, crashes, or inconsistent behavior across ranks. <code class="docutils literal notranslate"><span class="pre">torch.distributed</span></code> provides
+a suite of tools to help debug training applications in a self-serve fashion:</p>
+<p>As of v1.10, <a class="reference internal" href="#torch.distributed.monitored_barrier" title="torch.distributed.monitored_barrier"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.distributed.monitored_barrier()</span></code></a> exists as an alternative to <a class="reference internal" href="#torch.distributed.barrier" title="torch.distributed.barrier"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.distributed.barrier()</span></code></a> which fails with helpful information about which rank may be faulty
+when crashing, i.e. not all ranks calling into <a class="reference internal" href="#torch.distributed.monitored_barrier" title="torch.distributed.monitored_barrier"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.distributed.monitored_barrier()</span></code></a> within the provided timeout. <a class="reference internal" href="#torch.distributed.monitored_barrier" title="torch.distributed.monitored_barrier"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.distributed.monitored_barrier()</span></code></a> implements a host-side
+barrier using <code class="docutils literal notranslate"><span class="pre">send</span></code>/<code class="docutils literal notranslate"><span class="pre">recv</span></code> communication primitives in a process similar to acknowledgements, allowing rank 0 to report which rank(s) failed to acknowledge
+the barrier in time. As an example, consider the following function where rank 1 fails to call into <a class="reference internal" href="#torch.distributed.monitored_barrier" title="torch.distributed.monitored_barrier"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.distributed.monitored_barrier()</span></code></a> (in practice this could be due
+to an application bug or hang in a previous collective):</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">from</span> <span class="nn">datetime</span> <span class="kn">import</span> <span class="n">timedelta</span>
+
+<span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">import</span> <span class="nn">torch.distributed</span> <span class="k">as</span> <span class="nn">dist</span>
+<span class="kn">import</span> <span class="nn">torch.multiprocessing</span> <span class="k">as</span> <span class="nn">mp</span>
+
+
+<span class="k">def</span> <span class="nf">worker</span><span class="p">(</span><span class="n">rank</span><span class="p">):</span>
+    <span class="n">dist</span><span class="o">.</span><span class="n">init_process_group</span><span class="p">(</span><span class="s2">&quot;nccl&quot;</span><span class="p">,</span> <span class="n">rank</span><span class="o">=</span><span class="n">rank</span><span class="p">,</span> <span class="n">world_size</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+    <span class="c1"># monitored barrier requires gloo process group to perform host-side sync.</span>
+    <span class="n">group_gloo</span> <span class="o">=</span> <span class="n">dist</span><span class="o">.</span><span class="n">new_group</span><span class="p">(</span><span class="n">backend</span><span class="o">=</span><span class="s2">&quot;gloo&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">rank</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">[</span><span class="mi">1</span><span class="p">]:</span>
+        <span class="n">dist</span><span class="o">.</span><span class="n">monitored_barrier</span><span class="p">(</span><span class="n">group</span><span class="o">=</span><span class="n">group_gloo</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="n">timedelta</span><span class="p">(</span><span class="n">seconds</span><span class="o">=</span><span class="mi">2</span><span class="p">))</span>
+
+
+<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s2">&quot;__main__&quot;</span><span class="p">:</span>
+    <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s2">&quot;MASTER_ADDR&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;localhost&quot;</span>
+    <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s2">&quot;MASTER_PORT&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;29501&quot;</span>
+    <span class="n">mp</span><span class="o">.</span><span class="n">spawn</span><span class="p">(</span><span class="n">worker</span><span class="p">,</span> <span class="n">nprocs</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="p">())</span>
+</pre></div>
+</div>
+<p>The following error message is produced on rank 0, allowing the user to determine which rank(s) may be faulty and investigate further:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="ne">RuntimeError</span><span class="p">:</span> <span class="n">Rank</span> <span class="mi">1</span> <span class="n">failed</span> <span class="n">to</span> <span class="k">pass</span> <span class="n">monitoredBarrier</span> <span class="ow">in</span> <span class="mi">2000</span> <span class="n">ms</span>
+ <span class="n">Original</span> <span class="n">exception</span><span class="p">:</span>
+<span class="p">[</span><span class="n">gloo</span><span class="o">/</span><span class="n">transport</span><span class="o">/</span><span class="n">tcp</span><span class="o">/</span><span class="n">pair</span><span class="o">.</span><span class="n">cc</span><span class="p">:</span><span class="mi">598</span><span class="p">]</span> <span class="n">Connection</span> <span class="n">closed</span> <span class="n">by</span> <span class="n">peer</span> <span class="p">[</span><span class="mi">2401</span><span class="p">:</span><span class="n">db00</span><span class="p">:</span><span class="n">eef0</span><span class="p">:</span><span class="mi">1100</span><span class="p">:</span><span class="mi">3560</span><span class="p">:</span><span class="mi">0</span><span class="p">:</span><span class="mi">1</span><span class="n">c05</span><span class="p">:</span><span class="mi">25</span><span class="n">d</span><span class="p">]:</span><span class="mi">8594</span>
+</pre></div>
+</div>
+<p>Next, the environment variable <code class="docutils literal notranslate"><span class="pre">TORCH_DISTRIBUTED_DEBUG</span></code>  can be used to trigger additional useful logging and collective synchronization checks to ensure all ranks
+are synchronized appropriately. <code class="docutils literal notranslate"><span class="pre">TORCH_DISTRIBUTED_DEBUG</span></code> can be set to either <code class="docutils literal notranslate"><span class="pre">OFF</span></code> (default), <code class="docutils literal notranslate"><span class="pre">INFO</span></code>, or <code class="docutils literal notranslate"><span class="pre">DETAIL</span></code> depending on the debugging level
+required. Please note that the most verbose option, <code class="docutils literal notranslate"><span class="pre">DETAIL</span></code> may impact the application performance and thus should only be used when debugging issues.</p>
+<p>Setting <code class="docutils literal notranslate"><span class="pre">TORCH_DISTRIBUTED_DEBUG=INFO</span></code> will result in additional debug logging when models trained with <a class="reference internal" href="generated/torch.nn.parallel.DistributedDataParallel.html#torch.nn.parallel.DistributedDataParallel" title="torch.nn.parallel.DistributedDataParallel"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.nn.parallel.DistributedDataParallel()</span></code></a> are initialized, and
+<code class="docutils literal notranslate"><span class="pre">TORCH_DISTRIBUTED_DEBUG=DETAIL</span></code> will additionally log runtime performance statistics a select number of iterations. These runtime statistics
+include data such as forward time, backward time, gradient communication time, etc. As an example, given the following application:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">os</span>
+
+<span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">import</span> <span class="nn">torch.distributed</span> <span class="k">as</span> <span class="nn">dist</span>
+<span class="kn">import</span> <span class="nn">torch.multiprocessing</span> <span class="k">as</span> <span class="nn">mp</span>
+
+
+<span class="k">class</span> <span class="nc">TwoLinLayerNet</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">a</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="n">bias</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">b</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">bias</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">):</span>
+        <span class="n">a</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">a</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+        <span class="n">b</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">b</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+        <span class="k">return</span> <span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">worker</span><span class="p">(</span><span class="n">rank</span><span class="p">):</span>
+    <span class="n">dist</span><span class="o">.</span><span class="n">init_process_group</span><span class="p">(</span><span class="s2">&quot;nccl&quot;</span><span class="p">,</span> <span class="n">rank</span><span class="o">=</span><span class="n">rank</span><span class="p">,</span> <span class="n">world_size</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+    <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">set_device</span><span class="p">(</span><span class="n">rank</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;init model&quot;</span><span class="p">)</span>
+    <span class="n">model</span> <span class="o">=</span> <span class="n">TwoLinLayerNet</span><span class="p">()</span><span class="o">.</span><span class="n">cuda</span><span class="p">()</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;init ddp&quot;</span><span class="p">)</span>
+    <span class="n">ddp_model</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">parallel</span><span class="o">.</span><span class="n">DistributedDataParallel</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">device_ids</span><span class="o">=</span><span class="p">[</span><span class="n">rank</span><span class="p">])</span>
+
+    <span class="n">inp</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">10</span><span class="p">)</span><span class="o">.</span><span class="n">cuda</span><span class="p">()</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;train&quot;</span><span class="p">)</span>
+
+    <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">20</span><span class="p">):</span>
+        <span class="n">output</span> <span class="o">=</span> <span class="n">ddp_model</span><span class="p">(</span><span class="n">inp</span><span class="p">)</span>
+        <span class="n">loss</span> <span class="o">=</span> <span class="n">output</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">+</span> <span class="n">output</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+        <span class="n">loss</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span><span class="o">.</span><span class="n">backward</span><span class="p">()</span>
+
+
+<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s2">&quot;__main__&quot;</span><span class="p">:</span>
+    <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s2">&quot;MASTER_ADDR&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;localhost&quot;</span>
+    <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s2">&quot;MASTER_PORT&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;29501&quot;</span>
+    <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span>
+        <span class="s2">&quot;TORCH_DISTRIBUTED_DEBUG&quot;</span>
+    <span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;DETAIL&quot;</span>  <span class="c1"># set to DETAIL for runtime logging.</span>
+    <span class="n">mp</span><span class="o">.</span><span class="n">spawn</span><span class="p">(</span><span class="n">worker</span><span class="p">,</span> <span class="n">nprocs</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="p">())</span>
+</pre></div>
+</div>
+<p>The following logs are rendered at initialization time:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">I0607</span> <span class="mi">16</span><span class="p">:</span><span class="mi">10</span><span class="p">:</span><span class="mf">35.739390</span> <span class="mi">515217</span> <span class="n">logger</span><span class="o">.</span><span class="n">cpp</span><span class="p">:</span><span class="mi">173</span><span class="p">]</span> <span class="p">[</span><span class="n">Rank</span> <span class="mi">0</span><span class="p">]:</span> <span class="n">DDP</span> <span class="n">Initialized</span> <span class="k">with</span><span class="p">:</span>
+<span class="n">broadcast_buffers</span><span class="p">:</span> <span class="mi">1</span>
+<span class="n">bucket_cap_bytes</span><span class="p">:</span> <span class="mi">26214400</span>
+<span class="n">find_unused_parameters</span><span class="p">:</span> <span class="mi">0</span>
+<span class="n">gradient_as_bucket_view</span><span class="p">:</span> <span class="mi">0</span>
+<span class="n">is_multi_device_module</span><span class="p">:</span> <span class="mi">0</span>
+<span class="n">iteration</span><span class="p">:</span> <span class="mi">0</span>
+<span class="n">num_parameter_tensors</span><span class="p">:</span> <span class="mi">2</span>
+<span class="n">output_device</span><span class="p">:</span> <span class="mi">0</span>
+<span class="n">rank</span><span class="p">:</span> <span class="mi">0</span>
+<span class="n">total_parameter_size_bytes</span><span class="p">:</span> <span class="mi">440</span>
+<span class="n">world_size</span><span class="p">:</span> <span class="mi">2</span>
+<span class="n">backend_name</span><span class="p">:</span> <span class="n">nccl</span>
+<span class="n">bucket_sizes</span><span class="p">:</span> <span class="mi">440</span>
+<span class="n">cuda_visible_devices</span><span class="p">:</span> <span class="n">N</span><span class="o">/</span><span class="n">A</span>
+<span class="n">device_ids</span><span class="p">:</span> <span class="mi">0</span>
+<span class="n">dtypes</span><span class="p">:</span> <span class="nb">float</span>
+<span class="n">master_addr</span><span class="p">:</span> <span class="n">localhost</span>
+<span class="n">master_port</span><span class="p">:</span> <span class="mi">29501</span>
+<span class="n">module_name</span><span class="p">:</span> <span class="n">TwoLinLayerNet</span>
+<span class="n">nccl_async_error_handling</span><span class="p">:</span> <span class="n">N</span><span class="o">/</span><span class="n">A</span>
+<span class="n">nccl_blocking_wait</span><span class="p">:</span> <span class="n">N</span><span class="o">/</span><span class="n">A</span>
+<span class="n">nccl_debug</span><span class="p">:</span> <span class="n">WARN</span>
+<span class="n">nccl_ib_timeout</span><span class="p">:</span> <span class="n">N</span><span class="o">/</span><span class="n">A</span>
+<span class="n">nccl_nthreads</span><span class="p">:</span> <span class="n">N</span><span class="o">/</span><span class="n">A</span>
+<span class="n">nccl_socket_ifname</span><span class="p">:</span> <span class="n">N</span><span class="o">/</span><span class="n">A</span>
+<span class="n">torch_distributed_debug</span><span class="p">:</span> <span class="n">INFO</span>
+</pre></div>
+</div>
+<p>The following logs are rendered during runtime (when <code class="docutils literal notranslate"><span class="pre">TORCH_DISTRIBUTED_DEBUG=DETAIL</span></code> is set):</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">I0607</span> <span class="mi">16</span><span class="p">:</span><span class="mi">18</span><span class="p">:</span><span class="mf">58.085681</span> <span class="mi">544067</span> <span class="n">logger</span><span class="o">.</span><span class="n">cpp</span><span class="p">:</span><span class="mi">344</span><span class="p">]</span> <span class="p">[</span><span class="n">Rank</span> <span class="mi">1</span> <span class="o">/</span> <span class="mi">2</span><span class="p">]</span> <span class="n">Training</span> <span class="n">TwoLinLayerNet</span> <span class="n">unused_parameter_size</span><span class="o">=</span><span class="mi">0</span>
+ <span class="n">Avg</span> <span class="n">forward</span> <span class="n">compute</span> <span class="n">time</span><span class="p">:</span> <span class="mi">40838608</span>
+ <span class="n">Avg</span> <span class="n">backward</span> <span class="n">compute</span> <span class="n">time</span><span class="p">:</span> <span class="mi">5983335</span>
+<span class="n">Avg</span> <span class="n">backward</span> <span class="n">comm</span><span class="o">.</span> <span class="n">time</span><span class="p">:</span> <span class="mi">4326421</span>
+ <span class="n">Avg</span> <span class="n">backward</span> <span class="n">comm</span><span class="o">/</span><span class="n">comp</span> <span class="n">overlap</span> <span class="n">time</span><span class="p">:</span> <span class="mi">4207652</span>
+<span class="n">I0607</span> <span class="mi">16</span><span class="p">:</span><span class="mi">18</span><span class="p">:</span><span class="mf">58.085693</span> <span class="mi">544066</span> <span class="n">logger</span><span class="o">.</span><span class="n">cpp</span><span class="p">:</span><span class="mi">344</span><span class="p">]</span> <span class="p">[</span><span class="n">Rank</span> <span class="mi">0</span> <span class="o">/</span> <span class="mi">2</span><span class="p">]</span> <span class="n">Training</span> <span class="n">TwoLinLayerNet</span> <span class="n">unused_parameter_size</span><span class="o">=</span><span class="mi">0</span>
+ <span class="n">Avg</span> <span class="n">forward</span> <span class="n">compute</span> <span class="n">time</span><span class="p">:</span> <span class="mi">42850427</span>
+ <span class="n">Avg</span> <span class="n">backward</span> <span class="n">compute</span> <span class="n">time</span><span class="p">:</span> <span class="mi">3885553</span>
+<span class="n">Avg</span> <span class="n">backward</span> <span class="n">comm</span><span class="o">.</span> <span class="n">time</span><span class="p">:</span> <span class="mi">2357981</span>
+ <span class="n">Avg</span> <span class="n">backward</span> <span class="n">comm</span><span class="o">/</span><span class="n">comp</span> <span class="n">overlap</span> <span class="n">time</span><span class="p">:</span> <span class="mi">2234674</span>
+</pre></div>
+</div>
+<p>In addition, <code class="docutils literal notranslate"><span class="pre">TORCH_DISTRIBUTED_DEBUG=INFO</span></code> enhances crash logging in <a class="reference internal" href="generated/torch.nn.parallel.DistributedDataParallel.html#torch.nn.parallel.DistributedDataParallel" title="torch.nn.parallel.DistributedDataParallel"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.nn.parallel.DistributedDataParallel()</span></code></a> due to unused parameters in the model. Currently, <code class="docutils literal notranslate"><span class="pre">find_unused_parameters=True</span></code>
+must be passed into <a class="reference internal" href="generated/torch.nn.parallel.DistributedDataParallel.html#torch.nn.parallel.DistributedDataParallel" title="torch.nn.parallel.DistributedDataParallel"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.nn.parallel.DistributedDataParallel()</span></code></a> initialization if there are parameters that may be unused in the forward pass, and as of v1.10, all model outputs are required
+to be used in loss computation as <a class="reference internal" href="generated/torch.nn.parallel.DistributedDataParallel.html#torch.nn.parallel.DistributedDataParallel" title="torch.nn.parallel.DistributedDataParallel"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.nn.parallel.DistributedDataParallel()</span></code></a> does not support unused parameters in the backwards pass. These constraints are challenging especially for larger
+models, thus when crashing with an error, <a class="reference internal" href="generated/torch.nn.parallel.DistributedDataParallel.html#torch.nn.parallel.DistributedDataParallel" title="torch.nn.parallel.DistributedDataParallel"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.nn.parallel.DistributedDataParallel()</span></code></a> will log the fully qualified name of all parameters that went unused. For example, in the above application,
+if we modify <code class="docutils literal notranslate"><span class="pre">loss</span></code> to be instead computed as <code class="docutils literal notranslate"><span class="pre">loss</span> <span class="pre">=</span> <span class="pre">output[1]</span></code>, then <code class="docutils literal notranslate"><span class="pre">TwoLinLayerNet.a</span></code> does not receive a gradient in the backwards pass, and
+thus results in <code class="docutils literal notranslate"><span class="pre">DDP</span></code> failing. On a crash, the user is passed information about parameters which went unused, which may be challenging to manually find for large models:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>RuntimeError: Expected to have finished reduction in the prior iteration before starting a new one. This error indicates that your module has parameters that were not used in producing loss. You can enable unused parameter detection by passing
+ the keyword argument `find_unused_parameters=True` to `torch.nn.parallel.DistributedDataParallel`, and by
+making sure all `forward` function outputs participate in calculating loss.
+If you already have done the above, then the distributed data parallel module wasn&#39;t able to locate the output tensors in the return value of your module&#39;s `forward` function. Please include the loss function and the structure of the return va
+lue of `forward` of your module when reporting this issue (e.g. list, dict, iterable).
+Parameters which did not receive grad for rank 0: a.weight
+Parameter indices which did not receive grad for rank 0: 0
+</pre></div>
+</div>
+<p>Setting <code class="docutils literal notranslate"><span class="pre">TORCH_DISTRIBUTED_DEBUG=DETAIL</span></code> will trigger additional consistency and synchronization checks on every collective call issued by the user
+either directly or indirectly (such as DDP <code class="docutils literal notranslate"><span class="pre">allreduce</span></code>). This is done by creating a wrapper process group that wraps all process groups returned by
+<a class="reference internal" href="#torch.distributed.init_process_group" title="torch.distributed.init_process_group"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.distributed.init_process_group()</span></code></a> and <a class="reference internal" href="#torch.distributed.new_group" title="torch.distributed.new_group"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.distributed.new_group()</span></code></a> APIs. As a result, these APIs will return a wrapper process group that can be used exactly like a regular process
+group, but performs consistency checks before dispatching the collective to an underlying process group. Currently, these checks include a <a class="reference internal" href="#torch.distributed.monitored_barrier" title="torch.distributed.monitored_barrier"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.distributed.monitored_barrier()</span></code></a>,
+which ensures all ranks complete their outstanding collective calls and reports ranks which are stuck. Next, the collective itself is checked for consistency by
+ensuring all collective functions match and are called with consistent tensor shapes. If this is not the case, a detailed error report is included when the
+application crashes, rather than a hang or uninformative error message. As an example, consider the following function which has mismatched input shapes into
+<a class="reference internal" href="#torch.distributed.all_reduce" title="torch.distributed.all_reduce"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.distributed.all_reduce()</span></code></a>:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">import</span> <span class="nn">torch.distributed</span> <span class="k">as</span> <span class="nn">dist</span>
+<span class="kn">import</span> <span class="nn">torch.multiprocessing</span> <span class="k">as</span> <span class="nn">mp</span>
+
+
+<span class="k">def</span> <span class="nf">worker</span><span class="p">(</span><span class="n">rank</span><span class="p">):</span>
+    <span class="n">dist</span><span class="o">.</span><span class="n">init_process_group</span><span class="p">(</span><span class="s2">&quot;nccl&quot;</span><span class="p">,</span> <span class="n">rank</span><span class="o">=</span><span class="n">rank</span><span class="p">,</span> <span class="n">world_size</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+    <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">set_device</span><span class="p">(</span><span class="n">rank</span><span class="p">)</span>
+    <span class="n">tensor</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">10</span> <span class="k">if</span> <span class="n">rank</span> <span class="o">==</span> <span class="mi">0</span> <span class="k">else</span> <span class="mi">20</span><span class="p">)</span><span class="o">.</span><span class="n">cuda</span><span class="p">()</span>
+    <span class="n">dist</span><span class="o">.</span><span class="n">all_reduce</span><span class="p">(</span><span class="n">tensor</span><span class="p">)</span>
+    <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">synchronize</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="n">rank</span><span class="p">)</span>
+
+
+<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s2">&quot;__main__&quot;</span><span class="p">:</span>
+    <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s2">&quot;MASTER_ADDR&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;localhost&quot;</span>
+    <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s2">&quot;MASTER_PORT&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;29501&quot;</span>
+    <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s2">&quot;TORCH_DISTRIBUTED_DEBUG&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;DETAIL&quot;</span>
+    <span class="n">mp</span><span class="o">.</span><span class="n">spawn</span><span class="p">(</span><span class="n">worker</span><span class="p">,</span> <span class="n">nprocs</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="p">())</span>
+</pre></div>
+</div>
+<p>With the <code class="docutils literal notranslate"><span class="pre">NCCL</span></code> backend, such an application would likely result in a hang which can be challenging to root-cause in nontrivial scenarios. If the user enables
+<code class="docutils literal notranslate"><span class="pre">TORCH_DISTRIBUTED_DEBUG=DETAIL</span></code> and reruns the application, the following error message reveals the root cause:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">work</span> <span class="o">=</span> <span class="n">default_pg</span><span class="o">.</span><span class="n">allreduce</span><span class="p">([</span><span class="n">tensor</span><span class="p">],</span> <span class="n">opts</span><span class="p">)</span>
+<span class="ne">RuntimeError</span><span class="p">:</span> <span class="n">Error</span> <span class="n">when</span> <span class="n">verifying</span> <span class="n">shape</span> <span class="n">tensors</span> <span class="k">for</span> <span class="n">collective</span> <span class="n">ALLREDUCE</span> <span class="n">on</span> <span class="n">rank</span> <span class="mf">0.</span> <span class="n">This</span> <span class="n">likely</span> <span class="n">indicates</span> <span class="n">that</span> <span class="nb">input</span> <span class="n">shapes</span> <span class="n">into</span> <span class="n">the</span> <span class="n">collective</span> <span class="n">are</span> <span class="n">mismatched</span> <span class="n">across</span> <span class="n">ranks</span><span class="o">.</span> <span class="n">Got</span> <span class="n">shapes</span><span class="p">:</span>  <span class="mi">10</span>
+<span class="p">[</span> <span class="n">torch</span><span class="o">.</span><span class="n">LongTensor</span><span class="p">{</span><span class="mi">1</span><span class="p">}</span> <span class="p">]</span>
+</pre></div>
+</div>
+<p>In addition, <cite>TORCH_DISTRIBUTED_DEBUG=DETAIL</cite> can be used in conjunction with <cite>TORCH_SHOW_CPP_STACKTRACES=1</cite> to log the entire callstack when a collective desynchronization is detected. These
+collective desynchronization checks will work for all applications that use <code class="docutils literal notranslate"><span class="pre">c10d</span></code> collective calls backed by process groups created with the
+<a class="reference internal" href="#torch.distributed.init_process_group" title="torch.distributed.init_process_group"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.distributed.init_process_group()</span></code></a> and <a class="reference internal" href="#torch.distributed.new_group" title="torch.distributed.new_group"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.distributed.new_group()</span></code></a> APIs.</p>
+</div>
 </div>
 
 
@@ -2591,6 +2776,7 @@ implementation</a></p>
 <li><a class="reference internal" href="#third-party-backends">Third-party backends</a></li>
 <li><a class="reference internal" href="#launch-utility">Launch utility</a></li>
 <li><a class="reference internal" href="#spawn-utility">Spawn utility</a></li>
+<li><a class="reference internal" href="#debugging-torch-distributed-applications">Debugging <code class="docutils literal notranslate"><span class="pre">torch.distributed</span></code> applications</a></li>
 </ul>
 </li>
 </ul>
