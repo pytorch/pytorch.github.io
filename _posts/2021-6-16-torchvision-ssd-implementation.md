@@ -1,6 +1,6 @@
 ---
 layout: blog_detail
-title: 'PyTorch 1.9 Release, including torch.linalg and Mobile Interpreter'
+title: 'Everything You Need To Know About Torchvision’s SSD Implementation'
 author: Vasilis Vryniotis
 featured-img: 'assets/images/prediction-examples.png'
 ---
