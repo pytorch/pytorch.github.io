@@ -14,16 +14,24 @@ It’s never been easier to deploy a state-of-the-art ML model to a phone. You d
 ### Image Classification
 This app demonstrates how to use PyTorch C++ libraries on iOS and Android to classify a static image with the MobileNetv2/3 model.
 
-
-<img src="{{ site.url }}/assets/images/github_logo_32.png"> [iOS ##1](https://github.com/pytorch/ios-demo-app/tree/master/HelloWorld) [iOS ##2](https://github.com/pytorch/workshops/tree/master/PTMobileWalkthruIOS) [Android ##1](https://github.com/pytorch/android-demo-app/tree/master/HelloWorldApp) [Android ##2](https://github.com/pytorch/workshops/tree/master/PTMobileWalkthruAndroid)
+<img src="{{ site.url }}/assets/images/github_logo_32.png"> [iOS #1](https://github.com/pytorch/ios-demo-app/tree/master/HelloWorld) [iOS #2](https://github.com/pytorch/workshops/tree/master/PTMobileWalkthruIOS) [Android #1](https://github.com/pytorch/android-demo-app/tree/master/HelloWorldApp) [Android #2](https://github.com/pytorch/workshops/tree/master/PTMobileWalkthruAndroid)
 
 <img src="{{ site.url }}/assets/images/screencast.png"> [iOS](https://youtu.be/amTepUIR93k) [Android](https://youtu.be/5Lxuu16_28o)
+
+<div class="text-center">
+  <img src="{{ site.url }}/assets/images/screenshot_mobile_helloworld.png" width="100%">
+</div>
 
 
 ### Live Image Classification
 This app demonstrates how to run a quantized MobileNetV2 and Resnet18 models to classify images in real time with an iOS and Android device camera.
 
 <img src="{{ site.url }}/assets/images/github_logo_32.png"> [iOS](https://github.com/pytorch/ios-demo-app/tree/master/PyTorchDemo) [Android](https://github.com/pytorch/android-demo-app/tree/master/PyTorchDemoApp)
+
+<div class="text-center">
+<img src="{{ site.url }}/assets/images/screenshot_live_image_classification1.png" width="50%">
+<img src="{{ site.url }}/assets/images/screenshot_live_image_classification2.png" width="50%">
+</div>
 
 
 ### Image Segmentation
@@ -33,6 +41,10 @@ This app demonstrates how to use the PyTorch DeepLabV3 model to segment images. 
 
 <img src="{{ site.url }}/assets/images/tutorial.png"> [iOS](https://pytorch.org/tutorials/beginner/deeplabv3_on_ios.html) [Android](https://github.com/pytorch/android-demo-app/tree/master/ImageSegmentation)
 
+<div class="text-center">
+  <img src="{{ site.url }}/assets/images/deeplab1.png" width="50%"> <img src="{{ site.url }}/assets/images/deeplab2.png" width="50%">
+</div>
+
 
 ### Vision Transformer for Handwritten Digit Recognition
 This app demonstrates how to use Facebook's latest optimized Vision Transformer DeiT model to do image classification and handwritten digit recognition.
@@ -41,6 +53,10 @@ This app demonstrates how to use Facebook's latest optimized Vision Transformer 
 
 <img src="{{ site.url }}/assets/images/screencast.png"> [Android](https://drive.google.com/file/d/11L5mIjrLn7B7VdwjQl5vJv3ZVK4hcYut/view?usp=sharing)
 
+<div class="text-center">
+  <img src="{{ site.url }}/assets/images/screenshot_mobile_digit_recognition1.png" width="50%"> <img src="{{ site.url }}/assets/images/screenshot_mobile_digit_recognition2.png" width="50%">
+</div>
+
 
 ### Object Detection
 This app demonstrates how to convert the popular YOLOv5 model and use it on an iOS app that detects objects from pictures in your photos, taken with camera, or with live camera.
@@ -48,6 +64,10 @@ This app demonstrates how to convert the popular YOLOv5 model and use it on an i
 <img src="{{ site.url }}/assets/images/github_logo_32.png"> [iOS](https://github.com/pytorch/ios-demo-app/tree/master/ObjectDetection) [Android](https://github.com/pytorch/android-demo-app/tree/master/ObjectDetection)
 
 <img src="{{ site.url }}/assets/images/screencast.png"> [iOS](https://drive.google.com/file/d/1pIDrUDnCD5uF-mIz8nbSlZcXxPlRBKhl/view) [Android](https://drive.google.com/file/d/1-5AoRONUqZPZByM-fy0m7r8Ct11OnlIT/view)
+
+<div class="text-center">
+  <img src="{{ site.url }}/assets/images/screenshot_mobile_object_detection1.png" width="50%"> <img src="{{ site.url }}/assets/images/screenshot_mobile_object_detection2.png" width="50%">
+</div>
 
 
 ### D2Go
@@ -58,6 +78,11 @@ This app demonstrates how to create and use a much lighter and faster Facebook D
 <img src="{{ site.url }}/assets/images/screencast.png"> [iOS](https://drive.google.com/file/d/1GO2Ykfv5ut2Mfoc06Y3QUTFkS7407YA4/view) [Android](https://drive.google.com/file/d/18-2hLc-7JAKtd1q00X-5pHQCAdyJg7dZ/view?usp=sharing)
 
 
+<div class="text-center">
+  <img src="{{ site.url }}/assets/images/screenshot_mobile_d2go1.png" width="50%"> <img src="{{ site.url }}/assets/images/screenshot_mobile_d2go2.png" width="50%">
+</div>
+
+
 ## Video
 ### Video Classification
 This app demonstrates how to use a pre-trained PyTorchVideo model to perform video classification on tested videos, videos from the Photos library, or even real-time videos.
@@ -66,11 +91,22 @@ This app demonstrates how to use a pre-trained PyTorchVideo model to perform vid
 
 <img src="{{ site.url }}/assets/images/screencast.png"> [iOS](https://drive.google.com/file/d/1ijb4UIuF2VQiab4xfAsBwrQXCInvb9wd/view) [Android](https://drive.google.com/file/d/193tkZgt5Rlk7u-EQPcvkoFtmOQ14-zCC/view)
 
+<div class="text-center">
+  <img src="{{ site.url }}/assets/images/screenshot_mobile_video1.png" width="50%"> <img src="{{ site.url }}/assets/images/screenshot_mobile_video2.png" width="50%">
+</div>
+
+
+
 ## Natural Language Processing
 ### Text Classification
 This app demonstrates how to use a pre-trained Reddit model to perform text classification.
 
 <img src="{{ site.url }}/assets/images/github_logo_32.png"> [iOS](https://github.com/pytorch/ios-demo-app/tree/master/PyTorchDemo) [Android](https://github.com/pytorch/android-demo-app/tree/master/PyTorchDemoApp)
+
+<div class="text-center">
+  <img src="{{ site.url }}/assets/images/screenshot_mobile_textclassification1.png" width="50%"> <img src="{{ site.url }}/assets/images/screenshot_mobile_textclassification2.png" width="50%">
+</div>
+
 
 ### Machine Translation
 This app demonstrates how to convert a sequence-to-sequence neural machine translation model trained with the code in the PyTorch NMT tutorial for french to english translation.
@@ -79,6 +115,9 @@ This app demonstrates how to convert a sequence-to-sequence neural machine trans
 
 <img src="{{ site.url }}/assets/images/screencast.png"> [iOS](https://drive.google.com/file/d/17Edk-yAyfzijHPR_2ZDAIX7VY-TkQnLf/view) [Android](https://drive.google.com/file/d/110KN3Pa9DprkBWnzj8Ppa8KMymhmBI61/view?usp=sharing)
 
+<div class="text-center">
+  <img src="{{ site.url }}/assets/images/screenshot_mobile_machinetranslation1.png" width="50%"> <img src="{{ site.url }}/assets/images/screenshot_mobile_machinetranslation2.png" width="50%">
+</div>
 
 ### Question Answering
 This app demonstrates how to use the DistilBERT Hugging Face transformer model to answer questions about Pytorch Mobile itself.
@@ -87,11 +126,20 @@ This app demonstrates how to use the DistilBERT Hugging Face transformer model t
 
 <img src="{{ site.url }}/assets/images/screencast.png"> [iOS](https://drive.google.com/file/d/1QIB3yoP4I3zUU0bLCpvUqPV5Kv8f8JvB/view) [Android](https://drive.google.com/file/d/10hwGNFo5tylalKwut_CWFPJmV7JRdDKF/view?usp=sharing)
 
+<div class="text-center">
+  <img src="{{ site.url }}/assets/images/screenshot_mobile_qa1.png" width="50%"> <img src="{{ site.url }}/assets/images/screenshot_mobile_qa2.png" width="50%">
+</div>
+
+
 ## Audio
 ### Speech Recognition
 This app demonstrates how to convert Facebook AI's torchaudio-powered wav2vec 2.0, one of the leading models in speech recognition to TorchScript before deploying it.
 
 <img src="{{ site.url }}/assets/images/github_logo_32.png"> [iOS](https://github.com/pytorch/ios-demo-app/tree/master/SpeechRecognition) [Android](https://github.com/pytorch/android-demo-app/tree/master/SpeechRecognition)
+
+<div class="text-center">
+  <img src="{{ site.url }}/assets/images/screenshot_mobile_asr1.png" width="50%"> <img src="{{ site.url }}/assets/images/screenshot_mobile_asr2.png" width="50%">
+</div>
 
 
 We really hope one of these demo apps stood out for you. For the full list make sure to visit the [iOS](https://github.com/pytorch/ios-demo-app) and [Android](https://github.com/pytorch/android-demo-app) demo app repos.
