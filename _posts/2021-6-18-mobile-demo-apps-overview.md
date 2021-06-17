@@ -1,4 +1,10 @@
-# An Overview of the PyTorch Mobile Demo Apps
+---
+layout: blog_detail
+title: 'An Overview of the PyTorch Mobile Demo Apps'
+author: Jeff Tang and Mark Saroufim
+featured-img: 'assets/images/android-demo-app.png'
+---
+
 
 PyTorch Mobile provides a runtime environment to execute state-of-the-art machine learning models on mobile devices. Latency is reduced, privacy preserved, and models can run on mobile devices anytime, anywhere.
 
