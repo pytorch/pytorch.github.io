@@ -3,6 +3,7 @@ layout: blog_detail
 title: 'An Overview of the PyTorch Mobile Demo Apps'
 author: Jeff Tang and Mark Saroufim
 featured-img: 'assets/images/android-demo-app.png'
+date: 2021-06-16 12:00:00 -0500
 ---
 
 
