@@ -14,7 +14,7 @@ In this blog post, we provide a quick overview of 10 currently available PyTorch
 It’s never been easier to deploy a state-of-the-art ML model to a phone. You don’t need any domain knowledge in Machine Learning and we hope one of the below examples resonates enough with you to be the starting point for your next project.
 
 <div class="text-center">
-  <img src="../assets/images/mobile_app_code.png" width="100%"/>
+  <img src="/assets/images/mobile_app_code.png" width="100%"/>
 </div>
 
 ## Computer Vision
@@ -36,8 +36,8 @@ This app demonstrates how to run a quantized MobileNetV2 and Resnet18 models to 
 <img src="/assets/images/github_logo_32.png"> [iOS](https://github.com/pytorch/ios-demo-app/tree/master/PyTorchDemo) [Android](https://github.com/pytorch/android-demo-app/tree/master/PyTorchDemoApp)
 
 <div class="text-center">
-<img src="/assets/images/screenshot_live_image_classification1.png" width="50%">
-<img src="/assets/images/screenshot_live_image_classification2.png" width="50%">
+<img src="/assets/images/screenshot_live_image_classification1.png" width="40%">
+<img src="/assets/images/screenshot_live_image_classification2.png" width="40%">
 </div>
 
 
@@ -49,7 +49,7 @@ This app demonstrates how to use the PyTorch DeepLabV3 model to segment images. 
 <img src="/assets/images/tutorial.png"> [iOS](https://pytorch.org/tutorials/beginner/deeplabv3_on_ios.html) [Android](https://github.com/pytorch/android-demo-app/tree/master/ImageSegmentation)
 
 <div class="text-center">
-  <img src="/assets/images/deeplab1.png" width="50%"> <img src="/assets/images/deeplab2.png" width="50%">
+  <img src="/assets/images/deeplab1.png" width="40%"> <img src="/assets/images/deeplab2.png" width="40%">
 </div>
 
 
@@ -61,7 +61,7 @@ This app demonstrates how to use Facebook's latest optimized Vision Transformer 
 <img src="/assets/images/screencast.png"> [Android](https://drive.google.com/file/d/11L5mIjrLn7B7VdwjQl5vJv3ZVK4hcYut/view?usp=sharing)
 
 <div class="text-center">
-  <img src="/assets/images/screenshot_mobile_digit_recognition1.png" width="50%"> <img src="/assets/images/screenshot_mobile_digit_recognition2.png" width="50%">
+  <img src="/assets/images/screenshot_mobile_digit_recognition1.png" width="40%"> <img src="/assets/images/screenshot_mobile_digit_recognition2.png" width="40%">
 </div>
 
 
@@ -73,7 +73,7 @@ This app demonstrates how to convert the popular YOLOv5 model and use it on an i
 <img src="/assets/images/screencast.png"> [iOS](https://drive.google.com/file/d/1pIDrUDnCD5uF-mIz8nbSlZcXxPlRBKhl/view) [Android](https://drive.google.com/file/d/1-5AoRONUqZPZByM-fy0m7r8Ct11OnlIT/view)
 
 <div class="text-center">
-  <img src="/assets/images/screenshot_mobile_object_detection1.png" width="50%"> <img src="/assets/images/screenshot_mobile_object_detection2.png" width="50%">
+  <img src="/assets/images/screenshot_mobile_object_detection1.png" width="40%"> <img src="/assets/images/screenshot_mobile_object_detection2.png" width="40%">
 </div>
 
 
@@ -86,7 +86,7 @@ This app demonstrates how to create and use a much lighter and faster Facebook D
 
 
 <div class="text-center">
-  <img src="/assets/images/screenshot_mobile_d2go1.png" width="50%"> <img src="/assets/images/screenshot_mobile_d2go2.png" width="50%">
+  <img src="/assets/images/screenshot_mobile_d2go1.png" width="40%"> <img src="/assets/images/screenshot_mobile_d2go2.png" width="40%">
 </div>
 
 
@@ -99,7 +99,7 @@ This app demonstrates how to use a pre-trained PyTorchVideo model to perform vid
 <img src="/assets/images/screencast.png"> [iOS](https://drive.google.com/file/d/1ijb4UIuF2VQiab4xfAsBwrQXCInvb9wd/view) [Android](https://drive.google.com/file/d/193tkZgt5Rlk7u-EQPcvkoFtmOQ14-zCC/view)
 
 <div class="text-center">
-  <img src="/assets/images/screenshot_mobile_video1.png" width="50%"> <img src="/assets/images/screenshot_mobile_video2.png" width="50%">
+  <img src="/assets/images/screenshot_mobile_video1.png" width="40%"> <img src="/assets/images/screenshot_mobile_video2.png" width="40%">
 </div>
 
 
@@ -111,7 +111,7 @@ This app demonstrates how to use a pre-trained Reddit model to perform text clas
 <img src="/assets/images/github_logo_32.png"> [iOS](https://github.com/pytorch/ios-demo-app/tree/master/PyTorchDemo) [Android](https://github.com/pytorch/android-demo-app/tree/master/PyTorchDemoApp)
 
 <div class="text-center">
-  <img src="/assets/images/screenshot_mobile_textclassification1.png" width="50%"> <img src="/assets/images/screenshot_mobile_textclassification2.png" width="50%">
+  <img src="/assets/images/screenshot_mobile_textclassification1.png" width="40%"> <img src="/assets/images/screenshot_mobile_textclassification2.png" width="40%">
 </div>
 
 
@@ -123,7 +123,7 @@ This app demonstrates how to convert a sequence-to-sequence neural machine trans
 <img src="/assets/images/screencast.png"> [iOS](https://drive.google.com/file/d/17Edk-yAyfzijHPR_2ZDAIX7VY-TkQnLf/view) [Android](https://drive.google.com/file/d/110KN3Pa9DprkBWnzj8Ppa8KMymhmBI61/view?usp=sharing)
 
 <div class="text-center">
-  <img src="/assets/images/screenshot_mobile_machinetranslation1.png" width="50%"> <img src="/assets/images/screenshot_mobile_machinetranslation2.png" width="50%">
+  <img src="/assets/images/screenshot_mobile_machinetranslation1.png" width="40%"> <img src="/assets/images/screenshot_mobile_machinetranslation2.png" width="40%">
 </div>
 
 ### Question Answering
@@ -134,7 +134,7 @@ This app demonstrates how to use the DistilBERT Hugging Face transformer model t
 <img src="/assets/images/screencast.png"> [iOS](https://drive.google.com/file/d/1QIB3yoP4I3zUU0bLCpvUqPV5Kv8f8JvB/view) [Android](https://drive.google.com/file/d/10hwGNFo5tylalKwut_CWFPJmV7JRdDKF/view?usp=sharing)
 
 <div class="text-center">
-  <img src="/assets/images/screenshot_mobile_qa1.png" width="50%"> <img src="/assets/images/screenshot_mobile_qa2.png" width="50%">
+  <img src="/assets/images/screenshot_mobile_qa1.png" width="40%"> <img src="/assets/images/screenshot_mobile_qa2.png" width="40%">
 </div>
 
 
@@ -145,7 +145,7 @@ This app demonstrates how to convert Facebook AI's torchaudio-powered wav2vec 2.
 <img src="/assets/images/github_logo_32.png"> [iOS](https://github.com/pytorch/ios-demo-app/tree/master/SpeechRecognition) [Android](https://github.com/pytorch/android-demo-app/tree/master/SpeechRecognition)
 
 <div class="text-center">
-  <img src="/assets/images/screenshot_mobile_asr1.png" width="50%"> <img src="/assets/images/screenshot_mobile_asr2.png" width="50%">
+  <img src="/assets/images/screenshot_mobile_asr1.png" width="40%"> <img src="/assets/images/screenshot_mobile_asr2.png" width="40%">
 </div>
 
 
