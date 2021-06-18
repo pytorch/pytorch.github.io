@@ -3,7 +3,7 @@ layout: blog_detail
 title: 'An Overview of the PyTorch Mobile Demo Apps'
 author: Jeff Tang and Mark Saroufim
 featured-img: 'assets/images/android-demo-app.png'
-date: 2021-06-17 12:00:00 -0500
+date: 2021-06-18 12:00:00 -0500
 ---
 
 
@@ -96,7 +96,7 @@ This app demonstrates how to use a pre-trained PyTorchVideo model to perform vid
 
 <img src="/assets/images/github_logo_32.png"> [iOS](https://github.com/pytorch/ios-demo-app/tree/master/TorchVideo) [Android](https://github.com/pytorch/android-demo-app/tree/master/TorchVideo)
 
-<img src="/assets/images/screencast.png"> [iOS](https://drive.google.com/file/d/1ijb4UIuF2VQiab4xfAsBwrQXCInvb9wd/view) [Android](https://drive.google.com/file/d/193tkZgt5Rlk7u-EQPcvkoFtmOQ14-zCC/view)
+<img src="/assets/images/screencast.png"> [iOS](https://drive.google.com/file/d/1ijb4UIuF2VQiab4xfAsBwrQXCInvb9wd/view) [Android](https://drive.google.com/file/d/193tkZgt5Rlk7u-EQPcvkoFtmOQ14-zCC/view) [Deep Dive](https://www.youtube.com/watch?v=Qb4vDm-ruwI)
 
 <div class="text-center">
   <img src="/assets/images/screenshot_mobile_video1.png" width="40%"> <img src="/assets/images/screenshot_mobile_video2.png" width="40%">
@@ -149,4 +149,4 @@ This app demonstrates how to convert Facebook AI's torchaudio-powered wav2vec 2.
 </div>
 
 
-We really hope one of these demo apps stood out for you. For the full list make sure to visit the [iOS](https://github.com/pytorch/ios-demo-app) and [Android](https://github.com/pytorch/android-demo-app) demo app repos.
+We really hope one of these demo apps stood out for you. For the full list, make sure to visit the [iOS](https://github.com/pytorch/ios-demo-app) and [Android](https://github.com/pytorch/android-demo-app) demo app repos. You should also definitely check out the video [An Overview of the PyTorch Mobile Demo Apps](https://www.youtube.com/watch?v=Qb4vDm-ruwI) which provides both an overview of the PyTorch mobile demo apps and a deep dive into the PyTorch Video app for iOS and Android.
