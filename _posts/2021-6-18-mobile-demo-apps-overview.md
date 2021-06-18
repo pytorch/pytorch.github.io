@@ -3,7 +3,7 @@ layout: blog_detail
 title: 'An Overview of the PyTorch Mobile Demo Apps'
 author: Jeff Tang and Mark Saroufim
 featured-img: 'assets/images/android-demo-app.png'
-date: 2021-06-16 12:00:00 -0500
+date: 2021-06-17 12:00:00 -0500
 ---
 
 
@@ -26,7 +26,7 @@ This app demonstrates how to use PyTorch C++ libraries on iOS and Android to cla
 <img src="/assets/images/screencast.png"> [iOS](https://youtu.be/amTepUIR93k) [Android](https://youtu.be/5Lxuu16_28o)
 
 <div class="text-center">
-  <img src="/assets/images/screenshot_mobile_helloworld.png" width="100%">
+  <img src="/assets/images/screenshot_mobile_helloworld.png" width="50%">
 </div>
 
 
