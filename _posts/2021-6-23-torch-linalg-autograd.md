@@ -155,7 +155,7 @@ These charts show that performance has increased significantly on larger matrice
 
 # Beyond NumPy
 
-In addition to offering all the functions in NumPy’s linear algebra module with support for autograd and accelerators, ```torch.linalg``` has a few new functions of its own. NumPy’s ```linalg.norm``` does not allow users to compute vector norm over arbitrary subset of dimensions, so to enable this functionality we added ```torch.linalg.vector_norm```. To make APIs more convenient and self-describing, we also added ```torch.linalg.matrix_norm```. We’ve also started modernizing other linear algebra functionality in PyTorch, so we created ```torch.linalg.householder_product``` to replace the older ```torch.orgqr```, and we plan to continue adding more linear algebra functionality in the future, too.
+In addition to offering all the functions in NumPy’s linear algebra module with support for autograd and accelerators, ```torch.linalg``` has a few new functions of its own. NumPy’s ```linalg.norm``` does not allow users to compute vector norms over arbitrary subsets of dimensions, so to enable this functionality we added ```torch.linalg.vector_norm```. We’ve also started modernizing other linear algebra functionality in PyTorch, so we created ```torch.linalg.householder_product``` to replace the older ```torch.orgqr```, and we plan to continue adding more linear algebra functionality in the future, too.
 
 # The Future of Linear Algebra in PyTorch
 
