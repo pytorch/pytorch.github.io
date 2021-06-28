@@ -2,7 +2,7 @@
 layout: blog_detail
 title: 'Everything You Need To Know About Torchvision’s SSDlite Implementation'
 author: Vasilis Vryniotis
-featured-img: 'assets/images/ssdlite-pre-trained.png.png'
+featured-img: 'assets/images/mAP-of-SSD320-MobileNetV3-Large.png'
 ---
 
 In the [previous article](https://pytorch.org/blog/torchvision-ssd-implementation/), we’ve discussed how the SSD algorithm works, covered its implementation details and presented its training process. If you have not read the previous blog post, I encourage you to check it out before continuing.
