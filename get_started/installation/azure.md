@@ -16,6 +16,8 @@ Microsoft is one of the founding members and also the inaugural participant of t
 
 To learn more and get started with PyTorch Enterprise on Microsoft Azure, [visit here](https://azure.microsoft.com/en-us/develop/pytorch/).
 
+For documentation, [visit here](https://docs.microsoft.com/en-us/azure/pytorch-enterprise/).
+
 ## Azure Primer
 {: #microsoft-azure-primer}
 
