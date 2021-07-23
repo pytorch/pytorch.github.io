@@ -4,11 +4,11 @@ title: 'PipeTransformer: Automated Elastic Pipelining for Distributed'
 author: Chaoyang He, Shen Li, Mahdi Soltanolkotabi, and Salman Avestimehr
 ---
 
-In this blog post, we describe the first peer-reviewed research paper that explores accelerating the hybrid of PyTorch DDP (`torch.nn.parallel.DistributedDataParallel`) [1] and Pipeline (`torch.distributed.pipeline`) - [PipeTransformer: Automated Elastic Pipelining for Distributed Training of Large-scale Models](http://proceedings.mlr.press/v139/he21a.html) (Transformers such as BERT [2]  and ViT [3]), published at ICML 2021. 
+In this blog post, we describe the first peer-reviewed research paper that explores accelerating the hybrid of PyTorch DDP (`torch.nn.parallel.DistributedDataParallel`) [1] and Pipeline (`torch.distributed.pipeline`) - [PipeTransformer: Automated Elastic Pipelining for Distributed Training of Large-scale Models](http://proceedings.mlr.press/v139/he21a.html) (Transformers such as BERT [2]  and ViT [3]), published at ICML 2021.
 
 PipeTransformer leverages automated elastic pipelining for efficient distributed training of Transformer models. In PipeTransformer, we designed an adaptive on-the-fly freeze algorithm that can identify and freeze some layers gradually during training and an elastic pipelining system that can dynamically allocate resources to train the remaining active layers. More specifically, PipeTransformer automatically excludes frozen layers from the pipeline, packs active layers into fewer GPUs, and forks more replicas to increase data-parallel width. We evaluate PipeTransformer using Vision Transformer (ViT) on ImageNet and BERT on SQuAD and GLUE datasets. Our results show that compared to the state-of-the-art baseline, PipeTransformer attains up to 2.83-fold speedup without losing accuracy. We also provide various performance analyses for a more comprehensive understanding of our algorithmic and system-wise design.
 
-Next, we will introduce the background, motivation, our idea, design, and how we implement the algorithm and system with PyTorch Distributed APIs. 
+Next, we will introduce the background, motivation, our idea, design, and how we implement the algorithm and system with PyTorch Distributed APIs.
 
 * Paper: [http://proceedings.mlr.press/v139/he21a.html](http://proceedings.mlr.press/v139/he21a.html)
 * Source Code: [https://DistML.ai](https://distml.ai).
@@ -39,7 +39,7 @@ Existing distributed training solutions, however, only study scenarios where all
 </p>
 Figure 2. Interpretable Freeze Training: DNNs converge bottom-up (Results on CIFAR10 using ResNet). Each pane shows layer-by-layer similarity using SVCCA [17][18]
 
-For example, in freeze training [17][18], neural networks usually converge from the bottom-up (i.e., not all layers need to be trained all the way through training). Figure 2 shows an example of how weights gradually stabilize during training in this approach. This observation motivates us to utilize freeze training for distributed training of Transformer models to accelerate training by dynamically allocating resources to focus on a shrinking set of active layers. Such a layer freezing strategy is especially pertinent to pipeline parallelism, as excluding consecutive bottom layers from the pipeline can reduce computation, memory, and communication overhead. 
+For example, in freeze training [17][18], neural networks usually converge from the bottom-up (i.e., not all layers need to be trained all the way through training). Figure 2 shows an example of how weights gradually stabilize during training in this approach. This observation motivates us to utilize freeze training for distributed training of Transformer models to accelerate training by dynamically allocating resources to focus on a shrinking set of active layers. Such a layer freezing strategy is especially pertinent to pipeline parallelism, as excluding consecutive bottom layers from the pipeline can reduce computation, memory, and communication overhead.
 
 <p align="center">
 <img src="./figure/PipeTransformer.png" alt="Freeze Training">
@@ -63,19 +63,19 @@ As shown in the animation (Figure 4), PipeTransformer is designed with four core
 
 Overall, PipeTransformer combines the Freeze Algorithm, AutoPipe, AutoDP, and AutoCache modules to provide a significant training speedup.
 We evaluate PipeTransformer using Vision Transformer (ViT) on ImageNet and BERT on GLUE and SQuAD datasets. Our results show that PipeTransformer attains up to 2.83-fold speedup without losing accuracy. We also provide various performance analyses for a more comprehensive understanding of our algorithmic and system-wise design.
-Finally, we have also developed open-source flexible APIs for PipeTransformer, which offer a clean separation among the freeze algorithm, model definitions, and training accelerations, allowing for transferability to other algorithms that require similar freezing strategies. 
+Finally, we have also developed open-source flexible APIs for PipeTransformer, which offer a clean separation among the freeze algorithm, model definitions, and training accelerations, allowing for transferability to other algorithms that require similar freezing strategies.
 
 # Overall Design
 
 Suppose we aim to train a massive model in a distributed training system where the hybrid of pipelined model parallelism and data parallelism is used to target scenarios where either the memory of a single GPU device cannot hold the model, or if loaded, the batch size is small enough to avoid running out of memory. More specifically, we define our settings as follows:
 
-<strong>Training task and model definition.</strong> We train Transformer models (e.g., Vision Transformer, BERT on large-scale image or text datasets. The Transformer model <img src="https://render.githubusercontent.com/render/math?math=mathcal{F}"> has <img src="https://render.githubusercontent.com/render/math?L"> layers, in which the <img src="https://render.githubusercontent.com/render/math?i"> th layer is composed of a forward computation function <img src="https://render.githubusercontent.com/render/math?f_i"> and a corresponding set of parameters. 
+<strong>Training task and model definition.</strong> We train Transformer models (e.g., Vision Transformer, BERT on large-scale image or text datasets. The Transformer model <img src="https://render.githubusercontent.com/render/math?math=mathcal{F}"> has <img src="https://render.githubusercontent.com/render/math?math=L"> layers, in which the <img src="https://render.githubusercontent.com/render/math?math=i"> th layer is composed of a forward computation function <img src="https://render.githubusercontent.com/render/math?math=f_i"> and a corresponding set of parameters.
 
-<strong>Training infrastructure.</strong> Assume the training infrastructure contains a GPU cluster that has <img src="https://render.githubusercontent.com/render/math?N"> GPU servers (i.e. nodes). Each node has <img src="https://render.githubusercontent.com/render/math?I"> GPUs. Our cluster is homogeneous, meaning that each GPU and server have the same hardware configuration. Each GPU's memory capacity is <img src="https://render.githubusercontent.com/render/math?M_\text{GPU}">. Servers are connected by a high bandwidth network interface such as InfiniBand interconnect.
+<strong>Training infrastructure.</strong> Assume the training infrastructure contains a GPU cluster that has <img src="https://render.githubusercontent.com/render/math?math=N"> GPU servers (i.e. nodes). Each node has <img src="https://render.githubusercontent.com/render/math?math=I"> GPUs. Our cluster is homogeneous, meaning that each GPU and server have the same hardware configuration. Each GPU's memory capacity is <img src="https://render.githubusercontent.com/render/math?math=M_\text{GPU}">. Servers are connected by a high bandwidth network interface such as InfiniBand interconnect.
 
-<strong>Pipeline parallelism.</strong> In each machine, we load a model <img src="https://render.githubusercontent.com/render/math?\mathcal{F}"> into a pipeline <img src="https://render.githubusercontent.com/render/math?\mathcal{P}"> which has <img src="https://render.githubusercontent.com/render/math?K">partitions (<img src="https://render.githubusercontent.com/render/math?K"> also represents the pipeline length). The <img src="https://render.githubusercontent.com/render/math?k">th partition <img src="https://render.githubusercontent.com/render/math?p_k"> consists of consecutive layers. We assume each partition is handled by a single GPU device. <img src="https://render.githubusercontent.com/render/math?1 \leq K \leq I">, meaning that we can build multiple pipelines for multiple model replicas in a single machine. We assume all GPU devices in a pipeline belonging to the same machine. Our pipeline is a synchronous pipeline, which does not involve stale gradients, and the number of micro-batches is <img src="https://render.githubusercontent.com/render/math?M">. In the Linux OS, each pipeline is handled by a single process. We refer the reader to GPipe [10] for more details.
+<strong>Pipeline parallelism.</strong> In each machine, we load a model <img src="https://render.githubusercontent.com/render/math?math=\mathcal{F}"> into a pipeline <img src="https://render.githubusercontent.com/render/math?math=\mathcal{P}"> which has <img src="https://render.githubusercontent.com/render/math?math=K">partitions (<img src="https://render.githubusercontent.com/render/math?math=K"> also represents the pipeline length). The <img src="https://render.githubusercontent.com/render/math?math=k">th partition <img src="https://render.githubusercontent.com/render/math?math=p_k"> consists of consecutive layers. We assume each partition is handled by a single GPU device. <img src="https://render.githubusercontent.com/render/math?math=1 \leq K \leq I">, meaning that we can build multiple pipelines for multiple model replicas in a single machine. We assume all GPU devices in a pipeline belonging to the same machine. Our pipeline is a synchronous pipeline, which does not involve stale gradients, and the number of micro-batches is <img src="https://render.githubusercontent.com/render/math?math=M">. In the Linux OS, each pipeline is handled by a single process. We refer the reader to GPipe [10] for more details.
 
-<strong>Data parallelism.</strong> DDP is a cross-machine distributed data-parallel process group within <img src="https://render.githubusercontent.com/render/math?R"> parallel workers. Each worker is a pipeline replica (a single process). The <img src="https://render.githubusercontent.com/render/math?r">th worker's index (ID) is rank <img src="https://render.githubusercontent.com/render/math?r">. For any two pipelines in DDP, they can belong to either the same GPU server or different GPU servers, and they can exchange gradients with the AllReduce algorithm.
+<strong>Data parallelism.</strong> DDP is a cross-machine distributed data-parallel process group within <img src="https://render.githubusercontent.com/render/math?math=R"> parallel workers. Each worker is a pipeline replica (a single process). The <img src="https://render.githubusercontent.com/render/math?math=r">th worker's index (ID) is rank <img src="https://render.githubusercontent.com/render/math?math=r">. For any two pipelines in DDP, they can belong to either the same GPU server or different GPU servers, and they can exchange gradients with the AllReduce algorithm.
 
 Under these settings, our goal is to accelerate training by leveraging freeze training, which does not require all layers to be trained throughout the duration of the training. Additionally, it may help save computation, communication, memory cost, and potentially prevent overfitting by consecutively freezing layers. However, these benefits can only be achieved by overcoming the four challenges of designing an adaptive freezing algorithm, dynamical pipeline re-partitioning, efficient resource reallocation, and cross-process caching, as discussed in the introduction.
 
@@ -95,7 +95,7 @@ As can be seen from Figure 5, PipeTransformers contain four components: Freeze A
 
 ## AutoPipe: Elastic Pipelining
 
-AutoPipe can accelerate training by excluding frozen layers from the pipeline and packing the active layers into fewer GPUs. This section elaborates on the key components of AutoPipe that dynamically 1) partition pipelines, 2) minimize the number of pipeline devices, and 3) optimize mini-batch chunk size accordingly. 
+AutoPipe can accelerate training by excluding frozen layers from the pipeline and packing the active layers into fewer GPUs. This section elaborates on the key components of AutoPipe that dynamically 1) partition pipelines, 2) minimize the number of pipeline devices, and 3) optimize mini-batch chunk size accordingly.
 
 ### Basic Usage of PyTorch Pipeline
 
@@ -130,9 +130,9 @@ In dynamic training system such as PipeTransformer, maintaining optimally balanc
 Figure 6. The partition boundary is in the middle of a skip connection
 </p>
 
-1. <strong>Cross-partition communication overhead.</strong> Placing a partition boundary in the middle of a skip connection leads to additional communications since tensors in the skip connection must now be copied to a different GPU. For example, with BERT partitions in Figure 6, partition <img src="https://render.githubusercontent.com/render/math?k"> must take intermediate outputs from both partition <img src="https://render.githubusercontent.com/render/math?k-2"> and partition <img src="https://render.githubusercontent.com/render/math?k-1">. In contrast, if the boundary is placed after the addition layer, the communication overhead between partition <img src="https://render.githubusercontent.com/render/math?k-1"> and <img src="https://render.githubusercontent.com/render/math?k"> is visibly smaller. Our measurements show that having cross-device communication is more expensive than having slightly imbalanced partitions (see the Appendix in our paper). Therefore, we do not consider breaking skip connections (highlighted separately as an entire attention layer and MLP layer in green color at line 7 in Algorithm 1.
+1. <strong>Cross-partition communication overhead.</strong> Placing a partition boundary in the middle of a skip connection leads to additional communications since tensors in the skip connection must now be copied to a different GPU. For example, with BERT partitions in Figure 6, partition <img src="https://render.githubusercontent.com/render/math?math=k"> must take intermediate outputs from both partition <img src="https://render.githubusercontent.com/render/math?math=k-2"> and partition <img src="https://render.githubusercontent.com/render/math?math=k-1">. In contrast, if the boundary is placed after the addition layer, the communication overhead between partition <img src="https://render.githubusercontent.com/render/math?math=k-1"> and <img src="https://render.githubusercontent.com/render/math?math=k"> is visibly smaller. Our measurements show that having cross-device communication is more expensive than having slightly imbalanced partitions (see the Appendix in our paper). Therefore, we do not consider breaking skip connections (highlighted separately as an entire attention layer and MLP layer in green color at line 7 in Algorithm 1.
 
-2. <strong>Frozen layer memory footprint.</strong> During training, AutoPipe must recompute partition boundaries several times to balance two distinct types of layers: frozen layers and active layers. The frozen layer's memory cost is a fraction of that inactive layer, given that the frozen layer does not need backward activation maps, optimizer states, and gradients. Instead of launching intrusive profilers to obtain thorough metrics on memory and computational cost, we define a tunable cost factor <img src="https://render.githubusercontent.com/render/math?lambda_{\text{frozen}}"> to estimate the memory footprint ratio of a frozen layer over the same active layer. Based on empirical measurements in our experimental hardware, we set it to <img src="https://render.githubusercontent.com/render/math?\frac{1}{6}">. 
+2. <strong>Frozen layer memory footprint.</strong> During training, AutoPipe must recompute partition boundaries several times to balance two distinct types of layers: frozen layers and active layers. The frozen layer's memory cost is a fraction of that inactive layer, given that the frozen layer does not need backward activation maps, optimizer states, and gradients. Instead of launching intrusive profilers to obtain thorough metrics on memory and computational cost, we define a tunable cost factor <img src="https://render.githubusercontent.com/render/math?math=lambda_{\text{frozen}}"> to estimate the memory footprint ratio of a frozen layer over the same active layer. Based on empirical measurements in our experimental hardware, we set it to <img src="https://render.githubusercontent.com/render/math?math=\frac{1}{6}">.
 
 
 
@@ -141,44 +141,44 @@ Figure 6. The partition boundary is in the middle of a skip connection
 <br>
 </p>
 
-Based on the above two considerations, AutoPipe balances pipeline partitions based on parameter sizes. More specifically, AutoPipe uses a greedy algorithm to allocate all frozen and active layers to evenly distribute partitioned sublayers into <img src="https://render.githubusercontent.com/render/math?K"> GPU devices. Pseudocode is described as the `load\_balance()` function in Algorithm 1. The frozen layers are extracted from the original model and kept in a separate model instance <img src="https://render.githubusercontent.com/render/math?\mathcal{F}_{\text{frozen}}"> in the first device of a pipeline.
+Based on the above two considerations, AutoPipe balances pipeline partitions based on parameter sizes. More specifically, AutoPipe uses a greedy algorithm to allocate all frozen and active layers to evenly distribute partitioned sublayers into <img src="https://render.githubusercontent.com/render/math?math=K"> GPU devices. Pseudocode is described as the `load\_balance()` function in Algorithm 1. The frozen layers are extracted from the original model and kept in a separate model instance <img src="https://render.githubusercontent.com/render/math?math=\mathcal{F}_{\text{frozen}}"> in the first device of a pipeline.
 
-Note that the partition algorithm employed in this paper is not the only option; PipeTransformer is modularized to work with any alternatives. 
+Note that the partition algorithm employed in this paper is not the only option; PipeTransformer is modularized to work with any alternatives.
 
 
 ### Pipeline Compression
 
-Pipeline compression helps to free up GPUs to accommodate more pipeline replicas and reduce the number of cross-device communications between partitions. To determine the timing of compression, we can estimate the memory cost of the largest partition after compression, and then compare it with that of the largest partition of a pipeline at timestep <img src="https://render.githubusercontent.com/render/math?T=0">. To avoid extensive memory profiling, the compression algorithm uses the parameter size as a proxy for the training memory footprint. Based on this simplification, the criterion of pipeline compression is as follows:
+Pipeline compression helps to free up GPUs to accommodate more pipeline replicas and reduce the number of cross-device communications between partitions. To determine the timing of compression, we can estimate the memory cost of the largest partition after compression, and then compare it with that of the largest partition of a pipeline at timestep <img src="https://render.githubusercontent.com/render/math?math=T=0">. To avoid extensive memory profiling, the compression algorithm uses the parameter size as a proxy for the training memory footprint. Based on this simplification, the criterion of pipeline compression is as follows:
 
 <p align="center">
 <img src="./figure/memory_reduction.png" width="320">
 <br>
 </p>
 
-Once the freeze notification is received, AutoPipe will always attempt to divide the pipeline length <img src="https://render.githubusercontent.com/render/math?K"> by 2 (e.g., from 8 to 4, then 2). By using <img src="https://render.githubusercontent.com/render/math?\frac{K}{2}"> as the input, the compression algorithm can verify if the result satisfies the criterion in Equation (1). Pseudocode is shown in lines 25-33 in Algorithm 1. Note that this compression makes the acceleration ratio exponentially increase during training, meaning that if a GPU server has a larger number of GPUs (e.g., more than 8), the acceleration ratio will be further amplified.
+Once the freeze notification is received, AutoPipe will always attempt to divide the pipeline length <img src="https://render.githubusercontent.com/render/math?math=K"> by 2 (e.g., from 8 to 4, then 2). By using <img src="https://render.githubusercontent.com/render/math?math=\frac{K}{2}"> as the input, the compression algorithm can verify if the result satisfies the criterion in Equation (1). Pseudocode is shown in lines 25-33 in Algorithm 1. Note that this compression makes the acceleration ratio exponentially increase during training, meaning that if a GPU server has a larger number of GPUs (e.g., more than 8), the acceleration ratio will be further amplified.
 
 <p align="center">
 <img src="./figure/pipe_buble.png" width="560">
 <br>
-Figure 7. Pipeline Bubble: <img src="https://render.githubusercontent.com/render/math?F_{d,b}">, and <img src="https://render.githubusercontent.com/render/math?U_d"> denote forward, backward, and the optimizer update of micro-batch <img src="https://render.githubusercontent.com/render/math?b"> on device <img src="https://render.githubusercontent.com/render/math?d">, respectively. The total bubble size in each iteration is <img src="https://render.githubusercontent.com/render/math?K-1"> times per micro-batch forward and backward cost.
+Figure 7. Pipeline Bubble: <img src="https://render.githubusercontent.com/render/math?math=F_{d,b}">, and <img src="https://render.githubusercontent.com/render/math?math=U_d"> denote forward, backward, and the optimizer update of micro-batch <img src="https://render.githubusercontent.com/render/math?math=b"> on device <img src="https://render.githubusercontent.com/render/math?math=d">, respectively. The total bubble size in each iteration is <img src="https://render.githubusercontent.com/render/math?math=K-1"> times per micro-batch forward and backward cost.
 </p>
 
-Additionally, such a technique can also speed up training by shrinking the size of pipeline bubbles. To explain bubble sizes in a pipeline, Figure 7 depicts how 4 micro-batches run through a 4-device pipeline <img src="https://render.githubusercontent.com/render/math?K = 4">. In general, the total bubble size is <img src="https://render.githubusercontent.com/render/math?(K-1)"> times per micro-batch forward and backward cost. Therefore, it is clear that shorter pipelines have smaller bubble sizes.
+Additionally, such a technique can also speed up training by shrinking the size of pipeline bubbles. To explain bubble sizes in a pipeline, Figure 7 depicts how 4 micro-batches run through a 4-device pipeline <img src="https://render.githubusercontent.com/render/math?math=K = 4">. In general, the total bubble size is <img src="https://render.githubusercontent.com/render/math?math=(K-1)"> times per micro-batch forward and backward cost. Therefore, it is clear that shorter pipelines have smaller bubble sizes.
 
 ### Dynamic Number of Micro-Batches
 
-Prior pipeline parallel systems use a fixed number of micro-batches per mini-batch (<img src="https://render.githubusercontent.com/render/math?M"> ). GPipe suggests <img src="https://render.githubusercontent.com/render/math?M \geq 4 \times K">, where <img src="https://render.githubusercontent.com/render/math?K"> is the number of partitions (pipeline length). However, given that PipeTransformer dynamically configures <img src="https://render.githubusercontent.com/render/math?K">, we find it to be sub-optimal to maintain a static <img src="https://render.githubusercontent.com/render/math?M"> during training. Moreover, when integrated with DDP, the value of <img src="https://render.githubusercontent.com/render/math?M"> also has an impact on the efficiency of DDP gradient synchronizations. Since DDP must wait for the last micro-batch to finish its backward computation on a parameter before launching its gradient synchronization, finer micro-batches lead to a smaller overlap between computation and communication. Hence, instead of using a static value, PipeTransformer searches for optimal <img src="https://render.githubusercontent.com/render/math?M"> on the fly in the hybrid of DDP environment by enumerating <img src="https://render.githubusercontent.com/render/math?M"> values ranging from <img src="https://render.githubusercontent.com/render/math?K"> to <img src="https://render.githubusercontent.com/render/math?6K">. For a specific training environment, the profiling needs only to be done once (see Algorithm 1 line 35).
+Prior pipeline parallel systems use a fixed number of micro-batches per mini-batch (<img src="https://render.githubusercontent.com/render/math?math=M"> ). GPipe suggests <img src="https://render.githubusercontent.com/render/math?math=M \geq 4 \times K">, where <img src="https://render.githubusercontent.com/render/math?math=K"> is the number of partitions (pipeline length). However, given that PipeTransformer dynamically configures <img src="https://render.githubusercontent.com/render/math?math=K">, we find it to be sub-optimal to maintain a static <img src="https://render.githubusercontent.com/render/math?math=M"> during training. Moreover, when integrated with DDP, the value of <img src="https://render.githubusercontent.com/render/math?math=M"> also has an impact on the efficiency of DDP gradient synchronizations. Since DDP must wait for the last micro-batch to finish its backward computation on a parameter before launching its gradient synchronization, finer micro-batches lead to a smaller overlap between computation and communication. Hence, instead of using a static value, PipeTransformer searches for optimal <img src="https://render.githubusercontent.com/render/math?math=M"> on the fly in the hybrid of DDP environment by enumerating <img src="https://render.githubusercontent.com/render/math?math=M"> values ranging from <img src="https://render.githubusercontent.com/render/math?math=K"> to <img src="https://render.githubusercontent.com/render/math?math=6K">. For a specific training environment, the profiling needs only to be done once (see Algorithm 1 line 35).
 
 For the complete source code, please refer to `https://github.com/Distributed-AI/PipeTransformer/blob/master/pipe_transformer/pipe/auto_pipe.py`.
 
 ## AutoDP: Spawning More Pipeline Replicas
-As AutoPipe compresses the same pipeline into fewer GPUs, AutoDP can automatically spawn new pipeline replicas to increase data-parallel width. 
+As AutoPipe compresses the same pipeline into fewer GPUs, AutoDP can automatically spawn new pipeline replicas to increase data-parallel width.
 
-Despite the conceptual simplicity, subtle dependencies on communications and states require careful design. The challenges are threefold: 
+Despite the conceptual simplicity, subtle dependencies on communications and states require careful design. The challenges are threefold:
 
-1. <strong>DDP Communication</strong>: Collective communications in PyTorch DDP requires static membership, which prevents new pipelines from connecting with existing ones; 
+1. <strong>DDP Communication</strong>: Collective communications in PyTorch DDP requires static membership, which prevents new pipelines from connecting with existing ones;
 
-2. <strong>State Synchronization</strong>: newly activated processes must be consistent with existing pipelines in the training progress (e.g., epoch number and learning rate), weights and optimizer states, the boundary of frozen layers, and pipeline GPU range; 
+2. <strong>State Synchronization</strong>: newly activated processes must be consistent with existing pipelines in the training progress (e.g., epoch number and learning rate), weights and optimizer states, the boundary of frozen layers, and pipeline GPU range;
 
 3. <strong>Dataset Redistribution</strong>: the dataset should be re-balanced to match a dynamic number of pipelines. This not only avoids stragglers but also ensures that gradients from all DDP processes are equally weighted.
 
@@ -190,7 +190,7 @@ Figure 8. AutoDP: handling dynamical data-parallel with messaging between double
 
 
 
-To tackle these challenges, we create double communication process groups for DDP. As in the example shown in Figure 8, the message process group (purple) is responsible for light-weight control messages and covers all processes, while the active training process group (yellow) only contains active processes and serves as a vehicle for heavy-weight tensor communications during training. The message group remains static, whereas the training group is dismantled and reconstructed to match active processes. 
+To tackle these challenges, we create double communication process groups for DDP. As in the example shown in Figure 8, the message process group (purple) is responsible for light-weight control messages and covers all processes, while the active training process group (yellow) only contains active processes and serves as a vehicle for heavy-weight tensor communications during training. The message group remains static, whereas the training group is dismantled and reconstructed to match active processes.
 In T0, only processes 0 and 8 are active. During the transition to T1, process 0 activates processes 1 and 9 (newly added pipeline replicas) and synchronizes necessary information mentioned above using the message group. The four active processes then form a new training group, allowing static collective communications adaptive to dynamic memberships.
 To redistribute the dataset, we implement a variant of DistributedSampler that can seamlessly adjust data samples to match the number of active pipeline replicas.
 
@@ -203,7 +203,7 @@ import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
 
 # initialize the process group (this must be called in the initialization of PyTorch DDP)
-dist.init_process_group(init_method='tcp://' + str(self.config.master_addr) + ':' + 
+dist.init_process_group(init_method='tcp://' + str(self.config.master_addr) + ':' +
 str(self.config.master_port), backend=Backend.GLOO, rank=self.global_rank, world_size=self.world_size)
 ...
 
@@ -216,8 +216,8 @@ self.comm_broadcast_group = dist.new_group(ranks=[i for i in range(self.world_si
 ...
 
 # create DDP-enabled model when the number of data-parallel workers is changed. Note:
-# 1. The process group to be used for distributed data all-reduction. 
-If None, the default process group, which is created by torch.distributed.init_process_group, will be used. 
+# 1. The process group to be used for distributed data all-reduction.
+If None, the default process group, which is created by torch.distributed.init_process_group, will be used.
 In our case, we set it as self.active_process_group
 # 2. device_ids should be set when the pipeline length = 1 (the model resides on a single CUDA device).
 
@@ -226,7 +226,7 @@ if gpu_num_per_process > 1:
     model = DDP(model, process_group=self.active_process_group, find_unused_parameters=True)
 else:
     model = DDP(model, device_ids=[self.local_rank], process_group=self.active_process_group, find_unused_parameters=True)
-    
+
 # to broadcast message among processes, we use dist.broadcast_object_list
 def dist_broadcast(object_list, src, group):
     """Broadcasts a given object to all parties."""
@@ -239,7 +239,7 @@ For the complete source code, please refer to `https://github.com/Distributed-AI
 
 This section first summarizes experiment setups and then evaluates PipeTransformer using computer vision and natural language processing tasks.
 
-<strong>Hardware.</strong> Experiments were conducted on 2 identical machines connected by InfiniBand CX353A (<img src="https://render.githubusercontent.com/render/math?5">GB/s), where each machine is equipped with 8 NVIDIA Quadro RTX 5000 (16GB GPU memory). GPU-to-GPU bandwidth within a machine (PCI 3.0, 16 lanes) is <img src="https://render.githubusercontent.com/render/math?15.754">GB/s.
+<strong>Hardware.</strong> Experiments were conducted on 2 identical machines connected by InfiniBand CX353A (<img src="https://render.githubusercontent.com/render/math?math=5">GB/s), where each machine is equipped with 8 NVIDIA Quadro RTX 5000 (16GB GPU memory). GPU-to-GPU bandwidth within a machine (PCI 3.0, 16 lanes) is <img src="https://render.githubusercontent.com/render/math?math=15.754">GB/s.
 
 <strong>Implementation.</strong> We used PyTorch Pipe as a building block. The BERT model definition, configuration, and related tokenizer are from HuggingFace 3.5.0. We implemented Vision Transformer using PyTorch by following its TensorFlow implementation. More details can be found in our source code.
 
@@ -249,7 +249,7 @@ This section first summarizes experiment setups and then evaluates PipeTransform
 
 <strong>Baseline.</strong> Experiments in this section compare PipeTransformer to the state-of-the-art framework, a hybrid scheme of PyTorch Pipeline (PyTorch’s implementation of GPipe) and PyTorch DDP. Since this is the first paper that studies accelerating distributed training by freezing layers, there are no perfectly aligned counterpart solutions yet.
 
-<strong>Hyper-parameters.</strong> Experiments use ViT-B/16 (12 transformer layers, <img src="https://render.githubusercontent.com/render/math?16 \times 16"> input patch size) for ImageNet and CIFAR-100, BERT-large-uncased (24 layers) for SQuAD 1.1, and BERT-base-uncased (12 layers) for SST-2. With PipeTransformer, ViT and BERT training can set the per-pipeline batch size to around 400 and 64, respectively. Other hyperparameters (e.g., epoch, learning rate) for all experiments are presented in Appendix.
+<strong>Hyper-parameters.</strong> Experiments use ViT-B/16 (12 transformer layers, <img src="https://render.githubusercontent.com/render/math?math=16 \times 16"> input patch size) for ImageNet and CIFAR-100, BERT-large-uncased (24 layers) for SQuAD 1.1, and BERT-base-uncased (12 layers) for SST-2. With PipeTransformer, ViT and BERT training can set the per-pipeline batch size to around 400 and 64, respectively. Other hyperparameters (e.g., epoch, learning rate) for all experiments are presented in Appendix.
 
 ## Overall Training Acceleration
 <p align="center">
@@ -257,7 +257,7 @@ This section first summarizes experiment setups and then evaluates PipeTransform
 <br>
 </p>
 
-We summarize the overall experimental results in the table above. Note that the speedup we report is based on a conservative <img src="https://render.githubusercontent.com/render/math?\alpha"> <img src="https://render.githubusercontent.com/render/math?\frac{1}{3}"> value that can obtain comparable or even higher accuracy. A more aggressive <img src="https://render.githubusercontent.com/render/math?\alpha"> (<img src="https://render.githubusercontent.com/render/math?\frac{2}{5}">, <img src="https://render.githubusercontent.com/render/math?\frac{1}{2}">) can obtain a higher speedup but may lead to a slight loss in accuracy. Note that the model size of BERT (24 layers) is larger than ViT-B/16 (12 layers), thus it takes more time for communication.
+We summarize the overall experimental results in the table above. Note that the speedup we report is based on a conservative <img src="https://render.githubusercontent.com/render/math?math=\alpha"> <img src="https://render.githubusercontent.com/render/math?math=\frac{1}{3}"> value that can obtain comparable or even higher accuracy. A more aggressive <img src="https://render.githubusercontent.com/render/math?math=\alpha"> (<img src="https://render.githubusercontent.com/render/math?math=\frac{2}{5}">, <img src="https://render.githubusercontent.com/render/math?math=\frac{1}{2}">) can obtain a higher speedup but may lead to a slight loss in accuracy. Note that the model size of BERT (24 layers) is larger than ViT-B/16 (12 layers), thus it takes more time for communication.
 
 ## Performance Analysis
 
@@ -271,21 +271,21 @@ This section presents evaluation results and analyzes the performance of differe
 Figure 9. Speedup Breakdown (ViT on ImageNet)
 </p>
 
-To understand the efficacy of all four components and their impacts on training speed, we experimented with different combinations and used their training sample throughput (samples/second) and speedup ratio as metrics. Results are illustrated in Figure 9. Key takeaways from these experimental results are: 
+To understand the efficacy of all four components and their impacts on training speed, we experimented with different combinations and used their training sample throughput (samples/second) and speedup ratio as metrics. Results are illustrated in Figure 9. Key takeaways from these experimental results are:
 
 1. the main speedup is the result of elastic pipelining which is achieved through the joint use of AutoPipe and AutoDP;
 2. AutoCache's contribution is amplified by AutoDP;
-3. freeze training alone without system-wise adjustment even downgrades the training speed. 
+3. freeze training alone without system-wise adjustment even downgrades the training speed.
 
-### Tuning <img src="https://render.githubusercontent.com/render/math?\alpha"> in Freezing Algorithm
+### Tuning <img src="https://render.githubusercontent.com/render/math?math=\alpha"> in Freezing Algorithm
 
 <p align="center">
 <img src="./figure/experiments_tuning_alpha.png" width="460">
 <br>
-Figure 10. Tuning <img src="https://render.githubusercontent.com/render/math?\alpha"> in Freezing Algorithm
+Figure 10. Tuning <img src="https://render.githubusercontent.com/render/math?math=\alpha"> in Freezing Algorithm
 </p>
 
-We ran experiments to show how the <img src="https://render.githubusercontent.com/render/math?\alpha">  in the freeze algorithms influences training speed. The result clearly demonstrates that a larger <img src="https://render.githubusercontent.com/render/math?\alpha"> (excessive freeze) leads to a greater speedup but suffers from a slight performance degradation. In the case shown in Figure 10, where <img src="https://render.githubusercontent.com/render/math?\alpha=1/5">, freeze training outperforms normal training and obtains a <img src="https://render.githubusercontent.com/render/math?2.04">-fold speedup. We provide more results in the Appendix.
+We ran experiments to show how the <img src="https://render.githubusercontent.com/render/math?math=\alpha">  in the freeze algorithms influences training speed. The result clearly demonstrates that a larger <img src="https://render.githubusercontent.com/render/math?math=\alpha"> (excessive freeze) leads to a greater speedup but suffers from a slight performance degradation. In the case shown in Figure 10, where <img src="https://render.githubusercontent.com/render/math?math=\alpha=1/5">, freeze training outperforms normal training and obtains a <img src="https://render.githubusercontent.com/render/math?math=2.04">-fold speedup. We provide more results in the Appendix.
 
 ### Optimal Chunks in the elastic pipeline
 
@@ -295,7 +295,7 @@ We ran experiments to show how the <img src="https://render.githubusercontent.co
 Figure 11. Optimal chunk number in the elastic pipeline
 </p>
 
-We profiled the optimal number of micro-batches <img src="https://render.githubusercontent.com/render/math?M"> for different pipeline lengths <img src="https://render.githubusercontent.com/render/math?K">. Results are summarized in Figure 11. As we can see, different <img src="https://render.githubusercontent.com/render/math?K"> values lead to different optimal <img src="https://render.githubusercontent.com/render/math?M">, and the throughput gaps across different M values are large (as shown when <img src="https://render.githubusercontent.com/render/math?K=8">), which confirms the necessity of an anterior profiler in elastic pipelining.
+We profiled the optimal number of micro-batches <img src="https://render.githubusercontent.com/render/math?math=M"> for different pipeline lengths <img src="https://render.githubusercontent.com/render/math?math=K">. Results are summarized in Figure 11. As we can see, different <img src="https://render.githubusercontent.com/render/math?math=K"> values lead to different optimal <img src="https://render.githubusercontent.com/render/math?math=M">, and the throughput gaps across different M values are large (as shown when <img src="https://render.githubusercontent.com/render/math?math=K=8">), which confirms the necessity of an anterior profiler in elastic pipelining.
 
 ### Understanding the Timing of Caching
 
@@ -305,7 +305,7 @@ We profiled the optimal number of micro-batches <img src="https://render.githubu
 Figure 12. the timing of caching
 </p>
 
-To evaluate AutoCache, we compared the sample throughput of training that activates AutoCache from epoch <img src="https://render.githubusercontent.com/render/math?0"> (blue) with the training job without AutoCache (red). Figure 12 shows that enabling caching too early can slow down training, as caching can be more expensive than the forward propagation on a small number of frozen layers. After more layers are frozen, caching activations clearly outperform the corresponding forward propagation. As a result, AutoCache uses a profiler to determine the proper timing to enable caching. In our system, for ViT (12 layers), caching starts from 3 frozen layers, while for BERT (24 layers), caching starts from 5 frozen layers.
+To evaluate AutoCache, we compared the sample throughput of training that activates AutoCache from epoch <img src="https://render.githubusercontent.com/render/math?math=0"> (blue) with the training job without AutoCache (red). Figure 12 shows that enabling caching too early can slow down training, as caching can be more expensive than the forward propagation on a small number of frozen layers. After more layers are frozen, caching activations clearly outperform the corresponding forward propagation. As a result, AutoCache uses a profiler to determine the proper timing to enable caching. In our system, for ViT (12 layers), caching starts from 3 frozen layers, while for BERT (24 layers), caching starts from 5 frozen layers.
 
 For more detailed experimental analysis, please refer to our paper.
 
@@ -339,7 +339,7 @@ This blog introduces PipeTransformer, a holistic solution that combines elastic 
 
 [12] Narayanan, D., Harlap, A., Phanishayee, A., Seshadri, V., Devanur, N. R., Ganger, G. R., Gibbons, P. B., and Zaharia, M. Pipedream: Generalized Pipeline Parallelism for DNN Training. In Proceedings of the 27th ACM Symposium on Operating Systems Principles, SOSP ’19, pp. 1–15, New York, NY, USA, 2019. Association for Computing Machinery. ISBN 9781450368735. doi: 10.1145/3341301.3359646.
 
-[13] Lepikhin, D., Lee, H., Xu, Y., Chen, D., Firat, O., Huang, Y., Krikun, M., Shazeer, N., and Chen, Z. Gshard: Scaling Giant Models with Conditional Computation and Automatic Sharding. 
+[13] Lepikhin, D., Lee, H., Xu, Y., Chen, D., Firat, O., Huang, Y., Krikun, M., Shazeer, N., and Chen, Z. Gshard: Scaling Giant Models with Conditional Computation and Automatic Sharding.
 
 [14] Shazeer, N., Cheng, Y., Parmar, N., Tran, D., Vaswani, A., Koanantakool, P., Hawkins, P., Lee, H., Hong, M., Young, C., Sepassi, R., and Hechtman, B. Mesh-Tensorflow: Deep Learning for Supercomputers. In Bengio, S., Wallach, H., Larochelle, H., Grauman, K., Cesa-Bianchi, N., and Garnett, R. (eds.), Advances in Neural Information Processing Systems, volume 31, pp. 10414–10423. Curran Associates, Inc., 2018.
 
@@ -349,4 +349,4 @@ This blog introduces PipeTransformer, a holistic solution that combines elastic 
 
 [17] Raghu, M., Gilmer, J., Yosinski, J., and Sohl Dickstein, J. Svcca: Singular Vector Canonical Correlation Analysis for Deep Learning Dynamics and Interpretability. In NIPS, 2017.
 
-[18] Morcos, A., Raghu, M., and Bengio, S. Insights on Representational Similarity in Neural Networks with Canonical Correlation. In Bengio, S., Wallach, H., Larochelle, H., Grauman, K., Cesa-Bianchi, N., and Garnett, R. (eds.), Advances in Neural Information Processing Systems 31, pp. 5732–5741. Curran Associates, Inc., 2018. 
+[18] Morcos, A., Raghu, M., and Bengio, S. Insights on Representational Similarity in Neural Networks with Canonical Correlation. In Bengio, S., Wallach, H., Larochelle, H., Grauman, K., Cesa-Bianchi, N., and Garnett, R. (eds.), Advances in Neural Information Processing Systems 31, pp. 5732–5741. Curran Associates, Inc., 2018.
