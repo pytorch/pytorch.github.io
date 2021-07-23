@@ -192,7 +192,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href='https://pytorch.org/docs/versions.html'>master (1.10.0a0+git2bfbfd8 ) &#x25BC</a>
+      <a href='https://pytorch.org/docs/versions.html'>master (1.10.0a0+gitb324086 ) &#x25BC</a>
     </div>
     
 
@@ -395,12 +395,16 @@
 <span class="kn">from</span> <span class="nn">.observer</span> <span class="kn">import</span> <span class="n">MovingAverageMinMaxObserver</span><span class="p">,</span> <span class="n">HistogramObserver</span><span class="p">,</span> <span class="n">MovingAveragePerChannelMinMaxObserver</span><span class="p">,</span> <span class="n">_with_args</span>
 <span class="kn">import</span> <span class="nn">re</span>
 <span class="kn">from</span> <span class="nn">abc</span> <span class="kn">import</span> <span class="n">ABC</span><span class="p">,</span> <span class="n">abstractmethod</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Tuple</span>
 
 <span class="k">def</span> <span class="nf">_is_per_channel</span><span class="p">(</span><span class="n">qscheme</span><span class="p">:</span> <span class="s1">&#39;torch.qscheme&#39;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
     <span class="k">return</span> <span class="n">qscheme</span> <span class="ow">in</span> <span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">per_channel_symmetric</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">per_channel_affine</span><span class="p">]</span>
 
 <span class="k">def</span> <span class="nf">_is_per_tensor</span><span class="p">(</span><span class="n">qscheme</span><span class="p">:</span> <span class="s1">&#39;torch.qscheme&#39;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
     <span class="k">return</span> <span class="n">qscheme</span> <span class="ow">in</span> <span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">per_tensor_symmetric</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">per_tensor_affine</span><span class="p">]</span>
+
+<span class="k">def</span> <span class="nf">_is_symmetric_quant</span><span class="p">(</span><span class="n">qscheme</span><span class="p">:</span> <span class="s1">&#39;torch.qscheme&#39;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+    <span class="k">return</span> <span class="n">qscheme</span> <span class="ow">in</span> <span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">per_tensor_symmetric</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">per_channel_symmetric</span><span class="p">]</span>
 
 <span class="k">class</span> <span class="nc">FakeQuantizeBase</span><span class="p">(</span><span class="n">ABC</span><span class="p">,</span> <span class="n">Module</span><span class="p">):</span>
     <span class="sa">r</span><span class="sd">&quot;&quot;&quot; Base fake quantize module</span>
@@ -636,6 +640,75 @@
                    <span class="bp">self</span><span class="o">.</span><span class="n">scale</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">zero_point</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
                    <span class="bp">self</span><span class="o">.</span><span class="n">quant_min</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">quant_max</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">qscheme</span><span class="p">)</span>
 
+<span class="k">class</span> <span class="nc">FusedMovingAvgObsFakeQuantize</span><span class="p">(</span><span class="n">FakeQuantize</span><span class="p">):</span>
+    <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Fused module that is used to observe the input tensor (compute min/max), compute</span>
+<span class="sd">    scale/zero_point and fake_quantize the tensor.</span>
+<span class="sd">    This module uses calculation similar MovingAverageMinMaxObserver for the inputs,</span>
+<span class="sd">    to compute the min/max values in order to compute the scale/zero_point.</span>
+<span class="sd">    The qscheme input in the observer is used to differentiate between symmetric/affine</span>
+<span class="sd">    quantization scheme.</span>
+
+<span class="sd">    The output of this module is given by</span>
+<span class="sd">    x_out = (clamp(round(x/scale + zero_point), quant_min, quant_max)-zero_point)*scale</span>
+
+<span class="sd">    Similar to :class:`~torch.quantization.FakeQuantize`, and accepts the same attributes as the</span>
+<span class="sd">    base class.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">observer</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="n">MovingAverageMinMaxObserver</span><span class="p">,</span>
+        <span class="n">quant_min</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
+        <span class="n">quant_max</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">255</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">observer_kwargs</span><span class="p">:</span> <span class="n">Any</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">observer</span><span class="p">,</span> <span class="n">quant_min</span><span class="p">,</span> <span class="n">quant_max</span><span class="p">,</span> <span class="o">**</span><span class="n">observer_kwargs</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">activation_post_process</span><span class="p">,</span> <span class="n">MovingAverageMinMaxObserver</span>
+        <span class="p">),</span> <span class="s2">&quot;Fused observer+fake_quant module only works with MovingAverageMinMaxObserver&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">quant_min</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">quant_min</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">quant_max</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">quant_max</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s2">&quot;fake_quant_enabled&quot;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mi">0</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s2">&quot;observer_enabled&quot;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mi">0</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">is_symmetric_quant</span> <span class="o">=</span> <span class="n">_is_symmetric_quant</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">activation_post_process</span><span class="o">.</span><span class="n">qscheme</span><span class="p">)</span>
+
+    <span class="nd">@torch</span><span class="o">.</span><span class="n">jit</span><span class="o">.</span><span class="n">export</span>
+    <span class="k">def</span> <span class="nf">calculate_qparams</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">activation_post_process</span><span class="o">.</span><span class="n">calculate_qparams</span><span class="p">()</span>
+
+    <span class="nd">@torch</span><span class="o">.</span><span class="n">jit</span><span class="o">.</span><span class="n">export</span>
+    <span class="k">def</span> <span class="nf">extra_repr</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="s2">&quot;fake_quant_enabled=</span><span class="si">{}</span><span class="s2">, observer_enabled=</span><span class="si">{}</span><span class="s2">, scale=</span><span class="si">{}</span><span class="s2">, zero_point=</span><span class="si">{}</span><span class="s2">, &quot;</span>
+            <span class="s2">&quot;dtype=</span><span class="si">{}</span><span class="s2">, quant_min=</span><span class="si">{}</span><span class="s2">, quant_max=</span><span class="si">{}</span><span class="s2">, qscheme=</span><span class="si">{}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">fake_quant_enabled</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">observer_enabled</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">scale</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">zero_point</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">quant_min</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">quant_max</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">qscheme</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">fused_moving_avg_obs_fake_quant</span><span class="p">(</span>
+            <span class="n">X</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">observer_enabled</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">fake_quant_enabled</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">activation_post_process</span><span class="o">.</span><span class="n">min_val</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">activation_post_process</span><span class="o">.</span><span class="n">max_val</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">scale</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">zero_point</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">activation_post_process</span><span class="o">.</span><span class="n">averaging_constant</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">quant_min</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">quant_max</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">ch_axis</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">is_per_channel</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">is_symmetric_quant</span><span class="p">,</span>
+        <span class="p">)</span>
 
 <span class="n">default_fake_quant</span> <span class="o">=</span> <span class="n">FakeQuantize</span><span class="o">.</span><span class="n">with_args</span><span class="p">(</span><span class="n">observer</span><span class="o">=</span><span class="n">MovingAverageMinMaxObserver</span><span class="p">,</span> <span class="n">quant_min</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">quant_max</span><span class="o">=</span><span class="mi">255</span><span class="p">,</span>
                                             <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">quint8</span><span class="p">,</span> <span class="n">qscheme</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">per_tensor_affine</span><span class="p">,</span> <span class="n">reduce_range</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
