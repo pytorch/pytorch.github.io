@@ -65,11 +65,6 @@ If the computation and overlapping time of one worker is much larger than the ot
   <p>Figure: A straggler example</p>
 </div>
 
-<div class="text-center">
-  <img src="{{ site.baseurl }}/assets/images/profiler_1.9_image3.png" width="100%">
-  <p>Image: ‘worker3’ appears to have a dramatic deviance of computation & overlapping time</p>
-</div>
-
 **Scenario 2**:
 
 If there is a small batch size (i.e. less computation on each worker) or the data to be transferred is large, the computation-to-communication may also be small and be seen in the profiler with low GPU utilization and long waiting times. This computation/communication view will allow you to diagnose your code to reduce communication by adopting gradient accumulation, or to decrease the communication proportion by increasing batch size. DDP communication time depends on model size. Batch size has no relationship with model size. So increasing batch size could make computation time longer and make computation-to-communication ratio bigger. 
