@@ -36,7 +36,7 @@ If everything works well, we should have our model - `model.pt` generated in the
 
 > To find out more details about TorchScript, please visit [tutorials on pytorch.org](https://pytorch.org/tutorials/advanced/cpp_export.html)
 
-### Install LibTorch via Cocoapods
+### Install LibTorch-Lite via Cocoapods
 
 The PyTorch C++ library is available in [Cocoapods](https://cocoapods.org/), to integrate it to our project, simply run
 
@@ -217,18 +217,18 @@ git submodule update --init --recursive
 
 > Make sure you have `cmake` and Python installed correctly on your local machine. We recommend following the [Pytorch Github page](https://github.com/pytorch/pytorch) to set up the Python development environment
 
-### Build LibTorch for iOS Simulators
+### Build LibTorch-Lite for iOS Simulators
 
-Open terminal and navigate to the PyTorch root directory. Run the following command (if you already build LibTorch for iOS devices (see below), run `rm -rf build_ios` first):
+Open terminal and navigate to the PyTorch root directory. Run the following command (if you already build LibTorch-Lite for iOS devices (see below), run `rm -rf build_ios` first):
 
 ```
 BUILD_PYTORCH_MOBILE=1 IOS_PLATFORM=SIMULATOR ./scripts/build_ios.sh
 ```
 After the build succeeds, all static libraries and header files will be generated under `build_ios/install`
 
-### Build LibTorch for arm64 Devices
+### Build LibTorch-Lite for arm64 Devices
 
-Open terminal and navigate to the PyTorch root directory. Run the following command (if you already build LibTorch for iOS simulators, run `rm -rf build_ios` first):
+Open terminal and navigate to the PyTorch root directory. Run the following command (if you already build LibTorch-Lite for iOS simulators, run `rm -rf build_ios` first):
 
 ```
 BUILD_PYTORCH_MOBILE=1 IOS_ARCH=arm64 ./scripts/build_ios.sh
