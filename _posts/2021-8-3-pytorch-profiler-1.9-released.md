@@ -27,6 +27,7 @@ With profiler.profile(XXXX)
 ```
 
 **Comments**:
+
 • For CUDA and CPU profiling, see [below](https://github.com/pytorch/kineto/blob/master/tb_plugin/examples/resnet50_profiler_api.py): 
 ```
 with torch.profiler.profile( 
@@ -36,6 +37,7 @@ torch.profiler.ProfilerActivity.CUDA],
 ```
 
 •	With profiler.record_function(“$NAME”): allows putting a decorator (a tag associated to a name) for a block of function
+
 •	Profile_memory=True parameter under profiler.profile allows you to profile CPU and GPU memory footprint
 
 ## Visualizing PyTorch Model Performance using PyTorch Profiler
@@ -67,8 +69,6 @@ If the computation and overlapping time of one worker is much larger than the ot
   <img src="{{ site.baseurl }}/assets/images/profiler_1.9_image3.png" width="100%">
   <p>Image: ‘worker3’ appears to have a dramatic deviance of computation & overlapping time</p>
 </div>
-
-https://docs.nvidia.com/gameworks/content/developertools/desktop/analysis/report/cudaexperiments/kernellevel/achievedoccupancy.htm
 
 **Scenario 2**:
 
@@ -105,9 +105,12 @@ Profiler_memory=True # this will take 1 – 2 minutes to complete.
 )
 ```
 
-Important Definitions:
+**Important Definitions**:
+
 •	“Size Increase” displays the sum of all allocation bytes and minus all the memory release bytes.
+
 •	“Allocation Size” shows the sum of all allocation bytes without considering the memory release.
+
 •	“Self” means the allocated memory is not from any child operators, instead by the operator itself.
 
 <div class="text-center">
@@ -125,7 +128,9 @@ The overview page highlights the results of three important GPU usage metrics at
 If the GPU utilization result is low, this suggests a potential bottleneck is present in your model. Common reasons: 
 
 •Insufficient parallelism in kernels (i.e., low batch size) 
+
 •Small kernels called in a loop. This is to say the launch overheads are not amortized 
+
 •CPU or I/O bottlenecks lead to the GPU not receiving enough work to keep busy 
 
 Looking of the overview page where the performance recommendation section is where you’ll find potential suggestions on how to increase that GPU utilization. In this example, GPU utilization is low so the performance recommendation was to increase batch size. Increasing batch size 4 to 32, as per the performance recommendation, increased the GPU Utilization by 60.68%. 
@@ -189,7 +194,6 @@ torch-tb-profiler[blob]
 torch-tb-profiler[gs] 
 torch-tb-profiler[s3] 
 ``` 
-
 ```pip install torch-tb-profiler[blob]```, ```pip install torch-tb-profiler[gs]```, or ```pip install torch-tb-profiler[S3]``` to have data be read through these cloud providers. For more information, please refer to this [README](https://github.com/pytorch/kineto/tree/main/tb_plugin). 
 
 ### Jump to Source Code:
