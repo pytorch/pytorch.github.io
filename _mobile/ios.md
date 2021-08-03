@@ -245,7 +245,7 @@ In the build settings, search for **other linker flags**.  Add a custom linker f
 -all_load
 ```
 
-To use the custom built libraries the project, replace `#import <LibTorch-Lite/LibTorch-Lite.h>` (in `TorchModule.mm`) which is needed when using LibTorch via Cocoapods with the code below:
+To use the custom built libraries the project, replace `#import <LibTorch-Lite/LibTorch-Lite.h>` (in `TorchModule.mm`) which is needed when using LibTorch-Lite via Cocoapods with the code below:
 ```
 #include <torch/csrc/jit/mobile/import.h>
 #include <torch/csrc/jit/mobile/module.h>
