@@ -245,15 +245,11 @@ In the build settings, search for **other linker flags**.  Add a custom linker f
 -all_load
 ```
 
-To use the custom built libraries the project, replace `#import <LibTorch/LibTorch.h>` (in `TorchModule.mm`) which is needed when using LibTorch via Cocoapods with the code below:
+To use the custom built libraries the project, replace `#import <LibTorch-Lite/LibTorch-Lite.h>` (in `TorchModule.mm`) which is needed when using LibTorch via Cocoapods with the code below:
 ```
-#include "ATen/ATen.h"
-#include "caffe2/core/timer.h"
-#include "caffe2/utils/string_utils.h"
-#include "torch/csrc/autograd/grad_mode.h"
-#include "torch/csrc/jit/mobile/import.h"
-#include "torch/csrc/jit/mobile/module.h"
-#include "torch/script.h"
+#include <torch/csrc/jit/mobile/import.h>
+#include <torch/csrc/jit/mobile/module.h>
+#include <torch/script.h>
 ```
 
 Finally, disable bitcode for your target by selecting the Build Settings, searching for **Enable Bitcode**, and set the value to **No**.
