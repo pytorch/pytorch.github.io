@@ -137,7 +137,7 @@ Estimated Stream Multiprocessor Efficiency (Est. SM Efficiency) is a finer grain
 Estimated Achieved Occupancy (Est. Achieved Occupancy) is a layer deeper than Est. SM Efficiency and GPU Utilization for diagnosing performance issues. Estimated Achieved Occupancy indicates how many warps can be active at once per SMs. Having a sufficient number of active warps is usually key to achieving good throughput. Unlike GPU Utilization and SM Efficiency, it is not a goal to make this value as high as possible. As a rule of thumb, good throughput gains can be had by improving this metric to 15% and above. But at some point you will hit diminishing returns. If the value is already at 30% for example, further gains will be uncertain. This metric reports the average values of all warp schedulers for the kernel execution period (NVIDIA [doc](https://docs.nvidia.com/gameworks/content/developertools/desktop/analysis/report/cudaexperiments/kernellevel/achievedoccupancy.htm)). The larger the Est. Achieve Occupancy value is the better. 
 
 <div class="text-center">
-  <img src="{{ site.baseurl }}/assets/images/profiler_1.9_image7" width="100%">
+  <img src="{{ site.baseurl }}/assets/images/profiler_1.9_image7.png" width="100%">
   <p>Overview details: Resnet50_batchsize4</p>
 </div>
 
