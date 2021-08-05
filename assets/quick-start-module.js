@@ -461,21 +461,21 @@ function commandMessage(key) {
       "conda install pytorch torchvision torchaudio cpuonly -c pytorch-lts",
 
     "lts,pip,macos,cuda10.2,python":
-      "pip3 install torch torchvision torchaudio -f https://download.pytorch.org/whl/lts/1.8/torch_lts.html<br /># MacOS Binaries dont support CUDA, install from source if CUDA is needed",
+      "pip3 install torch==1.8.1 torchvision==0.9.1 torchaudio==0.8.1 -f https://download.pytorch.org/whl/lts/1.8/torch_lts.html<br /># MacOS Binaries dont support CUDA, install from source if CUDA is needed",
 
     "lts,pip,macos,cuda11.1,python":
-      "pip3 install torch torchvision torchaudio -f https://download.pytorch.org/whl/lts/1.8/torch_lts.html<br /># MacOS Binaries dont support CUDA, install from source if CUDA is needed",
+      "pip3 install torch==1.8.1 torchvision==0.9.1 torchaudio==0.8.1 -f https://download.pytorch.org/whl/lts/1.8/torch_lts.html<br /># MacOS Binaries dont support CUDA, install from source if CUDA is needed",
 
     "lts,pip,macos,rocm4.2,python":
       "<b>NOTE:</b> ROCm is not supported in LTS",
 
-    "lts,pip,macos,accnone,python": "pip3 install torch torchvision torchaudio -f https://download.pytorch.org/whl/lts/1.8/torch_lts.html",
+    "lts,pip,macos,accnone,python": "pip3 install torch==1.8.1 torchvision==0.9.1 torchaudio==0.8.1 -f https://download.pytorch.org/whl/lts/1.8/torch_lts.html",
 
     "lts,pip,linux,accnone,python":
       "pip3 install torch==1.8.1+cpu torchvision==0.9.1+cpu torchaudio==0.8.1 -f https://download.pytorch.org/whl/lts/1.8/torch_lts.html",
 
     "lts,pip,linux,cuda10.2,python":
-      "pip3 install torch torchvision torchaudio -f https://download.pytorch.org/whl/lts/1.8/torch_lts.html",
+      "pip3 install torch==1.8.1+cu102 torchvision==0.9.1+cu102 torchaudio==0.8.1 -f https://download.pytorch.org/whl/lts/1.8/torch_lts.html",
 
     "lts,pip,linux,cuda11.1,python":
       "pip3 install torch==1.8.1+cu111 torchvision==0.9.1+cu111 torchaudio==0.8.1 -f https://download.pytorch.org/whl/lts/1.8/torch_lts.html",
