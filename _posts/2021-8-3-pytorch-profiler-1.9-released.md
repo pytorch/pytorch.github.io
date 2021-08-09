@@ -1,7 +1,7 @@
 ---
 layout: blog_detail
 title: 'What’s New in PyTorch Profiler 1.9?'
-author: Sabrina Smai
+author: Sabrina Smai, Program Manager on the AI Framework team at Microsoft
 ---
 
 PyTorch Profiler v1.9 has been released! The goal of this new release (previous [PyTorch Profiler release](https://pytorch.org/blog/introducing-pytorch-profiler-the-new-and-improved-performance-tool/)) is to provide you with new state-of-the-art tools to help diagnose and fix machine learning performance issues regardless of whether you are working on one or numerous machines. The objective is to target the execution steps that are the most costly in time and/or memory, and visualize the work load distribution between GPUs and CPUs. 
@@ -210,3 +210,8 @@ You just saw how PyTorch Profiler can help optimize a model. You can now try the
 Look out for an advanced version of this tutorial in the future. If you want tailored enterprise-grade support for this, check out [PyTorch Enterprise on Azure](https://azure.microsoft.com/en-us/develop/pytorch/). We are also thrilled to continue to bring state-of-the-art tool to PyTorch users to improve ML performance. We'd love to hear from you. Feel free to open an issue [here](https://github.com/pytorch/kineto/issues).   
 
 For new and exciting features coming up with PyTorch Profiler, follow @PyTorch on Twitter and check us out on pytorch.org. 
+
+## Acknowledgements
+
+The author would like to thank the contributions of the following individuals to this piece. From the Facebook side: Geeta Chauhan, Gisle Dankel, Woo Kim, Sam Farahzad, and Mark Saroufim. On the Microsoft side: AI Framework engineers (Teng Gao, Mike Guo, and Yang Gu), Guoliang Hua, and Thuy Nguyen.
+
