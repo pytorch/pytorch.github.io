@@ -114,17 +114,16 @@ Again, the `predict` method is just an Objective-C wrapper. Under the hood, it c
 
 ```cpp
 at::Tensor tensor = torch::from_blob(imageBuffer, {1, 3, 224, 224}, at::kFloat);
-torch::autograd::AutoGradMode guard(false);
+c10::InferenceMode guard;
 auto outputTensor = _impl.forward({tensor}).toTensor();
 float* floatBuffer = outputTensor.data_ptr<float>();
 ```
-The C++ function `torch::from_blob` will create an input tensor from the pixel buffer. Note that the shape of the tensor is `{1,3,224,224}` which represents `NxCxWxH` as we discussed in the above section.
+The C++ function `torch::from_blob` will create an input tensor from the pixel buffer. Note that the shape of the tensor is `{1,3,224,224}` which represents `{N, C, H, W}` as we discussed in the above section.
 
 ```cpp
-torch::autograd::AutoGradMode guard(false);
-at::AutoNonVariableTypeMode non_var_type_mode(true);
+c10::InferenceMode guard;
 ```
-The above two lines tells the PyTorch engine to do inference only. This is because by default, PyTorch has built-in support for doing auto-differentiation, which is also known as [autograd](https://pytorch.org/docs/stable/notes/autograd.html). Since we don't do training on mobile, we can just disable the autograd mode.
+The above line tells PyTorch to do inference only.
 
 Finally, we can call this `forward` function to get the output tensor and convert it to a `float` buffer.
 
