@@ -30,6 +30,7 @@
 
   <link rel="stylesheet" href="../../../../_static/css/theme.css" type="text/css" />
   <!-- <link rel="stylesheet" href="../../../../_static/pygments.css" type="text/css" /> -->
+  <link rel="stylesheet" href="../../../../_static/copybutton.css" type="text/css" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.10.0-beta/dist/katex.min.css" type="text/css" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.13.11/dist/katex.min.css" type="text/css" />
   <link rel="stylesheet" href="../../../../_static/katex-math.css" type="text/css" />
@@ -192,7 +193,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href='https://pytorch.org/docs/versions.html'>master (1.10.0a0+git100f6e1 ) &#x25BC</a>
+      <a href='https://pytorch.org/docs/versions.html'>master (1.10.0a0+gitc21b6c1 ) &#x25BC</a>
     </div>
     
 
@@ -399,10 +400,11 @@
 <span class="kn">import</span> <span class="nn">collections</span>
 <span class="kn">import</span> <span class="nn">copy</span>
 <span class="kn">import</span> <span class="nn">enum</span>
+<span class="kn">import</span> <span class="nn">inspect</span>
 <span class="kn">import</span> <span class="nn">io</span>
 <span class="kn">import</span> <span class="nn">logging</span>
 <span class="kn">from</span> <span class="nn">itertools</span> <span class="kn">import</span> <span class="n">chain</span>
-<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">NamedTuple</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Type</span><span class="p">,</span> <span class="n">Union</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Set</span><span class="p">,</span> <span class="n">Type</span>
 
 <span class="kn">import</span> <span class="nn">torch</span>
 <span class="kn">import</span> <span class="nn">torch.distributed</span> <span class="k">as</span> <span class="nn">dist</span>
@@ -514,17 +516,39 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">zero</span><span class="o">.</span><span class="n">step</span><span class="p">()</span>
 
 
-<span class="k">class</span> <span class="nc">_DDPBucket</span><span class="p">(</span><span class="n">NamedTuple</span><span class="p">):</span>
+<span class="k">class</span> <span class="nc">_DDPBucketAssignment</span><span class="p">():</span>
     <span class="sa">r</span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    This contains the model parameters corresponding to a</span>
-<span class="sd">    :class:`DistributedDataParallel` gradient bucket.</span>
+<span class="sd">    This represents a :class:`DistributedDataParallel` bucket assignment,</span>
+<span class="sd">    meaning a (possibly non-strict) subset of the parameters corresponding to</span>
+<span class="sd">    a DDP bucket assigned to a rank to update.</span>
 
+<span class="sd">    Attributes:</span>
 <span class="sd">        bucket_index (int): index of the bucket determined by the DDP gradient</span>
 <span class="sd">            bucket all-reduce order.</span>
-<span class="sd">        params (List[torch.Tensor]): model parameters in the bucket.</span>
+<span class="sd">        parameters (List[torch.Tensor]): model parameters in the bucket</span>
+<span class="sd">            assigned to this rank.</span>
+<span class="sd">        offset (int): offset into the :class:`GradBucket` &#39;s :meth:`parameters`</span>
+<span class="sd">            giving the index of the first element in the passed-in</span>
+<span class="sd">            ``parameters``; this equivalently indexes into the</span>
+<span class="sd">            :class:`GradBucket` &#39;s :meth:`gradients`.</span>
+<span class="sd">        device (torch.device): device on which the parameters are stored.</span>
+<span class="sd">        tensor (torch.Tensor): flattened tensor giving the data of the</span>
+<span class="sd">            parameter subset assigned to the rank.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">bucket_index</span><span class="p">:</span> <span class="nb">int</span>
-    <span class="n">params</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">bucket_index</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">parameters</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">],</span>
+        <span class="n">offset</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">bucket_index</span> <span class="o">=</span> <span class="n">bucket_index</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">parameters</span> <span class="o">=</span> <span class="n">parameters</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">offset</span> <span class="o">=</span> <span class="n">offset</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">parameters</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Empty bucket assignment&quot;</span><span class="p">)</span>
+        <span class="c1"># DDP guarantees all parameters in the bucket have the same device</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">parameters</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">device</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">tensor</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
 
 
 <span class="k">class</span> <span class="nc">_OverlapStatus</span><span class="p">(</span><span class="n">enum</span><span class="o">.</span><span class="n">IntEnum</span><span class="p">):</span>
@@ -551,6 +575,18 @@
 <span class="sd">    This contains the information needed by :class:`ZeroRedundancyOptimizer`</span>
 <span class="sd">    to overlap with :class:`DistributedDataParallel`.</span>
 
+<span class="sd">    Arguments:</span>
+<span class="sd">        world_size (int): world size of the process group being used.</span>
+
+<span class="sd">    Attributes:</span>
+<span class="sd">        shard_buckets (bool): if ``True``, then the assignment of each</span>
+<span class="sd">            :class:`DistributedDataParallel` bucket is partitioned across</span>
+<span class="sd">            possibly multiple :class:`ZeroRedundancyOptimizer` instances (i.e.</span>
+<span class="sd">            across possibly multiple ranks) to approximate uniformity following</span>
+<span class="sd">            a threshold given by the total parameter size divided by the world</span>
+<span class="sd">            size; if ``False``, then each bucket is wholly assigned to a single</span>
+<span class="sd">            :class:`ZeroRedundancyOptimizer` instance (i.e. to a single rank);</span>
+<span class="sd">            this should be set to the value passed into the hook constructor.</span>
 <span class="sd">        status (_OverlapStatus): current status; see :class:`_OverlapStatus`</span>
 <span class="sd">            for more information.</span>
 <span class="sd">        params_per_bucket (List[List[torch.Tensor]]): ``params_per_bucket[i]``</span>
@@ -563,6 +599,13 @@
 <span class="sd">            parameter in that bucket, where ``rank`` is this process&#39;s own</span>
 <span class="sd">            rank; the keys of this :class:`dict` are the bucket indices</span>
 <span class="sd">            assigned to this rank.</span>
+<span class="sd">        num_bucket_assignments (int): total number of bucket assignments across</span>
+<span class="sd">            all ranks; this is equal to the number of</span>
+<span class="sd">            :class:`DistributedDataParallel` gradient buckets if</span>
+<span class="sd">            ``shard_buckets=False`` and possibly greater otherwise.</span>
+<span class="sd">        total_size (int, optional): total size of all buckets (i.e. sum of</span>
+<span class="sd">            ``param.numel()`` for all ``param`` across all buckets) if</span>
+<span class="sd">            ``shard_buckets=True``; otherwise, ``None``.</span>
 <span class="sd">        broadcast_handles (List[Work]): :class:`list` of async work handles for</span>
 <span class="sd">            the parameter broadcasts.</span>
 <span class="sd">        bucket_index_to_future (Dict[int, torch.futures.Future]):</span>
@@ -573,14 +616,18 @@
 <span class="sd">        bucket_indices_seen (List[int]): :class:`list` of the bucket indices</span>
 <span class="sd">            seen on this iteration.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">world_size</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">status</span><span class="p">:</span> <span class="n">_OverlapStatus</span> <span class="o">=</span> <span class="n">_OverlapStatus</span><span class="o">.</span><span class="n">UNINITIALIZED</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">shard_buckets</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
 
         <span class="c1"># Modified per bucket reconstruction</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">params_per_bucket</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">params_per_rank</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]]</span> <span class="o">=</span> \
-            <span class="p">[[]</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">dist</span><span class="o">.</span><span class="n">get_world_size</span><span class="p">())]</span>
+            <span class="p">[[]</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">world_size</span><span class="p">)]</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">offsets</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assigned_ranks_per_bucket</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Set</span><span class="p">[</span><span class="nb">int</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">num_bucket_assignments</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">total_size</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
 
         <span class="c1"># Modified per iteration</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">broadcast_handles</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
@@ -589,19 +636,15 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">bucket_index_to_future</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">futures</span><span class="o">.</span><span class="n">Future</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">bucket_index_to_bucket</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">dist</span><span class="o">.</span><span class="n">GradBucket</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
 
-    <span class="k">def</span> <span class="nf">wait_for_broadcasts</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">num_buckets</span><span class="p">,</span> <span class="n">rank</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">def</span> <span class="nf">wait_for_broadcasts</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="sa">r</span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Waits for all parameter broadcasts. This should be called once all</span>
 <span class="sd">        broadcasts have been scheduled, meaning ``self.broadcast_handles`` is</span>
 <span class="sd">        filled. This clears ``self.broadcast_handles`` in preparation for the</span>
 <span class="sd">        next iteration.</span>
-
-<span class="sd">        Arguments:</span>
-<span class="sd">            num_buckets (int): total number of buckets.</span>
-<span class="sd">            rank (int): the calling process&#39;s rank.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">broadcast_handles</span><span class="p">)</span> <span class="o">==</span> <span class="n">num_buckets</span><span class="p">,</span> \
-            <span class="sa">f</span><span class="s2">&quot;Missing at least one broadcast handle on rank </span><span class="si">{</span><span class="n">rank</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">broadcast_handles</span><span class="p">)</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_bucket_assignments</span><span class="p">,</span> \
+            <span class="sa">f</span><span class="s2">&quot;Missing at least one broadcast handle on rank </span><span class="si">{</span><span class="n">dist</span><span class="o">.</span><span class="n">get_rank</span><span class="p">()</span><span class="si">}</span><span class="s2">&quot;</span>
         <span class="n">_</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">map</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="o">.</span><span class="n">wait</span><span class="p">(),</span> <span class="bp">self</span><span class="o">.</span><span class="n">broadcast_handles</span><span class="p">))</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">broadcast_handles</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
 
@@ -687,14 +730,14 @@
 <span class="sd">        If you pass ``overlap_with_ddp=True``, be wary of the following: Given</span>
 <span class="sd">        the way that overlapping :class:`DistributedDataParallel` with</span>
 <span class="sd">        :class:`ZeroRedundancyOptimizer` is currently implemented, the first</span>
-<span class="sd">        two training iterations do not perform parameter updates in the</span>
-<span class="sd">        optimizer step. This is because it needs information about the gradient</span>
-<span class="sd">        bucketing strategy used by :class:`DistributedDataParallel`, which is</span>
-<span class="sd">        not finalized until the second forward pass if ``static_graph=False``</span>
-<span class="sd">        or until the third forward pass if ``static_graph=True``. To adjust</span>
-<span class="sd">        for this, one option is to prepend dummy inputs. Note, however, that it</span>
-<span class="sd">        is important to still include ``ZeroRedundancyOptimizer.step()`` in the</span>
-<span class="sd">        training loop.</span>
+<span class="sd">        two or three training iterations do not perform parameter updates in</span>
+<span class="sd">        the optimizer step, depending on if ``static_graph=False`` or</span>
+<span class="sd">        ``static_graph=True``, respectively. This is because it needs</span>
+<span class="sd">        information about the gradient bucketing strategy used by</span>
+<span class="sd">        :class:`DistributedDataParallel`, which is not finalized until the</span>
+<span class="sd">        second forward pass if ``static_graph=False`` or until the third</span>
+<span class="sd">        forward pass if ``static_graph=True``. To adjust for this, one option</span>
+<span class="sd">        is to prepend dummy inputs.</span>
 
 <span class="sd">    .. warning:: ZeroRedundancyOptimizer is experimental and subject to change.</span>
 
@@ -732,8 +775,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_partition_parameters_cache</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="n">Dict</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_index_to_param_cache</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_device_to_params_per_rank_cache</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]]]</span> <span class="o">=</span> <span class="p">{}</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_device_to_buckets_cache</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="n">_DDPBucket</span><span class="p">]]]</span> <span class="o">=</span> <span class="p">{}</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_device_to_device_index</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_bucket_assignments_per_rank_cache</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">_DDPBucketAssignment</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_is_trainable_mask</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_is_trainable_mask</span><span class="p">()</span>
 
         <span class="c1"># Default device for collective communication and buckets</span>
@@ -753,7 +795,7 @@
         <span class="k">if</span> <span class="ow">not</span> <span class="n">overlap_with_ddp</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_init_local_optimizer</span><span class="p">()</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_overlap_info</span><span class="p">:</span> <span class="n">_OverlapInfo</span> <span class="o">=</span> <span class="n">_OverlapInfo</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_overlap_info</span><span class="p">:</span> <span class="n">_OverlapInfo</span> <span class="o">=</span> <span class="n">_OverlapInfo</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">world_size</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">parameters_as_bucket_view</span><span class="p">:</span>
                 <span class="n">logging</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
                     <span class="s2">&quot;`parameters_as_bucket_view=True` will be ignored since &quot;</span>
@@ -761,16 +803,10 @@
                     <span class="s2">&quot;strategy will be used&quot;</span>
                 <span class="p">)</span>
 
-        <span class="c1"># `self._buckets` is used if `parameters_as_bucket_view=True` or</span>
-        <span class="c1"># `overlap_with_ddp=True`, in which case parameter data is flattened</span>
-        <span class="c1"># into buckets (i.e. contiguous tensors)</span>
-        <span class="c1"># If `overlap_with_ddp=True`, the bucketing requires an additional</span>
-        <span class="c1"># dimension to match the DDP gradient bucketing</span>
+        <span class="c1"># `self._buckets` is used if `parameters_as_bucket_view=True`, in</span>
+        <span class="c1"># which case parameter data is flattened into contiguous bucket tensors</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">parameters_as_bucket_view</span> <span class="o">=</span> <span class="n">parameters_as_bucket_view</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_buckets</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span>
-            <span class="n">List</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]],</span>
-            <span class="n">List</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]]]</span>
-        <span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>  <span class="c1"># type: ignore[assignment]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_buckets</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_build_param_buckets</span><span class="p">()</span>
 
         <span class="c1"># Optional consolidated optimizer state, only populated if this rank</span>
@@ -788,7 +824,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_index_to_param_cache</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_param_to_index_cache</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_device_to_params_per_rank_cache</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_device_to_buckets_cache</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_bucket_assignments_per_rank_cache</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
 
 <div class="viewcode-block" id="ZeroRedundancyOptimizer.add_param_group"><a class="viewcode-back" href="../../../../distributed.optim.html#torch.distributed.optim.ZeroRedundancyOptimizer.add_param_group">[docs]</a>    <span class="k">def</span> <span class="nf">add_param_group</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">param_group</span><span class="p">:</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="sa">r</span><span class="sd">&quot;&quot;&quot;</span>
@@ -1003,7 +1039,7 @@
                     <span class="n">params_sorted</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">param_group</span><span class="p">[</span><span class="s2">&quot;params&quot;</span><span class="p">],</span> <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">t</span><span class="p">:</span> <span class="n">t</span><span class="o">.</span><span class="n">numel</span><span class="p">(),</span> <span class="n">reverse</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
                     <span class="k">for</span> <span class="n">param</span> <span class="ow">in</span> <span class="n">params_sorted</span><span class="p">:</span>
                         <span class="c1"># Greedily add the parameter to rank with smallest size so far</span>
-                        <span class="n">rank</span> <span class="o">=</span> <span class="n">sizes</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="nb">min</span><span class="p">(</span><span class="n">sizes</span><span class="p">))</span>
+                        <span class="n">rank</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_min_index</span><span class="p">(</span><span class="n">sizes</span><span class="p">)</span>
                         <span class="n">param_group_params_per_rank</span><span class="p">[</span><span class="n">rank</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">param</span><span class="p">)</span>
                         <span class="n">sizes</span><span class="p">[</span><span class="n">rank</span><span class="p">]</span> <span class="o">+=</span> <span class="n">param</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span>
                     <span class="c1"># Apply the constructed partition of the parameter group</span>
@@ -1155,44 +1191,160 @@
                         <span class="bp">self</span><span class="o">.</span><span class="n">_device_to_params_per_rank_cache</span><span class="p">[</span><span class="n">device</span><span class="p">][</span><span class="n">rank</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">param</span><span class="p">)</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_device_to_params_per_rank_cache</span>
 
-    <span class="nd">@property</span>
-    <span class="k">def</span> <span class="nf">_device_to_buckets</span><span class="p">(</span>
-        <span class="bp">self</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="n">_DDPBucket</span><span class="p">]]]:</span>
+    <span class="k">def</span> <span class="nf">_get_min_index</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">values</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">int</span><span class="p">],</span>
+        <span class="n">disallowed_indices</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Set</span><span class="p">[</span><span class="nb">int</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
         <span class="sa">r</span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        :class:`dict` mapping each device to a :class:`list` of :class:`list`</span>
-<span class="sd">        of :class:`_DDPBucket` s.</span>
+<span class="sd">        Returns ``values.index(min(values))``, except only uses one pass. It</span>
+<span class="sd">        also excludes any indices in ``disallowed_indices`` if provided.</span>
 
-<span class="sd">        ``_device_to_buckets[d][r][i]`` gives the ``i``th bucket</span>
-<span class="sd">        assigned to rank ``r`` stored on device ``d``, where each bucket</span>
-<span class="sd">        contains a list of the model parameters associated with the</span>
-<span class="sd">        corresponding logical :class:`DistributedDataParallel` gradient bucket.</span>
-
-<span class="sd">        This is used for constructing the parameter buckets if</span>
-<span class="sd">        ``overlap_with_ddp=True``.</span>
+<span class="sd">        Arguments:</span>
+<span class="sd">            values: (List[int]): :class:`list` of values.</span>
+<span class="sd">            disallowed_indices (Optional[Set[int]]): indices that are</span>
+<span class="sd">                disallowed from being the returned min index.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">_overlap_with_ddp</span><span class="p">,</span> \
-            <span class="s2">&quot;`_device_to_buckets()` should only be used if &quot;</span> \
-            <span class="s2">&quot;`overlap_with_ddp=True`&quot;</span>
-        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_device_to_buckets_cache</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
-            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_device_to_buckets_cache</span>
+        <span class="n">min_index</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>
+        <span class="n">min_value</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="s2">&quot;inf&quot;</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">values</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">disallowed_indices</span> <span class="ow">and</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">disallowed_indices</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="k">if</span> <span class="n">value</span> <span class="o">&lt;</span> <span class="n">min_value</span><span class="p">:</span>
+                <span class="n">min_value</span> <span class="o">=</span> <span class="n">value</span>
+                <span class="n">min_index</span> <span class="o">=</span> <span class="n">i</span>
+        <span class="k">assert</span> <span class="n">min_index</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;All indices are disallowed&quot;</span>
+        <span class="k">return</span> <span class="n">min_index</span>
+
+    <span class="k">def</span> <span class="nf">_assign_bucket_subset_to_rank</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">bucket_index</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">bucket_params</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">],</span>
+        <span class="n">bucket_offset</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">assigned_rank</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">assigned_ranks_per_bucket</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Set</span><span class="p">[</span><span class="nb">int</span><span class="p">]],</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="sa">r</span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Assigns the model parameters given by ``bucket_params``, representing a</span>
+<span class="sd">        (possibly non-strict) subset of the parameters corresponding to a</span>
+<span class="sd">        :class:`DistributedDataParallel` bucket, to the rank with the least</span>
+<span class="sd">        size assigned so far and collects relevant information.</span>
+
+<span class="sd">        Arguments:</span>
+<span class="sd">            bucket_index (int): index of the :class:`DistributedDataParallel`</span>
+<span class="sd">                gradient bucket.</span>
+<span class="sd">            bucket_params (List[torch.Tensor]): subset of the parameters</span>
+<span class="sd">                corresponding to the bucket to assign.</span>
+<span class="sd">            bucket_offset (int): offset giving the index of the first element</span>
+<span class="sd">                in ``bucket_params`` in the bucket&#39;s full parameter list.</span>
+<span class="sd">            assigned_rank (int): rank to assign to.</span>
+<span class="sd">            assigned_ranks_per_bucket (List[Set[int]]): :class:`set` of ranks</span>
+<span class="sd">                assigned to each bucket.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">overlap_info</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_overlap_info</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">bucket_params</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;Empty bucket assignment&quot;</span>
+            <span class="p">)</span>
+        <span class="n">params_per_rank</span> <span class="o">=</span> <span class="n">overlap_info</span><span class="o">.</span><span class="n">params_per_rank</span>
+        <span class="n">offsets</span> <span class="o">=</span> <span class="n">overlap_info</span><span class="o">.</span><span class="n">offsets</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_bucket_assignments_per_rank_cache</span><span class="p">[</span><span class="n">assigned_rank</span><span class="p">][</span><span class="n">bucket_index</span><span class="p">]</span> <span class="o">=</span> \
+            <span class="n">_DDPBucketAssignment</span><span class="p">(</span><span class="n">bucket_index</span><span class="p">,</span> <span class="n">bucket_params</span><span class="p">,</span> <span class="n">bucket_offset</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">global_rank</span> <span class="o">==</span> <span class="n">assigned_rank</span><span class="p">:</span>
+            <span class="n">offsets</span><span class="p">[</span><span class="n">bucket_index</span><span class="p">]</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">params_per_rank</span><span class="p">[</span><span class="n">assigned_rank</span><span class="p">])</span>
+        <span class="n">params_per_rank</span><span class="p">[</span><span class="n">assigned_rank</span><span class="p">]</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">bucket_params</span><span class="p">)</span>
+        <span class="n">assigned_ranks_per_bucket</span><span class="p">[</span><span class="n">bucket_index</span><span class="p">]</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">assigned_rank</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_overlap_info</span><span class="o">.</span><span class="n">num_bucket_assignments</span> <span class="o">+=</span> <span class="mi">1</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">_bucket_assignments_per_rank</span><span class="p">(</span>
+        <span class="bp">self</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">_DDPBucketAssignment</span><span class="p">]]:</span>
+        <span class="sa">r</span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        :class:`list` of length world size consisting of :class:`dict` s</span>
+<span class="sd">        mapping bucket indices to :class:`_DDPBucketAssignment` s for each</span>
+<span class="sd">        rank.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">_overlap_with_ddp</span><span class="p">,</span> <span class="s2">&quot;`_bucket_assignments_per_rank` &quot;</span> \
+            <span class="s2">&quot;only be used if `overlap_with_ddp=True`&quot;</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_bucket_assignments_per_rank_cache</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_bucket_assignments_per_rank_cache</span>
 
         <span class="n">overlap_info</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_overlap_info</span>
-        <span class="k">assert</span> <span class="n">overlap_info</span><span class="o">.</span><span class="n">status</span> <span class="o">==</span> <span class="n">_OverlapStatus</span><span class="o">.</span><span class="n">INITIALIZED</span><span class="p">,</span> \
-            <span class="s2">&quot;Accessing `_device_to_buckets` before the necessary &quot;</span> \
-            <span class="s2">&quot;information has been collected&quot;</span>
+        <span class="k">assert</span> <span class="n">overlap_info</span><span class="o">.</span><span class="n">status</span> <span class="o">==</span> <span class="n">_OverlapStatus</span><span class="o">.</span><span class="n">INITIALIZED</span>
 
+        <span class="bp">self</span><span class="o">.</span><span class="n">_bucket_assignments_per_rank_cache</span> <span class="o">=</span> <span class="p">[{}</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">world_size</span><span class="p">)]</span>
         <span class="n">params_per_bucket</span> <span class="o">=</span> <span class="n">overlap_info</span><span class="o">.</span><span class="n">params_per_bucket</span>
-        <span class="k">for</span> <span class="n">bucket_idx</span><span class="p">,</span> <span class="n">bucket_params</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">params_per_bucket</span><span class="p">):</span>
-            <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">bucket_params</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;Empty bucket&quot;</span>
-            <span class="n">rank</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ddp_bucket_index_to_rank</span><span class="p">(</span><span class="n">bucket_idx</span><span class="p">)</span>
-            <span class="n">bucket</span> <span class="o">=</span> <span class="n">_DDPBucket</span><span class="p">(</span><span class="n">bucket_idx</span><span class="p">,</span> <span class="n">bucket_params</span><span class="p">)</span>
-            <span class="n">device</span> <span class="o">=</span> <span class="n">bucket_params</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">device</span>  <span class="c1"># assume same device per bucket</span>
-            <span class="k">if</span> <span class="n">device</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_device_to_buckets_cache</span><span class="p">:</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_device_to_buckets_cache</span><span class="p">[</span><span class="n">device</span><span class="p">]</span> <span class="o">=</span> <span class="p">[[]</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">world_size</span><span class="p">)]</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_device_to_buckets_cache</span><span class="p">[</span><span class="n">device</span><span class="p">][</span><span class="n">rank</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">bucket</span><span class="p">)</span>
 
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_device_to_buckets_cache</span>
+        <span class="k">if</span> <span class="n">overlap_info</span><span class="o">.</span><span class="n">shard_buckets</span><span class="p">:</span>
+            <span class="c1"># Define the assignment threshold to approximate uniformity</span>
+            <span class="k">assert</span> <span class="n">overlap_info</span><span class="o">.</span><span class="n">total_size</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">,</span> \
+                <span class="s2">&quot;`total_size` was not computed&quot;</span>
+            <span class="n">threshold</span> <span class="o">=</span> <span class="n">overlap_info</span><span class="o">.</span><span class="n">total_size</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">world_size</span>  <span class="c1"># type: ignore[operator]</span>
+            <span class="n">size_per_rank</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">world_size</span><span class="p">)]</span>
+
+        <span class="n">num_buckets</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">params_per_bucket</span><span class="p">)</span>
+        <span class="n">overlap_info</span><span class="o">.</span><span class="n">assigned_ranks_per_bucket</span> <span class="o">=</span> <span class="p">[</span><span class="nb">set</span><span class="p">()</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_buckets</span><span class="p">)]</span>
+        <span class="n">assigned_ranks_per_bucket</span> <span class="o">=</span> <span class="n">overlap_info</span><span class="o">.</span><span class="n">assigned_ranks_per_bucket</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">overlap_info</span><span class="o">.</span><span class="n">shard_buckets</span><span class="p">:</span>
+            <span class="c1"># Assign each DDP bucket entirely to a single rank</span>
+            <span class="k">for</span> <span class="n">bucket_index</span><span class="p">,</span> <span class="n">bucket_params</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">params_per_bucket</span><span class="p">):</span>
+                <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">bucket_params</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;Empty bucket&quot;</span>
+                <span class="n">assigned_rank</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_assigned_rank</span><span class="p">(</span><span class="n">bucket_index</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_assign_bucket_subset_to_rank</span><span class="p">(</span>
+                    <span class="n">bucket_index</span><span class="p">,</span>
+                    <span class="n">bucket_params</span><span class="p">,</span>
+                    <span class="mi">0</span><span class="p">,</span>
+                    <span class="n">assigned_rank</span><span class="p">,</span>
+                    <span class="n">assigned_ranks_per_bucket</span><span class="p">,</span>
+                <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># Assign each DDP bucket to possibly multiple ranks</span>
+            <span class="c1"># Specifically, sort the DDP buckets by increasing size, and for</span>
+            <span class="c1"># each bucket, iteratively assign the maximal unassigned subset</span>
+            <span class="c1"># with size less than `threshold` to the rank with the least total</span>
+            <span class="c1"># size so far -- each such assignment is represented by a</span>
+            <span class="c1"># `_DDPBucketAssignment` instance and only contains parameters from</span>
+            <span class="c1"># a single DDP bucket</span>
+            <span class="n">params_per_bucket_enum</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span>
+                <span class="nb">enumerate</span><span class="p">(</span><span class="n">params_per_bucket</span><span class="p">),</span>
+                <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="nb">sum</span><span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">x</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+            <span class="p">)</span>
+            <span class="k">for</span> <span class="n">bucket_index</span><span class="p">,</span> <span class="n">bucket_params</span> <span class="ow">in</span> <span class="n">params_per_bucket_enum</span><span class="p">:</span>
+                <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">bucket_params</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;Empty bucket&quot;</span>
+                <span class="n">bucket_offset</span> <span class="o">=</span> <span class="mi">0</span>
+                <span class="n">assignment_size</span> <span class="o">=</span> <span class="mi">0</span>
+                <span class="k">for</span> <span class="n">param_index</span><span class="p">,</span> <span class="n">param</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">bucket_params</span><span class="p">):</span>
+                    <span class="n">param_numel</span> <span class="o">=</span> <span class="n">param</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span>
+                    <span class="k">if</span> <span class="n">assignment_size</span> <span class="o">+</span> <span class="n">param_numel</span> <span class="o">&gt;=</span> <span class="n">threshold</span> <span class="ow">and</span> <span class="n">param_index</span> <span class="o">&gt;</span> <span class="n">bucket_offset</span><span class="p">:</span>
+                        <span class="n">assigned_rank</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_min_index</span><span class="p">(</span><span class="n">size_per_rank</span><span class="p">,</span> <span class="n">assigned_ranks_per_bucket</span><span class="p">[</span><span class="n">bucket_index</span><span class="p">])</span>
+                        <span class="c1"># Include up to but not including the parameter that</span>
+                        <span class="c1"># exceeded the threshold</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">_assign_bucket_subset_to_rank</span><span class="p">(</span>
+                            <span class="n">bucket_index</span><span class="p">,</span>
+                            <span class="n">bucket_params</span><span class="p">[</span><span class="n">bucket_offset</span><span class="p">:</span><span class="n">param_index</span><span class="p">],</span>
+                            <span class="n">bucket_offset</span><span class="p">,</span>
+                            <span class="n">assigned_rank</span><span class="p">,</span>
+                            <span class="n">assigned_ranks_per_bucket</span><span class="p">,</span>
+                        <span class="p">)</span>
+                        <span class="n">size_per_rank</span><span class="p">[</span><span class="n">assigned_rank</span><span class="p">]</span> <span class="o">+=</span> <span class="n">assignment_size</span>
+                        <span class="n">bucket_offset</span> <span class="o">=</span> <span class="n">param_index</span>
+                        <span class="n">assignment_size</span> <span class="o">=</span> <span class="mi">0</span>
+                    <span class="n">assignment_size</span> <span class="o">+=</span> <span class="n">param_numel</span>
+                <span class="c1"># Assign the remainder of the bucket so that no assignment</span>
+                <span class="c1"># spans across two buckets</span>
+                <span class="n">assigned_rank</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_min_index</span><span class="p">(</span><span class="n">size_per_rank</span><span class="p">,</span> <span class="n">assigned_ranks_per_bucket</span><span class="p">[</span><span class="n">bucket_index</span><span class="p">])</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_assign_bucket_subset_to_rank</span><span class="p">(</span>
+                    <span class="n">bucket_index</span><span class="p">,</span>
+                    <span class="n">bucket_params</span><span class="p">[</span><span class="n">bucket_offset</span><span class="p">:],</span>
+                    <span class="n">bucket_offset</span><span class="p">,</span>
+                    <span class="n">assigned_rank</span><span class="p">,</span>
+                    <span class="n">assigned_ranks_per_bucket</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="n">size_per_rank</span><span class="p">[</span><span class="n">assigned_rank</span><span class="p">]</span> <span class="o">+=</span> <span class="n">assignment_size</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_bucket_assignments_per_rank_cache</span>
 
     <span class="k">def</span> <span class="nf">_local_step</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -1280,17 +1432,10 @@
 <span class="sd">        .. note: Any extra parameters are passed to the base optimizer as-is.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_overlap_with_ddp</span><span class="p">:</span>
-            <span class="c1"># If DDP buckets have been rebuilt, calling `step()` indicates that</span>
-            <span class="c1"># the backward pass has fully completed and all information has</span>
-            <span class="c1"># been collected; hence, this ZeRO instance can be initialized</span>
-            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_overlap_info</span><span class="o">.</span><span class="n">status</span> <span class="o">==</span> <span class="n">_OverlapStatus</span><span class="o">.</span><span class="n">DDP_HAS_REBUILT_BUCKETS</span><span class="p">:</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_overlap_info</span><span class="o">.</span><span class="n">status</span> <span class="o">=</span> <span class="n">_OverlapStatus</span><span class="o">.</span><span class="n">INITIALIZED</span>
-                <span class="c1"># Since all information has been collected, perform the delayed</span>
-                <span class="c1"># initialization of the local optimizer and supporting state</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_init_zero_for_overlap</span><span class="p">()</span>
-
-            <span class="c1"># `step()` does not actually perform any parameter updates and is</span>
-            <span class="c1"># only used for bookkeeping when `overlap_with_ddp=True`</span>
+            <span class="n">logging</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+                <span class="s2">&quot;`step()` should not be included in the training loop when &quot;</span>
+                <span class="s2">&quot;`overlap_with_ddp=True`&quot;</span>
+            <span class="p">)</span>
             <span class="k">return</span> <span class="kc">None</span>
 
         <span class="c1"># Perform the local optimizer step</span>
@@ -1502,57 +1647,38 @@
 
     <span class="k">def</span> <span class="nf">_build_ddp_param_buckets</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="sa">r</span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Builds parameter buckets if ``overlap_with_ddp`` so that for each</span>
-<span class="sd">        device that stores this rank&#39;s parameters, there is a :class:`list` of</span>
-<span class="sd">        buckets (represented as tensors) containing the parameters on that</span>
-<span class="sd">        device that are assigned to the rank in the parameter update</span>
-<span class="sd">        partition and grouped following the :class:`DistributedDataParallel`</span>
-<span class="sd">        gradient buckets.</span>
+<span class="sd">        For each DDP bucket with parameters assigned to this rank, flattens the</span>
+<span class="sd">        data of those parameters into a single tensor and saves the tensor to</span>
+<span class="sd">        the ``tensor`` attribute in the corresponding</span>
+<span class="sd">        :class:`_DDPBucketAssignment` instance stored in</span>
+<span class="sd">        ``self._bucket_assignments_per_rank``.</span>
 
-<span class="sd">        This method should only be called during the delayed initialization</span>
-<span class="sd">        when ``overlap_with_ddp=True``.</span>
-
-<span class="sd">        .. warning::</span>
-<span class="sd">            The current implementation assumes that all of the parameters in a</span>
-<span class="sd">            bucket are of the same dense type when allocating the bucket&#39;s</span>
-<span class="sd">            tensor.</span>
-
-<span class="sd">        .. warning::</span>
-<span class="sd">            If the model parameters are stored across more than one device,</span>
-<span class="sd">            then the storage partitioning must be the same across all</span>
-<span class="sd">            processes in order for parameter synchronization to work.</span>
+<span class="sd">        :class:`DistributedDataParallel` guarantees that the parameters</span>
+<span class="sd">        corresponding to a gradient bucket have the same device and the same</span>
+<span class="sd">        dtype.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">_overlap_with_ddp</span><span class="p">,</span> \
-            <span class="s2">&quot;`_build_ddp_param_buckets()` should only be called when &quot;</span> \
-            <span class="s2">&quot;`overlap_with_ddp=True`&quot;</span>
+        <span class="k">for</span> <span class="n">bucket_assignments</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_bucket_assignments_per_rank</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">bucket_assignment</span> <span class="ow">in</span> <span class="n">bucket_assignments</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+                <span class="n">params</span> <span class="o">=</span> <span class="n">bucket_assignment</span><span class="o">.</span><span class="n">parameters</span>
+                <span class="n">bucket_size</span> <span class="o">=</span> <span class="mi">0</span>
+                <span class="n">dtype</span> <span class="o">=</span> <span class="kc">None</span>
+                <span class="k">for</span> <span class="n">param</span> <span class="ow">in</span> <span class="n">params</span><span class="p">:</span>
+                    <span class="k">assert</span> <span class="n">_is_trainable</span><span class="p">(</span><span class="n">param</span><span class="p">),</span> <span class="s2">&quot;Model parameter &quot;</span> \
+                        <span class="s2">&quot;corresponding to a gradient in a DDP bucket should &quot;</span> \
+                        <span class="s2">&quot;require a gradient&quot;</span>
+                    <span class="n">bucket_size</span> <span class="o">+=</span> <span class="n">param</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span>
+                    <span class="n">dtype</span> <span class="o">=</span> <span class="n">param</span><span class="o">.</span><span class="n">dtype</span>  <span class="c1"># assumes all same dtype</span>
+                <span class="k">assert</span> <span class="n">bucket_size</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;Empty bucket&quot;</span>
 
-        <span class="n">num_devices</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_device_to_buckets</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_buckets</span> <span class="o">=</span> <span class="p">[[{}</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">world_size</span><span class="p">)]</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_devices</span><span class="p">)]</span>  <span class="c1"># type: ignore[assignment]</span>
-
-        <span class="k">for</span> <span class="n">dev_idx</span><span class="p">,</span> <span class="p">(</span><span class="n">device</span><span class="p">,</span> <span class="n">ddp_buckets_per_rank</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_device_to_buckets</span><span class="o">.</span><span class="n">items</span><span class="p">()):</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_device_to_device_index</span><span class="p">[</span><span class="n">device</span><span class="p">]</span> <span class="o">=</span> <span class="n">dev_idx</span>
-            <span class="k">for</span> <span class="n">rank</span><span class="p">,</span> <span class="n">ddp_buckets</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">ddp_buckets_per_rank</span><span class="p">):</span>
-                <span class="k">for</span> <span class="n">ddp_bucket</span> <span class="ow">in</span> <span class="n">ddp_buckets</span><span class="p">:</span>
-                    <span class="n">bucket_index</span> <span class="o">=</span> <span class="n">ddp_bucket</span><span class="o">.</span><span class="n">bucket_index</span>  <span class="c1"># type: ignore[attr-defined]</span>
-                    <span class="n">params</span> <span class="o">=</span> <span class="n">ddp_bucket</span><span class="o">.</span><span class="n">params</span>              <span class="c1"># type: ignore[attr-defined]</span>
-                    <span class="n">bucket_size</span> <span class="o">=</span> <span class="mi">0</span>
-                    <span class="n">dtype</span> <span class="o">=</span> <span class="kc">None</span>
-                    <span class="k">for</span> <span class="n">param</span> <span class="ow">in</span> <span class="n">params</span><span class="p">:</span>
-                        <span class="k">assert</span> <span class="n">_is_trainable</span><span class="p">(</span><span class="n">param</span><span class="p">),</span> \
-                            <span class="s2">&quot;Model parameter corresponding to a gradient in &quot;</span> \
-                            <span class="s2">&quot;a DDP bucket should require a gradient&quot;</span>
-                        <span class="n">bucket_size</span> <span class="o">+=</span> <span class="n">param</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span>
-                        <span class="n">dtype</span> <span class="o">=</span> <span class="n">param</span><span class="o">.</span><span class="n">dtype</span>  <span class="c1"># assumes all same dtype</span>
-                    <span class="k">assert</span> <span class="n">bucket_size</span> <span class="o">&gt;</span> <span class="mi">0</span>
-                    <span class="n">bucket</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">bucket_size</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
-                    <span class="n">offset</span> <span class="o">=</span> <span class="mi">0</span>
-                    <span class="c1"># Construct the bucket (assuming all dense and same dtype)</span>
-                    <span class="k">for</span> <span class="n">param</span> <span class="ow">in</span> <span class="n">params</span><span class="p">:</span>
-                        <span class="n">offset_next</span> <span class="o">=</span> <span class="n">offset</span> <span class="o">+</span> <span class="n">param</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span>
-                        <span class="n">bucket</span><span class="p">[</span><span class="n">offset</span><span class="p">:</span><span class="n">offset_next</span><span class="p">]</span><span class="o">.</span><span class="n">copy_</span><span class="p">(</span><span class="n">param</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">flatten</span><span class="p">())</span>
-                        <span class="n">param</span><span class="o">.</span><span class="n">data</span> <span class="o">=</span> <span class="n">bucket</span><span class="p">[</span><span class="n">offset</span><span class="p">:</span><span class="n">offset_next</span><span class="p">]</span><span class="o">.</span><span class="n">view_as</span><span class="p">(</span><span class="n">param</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
-                        <span class="n">offset</span> <span class="o">=</span> <span class="n">offset_next</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">_buckets</span><span class="p">[</span><span class="n">dev_idx</span><span class="p">][</span><span class="n">rank</span><span class="p">][</span><span class="n">bucket_index</span><span class="p">]</span> <span class="o">=</span> <span class="n">bucket</span>
+                <span class="c1"># Construct the bucket tensor (assuming all dense and same dtype)</span>
+                <span class="n">tensor</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">bucket_size</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">bucket_assignment</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+                <span class="n">offset</span> <span class="o">=</span> <span class="mi">0</span>
+                <span class="k">for</span> <span class="n">param</span> <span class="ow">in</span> <span class="n">params</span><span class="p">:</span>
+                    <span class="n">offset_next</span> <span class="o">=</span> <span class="n">offset</span> <span class="o">+</span> <span class="n">param</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span>
+                    <span class="n">tensor</span><span class="p">[</span><span class="n">offset</span><span class="p">:</span><span class="n">offset_next</span><span class="p">]</span><span class="o">.</span><span class="n">copy_</span><span class="p">(</span><span class="n">param</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">flatten</span><span class="p">())</span>
+                    <span class="n">param</span><span class="o">.</span><span class="n">data</span> <span class="o">=</span> <span class="n">tensor</span><span class="p">[</span><span class="n">offset</span><span class="p">:</span><span class="n">offset_next</span><span class="p">]</span><span class="o">.</span><span class="n">view_as</span><span class="p">(</span><span class="n">param</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
+                    <span class="n">offset</span> <span class="o">=</span> <span class="n">offset_next</span>
+                <span class="n">bucket_assignment</span><span class="o">.</span><span class="n">tensor</span> <span class="o">=</span> <span class="n">tensor</span>
 
     <span class="k">def</span> <span class="nf">_verify_and_init_params</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">params</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="sa">r</span><span class="sd">&quot;&quot;&quot;</span>
@@ -1637,7 +1763,32 @@
             <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">param_groups</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">,</span> <span class="s2">&quot;Initializing the local &quot;</span> \
                 <span class="s2">&quot;functional optimizer with more than one parameter group&quot;</span>
             <span class="n">params</span> <span class="o">=</span> <span class="n">param_groups</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;params&quot;</span><span class="p">]</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">optim</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_optim_constructor</span><span class="p">(</span><span class="n">params</span><span class="p">,</span> <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">_optim_defaults</span><span class="p">)</span>
+            <span class="c1"># Try to pass `_allow_empty_param_list=True` to avoid erroring</span>
+            <span class="k">if</span> <span class="s2">&quot;_allow_empty_param_list&quot;</span> <span class="ow">in</span> <span class="n">inspect</span><span class="o">.</span><span class="n">signature</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_optim_constructor</span><span class="p">)</span><span class="o">.</span><span class="n">parameters</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">optim</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_optim_constructor</span><span class="p">(</span><span class="n">params</span><span class="p">,</span> <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">_optim_defaults</span><span class="p">,</span> <span class="n">_allow_empty_param_list</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">logging</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_optim_constructor</span><span class="si">}</span><span class="s2"> does not support the argument &quot;</span>
+                    <span class="s2">&quot;`_allow_empty_param_list`; ZeroRedundancyOptimizer may &quot;</span>
+                    <span class="s2">&quot;error due to an empty parameter list&quot;</span>
+                <span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">optim</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_optim_constructor</span><span class="p">(</span><span class="n">params</span><span class="p">,</span> <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">_optim_defaults</span><span class="p">)</span>
+
+            <span class="c1"># Log information about the DDP and ZeRO bucketing</span>
+            <span class="k">if</span> <span class="n">dist</span><span class="o">.</span><span class="n">_get_debug_mode</span><span class="p">()</span> <span class="o">!=</span> <span class="n">dist</span><span class="o">.</span><span class="n">_DistributedDebugLevel</span><span class="o">.</span><span class="n">OFF</span><span class="p">:</span>
+                <span class="n">local_numel</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">params</span><span class="p">)</span>
+                <span class="n">num_assigned_buckets</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_bucket_assignments_per_rank</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">global_rank</span><span class="p">])</span>
+                <span class="n">logging</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;rank </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">global_rank</span><span class="si">}</span><span class="s2"> with </span><span class="si">{</span><span class="n">local_numel</span><span class="si">}</span><span class="s2"> parameters &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;across </span><span class="si">{</span><span class="n">num_assigned_buckets</span><span class="si">}</span><span class="s2"> buckets&quot;</span>
+                <span class="p">)</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">global_rank</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                    <span class="n">logging</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_overlap_info</span><span class="o">.</span><span class="n">params_per_bucket</span><span class="p">)</span><span class="si">}</span><span class="s2"> DDP &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;buckets and &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_overlap_info</span><span class="o">.</span><span class="n">num_bucket_assignments</span><span class="si">}</span><span class="s2"> bucket &quot;</span>
+                        <span class="s2">&quot;assignments&quot;</span>
+                    <span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="c1"># NOTE: Passing `param_groups` into the local optimizer constructor</span>
             <span class="c1"># bypasses the empty parameter list check</span>
@@ -1662,27 +1813,26 @@
         <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">_overlap_with_ddp</span><span class="p">,</span> \
             <span class="s2">&quot;`_init_zero_for_overlap()` should only be called when &quot;</span> \
             <span class="s2">&quot;`overlap_with_ddp=True`&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_overlap_info</span><span class="o">.</span><span class="n">status</span> <span class="o">=</span> <span class="n">_OverlapStatus</span><span class="o">.</span><span class="n">INITIALIZED</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_clear_cache</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_partition_parameters</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_overlap_info</span><span class="o">.</span><span class="n">params_per_rank</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_build_ddp_param_buckets</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_init_local_optimizer</span><span class="p">()</span>
 
-    <span class="k">def</span> <span class="nf">_ddp_bucket_index_to_rank</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">bucket_index</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
-        <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Assigns a rank to a given DDP gradient bucket index.&quot;&quot;&quot;</span>
-        <span class="k">return</span> <span class="n">bucket_index</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">world_size</span>
-
-    <span class="k">def</span> <span class="nf">_get_assigned_ddp_bucket_indices</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="nb">int</span><span class="p">]:</span>
+    <span class="k">def</span> <span class="nf">_get_assigned_rank</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">bucket_index</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
         <span class="sa">r</span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Returns a list of the DDP gradient bucket indices assigned to this rank</span>
-<span class="sd">        to update.</span>
+<span class="sd">        Returns the single rank assigned to a :class:`DistributedDataParallel`</span>
+<span class="sd">        gradient bucket.</span>
+
+<span class="sd">        Arguments:</span>
+<span class="sd">            bucket_index (int): index of the :class:`DistributedDataParallel`</span>
+<span class="sd">                bucket for which to get the assigned rank.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">_overlap_info</span><span class="o">.</span><span class="n">status</span> <span class="o">==</span> <span class="n">_OverlapStatus</span><span class="o">.</span><span class="n">INITIALIZED</span>
-        <span class="n">num_buckets</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_overlap_info</span><span class="o">.</span><span class="n">params_per_bucket</span><span class="p">)</span>
-        <span class="n">assigned_indices</span> <span class="o">=</span> <span class="p">[</span>
-            <span class="n">bucket_index</span> <span class="k">for</span> <span class="n">bucket_index</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_buckets</span><span class="p">)</span>
-            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ddp_bucket_index_to_rank</span><span class="p">(</span><span class="n">bucket_index</span><span class="p">)</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">global_rank</span>
-        <span class="p">]</span>
-        <span class="k">return</span> <span class="n">assigned_indices</span>
+        <span class="k">assert</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_overlap_info</span><span class="o">.</span><span class="n">shard_buckets</span><span class="p">,</span> \
+            <span class="s2">&quot;The bucket assignment requires global bucket information and &quot;</span> \
+            <span class="s2">&quot;will be computed later; there should be no need to use this &quot;</span> \
+            <span class="s2">&quot;method&quot;</span>
+        <span class="k">return</span> <span class="n">bucket_index</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">world_size</span>
 
     <span class="k">def</span> <span class="nf">_check_overlap_initialized</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="sa">r</span><span class="sd">&quot;&quot;&quot;</span>
@@ -1810,6 +1960,8 @@
          <script src="../../../../_static/jquery.js"></script>
          <script src="../../../../_static/underscore.js"></script>
          <script src="../../../../_static/doctools.js"></script>
+         <script src="../../../../_static/clipboard.min.js"></script>
+         <script src="../../../../_static/copybutton.js"></script>
      
 
   

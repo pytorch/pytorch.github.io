@@ -30,6 +30,7 @@
 
   <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
   <!-- <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" /> -->
+  <link rel="stylesheet" href="../../../_static/copybutton.css" type="text/css" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.10.0-beta/dist/katex.min.css" type="text/css" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.13.11/dist/katex.min.css" type="text/css" />
   <link rel="stylesheet" href="../../../_static/katex-math.css" type="text/css" />
@@ -192,7 +193,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href='https://pytorch.org/docs/versions.html'>master (1.10.0a0+git100f6e1 ) &#x25BC</a>
+      <a href='https://pytorch.org/docs/versions.html'>master (1.10.0a0+gitc21b6c1 ) &#x25BC</a>
     </div>
     
 
@@ -400,7 +401,7 @@
 
 <span class="kn">import</span> <span class="nn">torch</span>
 <span class="kn">import</span> <span class="nn">torch.nn</span> <span class="k">as</span> <span class="nn">nn</span>
-<span class="kn">from</span> <span class="nn">.utils</span> <span class="kn">import</span> <span class="n">check_min_max_valid</span>
+<span class="kn">from</span> <span class="nn">.utils</span> <span class="kn">import</span> <span class="n">check_min_max_valid</span><span class="p">,</span> <span class="n">calculate_qmin_qmax</span>
 
 
 <span class="k">class</span> <span class="nc">_PartialWrapper</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
@@ -586,8 +587,8 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">has_customized_qrange</span> <span class="o">=</span> <span class="p">(</span><span class="n">quant_min</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">and</span> <span class="p">(</span><span class="n">quant_max</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">)</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">has_customized_qrange</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_validate_qmin_qmax</span><span class="p">(</span><span class="n">quant_min</span><span class="p">,</span> <span class="n">quant_max</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">quant_min</span> <span class="o">=</span> <span class="n">quant_min</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">quant_max</span> <span class="o">=</span> <span class="n">quant_max</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">quant_min</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">quant_max</span> <span class="o">=</span> \
+            <span class="n">calculate_qmin_qmax</span><span class="p">(</span><span class="n">quant_min</span><span class="p">,</span> <span class="n">quant_max</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">has_customized_qrange</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">reduce_range</span><span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">_load_from_state_dict</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -642,51 +643,6 @@
         <span class="p">),</span> <span class="s2">&quot;qmin must be strictly less than qmax for user-specified quantization range.&quot;</span>
 
     <span class="nd">@torch</span><span class="o">.</span><span class="n">jit</span><span class="o">.</span><span class="n">export</span>
-    <span class="k">def</span> <span class="nf">_calculate_qmin_qmax</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]:</span>
-        <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Calculates actual qmin and qmax based on the quantization range,</span>
-<span class="sd">        observer datatype and if range is reduced.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">has_customized_qrange</span><span class="p">:</span>
-            <span class="c1"># This initialization here is to be resolve TorchScript compilation issues and allow</span>
-            <span class="c1"># using of refinement to decouple initial_qmin and initial_qmax from quantization range.</span>
-            <span class="c1"># The actual values of initial_qmin and initial_qmax will be reset below.</span>
-            <span class="n">initial_quant_min</span><span class="p">,</span> <span class="n">initial_quant_max</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">255</span>
-            <span class="c1"># The following assignment of self.qmin and self.qmax to the local variables and the if check refine the</span>
-            <span class="c1"># attribute from Optional valid integers for use, based on TorchScript&#39;s requirements.</span>
-            <span class="n">custom_quant_min</span><span class="p">,</span> <span class="n">custom_quant_max</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">quant_min</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">quant_max</span>
-            <span class="k">if</span> <span class="n">custom_quant_min</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">custom_quant_max</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="n">initial_quant_min</span><span class="p">,</span> <span class="n">initial_quant_max</span> <span class="o">=</span> <span class="p">(</span>
-                    <span class="n">custom_quant_min</span><span class="p">,</span>
-                    <span class="n">custom_quant_max</span><span class="p">,</span>
-                <span class="p">)</span>
-
-            <span class="n">qrange_len</span> <span class="o">=</span> <span class="n">initial_quant_max</span> <span class="o">-</span> <span class="n">initial_quant_min</span> <span class="o">+</span> <span class="mi">1</span>
-            <span class="k">assert</span> <span class="p">(</span>
-                <span class="mi">0</span> <span class="o">&lt;</span> <span class="n">qrange_len</span> <span class="o">&lt;=</span> <span class="mi">256</span>
-            <span class="p">),</span> <span class="s2">&quot;quantization range should be positive and not exceed the maximum bit range (=256).&quot;</span>
-            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">dtype</span> <span class="o">==</span> <span class="n">torch</span><span class="o">.</span><span class="n">qint8</span><span class="p">:</span>
-                <span class="n">quant_min</span><span class="p">,</span> <span class="n">quant_max</span> <span class="o">=</span> <span class="o">-</span><span class="n">qrange_len</span> <span class="o">//</span> <span class="mi">2</span><span class="p">,</span> <span class="n">qrange_len</span> <span class="o">//</span> <span class="mi">2</span> <span class="o">-</span> <span class="mi">1</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="n">quant_min</span><span class="p">,</span> <span class="n">quant_max</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span> <span class="n">qrange_len</span> <span class="o">-</span> <span class="mi">1</span>
-            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">reduce_range</span><span class="p">:</span>
-                <span class="n">quant_min</span><span class="p">,</span> <span class="n">quant_max</span> <span class="o">=</span> <span class="n">quant_min</span> <span class="o">//</span> <span class="mi">2</span><span class="p">,</span> <span class="n">quant_max</span> <span class="o">//</span> <span class="mi">2</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="c1"># Fallback onto default 8-bit qmin and qmax calculation if dynamic range is not used.</span>
-            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">dtype</span> <span class="o">==</span> <span class="n">torch</span><span class="o">.</span><span class="n">qint8</span><span class="p">:</span>
-                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">reduce_range</span><span class="p">:</span>
-                    <span class="n">quant_min</span><span class="p">,</span> <span class="n">quant_max</span> <span class="o">=</span> <span class="o">-</span><span class="mi">64</span><span class="p">,</span> <span class="mi">63</span>
-                <span class="k">else</span><span class="p">:</span>
-                    <span class="n">quant_min</span><span class="p">,</span> <span class="n">quant_max</span> <span class="o">=</span> <span class="o">-</span><span class="mi">128</span><span class="p">,</span> <span class="mi">127</span>
-            <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">dtype</span> <span class="o">==</span> <span class="n">torch</span><span class="o">.</span><span class="n">quint8</span><span class="p">:</span>
-                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">reduce_range</span><span class="p">:</span>
-                    <span class="n">quant_min</span><span class="p">,</span> <span class="n">quant_max</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">127</span>
-                <span class="k">else</span><span class="p">:</span>
-                    <span class="n">quant_min</span><span class="p">,</span> <span class="n">quant_max</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">255</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="n">quant_min</span><span class="p">,</span> <span class="n">quant_max</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">15</span>
-        <span class="k">return</span> <span class="n">quant_min</span><span class="p">,</span> <span class="n">quant_max</span>
-
-    <span class="nd">@torch</span><span class="o">.</span><span class="n">jit</span><span class="o">.</span><span class="n">export</span>
     <span class="k">def</span> <span class="nf">_calculate_qparams</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="n">min_val</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">max_val</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
@@ -704,7 +660,7 @@
         <span class="k">if</span> <span class="ow">not</span> <span class="n">check_min_max_valid</span><span class="p">(</span><span class="n">min_val</span><span class="p">,</span> <span class="n">max_val</span><span class="p">):</span>
             <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mf">1.0</span><span class="p">],</span> <span class="n">device</span><span class="o">=</span><span class="n">min_val</span><span class="o">.</span><span class="n">device</span><span class="o">.</span><span class="n">type</span><span class="p">),</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mi">0</span><span class="p">],</span> <span class="n">device</span><span class="o">=</span><span class="n">min_val</span><span class="o">.</span><span class="n">device</span><span class="o">.</span><span class="n">type</span><span class="p">)</span>
 
-        <span class="n">quant_min</span><span class="p">,</span> <span class="n">quant_max</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_calculate_qmin_qmax</span><span class="p">()</span>
+        <span class="n">quant_min</span><span class="p">,</span> <span class="n">quant_max</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">quant_min</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">quant_max</span>
         <span class="n">min_val_neg</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="n">min_val</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">min_val</span><span class="p">))</span>
         <span class="n">max_val_pos</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">max_val</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">max_val</span><span class="p">))</span>
 
@@ -1839,6 +1795,8 @@
          <script src="../../../_static/jquery.js"></script>
          <script src="../../../_static/underscore.js"></script>
          <script src="../../../_static/doctools.js"></script>
+         <script src="../../../_static/clipboard.min.js"></script>
+         <script src="../../../_static/copybutton.js"></script>
      
 
   
