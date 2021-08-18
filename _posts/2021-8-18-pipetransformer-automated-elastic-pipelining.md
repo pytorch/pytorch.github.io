@@ -1,6 +1,6 @@
 ---
 layout: blog_detail
-title: 'PipeTransformer: Automated Elastic Pipelining for Distributed'
+title: 'PipeTransformer: Automated Elastic Pipelining for Distributed Training of Large-scale Models'
 author: Chaoyang He, Shen Li, Mahdi Soltanolkotabi, and Salman Avestimehr
 featured-img: 'assets/images/pipetransformer_overview.png'
 ---
@@ -43,7 +43,7 @@ Figure 2. Interpretable Freeze Training: DNNs converge bottom-up (Results on CIF
 For example, in freeze training [17][18], neural networks usually converge from the bottom-up (i.e., not all layers need to be trained all the way through training). Figure 2 shows an example of how weights gradually stabilize during training in this approach. This observation motivates us to utilize freeze training for distributed training of Transformer models to accelerate training by dynamically allocating resources to focus on a shrinking set of active layers. Such a layer freezing strategy is especially pertinent to pipeline parallelism, as excluding consecutive bottom layers from the pipeline can reduce computation, memory, and communication overhead.
 
 <p align="center">
-<img src="{{ site.url }}/assets/images/PipeTransformer.png" alt="Freeze Training">
+<img src="{{ site.url }}/assets/images/PipeTransformer.png" width="50%">
 <br>
 Figure 3. The process of PipeTransformer’s automated and elastic pipelining to accelerate distributed training of Transformer models
 </p>
