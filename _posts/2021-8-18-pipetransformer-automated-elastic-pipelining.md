@@ -2,7 +2,7 @@
 layout: blog_detail
 title: 'PipeTransformer: Automated Elastic Pipelining for Distributed'
 author: Chaoyang He, Shen Li, Mahdi Soltanolkotabi, and Salman Avestimehr
-featured-img: 'assets/images/mAP-of-SSD320-MobileNetV3-Large.png'
+featured-img: 'assets/images/pipetransformer_overview.png'
 ---
 
 In this blog post, we describe the first peer-reviewed research paper that explores accelerating the hybrid of PyTorch DDP (`torch.nn.parallel.DistributedDataParallel`) [1] and Pipeline (`torch.distributed.pipeline`) - [PipeTransformer: Automated Elastic Pipelining for Distributed Training of Large-scale Models](http://proceedings.mlr.press/v139/he21a.html) (Transformers such as BERT [2]  and ViT [3]), published at ICML 2021.
