@@ -138,7 +138,7 @@ Figure 6. The partition boundary is in the middle of a skip connection
 
 
 <p align="center">
-<img src="{{ site.url }}/assets/images/AutoPipe_algorithm.png">
+<img src="{{ site.url }}/assets/images/AutoPipe_algorithm.png" width="100%">
 <br>
 </p>
 
