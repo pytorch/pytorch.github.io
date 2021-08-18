@@ -2,6 +2,7 @@
 layout: blog_detail
 title: 'PipeTransformer: Automated Elastic Pipelining for Distributed'
 author: Chaoyang He, Shen Li, Mahdi Soltanolkotabi, and Salman Avestimehr
+featured-img: 'assets/images/mAP-of-SSD320-MobileNetV3-Large.png'
 ---
 
 In this blog post, we describe the first peer-reviewed research paper that explores accelerating the hybrid of PyTorch DDP (`torch.nn.parallel.DistributedDataParallel`) [1] and Pipeline (`torch.distributed.pipeline`) - [PipeTransformer: Automated Elastic Pipelining for Distributed Training of Large-scale Models](http://proceedings.mlr.press/v139/he21a.html) (Transformers such as BERT [2]  and ViT [3]), published at ICML 2021.
@@ -16,7 +17,7 @@ Next, we will introduce the background, motivation, our idea, design, and how we
 
 # Introduction
 <p align="center">
-<img src="./figure/model_size.png" alt="Model Size" width="500">
+<img src="{{ site.url }}/assets/images/model_size.png" alt="Model Size" width="500">
 <br>
 Figure 1: the Parameter Number of Transformer Models Increases Dramatically.
 </p>
@@ -34,7 +35,7 @@ Existing distributed training solutions, however, only study scenarios where all
 
 
 <p align="center">
-<img src="./figure/freeze_training.png" alt="Freeze Training" width="560">
+<img src="{{ site.url }}/assets/images/freeze_training.png" alt="Freeze Training" width="560">
 <br>
 </p>
 Figure 2. Interpretable Freeze Training: DNNs converge bottom-up (Results on CIFAR10 using ResNet). Each pane shows layer-by-layer similarity using SVCCA [17][18]
@@ -42,7 +43,7 @@ Figure 2. Interpretable Freeze Training: DNNs converge bottom-up (Results on CIF
 For example, in freeze training [17][18], neural networks usually converge from the bottom-up (i.e., not all layers need to be trained all the way through training). Figure 2 shows an example of how weights gradually stabilize during training in this approach. This observation motivates us to utilize freeze training for distributed training of Transformer models to accelerate training by dynamically allocating resources to focus on a shrinking set of active layers. Such a layer freezing strategy is especially pertinent to pipeline parallelism, as excluding consecutive bottom layers from the pipeline can reduce computation, memory, and communication overhead.
 
 <p align="center">
-<img src="./figure/PipeTransformer.png" alt="Freeze Training">
+<img src="{{ site.url }}/assets/images/PipeTransformer.png" alt="Freeze Training">
 <br>
 Figure 3. The process of PipeTransformer’s automated and elastic pipelining to accelerate distributed training of Transformer models
 </p>
@@ -53,7 +54,7 @@ We propose PipeTransformer, an elastic pipelining training acceleration framewor
 The design of PipeTransformer faces four major challenges. First, the freeze algorithm must make on-the-fly and adaptive freezing decisions; however, existing work [17][18] only provides a posterior analysis tool. Second, the efficiency of pipeline re-partitioning results is influenced by multiple factors, including partition granularity, cross-partition activation size, and the chunking (the number of micro-batches) in mini-batches, which require reasoning and searching in a large solution space. Third, to dynamically introduce additional pipeline replicas, PipeTransformer must overcome the static nature of collective communications and avoid potentially complex cross-process messaging protocols when onboarding new processes (one pipeline is handled by one process). Finally, caching can save time for repeated forward propagation of frozen layers, but it must be shared between existing pipelines and newly added ones, as the system cannot afford to create and warm up a dedicated cache for each replica.
 
 <p align="center">
-<img src="./figure/PipeTransformer-Animation.gif" alt="Freeze Training">
+<img src="{{ site.url }}/assets/images/PipeTransformer-Animation.gif" alt="Freeze Training">
 <br>
 Figure 4: An Animation to Show the Dynamics of PipeTransformer
 </p>
@@ -81,7 +82,7 @@ Under these settings, our goal is to accelerate training by leveraging freeze tr
 
 
 <p align="center">
-<img src="./figure/overview.png" alt="Overview" width="560">
+<img src="{{ site.url }}/assets/images/pipetransformer_overview.png" alt="Overview" width="560">
 <br>
 Figure 5. Overview of PipeTransformer Training System
 </p>
@@ -125,7 +126,7 @@ In this basic example, we can see that before initializing `Pipe`, we need to pa
 In dynamic training system such as PipeTransformer, maintaining optimally balanced partitions in terms of parameter numbers does not guarantee the fastest training speed because other factors also play a crucial role:
 
 <p align="center">
-<img src="./figure/balancing_partition.png" width="560">
+<img src="{{ site.url }}/assets/images/balancing_partition.png" width="560">
 <br>
 Figure 6. The partition boundary is in the middle of a skip connection
 </p>
@@ -137,7 +138,7 @@ Figure 6. The partition boundary is in the middle of a skip connection
 
 
 <p align="center">
-<img src="./figure/AutoPipe_algorithm.png">
+<img src="{{ site.url }}/assets/images/AutoPipe_algorithm.png">
 <br>
 </p>
 
@@ -151,14 +152,14 @@ Note that the partition algorithm employed in this paper is not the only option;
 Pipeline compression helps to free up GPUs to accommodate more pipeline replicas and reduce the number of cross-device communications between partitions. To determine the timing of compression, we can estimate the memory cost of the largest partition after compression, and then compare it with that of the largest partition of a pipeline at timestep <img src="https://render.githubusercontent.com/render/math?math=T=0">. To avoid extensive memory profiling, the compression algorithm uses the parameter size as a proxy for the training memory footprint. Based on this simplification, the criterion of pipeline compression is as follows:
 
 <p align="center">
-<img src="./figure/memory_reduction.png" width="320">
+<img src="{{ site.url }}/assets/images/memory_reduction.png" width="320">
 <br>
 </p>
 
 Once the freeze notification is received, AutoPipe will always attempt to divide the pipeline length <img src="https://render.githubusercontent.com/render/math?math=K"> by 2 (e.g., from 8 to 4, then 2). By using <img src="https://render.githubusercontent.com/render/math?math=\frac{K}{2}"> as the input, the compression algorithm can verify if the result satisfies the criterion in Equation (1). Pseudocode is shown in lines 25-33 in Algorithm 1. Note that this compression makes the acceleration ratio exponentially increase during training, meaning that if a GPU server has a larger number of GPUs (e.g., more than 8), the acceleration ratio will be further amplified.
 
 <p align="center">
-<img src="./figure/pipe_buble.png" width="560">
+<img src="{{ site.url }}/assets/images/pipe_buble.png" width="560">
 <br>
 Figure 7. Pipeline Bubble: <img src="https://render.githubusercontent.com/render/math?math=F_{d,b}">, and <img src="https://render.githubusercontent.com/render/math?math=U_d"> denote forward, backward, and the optimizer update of micro-batch <img src="https://render.githubusercontent.com/render/math?math=b"> on device <img src="https://render.githubusercontent.com/render/math?math=d">, respectively. The total bubble size in each iteration is <img src="https://render.githubusercontent.com/render/math?math=K-1"> times per micro-batch forward and backward cost.
 </p>
@@ -183,7 +184,7 @@ Despite the conceptual simplicity, subtle dependencies on communications and sta
 3. <strong>Dataset Redistribution</strong>: the dataset should be re-balanced to match a dynamic number of pipelines. This not only avoids stragglers but also ensures that gradients from all DDP processes are equally weighted.
 
 <p align="center">
-<img src="./figure/AutoDP.png" width="560">
+<img src="{{ site.url }}/assets/images/AutoDP.png" width="560">
 <br>
 Figure 8. AutoDP: handling dynamical data-parallel with messaging between double process groups (Process 0-7 belong to machine 0, while process 8-15 belong to machine 1)
 </p>
@@ -253,7 +254,7 @@ This section first summarizes experiment setups and then evaluates PipeTransform
 
 ## Overall Training Acceleration
 <p align="center">
-<img src="./figure/experiments_table1.png" width="560">
+<img src="{{ site.url }}/assets/images/experiments_table1.png" width="560">
 <br>
 </p>
 
@@ -266,7 +267,7 @@ We summarize the overall experimental results in the table above. Note that the 
 This section presents evaluation results and analyzes the performance of different components in \autopipe. More experimental results can be found in the Appendix.
 
 <p align="center">
-<img src="./figure/experiments_throughput.png" width="560">
+<img src="{{ site.url }}/assets/images/experiments_throughput.png" width="560">
 <br>
 Figure 9. Speedup Breakdown (ViT on ImageNet)
 </p>
@@ -280,7 +281,7 @@ To understand the efficacy of all four components and their impacts on training 
 ### Tuning <img src="https://render.githubusercontent.com/render/math?math=\alpha"> in Freezing Algorithm
 
 <p align="center">
-<img src="./figure/experiments_tuning_alpha.png" width="460">
+<img src="{{ site.url }}/assets/images/experiments_tuning_alpha.png" width="460">
 <br>
 Figure 10. Tuning <img src="https://render.githubusercontent.com/render/math?math=\alpha"> in Freezing Algorithm
 </p>
@@ -290,7 +291,7 @@ We ran experiments to show how the <img src="https://render.githubusercontent.co
 ### Optimal Chunks in the elastic pipeline
 
 <p align="center">
-<img src="./figure/experiments_optimal_k.png" width="450">
+<img src="{{ site.url }}/assets/images/experiments_optimal_k.png" width="450">
 <br>
 Figure 11. Optimal chunk number in the elastic pipeline
 </p>
@@ -300,7 +301,7 @@ We profiled the optimal number of micro-batches <img src="https://render.githubu
 ### Understanding the Timing of Caching
 
 <p align="center">
-<img src="./figure/experiment_autocache.png" width="320">
+<img src="{{ site.url }}/assets/images/experiment_autocache.png" width="320">
 <br>
 Figure 12. the timing of caching
 </p>
