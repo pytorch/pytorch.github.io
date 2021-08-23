@@ -2,13 +2,13 @@
 layout: blog_detail
 title: 'Announcing PyTorch Developer Day 2021'
 author: Team PyTorch
-featured-img: 'assets/images/pyt-dev-day-2021.png'
+featured-img: 'assets/images/ptdevday21.gif'
 ---
 
 We are excited to announce PyTorch Developer Day (#PTD2), taking place virtually from December 1 & 2, 2021. Developer Day is designed for developers and users to discuss core technical developments, ideas, and roadmaps. 
 
 <div class="text-center">
-  <img src="{{ site.baseurl }}/assets/images/pytorch-developer-day-2021.png" width="100%">
+  <img src="{{ site.baseurl }}/assets/images/ptdevday21.gif" width="100%">
 </div>
 
 ## Event Details 
