@@ -36,7 +36,7 @@ If everything works well, we should have our model - `model.pt` generated in the
 
 > To find out more details about TorchScript, please visit [tutorials on pytorch.org](https://pytorch.org/tutorials/advanced/cpp_export.html)
 
-### Install LibTorch via Cocoapods
+### Install LibTorch-Lite via Cocoapods
 
 The PyTorch C++ library is available in [Cocoapods](https://cocoapods.org/), to integrate it to our project, simply run
 
@@ -114,17 +114,16 @@ Again, the `predict` method is just an Objective-C wrapper. Under the hood, it c
 
 ```cpp
 at::Tensor tensor = torch::from_blob(imageBuffer, {1, 3, 224, 224}, at::kFloat);
-torch::autograd::AutoGradMode guard(false);
+c10::InferenceMode guard;
 auto outputTensor = _impl.forward({tensor}).toTensor();
 float* floatBuffer = outputTensor.data_ptr<float>();
 ```
-The C++ function `torch::from_blob` will create an input tensor from the pixel buffer. Note that the shape of the tensor is `{1,3,224,224}` which represents `NxCxWxH` as we discussed in the above section.
+The C++ function `torch::from_blob` will create an input tensor from the pixel buffer. Note that the shape of the tensor is `{1,3,224,224}` which represents `{N, C, H, W}` as we discussed in the above section.
 
 ```cpp
-torch::autograd::AutoGradMode guard(false);
-at::AutoNonVariableTypeMode non_var_type_mode(true);
+c10::InferenceMode guard;
 ```
-The above two lines tells the PyTorch engine to do inference only. This is because by default, PyTorch has built-in support for doing auto-differentiation, which is also known as [autograd](https://pytorch.org/docs/stable/notes/autograd.html). Since we don't do training on mobile, we can just disable the autograd mode.
+The above line tells PyTorch to do inference only.
 
 Finally, we can call this `forward` function to get the output tensor and convert it to a `float` buffer.
 
@@ -217,18 +216,18 @@ git submodule update --init --recursive
 
 > Make sure you have `cmake` and Python installed correctly on your local machine. We recommend following the [Pytorch Github page](https://github.com/pytorch/pytorch) to set up the Python development environment
 
-### Build LibTorch for iOS Simulators
+### Build LibTorch-Lite for iOS Simulators
 
-Open terminal and navigate to the PyTorch root directory. Run the following command (if you already build LibTorch for iOS devices (see below), run `rm -rf build_ios` first):
+Open terminal and navigate to the PyTorch root directory. Run the following command (if you already build LibTorch-Lite for iOS devices (see below), run `rm -rf build_ios` first):
 
 ```
 BUILD_PYTORCH_MOBILE=1 IOS_PLATFORM=SIMULATOR ./scripts/build_ios.sh
 ```
 After the build succeeds, all static libraries and header files will be generated under `build_ios/install`
 
-### Build LibTorch for arm64 Devices
+### Build LibTorch-Lite for arm64 Devices
 
-Open terminal and navigate to the PyTorch root directory. Run the following command (if you already build LibTorch for iOS simulators, run `rm -rf build_ios` first):
+Open terminal and navigate to the PyTorch root directory. Run the following command (if you already build LibTorch-Lite for iOS simulators, run `rm -rf build_ios` first):
 
 ```
 BUILD_PYTORCH_MOBILE=1 IOS_ARCH=arm64 ./scripts/build_ios.sh
@@ -245,20 +244,21 @@ In the build settings, search for **other linker flags**.  Add a custom linker f
 -all_load
 ```
 
-To use the custom built libraries the project, replace `#import <LibTorch/LibTorch.h>` (in `TorchModule.mm`) which is needed when using LibTorch via Cocoapods with the code below:
+To use the custom built libraries the project, replace `#import <LibTorch-Lite/LibTorch-Lite.h>` (in `TorchModule.mm`) which is needed when using LibTorch-Lite via Cocoapods with the code below:
 ```
-#include "ATen/ATen.h"
-#include "caffe2/core/timer.h"
-#include "caffe2/utils/string_utils.h"
-#include "torch/csrc/autograd/grad_mode.h"
-#include "torch/csrc/jit/mobile/import.h"
-#include "torch/csrc/jit/mobile/module.h"
-#include "torch/script.h"
+#include <torch/csrc/jit/mobile/import.h>
+#include <torch/csrc/jit/mobile/module.h>
+#include <torch/script.h>
 ```
 
 Finally, disable bitcode for your target by selecting the Build Settings, searching for **Enable Bitcode**, and set the value to **No**.
 
-
+## Using the Nightly PyTorch iOS Libraries in CocoaPods
+If you want to try out the latest features added to PyTorch iOS, you can use the `LibTorch-Lite-Nightly` pod in your `Podfile`, it includes the nightly built libraries: 
+```
+pod 'LibTorch-Lite-Nightly'
+```
+And then run `pod install` to add it to your project. If you wish to update the nightly pod to the newer one, you can run `pod update` to get the latest version.  But be aware you may need to build the model used on mobile in the latest PyTorch - using either the latest PyTorch code or a quick nightly install with commands like `pip install --pre torch torchvision -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html` - to avoid possible model version mismatch errors when running the model on mobile. 
 
 ## Custom Build
 
