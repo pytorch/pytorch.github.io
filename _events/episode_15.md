@@ -1,0 +1,10 @@
+---
+category: live-stream
+title: Episode 15
+guest: Tom Bromley + Josh Izaac
+company: Xanadu
+date: August 25, 2021
+time: 9 AM PST
+poster: https://assets.pytorch.org/pted2021/posters/K1.png
+link: https://assets.pytorch.org/pted2021/posters/K1.png
+---
