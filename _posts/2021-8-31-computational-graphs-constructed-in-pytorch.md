@@ -1,7 +1,7 @@
 ---
 layout: blog_detail
 title: 'How Computational Graphs are Constructed in PyTorch'
-author: Chaoyang He, Shen Li, Mahdi Soltanolkotabi, and Salman Avestimehr
+author: Preferred Networks
 featured-img: 'assets/images/computational_graph_creation.gif'
 ---
 
