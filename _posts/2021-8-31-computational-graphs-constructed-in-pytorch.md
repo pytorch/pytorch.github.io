@@ -5,9 +5,8 @@ author: Preferred Networks
 featured-img: 'assets/images/computational_graph_creation.gif'
 ---
 
-# Introduction
-
 In the previous [post](https://pytorch.org/blog/overview-of-pytorch-autograd-engine/) we went over the theoretical foundations of automatic differentiation and reviewed the implementation in PyTorch. In this post, we will be showing the parts of PyTorch involved in creating the graph and executing it. In order to understand the following contents, please read @ezyang’s wonderful [blog post](http://blog.ezyang.com/2019/05/pytorch-internals/) about PyTorch internals.
+
 # Autograd components
 
 First of all, let’s look at where the different components of autograd live:
@@ -23,8 +22,6 @@ All this code is written in C++, since it is a critical part that is required to
 # Graph Creation
 
 [Previously](https://pytorch.org/blog/overview-of-pytorch-autograd-engine/), we described the creation of a computational graph. Now, we will see how PyTorch creates these graphs with references to the actual codebase.
-
-![comp_graph](comp-graph.png)
 
 <p align="center">
 <img src="{{ site.url }}/assets/images/augmented_computational_graph.png" width="100%">
@@ -52,7 +49,6 @@ void TensorImpl::set_requires_grad(bool requires_grad) {
 
 
 The `AutogradMeta` object is defined in [torch/csrc/autograd/variable.h](https://github.com/pytorch/pytorch/blob/release/1.9/torch/csrc/autograd/variable.h#L190-L286) as follows:
-
 
 ```c++
 
@@ -286,8 +282,6 @@ inline void set_history(
 ```
 
 This tensor now will be the input to another function and the above steps will be all repeated. Check the animation below to see how the graph is created.
-
-![graph-creation.gif](graph-creation.gif)
 
 <p align="center">
 <img src="{{ site.url }}/assets/images/computational_graph_creation.gif" width="100%">
