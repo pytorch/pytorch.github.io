@@ -17,7 +17,7 @@ First of all, let’s look at where the different components of autograd live:
 The rest of the files have additional components such as gradient checkers, anomaly detection, and the autograd profiler.
 
 [torch/csrc/autograd](https://github.com/pytorch/pytorch/tree/release/1.9/torch/csrc/autograd): This is where the graph creation and execution-related code lives.
-All this code is written in C++, since it is a critical part that is required to be extremely performant. Here, we have several files that implement the engine, metadata storage, and all the needed components. Alongside this, we have several files whose names start with `python_`, and their main responsibility is to allow python objects to be used in the autograd engine.
+All this code is written in C++, since it is a critical part that is required to be extremely performant. Here we have several files that implement the engine, metadata storage, and all the needed components. Alongside this, we have several files whose names start with `python_`, and their main responsibility is to allow python objects to be used in the autograd engine.
 
 # Graph Creation
 
