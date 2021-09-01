@@ -2,7 +2,7 @@
 layout: blog_detail
 title: 'How Computational Graphs are Constructed in PyTorch'
 author: Preferred Networks
-featured-img: 'assets/images/computational_graph_creation.gif'
+featured-img: 'assets/images/augmented_computational_graph.png'
 ---
 
 In the previous [post](https://pytorch.org/blog/overview-of-pytorch-autograd-engine/) we went over the theoretical foundations of automatic differentiation and reviewed the implementation in PyTorch. In this post, we will be showing the parts of PyTorch involved in creating the graph and executing it. In order to understand the following contents, please read @ezyang’s wonderful [blog post](http://blog.ezyang.com/2019/05/pytorch-internals/) about PyTorch internals.
