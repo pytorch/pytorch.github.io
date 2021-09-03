@@ -1,6 +1,6 @@
 ---
 featured: false
-image: assets/images/astrazeneca.png
+image: assets/images/astrazeneca-logo.png
 link: https://medium.com/pytorch/speeding-up-drug-discovery-with-advanced-machine-learning-b17d59e0daa6
 website: http://astrazeneca.com/
 order: 6
