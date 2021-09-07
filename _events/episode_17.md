@@ -1,0 +1,9 @@
+---
+category: live-stream
+title: Episode 17
+guest: Sergey Kolesnikov
+company: Catalyst
+date: September 8, 2021
+time: 9 AM PST
+poster: https://assets.pytorch.org/pted2021/posters/K2.png
+---
