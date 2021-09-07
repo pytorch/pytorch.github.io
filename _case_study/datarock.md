@@ -1,6 +1,6 @@
 ---
 featured: false
-image: assets/images/Datarock-logo.png
+image: assets/images/logo-datarock.png
 link: https://medium.com/pytorch/how-datarock-is-using-pytorch-for-more-intelligent-decision-making-d5d1694ba170?source=---------12-----------------------
 website: https://www.datarock.com.au/
 order: 12
