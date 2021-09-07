@@ -6,4 +6,4 @@ website: https://tubitv.com/
 order: 2
 ---
 
-Learn how the Tubi team has utilized machine learning and PyTorch to solve a myriad of problems involving recommendations, content understanding and ads.
+The world is eager to consume high-quality shows, movies, and live news for free. Tubi uses PyTorch to understand not only what their current audience wants to watch now, but also what their expanding audience wants to watch next.
