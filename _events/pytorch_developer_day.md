@@ -1,6 +1,6 @@
 ---
 category: event
-title: PyTorch Developer Day
+title: PyTorch Developer Day 2021
 date: December 1, 2021
 header-image: assets/images/pytorch_developer_day_2021.png
 ---
