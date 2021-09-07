@@ -1,6 +1,6 @@
 ---
 featured: false
-image: assets/images/Happiest-Mind-logo.png
+image: assets/images/Happiest_Minds_Technologies_Logo.png
 link: https://medium.com/pytorch/happiestminds-uses-pytorch-to-automatically-extract-critical-product-information-for-a-large-us-8f033153eb2b?source=---------13-----------------------
 website: https://www.happiestminds.com/
 order: 13
