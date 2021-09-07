@@ -6,4 +6,4 @@ website: https://www.happiestminds.com/
 order: 13
 ---
 
-Donec egestas, sapien ac venenatis placerat, augue dolor malesuada lacus, a pharetra nunc erat ut libero. Integer vitae velit vitae est molestie iaculis rutrum at nisl
+When a retailer sets up an online storefront, they must ensure all their product pages are factual, engaging, and responsive. Using PyTorch, Happiest Minds helped ensure factual correctness of everything ranging from product descriptions to vendor details on their client’s digital storefronts.
