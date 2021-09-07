@@ -6,4 +6,4 @@ website: https://www.datarock.com.au/
 order: 12
 ---
 
- Datarock is using PyTorch to automate the analysis of drill core images from mine sites. They have computer vision models that could process these images into a structured format and segment important geological information like the strength of a rock.
+The mining industry is looking for new ways to explore mineral resources and reduce costs in a competitive global industry. Datarock uses PyTorch to turn drill core imagery into high-quality datasets that support decision making, giving mining companies consistent geological information in a matter of minutes.
