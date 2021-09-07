@@ -6,4 +6,4 @@ website: https://www.trigo.tech/
 order: 11
 ---
 
- Trigo uses PyTorch and Allegro Trains to build an AI-powered checkout-free system for retailers. In this blog, they explain how they built a scalable development and deployment pipeline.
+Trigo provides AI-based checkout-free systems for the retail market to enable frictionless checkout, as well as in-store operational and marketing solutions. To build checkout-free systems, they employ multiple AI and PyTorch models and techniques, with an application logic layered on top that combines multiple inferences into one coherent decision.
