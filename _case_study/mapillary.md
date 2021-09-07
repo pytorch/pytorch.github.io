@@ -6,4 +6,4 @@ website: https://www.mapillary.com/
 order: 14
 ---
 
-Mapillary does Seamless Scene Segmentation and 3D fusion across 600m+ images A [post + code release] with tips for: - dealing with asymmetric graphs, variable-length images and unbalanced batches - in-place batchnorm - distributed training
+In many places around the world, mobile and web maps are either inaccurate, lacking in detail, or non-existent. Mapillary builds models developed in PyTorch to detect everything in street images in order to stitch them together and generate map data automatically to create a do-it-yourself street-view.
