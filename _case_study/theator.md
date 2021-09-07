@@ -6,4 +6,4 @@ website: https://theator.io/
 order: 3
 ---
 
-Learn how the Theator team has built a video-based analysis platform that helps extract in-detailed and meaningful data from lengthy surgical operation videos all while maintaining strict patient privacy.
+Performing surgery is 75% decision-making and 25% dexterity. Theator leverages machine learning and computer vision technology to analyze every step and critical junction of surgical procedures to significantly boost surgeons’ overall performance.
