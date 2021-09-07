@@ -6,4 +6,4 @@ website: https://xperience.ai/
 order: 8
 ---
 
-Donec egestas, sapien ac venenatis placerat, augue dolor malesuada lacus, a pharetra nunc erat ut libero. Integer vitae velit vitae est molestie iaculis rutrum at nisl
+Xperience.ai built an energy-efficient smart doorbell that can be used in apartment buildings as an entrance controller. By using PyTorch to develop a face recognition model, they were able to store all the data on the device to enhance privacy.
