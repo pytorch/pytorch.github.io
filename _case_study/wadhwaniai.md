@@ -1,6 +1,6 @@
 ---
 featured: false
-image: assets/images/Wadhwani-AI-logo.png
+image: assets/images/logo-wadhwaniAI.png
 link: https://medium.com/pytorch/how-wadhwani-ai-uses-pytorch-to-empower-cotton-farmers-14397f4c9f2b?source=---------3-----------------------
 website: https://www.wadhwaniai.org/
 order: 4
