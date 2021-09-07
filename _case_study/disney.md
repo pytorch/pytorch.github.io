@@ -6,4 +6,4 @@ website: https://www.disney.com/
 order: 10
 ---
 
- Disney uses PyTorch for animated character recognition and to speed up its video processing pipeline. DTCITechnology engineers also contributed new features to the Torchvision domain library.
+Disney’s Content Genome powers new applications for digital product innovation and creates a digital archive of Disney’s content. PyTorch helps Disney make their archiving process more efficient, speeds up the video processing and analysis pipelines, and assists with animated character detection.
