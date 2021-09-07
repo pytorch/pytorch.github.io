@@ -1,6 +1,6 @@
 ---
 featured: false
-image: assets/images/Tubi-Logo.png
+image: assets/images/tubi_logo.png
 link: https://medium.com/pytorch/machine-learning-at-tubi-powering-free-movies-tv-and-news-for-all-51499643018e?source=---------1-----------------------
 website: https://tubitv.com/
 order: 2
