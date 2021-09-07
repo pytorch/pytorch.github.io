@@ -6,4 +6,4 @@ website: https://www.lyft.com/
 order: 5
 ---
 
-Lyft Level 5 has adopted PyTorch to build an internal framework for their ML efforts as they build self-driving technology. They reduced the median job training time for heavy production jobs such as 2D and 3D detectors and segmenters to just 1 hour.
+Self-driving cars can make transportation safer and more accessible for everyone. Level 5, Lyft’s self-driving division, is using machine learning algorithms to solve problems in mapping, perception, prediction, and planning.
