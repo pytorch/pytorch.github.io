@@ -1,6 +1,6 @@
 ---
 featured: false
-image: assets/images/
+image: assets/images/Lyft logo – pink – rgb.png
 link: https://medium.com/pytorch/how-lyft-uses-pytorch-to-power-machine-learning-for-their-self-driving-cars-80642bc2d0ae?source=---------4-----------------------
 website: https://www.lyft.com/
 order: 5
