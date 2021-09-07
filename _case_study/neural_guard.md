@@ -6,4 +6,4 @@ website: https://www.neuralguard.com/
 order: 7
 ---
 
-Neural Guard, a tech company focused on AI-powered threat detection, built its X-Ray & CT Scanning AI production pipeline using PyTorch and Allegro Trains.
+Neural Guard leverages AI algorithms to analyze a security scanner’s output, detecting specific, high-risk items in CT and X-Ray imagery. By building solutions with PyTorch, they were able to get a more structured, organized code base for easier development and maintenance.
