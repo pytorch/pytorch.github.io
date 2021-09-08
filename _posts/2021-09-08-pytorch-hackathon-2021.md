@@ -38,7 +38,7 @@ All winners will also receive the opportunity to create blog posts that will be 
 
 [Q&Aid](https://devpost.com/software/pytorchxai) won first place in the Web/Mobile Applications Powered by PyTorch category. Backed by PyTorch core algorithms and models, Q&Aid is a conceptual health care chatbot aimed at making health care diagnoses and facilitating communication between patients and doctors.
 
-[FairTorch](https://devpost.com/software/a-qeysp1 won first place in the PyTorch Responsible AI Development Tools category. FairTorch is a PyTorch fairness library that lets developers add constraints to their models to equalize metrics across subgroups by simply adding a few lines of code.
+[FairTorch](https://devpost.com/software/a-qeysp1) won first place in the PyTorch Responsible AI Development Tools category. FairTorch is a PyTorch fairness library that lets developers add constraints to their models to equalize metrics across subgroups by simply adding a few lines of code.
 
 ## How to Join
 If you’re interested in joining this year’s Pytorch Hackathon, register at http://pytorch2021.devpost.com.
