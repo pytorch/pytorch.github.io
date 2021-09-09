@@ -193,7 +193,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href='https://pytorch.org/docs/versions.html'>master (1.10.0a0+gitaab14ff ) &#x25BC</a>
+      <a href='https://pytorch.org/docs/versions.html'>master (1.10.0a0+gitc99e75c ) &#x25BC</a>
     </div>
     
 
@@ -390,12 +390,288 @@
              <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
               
   <h1>Source code for torch.nn.utils.parametrizations</h1><div class="highlight"><pre>
-<span></span><span class="kn">import</span> <span class="nn">torch</span>
+<span></span><span class="kn">from</span> <span class="nn">enum</span> <span class="kn">import</span> <span class="n">Enum</span><span class="p">,</span> <span class="n">auto</span>
+
+<span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">from</span> <span class="nn">torch</span> <span class="kn">import</span> <span class="n">Tensor</span>
 <span class="kn">from</span> <span class="nn">..utils</span> <span class="kn">import</span> <span class="n">parametrize</span>
 <span class="kn">from</span> <span class="nn">..modules</span> <span class="kn">import</span> <span class="n">Module</span>
 <span class="kn">from</span> <span class="nn">..</span> <span class="kn">import</span> <span class="n">functional</span> <span class="k">as</span> <span class="n">F</span>
 
 <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Optional</span>
+
+
+<span class="k">def</span> <span class="nf">_is_orthogonal</span><span class="p">(</span><span class="n">Q</span><span class="p">,</span> <span class="n">eps</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+    <span class="n">n</span><span class="p">,</span> <span class="n">k</span> <span class="o">=</span> <span class="n">Q</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="o">-</span><span class="mi">2</span><span class="p">),</span> <span class="n">Q</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+    <span class="n">Id</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="n">k</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">Q</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">Q</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+    <span class="c1"># A reasonable eps, but not too large</span>
+    <span class="n">eps</span> <span class="o">=</span> <span class="mf">10.</span> <span class="o">*</span> <span class="n">n</span> <span class="o">*</span> <span class="n">torch</span><span class="o">.</span><span class="n">finfo</span><span class="p">(</span><span class="n">Q</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span><span class="o">.</span><span class="n">eps</span>
+    <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">allclose</span><span class="p">(</span><span class="n">Q</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="o">-</span><span class="mi">2</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">conj</span><span class="p">()</span> <span class="o">@</span> <span class="n">Q</span><span class="p">,</span> <span class="n">Id</span><span class="p">,</span> <span class="n">atol</span><span class="o">=</span><span class="n">eps</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">_make_orthogonal</span><span class="p">(</span><span class="n">A</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot; Assume that A is a tall matrix.</span>
+<span class="sd">    Compute the Q factor s.t. A = QR (A may be complex) and diag(R) is real and non-negative</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">X</span><span class="p">,</span> <span class="n">tau</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">geqrf</span><span class="p">(</span><span class="n">A</span><span class="p">)</span>
+    <span class="n">Q</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">householder_product</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">tau</span><span class="p">)</span>
+    <span class="c1"># The diagonal of X is the diagonal of R (which is always real) so we normalise by its signs</span>
+    <span class="n">Q</span> <span class="o">*=</span> <span class="n">X</span><span class="o">.</span><span class="n">diagonal</span><span class="p">(</span><span class="n">dim1</span><span class="o">=-</span><span class="mi">2</span><span class="p">,</span> <span class="n">dim2</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">sgn</span><span class="p">()</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">2</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">Q</span>
+
+
+<span class="k">class</span> <span class="nc">_OrthMaps</span><span class="p">(</span><span class="n">Enum</span><span class="p">):</span>
+    <span class="n">matrix_exp</span> <span class="o">=</span> <span class="n">auto</span><span class="p">()</span>
+    <span class="n">cayley</span> <span class="o">=</span> <span class="n">auto</span><span class="p">()</span>
+    <span class="n">householder</span> <span class="o">=</span> <span class="n">auto</span><span class="p">()</span>
+
+
+<span class="k">class</span> <span class="nc">_Orthogonal</span><span class="p">(</span><span class="n">Module</span><span class="p">):</span>
+    <span class="n">base</span><span class="p">:</span> <span class="n">Tensor</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span>
+                 <span class="n">weight</span><span class="p">,</span>
+                 <span class="n">orthogonal_map</span><span class="p">:</span> <span class="n">_OrthMaps</span><span class="p">,</span>
+                 <span class="o">*</span><span class="p">,</span>
+                 <span class="n">use_trivialization</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+
+        <span class="c1"># Note [Householder complex]</span>
+        <span class="c1"># For complex tensors, it is not possible to compute the tensor `tau` necessary for</span>
+        <span class="c1"># linalg.householder_product from the reflectors.</span>
+        <span class="c1"># To see this, note that the reflectors have a shape like:</span>
+        <span class="c1"># 0 0 0</span>
+        <span class="c1"># * 0 0</span>
+        <span class="c1"># * * 0</span>
+        <span class="c1"># which, for complex matrices, give n(n-1) (real) parameters. Now, you need n^2 parameters</span>
+        <span class="c1"># to parametrize the unitary matrices. Saving tau on its own does not work either, because</span>
+        <span class="c1"># not every combination of `(A, tau)` gives a unitary matrix, meaning that if we optimise</span>
+        <span class="c1"># them as independent tensors we would not maintain the constraint</span>
+        <span class="c1"># An equivalent reasoning holds for rectangular matrices</span>
+        <span class="k">if</span> <span class="n">weight</span><span class="o">.</span><span class="n">is_complex</span><span class="p">()</span> <span class="ow">and</span> <span class="n">orthogonal_map</span> <span class="o">==</span> <span class="n">_OrthMaps</span><span class="o">.</span><span class="n">householder</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;The householder parametrization does not support complex tensors.&quot;</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">shape</span> <span class="o">=</span> <span class="n">weight</span><span class="o">.</span><span class="n">shape</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">orthogonal_map</span> <span class="o">=</span> <span class="n">orthogonal_map</span>
+        <span class="k">if</span> <span class="n">use_trivialization</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s2">&quot;base&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+        <span class="n">n</span><span class="p">,</span> <span class="n">k</span> <span class="o">=</span> <span class="n">X</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="o">-</span><span class="mi">2</span><span class="p">),</span> <span class="n">X</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">transposed</span> <span class="o">=</span> <span class="n">n</span> <span class="o">&lt;</span> <span class="n">k</span>
+        <span class="k">if</span> <span class="n">transposed</span><span class="p">:</span>
+            <span class="n">X</span> <span class="o">=</span> <span class="n">X</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="o">-</span><span class="mi">2</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+            <span class="n">n</span><span class="p">,</span> <span class="n">k</span> <span class="o">=</span> <span class="n">k</span><span class="p">,</span> <span class="n">n</span>
+        <span class="c1"># Here n &gt; k and X is a tall matrix</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">orthogonal_map</span> <span class="o">==</span> <span class="n">_OrthMaps</span><span class="o">.</span><span class="n">matrix_exp</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">orthogonal_map</span> <span class="o">==</span> <span class="n">_OrthMaps</span><span class="o">.</span><span class="n">cayley</span><span class="p">:</span>
+            <span class="c1"># We just need n x k - k(k-1)/2 parameters</span>
+            <span class="n">X</span> <span class="o">=</span> <span class="n">X</span><span class="o">.</span><span class="n">tril</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">n</span> <span class="o">!=</span> <span class="n">k</span><span class="p">:</span>
+                <span class="c1"># Embed into a square matrix</span>
+                <span class="n">X</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">X</span><span class="p">,</span> <span class="n">X</span><span class="o">.</span><span class="n">new_zeros</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">n</span> <span class="o">-</span> <span class="n">k</span><span class="p">)</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="o">*</span><span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span><span class="o">-</span><span class="mi">2</span><span class="p">],</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)],</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+            <span class="n">A</span> <span class="o">=</span> <span class="n">X</span> <span class="o">-</span> <span class="n">X</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="o">-</span><span class="mi">2</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">conj</span><span class="p">()</span>
+            <span class="c1"># A is skew-symmetric (or skew-hermitian)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">orthogonal_map</span> <span class="o">==</span> <span class="n">_OrthMaps</span><span class="o">.</span><span class="n">matrix_exp</span><span class="p">:</span>
+                <span class="n">Q</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">matrix_exp</span><span class="p">(</span><span class="n">A</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">orthogonal_map</span> <span class="o">==</span> <span class="n">_OrthMaps</span><span class="o">.</span><span class="n">cayley</span><span class="p">:</span>
+                <span class="c1"># Computes the Cayley retraction (I+A/2)(I-A/2)^{-1}</span>
+                <span class="n">Id</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">A</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">A</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+                <span class="n">Q</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">solve</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">Id</span><span class="p">,</span> <span class="n">A</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=-</span><span class="mf">0.5</span><span class="p">),</span> <span class="n">torch</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">Id</span><span class="p">,</span> <span class="n">A</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.5</span><span class="p">))</span>
+            <span class="c1"># Q is now orthogonal (or unitary) of size (..., n, n)</span>
+            <span class="k">if</span> <span class="n">n</span> <span class="o">!=</span> <span class="n">k</span><span class="p">:</span>
+                <span class="n">Q</span> <span class="o">=</span> <span class="n">Q</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="p">:</span><span class="n">k</span><span class="p">]</span>
+            <span class="c1"># Q is now the size of the X (albeit perhaps transposed)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># X is real here, as we do not support householder with complex numbers</span>
+            <span class="n">A</span> <span class="o">=</span> <span class="n">X</span><span class="o">.</span><span class="n">tril</span><span class="p">(</span><span class="n">diagonal</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+            <span class="n">tau</span> <span class="o">=</span> <span class="mf">2.</span> <span class="o">/</span> <span class="p">(</span><span class="mf">1.</span> <span class="o">+</span> <span class="p">(</span><span class="n">A</span> <span class="o">*</span> <span class="n">A</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">2</span><span class="p">))</span>
+            <span class="n">Q</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">householder_product</span><span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="n">tau</span><span class="p">)</span>
+            <span class="c1"># The diagonal of X is 1&#39;s and -1&#39;s</span>
+            <span class="c1"># We do not want to differentiate through this or update the diagonal of X hence the casting</span>
+            <span class="n">Q</span> <span class="o">=</span> <span class="n">Q</span> <span class="o">*</span> <span class="n">X</span><span class="o">.</span><span class="n">diagonal</span><span class="p">(</span><span class="n">dim1</span><span class="o">=-</span><span class="mi">2</span><span class="p">,</span> <span class="n">dim2</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">int</span><span class="p">()</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">2</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;base&quot;</span><span class="p">):</span>
+            <span class="n">Q</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">base</span> <span class="o">@</span> <span class="n">Q</span>
+        <span class="k">if</span> <span class="n">transposed</span><span class="p">:</span>
+            <span class="n">Q</span> <span class="o">=</span> <span class="n">Q</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="o">-</span><span class="mi">2</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">Q</span>
+
+    <span class="nd">@torch</span><span class="o">.</span><span class="n">autograd</span><span class="o">.</span><span class="n">no_grad</span><span class="p">()</span>
+    <span class="k">def</span> <span class="nf">right_inverse</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">Q</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">Q</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">shape</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Expected a matrix or batch of matrices of shape </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">. &quot;</span>
+                             <span class="sa">f</span><span class="s2">&quot;Got a tensor of shape </span><span class="si">{</span><span class="n">Q</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">.&quot;</span><span class="p">)</span>
+
+        <span class="n">Q_init</span> <span class="o">=</span> <span class="n">Q</span>
+        <span class="n">n</span><span class="p">,</span> <span class="n">k</span> <span class="o">=</span> <span class="n">Q</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="o">-</span><span class="mi">2</span><span class="p">),</span> <span class="n">Q</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">transpose</span> <span class="o">=</span> <span class="n">n</span> <span class="o">&lt;</span> <span class="n">k</span>
+        <span class="k">if</span> <span class="n">transpose</span><span class="p">:</span>
+            <span class="n">Q</span> <span class="o">=</span> <span class="n">Q</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="o">-</span><span class="mi">2</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+            <span class="n">n</span><span class="p">,</span> <span class="n">k</span> <span class="o">=</span> <span class="n">k</span><span class="p">,</span> <span class="n">n</span>
+
+        <span class="c1"># We always make sure to always copy Q in every path</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;base&quot;</span><span class="p">):</span>
+            <span class="c1"># Note [right_inverse expm cayley]</span>
+            <span class="c1"># If we do not have use_trivialization=True, we just implement the inverse of the forward</span>
+            <span class="c1"># map for the Householder. To see why, think that for the Cayley map,</span>
+            <span class="c1"># we would need to find the matrix X \in R^{n x k} such that:</span>
+            <span class="c1"># Y = torch.cat([X.tril(), X.new_zeros(n, n - k).expand(*X.shape[:-2], -1, -1)], dim=-1)</span>
+            <span class="c1"># A = Y - Y.transpose(-2, -1).conj()</span>
+            <span class="c1"># cayley(A)[:, :k]</span>
+            <span class="c1"># gives the original tensor. It is not clear how to do this.</span>
+            <span class="c1"># Perhaps via some algebraic manipulation involving the QR like that of</span>
+            <span class="c1"># Corollary 2.2 in Edelman, Arias and Smith?</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">orthogonal_map</span> <span class="o">==</span> <span class="n">_OrthMaps</span><span class="o">.</span><span class="n">cayley</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">orthogonal_map</span> <span class="o">==</span> <span class="n">_OrthMaps</span><span class="o">.</span><span class="n">matrix_exp</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="s2">&quot;It is not possible to assign to the matrix exponential &quot;</span>
+                                          <span class="s2">&quot;or the Cayley parametrizations when use_trivialization=False.&quot;</span><span class="p">)</span>
+
+            <span class="c1"># If parametrization == _OrthMaps.householder, make Q orthogonal via the QR decomposition.</span>
+            <span class="c1"># Here Q is always real because we do not support householder and complex matrices.</span>
+            <span class="c1"># See note [Householder complex]</span>
+            <span class="n">A</span><span class="p">,</span> <span class="n">tau</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">geqrf</span><span class="p">(</span><span class="n">Q</span><span class="p">)</span>
+            <span class="c1"># We want to have a decomposition X = QR with diag(R) &gt; 0, as otherwise we could</span>
+            <span class="c1"># decompose an orthogonal matrix Q as Q = (-Q)@(-Id), which is a valid QR decomposition</span>
+            <span class="c1"># The diagonal of Q is the diagonal of R from the qr decomposition</span>
+            <span class="n">A</span><span class="o">.</span><span class="n">diagonal</span><span class="p">(</span><span class="n">dim1</span><span class="o">=-</span><span class="mi">2</span><span class="p">,</span> <span class="n">dim2</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">sign_</span><span class="p">()</span>
+            <span class="c1"># Equality with zero is ok because LAPACK returns exactly zero when it does not want</span>
+            <span class="c1"># to use a particular reflection</span>
+            <span class="n">A</span><span class="o">.</span><span class="n">diagonal</span><span class="p">(</span><span class="n">dim1</span><span class="o">=-</span><span class="mi">2</span><span class="p">,</span> <span class="n">dim2</span><span class="o">=-</span><span class="mi">1</span><span class="p">)[</span><span class="n">tau</span> <span class="o">==</span> <span class="mf">0.</span><span class="p">]</span> <span class="o">*=</span> <span class="o">-</span><span class="mi">1</span>
+            <span class="k">return</span> <span class="n">A</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="o">-</span><span class="mi">2</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="k">if</span> <span class="n">transpose</span> <span class="k">else</span> <span class="n">A</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">n</span> <span class="o">==</span> <span class="n">k</span><span class="p">:</span>
+                <span class="c1"># We check whether Q is orthogonal</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">_is_orthogonal</span><span class="p">(</span><span class="n">Q</span><span class="p">):</span>
+                    <span class="n">Q</span> <span class="o">=</span> <span class="n">_make_orthogonal</span><span class="p">(</span><span class="n">Q</span><span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>  <span class="c1"># Is orthogonal</span>
+                    <span class="n">Q</span> <span class="o">=</span> <span class="n">Q</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="c1"># Complete Q into a full n x n orthogonal matrix</span>
+                <span class="n">N</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="o">*</span><span class="p">(</span><span class="n">Q</span><span class="o">.</span><span class="n">size</span><span class="p">()[:</span><span class="o">-</span><span class="mi">2</span><span class="p">]</span> <span class="o">+</span> <span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">n</span> <span class="o">-</span> <span class="n">k</span><span class="p">)),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">Q</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">Q</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+                <span class="n">Q</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">Q</span><span class="p">,</span> <span class="n">N</span><span class="p">],</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+                <span class="n">Q</span> <span class="o">=</span> <span class="n">_make_orthogonal</span><span class="p">(</span><span class="n">Q</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">base</span> <span class="o">=</span> <span class="n">Q</span>
+
+            <span class="c1"># It is necessary to return the -Id, as we use the diagonal for the</span>
+            <span class="c1"># Householder parametrization. Using -Id makes:</span>
+            <span class="c1"># householder(torch.zeros(m,n)) == torch.eye(m,n)</span>
+            <span class="c1"># Poor man&#39;s version of eye_like</span>
+            <span class="n">neg_Id</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">Q_init</span><span class="p">)</span>
+            <span class="n">neg_Id</span><span class="o">.</span><span class="n">diagonal</span><span class="p">(</span><span class="n">dim1</span><span class="o">=-</span><span class="mi">2</span><span class="p">,</span> <span class="n">dim2</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">fill_</span><span class="p">(</span><span class="o">-</span><span class="mf">1.</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">neg_Id</span>
+
+
+<div class="viewcode-block" id="orthogonal"><a class="viewcode-back" href="../../../../generated/torch.nn.utils.parametrizations.orthogonal.html#torch.nn.utils.parametrizations.orthogonal">[docs]</a><span class="k">def</span> <span class="nf">orthogonal</span><span class="p">(</span><span class="n">module</span><span class="p">:</span> <span class="n">Module</span><span class="p">,</span>
+               <span class="n">name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s1">&#39;weight&#39;</span><span class="p">,</span>
+               <span class="n">orthogonal_map</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+               <span class="o">*</span><span class="p">,</span>
+               <span class="n">use_trivialization</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Module</span><span class="p">:</span>
+    <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Applies an orthogonal or unitary parametrization to a matrix or a batch of matrices.</span>
+
+<span class="sd">    Letting :math:`\mathbb{K}` be :math:`\mathbb{R}` or :math:`\mathbb{C}`, the parametrized</span>
+<span class="sd">    matrix :math:`Q \in \mathbb{K}^{m \times n}` is **orthogonal** as</span>
+
+<span class="sd">    .. math::</span>
+
+<span class="sd">        \begin{align*}</span>
+<span class="sd">            Q^{\text{H}}Q &amp;= \mathrm{I}_n \mathrlap{\qquad \text{if }m \geq n}\\</span>
+<span class="sd">            QQ^{\text{H}} &amp;= \mathrm{I}_m \mathrlap{\qquad \text{if }m &lt; n}</span>
+<span class="sd">        \end{align*}</span>
+
+<span class="sd">    where :math:`Q^{\text{H}}` is the conjugate transpose when :math:`Q` is complex</span>
+<span class="sd">    and the transpose when :math:`Q` is real-valued, and</span>
+<span class="sd">    :math:`\mathrm{I}_n` is the `n`-dimensional identity matrix.</span>
+<span class="sd">    In plain words, :math:`Q` will have orthonormal columns whenever :math:`m \geq n`</span>
+<span class="sd">    and orthonormal rows otherwise.</span>
+
+<span class="sd">    If the tensor has more than two dimensions, we consider it as a batch of matrices of shape `(..., m, n)`.</span>
+
+<span class="sd">    The matrix :math:`Q` may be parametrized via three different ``orthogonal_map`` in terms of the original tensor:</span>
+
+<span class="sd">    - ``&quot;matrix_exp&quot;``/``&quot;cayley&quot;``:</span>
+<span class="sd">      the :func:`~torch.matrix_exp` :math:`Q = \exp(A)` and the `Cayley map`_</span>
+<span class="sd">      :math:`Q = (\mathrm{I}_n + A/2)(\mathrm{I}_n - A/2)^{-1}` are applied to a skew-symmetric</span>
+<span class="sd">      :math:`A` to give an orthogonal matrix.</span>
+<span class="sd">    - ``&quot;householder&quot;``: computes a product of Householder reflectors</span>
+<span class="sd">      (:func:`~torch.linalg.householder_product`).</span>
+
+<span class="sd">    ``&quot;matrix_exp&quot;``/``&quot;cayley&quot;`` often make the parametrized weight converge faster than</span>
+<span class="sd">    ``&quot;householder&quot;``, but they are slower to compute for very thin or very wide matrices.</span>
+
+<span class="sd">    If ``use_trivialization=True`` (default), the parametrization implements the &quot;Dynamic Trivialization Framework&quot;,</span>
+<span class="sd">    where an extra matrix :math:`B \in \mathbb{K}^{n \times n}` is stored under</span>
+<span class="sd">    ``module.parametrizations.weight[0].base``. This helps the</span>
+<span class="sd">    convergence of the parametrized layer at the expense of some extra memory use.</span>
+<span class="sd">    See `Trivializations for Gradient-Based Optimization on Manifolds`_ .</span>
+
+<span class="sd">    Initial value of :math:`Q`:</span>
+<span class="sd">    If the original tensor is not parametrized and ``use_trivialization=True`` (default), the initial value</span>
+<span class="sd">    of :math:`Q` is that of the original tensor if it is orthogonal (or unitary in the complex case)</span>
+<span class="sd">    and it is orthogonalized via the QR decomposition otherwise (see :func:`torch.linalg.qr`).</span>
+<span class="sd">    Same happens when it is not parametrized and ``orthogonal_map=&quot;householder&quot;`` even when ``use_trivialization=False``.</span>
+<span class="sd">    Otherwise, the initial value is the result of the composition of all the registered</span>
+<span class="sd">    parametrizations applied to the original tensor.</span>
+
+<span class="sd">    .. note::</span>
+<span class="sd">        This function is implemented using the parametrization functionality</span>
+<span class="sd">        in :func:`~torch.nn.utils.parametrize.register_parametrization`.</span>
+
+
+<span class="sd">    .. _`Cayley map`: https://en.wikipedia.org/wiki/Cayley_transform#Matrix_map</span>
+<span class="sd">    .. _`Trivializations for Gradient-Based Optimization on Manifolds`: https://arxiv.org/abs/1909.09501</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        module (nn.Module): module on which to register the parametrization.</span>
+<span class="sd">        name (str, optional): name of the tensor to make orthogonal. Default: ``&quot;weight&quot;``.</span>
+<span class="sd">        orthogonal_map (str, optional): One of the following: ``&quot;matrix_exp&quot;``, ``&quot;cayley&quot;``, ``&quot;householder&quot;``.</span>
+<span class="sd">            Default: ``&quot;matrix_exp&quot;`` if the matrix is square or complex, ``&quot;householder&quot;`` otherwise.</span>
+<span class="sd">        use_trivialization (bool, optional): whether to use the dynamic trivialization framework.</span>
+<span class="sd">            Default: ``True``.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        The original module with an orthogonal parametrization registered to the specified</span>
+<span class="sd">        weight</span>
+
+<span class="sd">    Example::</span>
+
+<span class="sd">        &gt;&gt;&gt; orth_linear = orthogonal(nn.Linear(20, 40))</span>
+<span class="sd">        &gt;&gt;&gt; orth_linear</span>
+<span class="sd">        ParametrizedLinear(</span>
+<span class="sd">        in_features=20, out_features=40, bias=True</span>
+<span class="sd">        (parametrizations): ModuleDict(</span>
+<span class="sd">            (weight): ParametrizationList(</span>
+<span class="sd">            (0): _Orthogonal()</span>
+<span class="sd">            )</span>
+<span class="sd">        )</span>
+<span class="sd">        )</span>
+<span class="sd">        &gt;&gt;&gt; Q = orth_linear.weight</span>
+<span class="sd">        &gt;&gt;&gt; torch.dist(Q.T @ Q, torch.eye(20))</span>
+<span class="sd">        tensor(4.9332e-07)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">weight</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">weight</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">&quot;Module &#39;</span><span class="si">{}</span><span class="s2">&#39; has no parameter ot buffer with name &#39;</span><span class="si">{}</span><span class="s2">&#39;&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
+        <span class="p">)</span>
+
+    <span class="c1"># We could implement this for 1-dim tensors as the maps on the sphere</span>
+    <span class="c1"># but I believe it&#39;d bite more people than it&#39;d help</span>
+    <span class="k">if</span> <span class="n">weight</span><span class="o">.</span><span class="n">ndim</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Expected a matrix or batch of matrices. &quot;</span>
+                         <span class="sa">f</span><span class="s2">&quot;Got a tensor of </span><span class="si">{</span><span class="n">weight</span><span class="o">.</span><span class="n">ndim</span><span class="si">}</span><span class="s2"> dimensions.&quot;</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">orthogonal_map</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">orthogonal_map</span> <span class="o">=</span> <span class="s2">&quot;matrix_exp&quot;</span> <span class="k">if</span> <span class="n">weight</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="o">-</span><span class="mi">2</span><span class="p">)</span> <span class="o">==</span> <span class="n">weight</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="ow">or</span> <span class="n">weight</span><span class="o">.</span><span class="n">is_complex</span><span class="p">()</span> <span class="k">else</span> <span class="s2">&quot;householder&quot;</span>
+
+    <span class="n">orth_enum</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">_OrthMaps</span><span class="p">,</span> <span class="n">orthogonal_map</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">orth_enum</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;orthogonal_map has to be one of &quot;matrix_exp&quot;, &quot;cayley&quot;, &quot;householder&quot;. &#39;</span>
+                         <span class="sa">f</span><span class="s1">&#39;Got: </span><span class="si">{</span><span class="n">orthogonal_map</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
+    <span class="n">orth</span> <span class="o">=</span> <span class="n">_Orthogonal</span><span class="p">(</span><span class="n">weight</span><span class="p">,</span>
+                       <span class="n">orth_enum</span><span class="p">,</span>
+                       <span class="n">use_trivialization</span><span class="o">=</span><span class="n">use_trivialization</span><span class="p">)</span>
+    <span class="n">parametrize</span><span class="o">.</span><span class="n">register_parametrization</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">orth</span><span class="p">,</span> <span class="n">unsafe</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">module</span></div>
+
 
 <span class="k">class</span> <span class="nc">_SpectralNorm</span><span class="p">(</span><span class="n">Module</span><span class="p">):</span>
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
@@ -539,8 +815,8 @@
 <span class="sd">    .. _`Spectral Normalization for Generative Adversarial Networks`: https://arxiv.org/abs/1802.05957</span>
 
 <span class="sd">    .. note::</span>
-<span class="sd">        This function is implemented using the new parametrization functionality</span>
-<span class="sd">        in :func:`torch.nn.utils.parametrize.register_parametrization`. It is a</span>
+<span class="sd">        This function is implemented using the parametrization functionality</span>
+<span class="sd">        in :func:`~torch.nn.utils.parametrize.register_parametrization`. It is a</span>
 <span class="sd">        reimplementation of :func:`torch.nn.utils.spectral_norm`.</span>
 
 <span class="sd">    .. note::</span>
@@ -557,13 +833,13 @@
 
 <span class="sd">    Args:</span>
 <span class="sd">        module (nn.Module): containing module</span>
-<span class="sd">        name (str, optional): name of weight parameter</span>
+<span class="sd">        name (str, optional): name of weight parameter. Default: ``&quot;weight&quot;``.</span>
 <span class="sd">        n_power_iterations (int, optional): number of power iterations to</span>
-<span class="sd">            calculate spectral norm</span>
+<span class="sd">            calculate spectral norm. Default: ``1``.</span>
 <span class="sd">        eps (float, optional): epsilon for numerical stability in</span>
-<span class="sd">            calculating norms</span>
-<span class="sd">        dim (int, optional): dimension corresponding to number of outputs,</span>
-<span class="sd">            the default is ``0``, except for modules that are instances of</span>
+<span class="sd">            calculating norms. Default: ``1e-12``.</span>
+<span class="sd">        dim (int, optional): dimension corresponding to number of outputs.</span>
+<span class="sd">            Default: ``0``, except for modules that are instances of</span>
 <span class="sd">            ConvTranspose{1,2,3}d, when it is ``1``</span>
 
 <span class="sd">    Returns:</span>
@@ -585,13 +861,11 @@
 <span class="sd">        &gt;&gt;&gt; torch.linalg.matrix_norm(snm.weight, 2)</span>
 <span class="sd">        tensor(1.0000, grad_fn=&lt;CopyBackwards&gt;)</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">name</span><span class="p">):</span>
+    <span class="n">weight</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">weight</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">):</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-            <span class="s2">&quot;Module &#39;</span><span class="si">{}</span><span class="s2">&#39; has no attribute with name &#39;</span><span class="si">{}</span><span class="s2">&#39;&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
+            <span class="s2">&quot;Module &#39;</span><span class="si">{}</span><span class="s2">&#39; has no parameter or buffer with name &#39;</span><span class="si">{}</span><span class="s2">&#39;&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
         <span class="p">)</span>
-    <span class="c1"># getattr should get the correct parametrized weight if there</span>
-    <span class="c1"># is already an parametrization registered</span>
-    <span class="n">weight</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
 
     <span class="k">if</span> <span class="n">dim</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">ConvTranspose1d</span><span class="p">,</span>
