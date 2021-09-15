@@ -46,14 +46,14 @@ In this blog post, we focus on the approach for efficiently computing per-sample
 
 To understand the idea for efficiently computing per-sample gradients, let’s start by talking about how AutoGrad works in the commonly-used deep learning frameworks. We’ll focus on PyTorch from now on, but to the best of our knowledge the same applies to other frameworks (with the exception of Jax).
 
-For simplicity of explanation, we focus on one linear layer in a neural network, with weight matrix W. Also, we omit the bias from the forward pass equation: assume the forward pass is denoted by Y=WX where X is the input and Y is the output of the linear layer. If we are processing a single sample, X is a vector. On the other hand, if we are processing a batch (and that’s what we do in Opacus), X is a matrix of size B*d, with B rows (B is the batch size), where each row is an input vector of dimension d. Similarly, the output matrix Y would be of size B*r where each row is the output vector corresponding to an element in the batch and r is the output dimension.
+For simplicity of explanation, we focus on one linear layer in a neural network, with weight matrix W. Also, we omit the bias from the forward pass equation: assume the forward pass is denoted by Y=WX where X is the input and Y is the output of the linear layer. If we are processing a single sample, X is a vector. On the other hand, if we are processing a batch (and that’s what we do in Opacus), X is a matrix of size d* B, with B columns (B is the batch size), where each column is an input vector of dimension d. Similarly, the output matrix Y would be of size r* B where each column is the output vector corresponding to an element in the batch and r is the output dimension. 
 
 The forward pass can be written as the following equation that captures the computation for each element in the matrix Y:
 <img src="https://render.githubusercontent.com/render/math?math=Yi(b)=j=1dWi,jXj(b)">
 
-We will return to this equation shortly. <img src="https://render.githubusercontent.com/render/math?math=Yi(b)"> denotes the element at row b (batch b) and column i (remember that the dimension of Y is  B*r).
+We will return to this equation shortly. <img src="https://render.githubusercontent.com/render/math?math=Yi(b)"> denotes the element at row i and column b (remember that the dimension of Y is r*B).
 
-In any machine learning problem, we normally need the derivative of the loss with respect to weights W. Comparably, in Opacus we need the “per-sample” version of that, meaning, per-sample derivative of the loss with respect to weights W. Let’s first get the derivative of the loss with respect to weights, and soon, we will get to the per-sample part.
+In any machine learning problem, we normally need the derivative of the loss with respect to weights W. Comparably, in Opacus we need the “per-sample” version of that, meaning, per-sample derivative of the loss with respect to weights W. Let’s first get the derivative of the loss with respect to weights, and soon, we will get to the per-sample part. 
 
 To obtain the derivative of the loss with respect to weights, we use the chain rule, whose general form is:
 
@@ -85,9 +85,9 @@ Note that the two equations are very similar; one equation has the sum over the 
 Figure 6. The partition boundary is in the middle of a skip connection
 </p>
 
-A bit of notation and terminology. Recall that we used the notation Y = WX for forward pass of a single layer of a neural network. When the neural network has more layers, a better notation would be <img src="https://render.githubusercontent.com/render/math?math=Z(l+1)= W (l+1)Z(l)">, where <img src="https://render.githubusercontent.com/render/math?math=l"> corresponds to each layer of the neural network. In that case, we can call the gradients with respect to any activations <img src="https://render.githubusercontent.com/render/math?math=Z(l)"> the “highway gradients” and the gradients with respect to the weights the “exit gradients”.
+A bit of notation and terminology. Recall that we used the notation Y = WX for forward pass of a single layer of a neural network. When the neural network has more layers, a better notation would be <img src="https://render.githubusercontent.com/render/math?math=Z(l+1)= W (l+1)Z(l)">, where <img src="https://render.githubusercontent.com/render/math?math=l"> corresponds to each layer of the neural network. In that case, we can call the gradients with respect to any activations <img src="https://render.githubusercontent.com/render/math?math=Z(l)"> the “highway gradients” and the gradients with respect to the weights the “exit gradients”. They are shown in this picture.
 
-If we go with this definition, explaining the issue with Autograd is a one-liner: highway gradients retain per-sample information, but exit gradients do not. Or, highway gradients are per-sample, but exit gradients are not necessarily. This is unfortunate because the per-sample exit gradients are exactly what we need!
+If we go with this picture, explaining the issue with Autograd is a one-liner: highway gradients retain per-sample information, but exit gradients do not. Or, highway gradients are per-sample, but exit gradients are not necessarily. This is unfortunate because the per-sample exit gradients are exactly what we need!
 
 So here’s the question for us: given that we do have vectorized information in the highway, can we compute the per-sample exit gradients efficiently?
 
@@ -116,15 +116,15 @@ def forward_hook(module, input, output):
 In the backward hook, we use the grad_output (highway gradient), along with the stored activations (input to the layer) to compute the per-sample gradient as below:
 
 ```python
-def backward_hook(module, grad_input, grad_output):
+def backward_hook(module, grad_output):
     module.grad_sample = compute_grad_sample(module.activations, grad_output)
-    module.activations = input
 ```
 
 Now the final piece of the puzzle is the computation of the per-sample gradient itself, in the method ```compute_grad_sample``` above. Recall from Equation (* ) that the (average) gradient of loss with respect to the weights is the result of a matrix multiplication. In order to get the per-sample gradient, we want to remove the sum reduction, as in Equation (** ).  This corresponds to replacing the matrix multiplication with a batched outer product. Luckily for us, torch einsum allows us to do that in vectorized form. The method ```compute_grad_sample``` is defined based on einsum throughout our code. For instance, for the linear layer, the meat of the code is
 
 ```python
-def compute_linear_grad_sample(input, grad_output):
+def compute_linear_grad_sample(A, B):
+    """A: activations   B: backpropagations"""
     return torch.einsum("n...i,n...j->nij", B, A)
 ```
 
