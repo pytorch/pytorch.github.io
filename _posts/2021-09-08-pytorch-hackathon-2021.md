@@ -32,6 +32,9 @@ Submissions will be judged on the idea’s quality, originality, implementation,
 
 All winners will also receive the opportunity to create blog posts that will be featured throughout PyTorch channels as well as an exclusive Github badge. Honorable Mentions will also be awarded to the following three highest-scoring entries in each category and will receive $1,000 each.
 
+## Cloud Computing Credits
+Request $100 in credits from Amazon Web Services or Google Cloud for your computing costs. Please allow 3 business days for your request to be reviewed. Credits will be provided to verified registrants until the supplies run out. For more information, see https://pytorch2021.devpost.com/details/sponsors. 
+
 ## 2020 Winning Projects
 
 [DeMask](https://devpost.com/software/asteroid-the-pytorch-based-source-separation-toolkit) won first place in the PyTorch Developer Tools category. Built using Asteroid, a PyTorch-based audio source separation toolkit, DeMask is an end-to-end model for enhancing speech while wearing face masks.
