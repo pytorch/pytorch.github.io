@@ -1,144 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.9.0">Jekyll</generator><link href="https://pytorch.org/feed.xml" rel="self" type="application/atom+xml" /><link href="https://pytorch.org/" rel="alternate" type="text/html" /><updated>2021-09-15T11:44:06-07:00</updated><id>https://pytorch.org/feed.xml</id><title type="html">PyTorch Website</title><subtitle>Scientific Computing...</subtitle><author><name>Facebook</name></author><entry><title type="html">Differential Privacy Series Part 2 | Efficient Per-Sample Gradient Computation in Opacus</title><link href="https://pytorch.org/blog/efficient-per-sample-gradient-computation-opacus/" rel="alternate" type="text/html" title="Differential Privacy Series Part 2 | Efficient Per-Sample Gradient Computation in Opacus" /><published>2021-09-15T00:00:00-07:00</published><updated>2021-09-15T00:00:00-07:00</updated><id>https://pytorch.org/blog/efficient-per-sample-gradient-computation-opacus</id><content type="html" xml:base="https://pytorch.org/blog/efficient-per-sample-gradient-computation-opacus/">&lt;h2 id=&quot;introduction&quot;&gt;Introduction&lt;/h2&gt;
-
-&lt;p&gt;In our &lt;a href=&quot;https://medium.com/pytorch/differential-privacy-series-part-1-dp-sgd-algorithm-explained-12512c3959a3&quot;&gt;previous blog post&lt;/a&gt;, we went over the basics of the DP-SGD algorithm and introduced &lt;a href=&quot;https://opacus.ai&quot;&gt;Opacus&lt;/a&gt;, a PyTorch library for training ML models with differential privacy. In this blog post, we explain how performance-improving vectorized computation is done in Opacus and why Opacus can compute “per-sample gradients” a lot faster than “microbatching” (read on to see what all these terms mean!)&lt;/p&gt;
-
-&lt;h2 id=&quot;context&quot;&gt;Context&lt;/h2&gt;
-
-&lt;p&gt;Recall that differential privacy is all about worst-case guarantees, which means we need to check the gradient of each and every sample in a batch of data.&lt;/p&gt;
-
-&lt;p&gt;Conceptually, this is akin to writing the following PyTorch code:&lt;/p&gt;
-
-&lt;div class=&quot;language-python highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;n&quot;&gt;optimizer&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;torch&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;optim&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;SGD&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;lr&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;args&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;lr&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
-
-&lt;span class=&quot;k&quot;&gt;for&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;batch&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;in&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Dataloader&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;train_dataset&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;batch_size&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;):&lt;/span&gt;
-    &lt;span class=&quot;n&quot;&gt;all_per_sample_gradients&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;[]&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;# will have len = batch_size
-&lt;/span&gt;    &lt;span class=&quot;k&quot;&gt;for&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;x&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;y&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;in&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;batch&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt;
-        &lt;span class=&quot;n&quot;&gt;y_hat&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;model&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;x&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
-        &lt;span class=&quot;n&quot;&gt;loss&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;criterion&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;y_hat&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;y&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
-        &lt;span class=&quot;n&quot;&gt;loss&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;backward&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt;  &lt;span class=&quot;c1&quot;&gt;# Now p.grad for this x is filled
-&lt;/span&gt;
-        &lt;span class=&quot;c1&quot;&gt;# Need to clone it to save it
-&lt;/span&gt;        &lt;span class=&quot;n&quot;&gt;per_sample_gradients&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;p&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;grad&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;detach&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;().&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;clone&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;for&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;p&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;in&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;model&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;parameters&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()]&lt;/span&gt;
-
-        &lt;span class=&quot;n&quot;&gt;all_per_sample_gradients&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;append&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;per_sample_gradients&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
-        &lt;span class=&quot;n&quot;&gt;model&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;zero_grad&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt;  &lt;span class=&quot;c1&quot;&gt;# p.grad is cumulative so we'd better reset it
-&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;While the above procedure (called the “micro batch method”, or “micro batching”) does indeed yield correct per-sample gradients, it’s grossly inefficient: GPUs really like vectorized computation, and going sample-by-sample in a for-loop entirely misses that. We acknowledged this in the ending of our last entry, leaving the explanation of how to make this faster for a later post. This is it, folks!&lt;/p&gt;
-
-&lt;h2 id=&quot;vectorized-computation&quot;&gt;Vectorized Computation&lt;/h2&gt;
-
-&lt;p&gt;One of the features of Opacus is “vectorized computation”, in that it can compute per-sample gradients a lot faster than microbatching (they depend on the model, but we observed speedups from ~10x for small MNIST examples to ~50x for Transformers). Microbatching is simply not fast enough to run experiments and conduct research.&lt;/p&gt;
-
-&lt;p&gt;So, how do we do vectorized computation in Opacus? We derive the per-sample gradient formula, and implement a vectorized version of it. We will get to this soon. Let us mention that there are other methods  (like &lt;a href=&quot;https://arxiv.org/abs/1510.01799&quot;&gt;this&lt;/a&gt; and &lt;a href=&quot;https://arxiv.org/abs/2009.03106&quot;&gt;this&lt;/a&gt;) that rely on computing the norm of the per-sample gradients directly. It is worth noting that since these approaches are based on computing the norm of the per-sample gradients, they do two passes of back-propagation to compute the per-sample gradients: one pass for obtaining the norm, and one pass for using the norm as a weight (see the links above for details). Although they are considered efficient, in Opacus we set out to be even more efficient (!) and do everything in one back-propagation pass.&lt;/p&gt;
-
-&lt;p&gt;In this blog post, we focus on the approach for efficiently computing per-sample gradients that is based on deriving the per-sample gradient formula and implementing a vectorized version of it. To make this blog post short, we focus on simple linear layers - building blocks for multi-layer perceptrons (MLPs). In our next blog post, we will talk about how we extend this approach to other layers (e.g., convolutions, or LSTMs) in Opacus.&lt;/p&gt;
-
-&lt;h2 id=&quot;efficient-per-sample-gradient-computation-for-mlp&quot;&gt;Efficient Per-Sample Gradient Computation for MLP&lt;/h2&gt;
-
-&lt;p&gt;To understand the idea for efficiently computing per-sample gradients, let’s start by talking about how AutoGrad works in the commonly-used deep learning frameworks. We’ll focus on PyTorch from now on, but to the best of our knowledge the same applies to other frameworks (with the exception of Jax).&lt;/p&gt;
-
-&lt;p&gt;For simplicity of explanation, we focus on one linear layer in a neural network, with weight matrix W. Also, we omit the bias from the forward pass equation: assume the forward pass is denoted by Y=WX where X is the input and Y is the output of the linear layer. If we are processing a single sample, X is a vector. On the other hand, if we are processing a batch (and that’s what we do in Opacus), X is a matrix of size d* B, with B columns (B is the batch size), where each column is an input vector of dimension d. Similarly, the output matrix Y would be of size r* B where each column is the output vector corresponding to an element in the batch and r is the output dimension.&lt;/p&gt;
-
-&lt;p&gt;The forward pass can be written as the following equation that captures the computation for each element in the matrix Y:
-&lt;img src=&quot;https://render.githubusercontent.com/render/math?math=Yi(b)=j=1dWi,jXj(b)&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;We will return to this equation shortly. &lt;img src=&quot;https://render.githubusercontent.com/render/math?math=Yi(b)&quot; /&gt; denotes the element at row i and column b (remember that the dimension of Y is r*B).&lt;/p&gt;
-
-&lt;p&gt;In any machine learning problem, we normally need the derivative of the loss with respect to weights W. Comparably, in Opacus we need the “per-sample” version of that, meaning, per-sample derivative of the loss with respect to weights W. Let’s first get the derivative of the loss with respect to weights, and soon, we will get to the per-sample part.&lt;/p&gt;
-
-&lt;p&gt;To obtain the derivative of the loss with respect to weights, we use the chain rule, whose general form is:&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;https://render.githubusercontent.com/render/math?math=Lz=LY*Yz,&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;which can be written as&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;https://render.githubusercontent.com/render/math?math=Lz=b=1Bi'=1rLYi'(b)Yi'(b)z&quot; /&gt;.&lt;/p&gt;
-
-&lt;p&gt;Now, we can replace &lt;img src=&quot;https://render.githubusercontent.com/render/math?math=z&quot; /&gt; with &lt;img src=&quot;https://render.githubusercontent.com/render/math?math=Wi,j&quot; /&gt; and get&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;https://render.githubusercontent.com/render/math?math=LWi,j=b=1Bi'=1rLYi'(b)Yi'(b)Wi,j&quot; /&gt;.&lt;/p&gt;
-
-&lt;p&gt;We know from the equation &lt;img src=&quot;https://render.githubusercontent.com/render/math?math=Y=WX&quot; /&gt; that &lt;img src=&quot;https://render.githubusercontent.com/render/math?math=Yi'(b)Wi,j&quot; /&gt; is &lt;img src=&quot;https://render.githubusercontent.com/render/math?math=Y=WX&quot; /&gt; that &lt;img src=&quot;https://render.githubusercontent.com/render/math?math=Xj(b)&quot; /&gt; when &lt;img src=&quot;https://render.githubusercontent.com/render/math?math=i=i&quot; /&gt;, and is 0 otherwise. Hence, we will have&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;https://render.githubusercontent.com/render/math?math=LWi,j=b=1BLYi(b)Xj(b)(*)&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;This equation corresponds to a matrix multiplication in PyTorch.&lt;/p&gt;
-
-&lt;p&gt;As we can see, the gradient of loss with respect to the weight relies on the gradient of loss with respect to the output Y. In a regular backpropagation, the gradients of loss with respect to weights (or simply put, the “gradients”) are computed for the output of each layer, but they are reduced (i.e., summed up over the batch). Since Opacus requires computing &lt;strong&gt;per-sample gradients&lt;/strong&gt;, what we need is the following&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;https://render.githubusercontent.com/render/math?math=LbatchWi,j=LYi(b)Xj(b)(**)&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;Note that the two equations are very similar; one equation has the sum over the batch and the other one does not. Let’s now focus on how we compute the per-sample gradient (equation ** ) in Opacus efficiently.&lt;/p&gt;
-
-&lt;p align=&quot;center&quot;&gt;
-&lt;img src=&quot;/assets/images/image-opacus.png&quot; width=&quot;560&quot; /&gt;
-&lt;br /&gt;
-Figure 6. The partition boundary is in the middle of a skip connection
-&lt;/p&gt;
-
-&lt;p&gt;A bit of notation and terminology. Recall that we used the notation Y = WX for forward pass of a single layer of a neural network. When the neural network has more layers, a better notation would be &lt;img src=&quot;https://render.githubusercontent.com/render/math?math=Z(l+1)= W (l+1)Z(l)&quot; /&gt;, where &lt;img src=&quot;https://render.githubusercontent.com/render/math?math=l&quot; /&gt; corresponds to each layer of the neural network. In that case, we can call the gradients with respect to any activations &lt;img src=&quot;https://render.githubusercontent.com/render/math?math=Z(l)&quot; /&gt; the “highway gradients” and the gradients with respect to the weights the “exit gradients”. They are shown in this picture.&lt;/p&gt;
-
-&lt;p&gt;If we go with this picture, explaining the issue with Autograd is a one-liner: highway gradients retain per-sample information, but exit gradients do not. Or, highway gradients are per-sample, but exit gradients are not necessarily. This is unfortunate because the per-sample exit gradients are exactly what we need!&lt;/p&gt;
-
-&lt;p&gt;So here’s the question for us: given that we do have vectorized information in the highway, can we compute the per-sample exit gradients efficiently?&lt;/p&gt;
-
-&lt;p&gt;Luckily for us, there is a solution for this:&lt;/p&gt;
-&lt;ol&gt;
-  &lt;li&gt;Store the activations somewhere.&lt;/li&gt;
-  &lt;li&gt;Find a way to access the highway gradients.&lt;/li&gt;
-&lt;/ol&gt;
-
-&lt;p&gt;So far, so good; but how do we store the activations and how do we access the highway gradients? Well, PyTorch has a feature to do just these: module (and tensor) hooks! Read on.&lt;/p&gt;
-
-&lt;p&gt;Under the hood, PyTorch is event-based and will call the hooks at the right places (your forward and backward functions are indeed being hooked where they need to go). In addition, PyTorch exposes hooks so that anyone can leverage them. The ones we care about here are these:&lt;/p&gt;
-
-&lt;ol&gt;
-  &lt;li&gt;&lt;strong&gt;Parameter hook&lt;/strong&gt;. This attaches to a nn.Module’s Parameter tensor and will always run during the backward pass. The signature is this: &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;hook(grad) -&amp;gt; Tensor or None&lt;/code&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;nn.Module hook&lt;/strong&gt;. There are two types of these:
-    &lt;ol&gt;
-      &lt;li&gt;&lt;strong&gt;Forward hook&lt;/strong&gt;. The signature for this is &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;hook(module, input, output) -&amp;gt; None&lt;/code&gt;&lt;/li&gt;
-      &lt;li&gt;&lt;strong&gt;Backward hook&lt;/strong&gt;. The signature for this is &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;hook(module, grad_input, grad_output) -&amp;gt; Tensor or None&lt;/code&gt;&lt;/li&gt;
-    &lt;/ol&gt;
-  &lt;/li&gt;
-&lt;/ol&gt;
-
-&lt;p&gt;To learn more about these fundamental primitives, check out our &lt;a href=&quot;https://pytorch.org/tutorials/beginner/former_torchies/nnft_tutorial.html#forward-and-backward-function-hooks&quot;&gt;official tutorial&lt;/a&gt; on hooks, or one of the excellent explainers, such as &lt;a href=&quot;https://blog.paperspace.com/pytorch-hooks-gradient-clipping-debugging/&quot;&gt;Paperspace’s&lt;/a&gt; or this &lt;a href=&quot;https://www.kaggle.com/sironghuang/understanding-pytorch-hooks&quot;&gt;Kaggle notebook&lt;/a&gt;. Finally, if you want to play with hooks more interactively, we also made a &lt;a href=&quot;https://colab.research.google.com/drive/1zDidGCNI3DJk1oSPIpmB89b5cCWyuHao?usp=sharing&quot;&gt;notebook&lt;/a&gt; for you.&lt;/p&gt;
-
-&lt;p&gt;We use two hooks, one forward hook and one backward hook. In the forward hook, we simply store the activations:&lt;/p&gt;
-
-&lt;div class=&quot;language-python highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;k&quot;&gt;def&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;forward_hook&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;module&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;input&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;output&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;):&lt;/span&gt;
-    &lt;span class=&quot;n&quot;&gt;module&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;activations&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;input&lt;/span&gt;
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;In the backward hook, we use the grad_output (highway gradient), along with the stored activations (input to the layer) to compute the per-sample gradient as below:&lt;/p&gt;
-
-&lt;div class=&quot;language-python highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;k&quot;&gt;def&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;backward_hook&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;module&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;grad_output&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;):&lt;/span&gt;
-    &lt;span class=&quot;n&quot;&gt;module&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;grad_sample&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;compute_grad_sample&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;module&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;activations&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;grad_output&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;Now the final piece of the puzzle is the computation of the per-sample gradient itself, in the method &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;compute_grad_sample&lt;/code&gt; above. Recall from Equation (* ) that the (average) gradient of loss with respect to the weights is the result of a matrix multiplication. In order to get the per-sample gradient, we want to remove the sum reduction, as in Equation (** ).  This corresponds to replacing the matrix multiplication with a batched outer product. Luckily for us, torch einsum allows us to do that in vectorized form. The method &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;compute_grad_sample&lt;/code&gt; is defined based on einsum throughout our code. For instance, for the linear layer, the meat of the code is&lt;/p&gt;
-
-&lt;div class=&quot;language-python highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;k&quot;&gt;def&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;compute_linear_grad_sample&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;A&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;B&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;):&lt;/span&gt;
-    &lt;span class=&quot;s&quot;&gt;&quot;&quot;&quot;A: activations   B: backpropagations&quot;&quot;&quot;&lt;/span&gt;
-    &lt;span class=&quot;k&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;torch&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;einsum&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;n...i,n...j-&amp;gt;nij&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;B&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;A&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;You can find the full implementation for the linear module &lt;a href=&quot;https://github.com/pytorch/opacus/blob/204328947145d1759fcb26171368fcff6d652ef6/opacus/grad_sample/linear.py&quot;&gt;here&lt;/a&gt;. The actual code has some bookkeeping around the einsum call, but the einsum call is the main building block of the efficient per-sample computation for us.&lt;/p&gt;
-
-&lt;p&gt;Since this post is already long, we refer the interested reader to read about &lt;a href=&quot;https://rockt.github.io/2018/04/30/einsum&quot;&gt;einsum in PyTorch&lt;/a&gt; and do not get into the details of einsum. However, we really encourage you to check it out, as it’s kind of a magical thing! Just as an example, a matrix multiplication describe in&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;https://render.githubusercontent.com/render/math?math=Cij=kAikBkj&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;can be implemented beautifully in this line:&lt;/p&gt;
-
-&lt;p&gt;&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;c = torch.einsum('ik,kj-&amp;gt;ij', [a, b])&lt;/code&gt;&lt;/p&gt;
-
-&lt;p&gt;We like to highlight that einsum is really the key for us to have vectorized computation. That is it folks! We just explained the last piece of the puzzle, computation of the per-sample gradient.&lt;/p&gt;
-
-&lt;h2 id=&quot;conclusion&quot;&gt;Conclusion&lt;/h2&gt;
-
-&lt;p&gt;In this blog post, we explained how vectorized computation is done in Opacus and why Opacus can compute per-sample gradients a lot faster than micro batching (for reference, &lt;a href=&quot;https://github.com/tensorflow/privacy&quot;&gt;TensorFlow Privacy&lt;/a&gt; is based on micro batching 😜). We explained the idea to compute per-sample gradients efficiently for an MLP. Stay tuned for more blog posts! In our next blog post, we will talk about how we compute per-sample gradients efficiently for other layers (e.g. convolutions, or LSTMs).&lt;/p&gt;</content><author><name>Ashkan Yousefpour, Davide Testuggine, Alex Sablayrolles, and Ilya Mironov</name></author><summary type="html">Introduction</summary></entry><entry><title type="html">Announcing PyTorch Annual Hackathon 2021</title><link href="https://pytorch.org/blog/pytorch-hackathon-2021/" rel="alternate" type="text/html" title="Announcing PyTorch Annual Hackathon 2021" /><published>2021-09-08T00:00:00-07:00</published><updated>2021-09-08T00:00:00-07:00</updated><id>https://pytorch.org/blog/pytorch-hackathon-2021</id><content type="html" xml:base="https://pytorch.org/blog/pytorch-hackathon-2021/">&lt;p&gt;We’re excited to announce the PyTorch Annual Hackathon 2021! This year, we’re looking to support the community in creating innovative PyTorch tools, libraries, and applications. 2021 is the third year we’re hosting this Hackathon, and we welcome you to join the PyTorch community and put your machine learning skills into action. Submissions start on September 8 and end on November 3. Good luck to everyone!&lt;/p&gt;
+<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.9.0">Jekyll</generator><link href="https://pytorch.org/feed.xml" rel="self" type="application/atom+xml" /><link href="https://pytorch.org/" rel="alternate" type="text/html" /><updated>2021-09-15T12:43:26-07:00</updated><id>https://pytorch.org/feed.xml</id><title type="html">PyTorch Website</title><subtitle>Scientific Computing...</subtitle><author><name>Facebook</name></author><entry><title type="html">Announcing PyTorch Annual Hackathon 2021</title><link href="https://pytorch.org/blog/pytorch-hackathon-2021/" rel="alternate" type="text/html" title="Announcing PyTorch Annual Hackathon 2021" /><published>2021-09-08T00:00:00-07:00</published><updated>2021-09-08T00:00:00-07:00</updated><id>https://pytorch.org/blog/pytorch-hackathon-2021</id><content type="html" xml:base="https://pytorch.org/blog/pytorch-hackathon-2021/">&lt;p&gt;We’re excited to announce the PyTorch Annual Hackathon 2021! This year, we’re looking to support the community in creating innovative PyTorch tools, libraries, and applications. 2021 is the third year we’re hosting this Hackathon, and we welcome you to join the PyTorch community and put your machine learning skills into action. Submissions start on September 8 and end on November 3. Good luck to everyone!&lt;/p&gt;
 
 &lt;div class=&quot;text-center&quot;&gt;
   &lt;img src=&quot;/assets/images/pytorch_hackathon_2021.gif&quot; width=&quot;100%&quot; /&gt;
@@ -1810,4 +1670,216 @@ torch-tb-profiler[s3]
 
 &lt;p&gt;Our final model achieves an mAP of 25.1 and reproduces exactly the COCO results reported on the paper. Here is a &lt;a href=&quot;https://github.com/pytorch/vision/pull/3403&quot;&gt;detailed breakdown&lt;/a&gt; of the accuracy metrics.&lt;/p&gt;
 
-&lt;p&gt;We hope you found the part 1 of the series interesting. On the part 2, we will focus on the implementation of SSDlite and discuss its differences from SSD. Until then, we are looking forward to your feedback.&lt;/p&gt;</content><author><name>Vasilis Vryniotis</name></author><summary type="html">In TorchVision v0.10, we’ve released two new Object Detection models based on the SSD architecture. Our plan is to cover the key implementation details of the algorithms along with information on how they were trained in a two-part article.</summary></entry></feed>
+&lt;p&gt;We hope you found the part 1 of the series interesting. On the part 2, we will focus on the implementation of SSDlite and discuss its differences from SSD. Until then, we are looking forward to your feedback.&lt;/p&gt;</content><author><name>Vasilis Vryniotis</name></author><summary type="html">In TorchVision v0.10, we’ve released two new Object Detection models based on the SSD architecture. Our plan is to cover the key implementation details of the algorithms along with information on how they were trained in a two-part article.</summary></entry><entry><title type="html">New PyTorch Library Releases in PyTorch 1.9, including TorchVision, TorchAudio, and more</title><link href="https://pytorch.org/blog/pytorch-1.9-new-library-releases/" rel="alternate" type="text/html" title="New PyTorch Library Releases in PyTorch 1.9, including TorchVision, TorchAudio, and more" /><published>2021-06-15T00:00:00-07:00</published><updated>2021-06-15T00:00:00-07:00</updated><id>https://pytorch.org/blog/pytorch-1.9-new-library-releases</id><content type="html" xml:base="https://pytorch.org/blog/pytorch-1.9-new-library-releases/">&lt;p&gt;Today, we are announcing updates to a number of PyTorch libraries, alongside the &lt;a href=&quot;https://pytorch.org/blog/pytorch-1.9-released/&quot;&gt;PyTorch 1.9 release&lt;/a&gt;. The updates include new releases for the domain libraries including TorchVision, TorchText and TorchAudio. These releases, along with the PyTorch 1.9 release, include a number of new features and improvements that will provide a broad set of updates for the PyTorch community.&lt;/p&gt;
+
+&lt;p&gt;Some highlights include:&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;strong&gt;TorchVision&lt;/strong&gt; - Added new SSD and SSDLite models, quantized kernels for object detection, GPU Jpeg decoding, and iOS support. See &lt;a href=&quot;https://github.com/pytorch/vision/releases&quot;&gt;release notes&lt;/a&gt; here.&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;TorchAudio&lt;/strong&gt; - Added wav2vec 2.0 model deployable in non-Python environments (including C++, Android, and iOS). Many performance improvements in lfilter, spectral operations, resampling. Added options for quality control in sampling (i.e. Kaiser window support). Initiated the migration of complex tensors operations. Improved autograd support. See &lt;a href=&quot;https://github.com/pytorch/audio/releases&quot;&gt;release notes&lt;/a&gt; here.&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;TorchText&lt;/strong&gt; - Added a new high-performance Vocab module that provides common functional APIs for NLP workflows. See &lt;a href=&quot;https://github.com/pytorch/text/releases&quot;&gt;release notes&lt;/a&gt; here.&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;We’d like to thank the community for their support and work on this latest release.&lt;/p&gt;
+
+&lt;p&gt;Features in PyTorch releases are classified as Stable, Beta, and Prototype. You can learn more about the definitions in &lt;a href=&quot;https://pytorch.org/blog/pytorch-feature-classification-changes/&quot;&gt;this blog post&lt;/a&gt;.&lt;/p&gt;
+
+&lt;h1 id=&quot;torchvision-010&quot;&gt;TorchVision 0.10&lt;/h1&gt;
+
+&lt;h3 id=&quot;stable-quantized-kernels-for-object-detection&quot;&gt;(Stable) Quantized kernels for object detection&lt;/h3&gt;
+&lt;p&gt;The forward pass of the nms and roi_align operators now support tensors with a quantized dtype, which can help lower the memory footprint of object detection models, particularly on mobile environments. For more details, refer to &lt;a href=&quot;https://pytorch.org/vision/stable/ops.html#torchvision.ops.roi_align&quot;&gt;the documentation&lt;/a&gt;.&lt;/p&gt;
+
+&lt;h3 id=&quot;stable-speed-optimizations-for-tensor-transforms&quot;&gt;(Stable) Speed optimizations for Tensor transforms&lt;/h3&gt;
+&lt;p&gt;The resize and flip transforms have been optimized and its runtime improved by up to 5x on the CPU.&lt;/p&gt;
+
+&lt;h3 id=&quot;stable-documentation-improvements&quot;&gt;(Stable) Documentation improvements&lt;/h3&gt;
+&lt;p&gt;Significant improvements were made to the documentation. In particular, a new gallery of examples is available. These examples visually illustrate how each transform acts on an image, and also properly documents and illustrates the output of the segmentation models.&lt;/p&gt;
+
+&lt;p&gt;The example gallery will be extended in the future to provide more comprehensive examples and serve as a reference for common torchvision tasks. For more details, refer to &lt;a href=&quot;https://pytorch.org/vision/stable/auto_examples/index.html&quot;&gt;the documentation&lt;/a&gt;.&lt;/p&gt;
+
+&lt;h3 id=&quot;beta-new-models-for-detection&quot;&gt;(Beta) New models for detection&lt;/h3&gt;
+&lt;p&gt;&lt;a href=&quot;https://arxiv.org/abs/1512.02325&quot;&gt;SSD&lt;/a&gt; and &lt;a href=&quot;https://arxiv.org/abs/1801.04381&quot;&gt;SSDlite&lt;/a&gt; are two popular object detection architectures that are efficient in terms of speed and provide good results for low resolution pictures. In this release, we provide implementations for the original SSD model with VGG16 backbone and for its mobile-friendly variant SSDlite with MobileNetV3-Large backbone.&lt;/p&gt;
+
+&lt;p&gt;The models were pre-trained on COCO train2017 and can be used as follows:&lt;/p&gt;
+
+&lt;div class=&quot;language-python highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;kn&quot;&gt;import&lt;/span&gt; &lt;span class=&quot;nn&quot;&gt;torch&lt;/span&gt;
+&lt;span class=&quot;kn&quot;&gt;import&lt;/span&gt; &lt;span class=&quot;nn&quot;&gt;torchvision&lt;/span&gt;
+
+&lt;span class=&quot;c1&quot;&gt;# Original SSD variant
+&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;x&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;torch&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;rand&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;3&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;300&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;300&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;),&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;torch&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;rand&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;3&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;500&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;400&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)]&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;m_detector&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;torchvision&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;models&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;detection&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;ssd300_vgg16&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;pretrained&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;bp&quot;&gt;True&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;m_detector&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;eval&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;predictions&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;m_detector&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;x&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+
+&lt;span class=&quot;c1&quot;&gt;# Mobile-friendly SSDlite variant
+&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;x&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;torch&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;rand&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;3&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;320&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;320&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;),&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;torch&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;rand&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;3&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;500&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;400&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)]&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;m_detector&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;torchvision&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;models&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;detection&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;ssdlite320_mobilenet_v3_large&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;pretrained&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;bp&quot;&gt;True&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;m_detector&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;eval&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;predictions&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;m_detector&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;x&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;The following accuracies can be obtained on COCO val2017 (full results available in &lt;a href=&quot;https://github.com/pytorch/vision/pull/3403&quot;&gt;#3403&lt;/a&gt; and &lt;a href=&quot;https://github.com/pytorch/vision/pull/3757&quot;&gt;#3757&lt;/a&gt;):&lt;/p&gt;
+
+&lt;table class=&quot;table table-striped table-bordered&quot;&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th&gt;Model&lt;/th&gt;
+      &lt;th&gt;mAP&lt;/th&gt;
+      &lt;th&gt;mAP@50&lt;/th&gt;
+      &lt;th&gt;mAP@75&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td&gt;SSD300 VGG16&lt;/td&gt;
+      &lt;td&gt;25.1&lt;/td&gt;
+      &lt;td&gt;41.5&lt;/td&gt;
+      &lt;td&gt;26.2&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;SSDlite320 MobileNetV3-Large&lt;/td&gt;
+      &lt;td&gt;21.3&lt;/td&gt;
+      &lt;td&gt;34.3&lt;/td&gt;
+      &lt;td&gt;22.1&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;p&gt;For more details, refer to &lt;a href=&quot;https://pytorch.org/vision/stable/models.html#id37&quot;&gt;the documentation&lt;/a&gt;.&lt;/p&gt;
+
+&lt;h3 id=&quot;beta-jpeg-decoding-on-the-gpu&quot;&gt;(Beta) JPEG decoding on the GPU&lt;/h3&gt;
+&lt;p&gt;Decoding jpegs is now possible on GPUs with the use of &lt;a href=&quot;https://developer.nvidia.com/nvjpeg&quot;&gt;nvjpeg&lt;/a&gt;, which should be readily available in your CUDA setup. The decoding time of a single image should be about 2 to 3 times faster than with libjpeg on CPU. While the resulting tensor will be stored on the GPU device, the input raw tensor still needs to reside on the host (CPU), because the first stages of the decoding process take place on the host:
+from torchvision.io.image import read_file, decode_jpeg&lt;/p&gt;
+
+&lt;div class=&quot;language-python highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;n&quot;&gt;data&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;read_file&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;'path_to_image.jpg'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;  &lt;span class=&quot;c1&quot;&gt;# raw data is on CPU
+&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;img&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;decode_jpeg&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;data&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;device&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;'cuda'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;  &lt;span class=&quot;c1&quot;&gt;# decoded image in on GPU
+&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+&lt;p&gt;For more details, see &lt;a href=&quot;https://pytorch.org/vision/stable/io.html#torchvision.io.decode_jpeg&quot;&gt;the documentation&lt;/a&gt;.&lt;/p&gt;
+
+&lt;h3 id=&quot;beta-ios-support&quot;&gt;(Beta) iOS support&lt;/h3&gt;
+&lt;p&gt;TorchVision 0.10 now provides pre-compiled iOS binaries for its C++ operators, which means you can run Faster R-CNN and Mask R-CNN on iOS. An example app on how to build a program leveraging those ops can be found &lt;a href=&quot;https://github.com/pytorch/vision/tree/master/ios/VisionTestApp&quot;&gt;here&lt;/a&gt;.&lt;/p&gt;
+
+&lt;h1 id=&quot;torchaudio-090&quot;&gt;TorchAudio 0.9.0&lt;/h1&gt;
+
+&lt;h3 id=&quot;stable-complex-tensor-migration&quot;&gt;(Stable) Complex Tensor Migration&lt;/h3&gt;
+&lt;p&gt;TorchAudio has functions that handle complex-valued tensors. These functions follow a convention to use an extra dimension to represent real and imaginary parts. In PyTorch 1.6, the native complex type was introduced. As its API is getting stable, torchaudio has started to migrate to the native complex type.&lt;/p&gt;
+
+&lt;p&gt;In this release, we added support for native complex tensors, and you can opt-in to use them. Using the native complex types, we have verified that affected functions continue to support autograd and TorchScript, moreover, switching to native complex types improves their performance. For more details, refer to &lt;a href=&quot;https://github.com/pytorch/audio/issues/1337&quot;&gt;pytorch/audio#1337&lt;/a&gt;.&lt;/p&gt;
+
+&lt;h3 id=&quot;stable-filtering-improvement&quot;&gt;(Stable) Filtering Improvement&lt;/h3&gt;
+&lt;p&gt;In release 0.8, we added the C++ implementation of the core part of &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;lfilter&lt;/code&gt; for CPU, which improved the performance. In this release, we optimized some internal operations of the CPU implementation for further performance improvement. We also added autograd support to both CPU and GPU. Now &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;lfilter&lt;/code&gt; and all the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;biquad&lt;/code&gt; filters (&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;biquad&lt;/code&gt;, &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;band_biquad&lt;/code&gt;, &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;bass_biquad&lt;/code&gt;, &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;treble_biquad&lt;/code&gt;, &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;allpass_biquad&lt;/code&gt;, &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;lowpass_biquad&lt;/code&gt;, &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;highpass_biquad&lt;/code&gt;, &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;bandpass_biquad&lt;/code&gt;, &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;equalizer_biquad&lt;/code&gt; and &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;bandrefect_biquad&lt;/code&gt;) benefit from the performance improvement and support autograd. We also moved the implementation of overdrive to C++ for performance improvement. For more details, refer to &lt;a href=&quot;https://pytorch.org/audio/0.9.0/functional.html#lfilter&quot;&gt;the documentation&lt;/a&gt;.&lt;/p&gt;
+
+&lt;h3 id=&quot;stable-improved-autograd-support&quot;&gt;(Stable) Improved Autograd Support&lt;/h3&gt;
+&lt;p&gt;Along with the work of Complex Tensor Migration and Filtering Improvement, we also added autograd tests to transforms. &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;lfilter&lt;/code&gt;, &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;biquad&lt;/code&gt; and its variants, and most transforms are now guaranteed to support autograd. For more details, refer to &lt;a href=&quot;https://github.com/pytorch/audio/releases&quot;&gt;the release note&lt;/a&gt;.&lt;/p&gt;
+
+&lt;h3 id=&quot;stable-improved-windows-support&quot;&gt;(Stable) Improved Windows Support&lt;/h3&gt;
+&lt;p&gt;Torchaudio implements some operations in C++ for reasons such as performance and integration with third-party libraries. These C++ components were only available on Linux and macOS. In this release, we have added support to Windows. With this, the efficient filtering implementation mentioned above is also available on Windows.&lt;/p&gt;
+
+&lt;p&gt;However, please note that not all the C++ components are available for Windows. “sox_io” backend and &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;torchaudio.functional.compute_kaldi_pitch&lt;/code&gt; are not supported.&lt;/p&gt;
+
+&lt;h3 id=&quot;stable-io-functions-migration&quot;&gt;(Stable) I/O Functions Migration&lt;/h3&gt;
+&lt;p&gt;Since the 0.6 release, we have continuously improved I/O functionality. Specifically, in 0.8 we changed the default backend from “sox” to “sox_io” and applied the same switch to API of the “soundfile” backend. The 0.9 release concludes this migration by removing the deprecated backends. For more details, please refer to &lt;a href=&quot;https://github.com/pytorch/audio/issues/903&quot;&gt;#903&lt;/a&gt;.&lt;/p&gt;
+
+&lt;h3 id=&quot;beta-wav2vec20-model&quot;&gt;(Beta) Wav2Vec2.0 Model&lt;/h3&gt;
+&lt;p&gt;We have added the model architectures from &lt;a href=&quot;https://arxiv.org/abs/2006.11477&quot;&gt;Wav2Vec2.0&lt;/a&gt;. You can import fine-tuned models parameters published on &lt;a href=&quot;https://github.com/pytorch/fairseq/tree/master/examples/wav2vec&quot;&gt;fairseq&lt;/a&gt; and &lt;a href=&quot;https://huggingface.co/models?filter=wav2vec2&quot;&gt;Hugging Face Hub&lt;/a&gt;. Our model definition supports TorchScript, and it is possible to deploy the model to non-Python environments, such as C++, &lt;a href=&quot;https://github.com/pytorch/android-demo-app/tree/master/SpeechRecognition&quot;&gt;Android&lt;/a&gt; and &lt;a href=&quot;https://github.com/pytorch/ios-demo-app/tree/master/SpeechRecognition&quot;&gt;iOS&lt;/a&gt;.&lt;/p&gt;
+
+&lt;p&gt;The following code snippet illustrates such a use case. Please check out our &lt;a href=&quot;https://github.com/pytorch/audio/tree/master/examples/libtorchaudio&quot;&gt;c++ example directory&lt;/a&gt; for the complete example. Currently, it is designed for running inference. If you would like more support for training, please file a feature request.&lt;/p&gt;
+
+&lt;div class=&quot;language-python highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c1&quot;&gt;# Import fine-tuned model from Hugging Face Hub
+&lt;/span&gt;&lt;span class=&quot;kn&quot;&gt;import&lt;/span&gt; &lt;span class=&quot;nn&quot;&gt;transformers&lt;/span&gt;
+&lt;span class=&quot;kn&quot;&gt;from&lt;/span&gt; &lt;span class=&quot;nn&quot;&gt;torchaudio.models.wav2vec2.utils&lt;/span&gt; &lt;span class=&quot;kn&quot;&gt;import&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;import_huggingface_model&lt;/span&gt;
+
+&lt;span class=&quot;n&quot;&gt;original&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Wav2Vec2ForCTC&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;from_pretrained&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;facebook/wav2vec2-base-960h&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;imported&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;import_huggingface_model&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;original&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;div class=&quot;language-python highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c1&quot;&gt;# Import fine-tuned model from fairseq
+&lt;/span&gt;&lt;span class=&quot;kn&quot;&gt;import&lt;/span&gt; &lt;span class=&quot;nn&quot;&gt;fairseq&lt;/span&gt;
+&lt;span class=&quot;kn&quot;&gt;from&lt;/span&gt; &lt;span class=&quot;nn&quot;&gt;torchaudio.models.wav2vec2.utils&lt;/span&gt; &lt;span class=&quot;kn&quot;&gt;import&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;import_fairseq_model&lt;/span&gt;
+
+&lt;span class=&quot;n&quot;&gt;original&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;_&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;_&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;fairseq&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;checkpoint_utils&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;load_model_ensemble_and_task&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;
+    &lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;wav2vec_small_960h.pt&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;],&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;arg_overrides&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;'data'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&quot;&amp;lt;data_dir&amp;gt;&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;})&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;imported&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;import_fairseq_model&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;original&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;].&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;w2v_encoder&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;div class=&quot;language-python highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c1&quot;&gt;# Build uninitialized model and load state dict
+&lt;/span&gt;&lt;span class=&quot;kn&quot;&gt;from&lt;/span&gt; &lt;span class=&quot;nn&quot;&gt;torchaudio.models&lt;/span&gt; &lt;span class=&quot;kn&quot;&gt;import&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;wav2vec2_base&lt;/span&gt;
+
+&lt;span class=&quot;n&quot;&gt;model&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;wav2vec2_base&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;num_out&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;32&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;model&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;load_state_dict&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;imported&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;state_dict&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;())&lt;/span&gt;
+
+&lt;span class=&quot;c1&quot;&gt;# Quantize / script / optimize for mobile
+&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;quantized_model&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;torch&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;quantization&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;quantize_dynamic&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;model&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;qconfig_spec&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;torch&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;nn&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Linear&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;},&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;dtype&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;torch&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;qint8&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;scripted_model&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;torch&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;jit&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;script&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;quantized_model&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;optimized_model&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;optimize_for_mobile&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;scripted_model&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;optimized_model&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;save&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;model_for_deployment.pt&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;For more details, see &lt;a href=&quot;https://pytorch.org/audio/0.9.0/models.html#wav2vec2-0&quot;&gt;the documentation&lt;/a&gt;.&lt;/p&gt;
+
+&lt;h3 id=&quot;beta-resampling-improvement&quot;&gt;(Beta) Resampling Improvement&lt;/h3&gt;
+&lt;p&gt;In release 0.8, we vectorized the operation in &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;torchaudio.compliance.kaldi.resample_waveform&lt;/code&gt;, which improved the performance of &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;resample_waveform&lt;/code&gt; and &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;torchaudio.transforms.Resample&lt;/code&gt;. In this release, we have further revised the way the resampling algorithm is implemented.&lt;/p&gt;
+
+&lt;p&gt;We have:&lt;/p&gt;
+&lt;ul&gt;
+  &lt;li&gt;Added Kaiser Window support for a wider range of resampling quality.&lt;/li&gt;
+  &lt;li&gt;Added &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;rolloff&lt;/code&gt; parameter for anti-aliasing control.&lt;/li&gt;
+  &lt;li&gt;Added the mechanism to precompute the kernel and cache it in &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;torchaudio.transforms.Resample&lt;/code&gt; for even faster operation.&lt;/li&gt;
+  &lt;li&gt;Moved the implementation from &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;torchaudio.compliance.kaldi.resample_waveform&lt;/code&gt; to &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;torchaudio.functional.resample&lt;/code&gt; and deprecated &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;torchaudio.compliance.kaldi.resample_waveform&lt;/code&gt;.&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;For more details, see &lt;a href=&quot;https://pytorch.org/audio/0.9.0/transforms.html#resample&quot;&gt;the documentation&lt;/a&gt;.&lt;/p&gt;
+
+&lt;h3 id=&quot;prototype-rnn-transducer-loss&quot;&gt;(Prototype) RNN Transducer Loss&lt;/h3&gt;
+&lt;p&gt;The RNN transducer loss is used in training RNN transducer models, which is a popular architecture for speech recognition tasks. The prototype loss in torchaudio currently supports autograd, torchscript, float16 and float32, and can also be run on both CPU and CUDA. For more details, please refer to &lt;a href=&quot;https://pytorch.org/audio/master/rnnt_loss.html&quot;&gt;the documentation&lt;/a&gt;.&lt;/p&gt;
+
+&lt;h1 id=&quot;torchtext-0100&quot;&gt;TorchText 0.10.0&lt;/h1&gt;
+
+&lt;h3 id=&quot;beta-new-vocab-module&quot;&gt;(Beta) New Vocab Module&lt;/h3&gt;
+&lt;p&gt;In this release, we introduce a new Vocab module that replaces the current Vocab class. The new Vocab provides common functional APIs for NLP workflows. This module is backed by an efficient C++ implementation that reduces batch look-up time by up-to ~85% (refer to summary of &lt;a href=&quot;https://github.com/pytorch/text/pull/1248&quot;&gt;#1248&lt;/a&gt; and &lt;a href=&quot;https://github.com/pytorch/text/pull/1290&quot;&gt;#1290&lt;/a&gt; for further information on benchmarks), and provides support for TorchScript. We provide accompanying factory functions that can be used to build the Vocab object either through a python ordered dictionary or an Iterator that yields lists of tokens.&lt;/p&gt;
+
+&lt;div class=&quot;language-python highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c1&quot;&gt;#creating Vocab from text file
+&lt;/span&gt;&lt;span class=&quot;kn&quot;&gt;import&lt;/span&gt; &lt;span class=&quot;nn&quot;&gt;io&lt;/span&gt;
+&lt;span class=&quot;kn&quot;&gt;from&lt;/span&gt; &lt;span class=&quot;nn&quot;&gt;torchtext.vocab&lt;/span&gt; &lt;span class=&quot;kn&quot;&gt;import&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;build_vocab_from_iterator&lt;/span&gt;
+&lt;span class=&quot;c1&quot;&gt;#generator that yield list of tokens
+&lt;/span&gt;&lt;span class=&quot;k&quot;&gt;def&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;yield_tokens&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;file_path&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;):&lt;/span&gt;
+   &lt;span class=&quot;k&quot;&gt;with&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;io&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;open&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;file_path&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;encoding&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;'utf-8'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;as&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;f&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt;
+      &lt;span class=&quot;k&quot;&gt;for&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;line&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;in&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;f&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt;
+          &lt;span class=&quot;k&quot;&gt;yield&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;line&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;strip&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;().&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;split&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt;
+&lt;span class=&quot;c1&quot;&gt;#get Vocab object
+&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;vocab_obj&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;build_vocab_from_iterator&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;yield_tokens&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;file_path&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;),&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;specials&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;&amp;lt;unk&amp;gt;&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;])&lt;/span&gt;
+
+&lt;span class=&quot;c1&quot;&gt;#creating Vocab through ordered dict
+&lt;/span&gt;&lt;span class=&quot;kn&quot;&gt;from&lt;/span&gt; &lt;span class=&quot;nn&quot;&gt;torchtext.vocab&lt;/span&gt; &lt;span class=&quot;kn&quot;&gt;import&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;vocab&lt;/span&gt;
+&lt;span class=&quot;kn&quot;&gt;from&lt;/span&gt; &lt;span class=&quot;nn&quot;&gt;collections&lt;/span&gt; &lt;span class=&quot;kn&quot;&gt;import&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Counter&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;OrderedDict&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;counter&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Counter&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;([&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;a&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&quot;a&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&quot;b&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&quot;b&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&quot;b&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;])&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;sorted_by_freq_tuples&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;sorted&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;counter&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;items&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(),&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;key&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;k&quot;&gt;lambda&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;x&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;x&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;],&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;reverse&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;bp&quot;&gt;True&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;ordered_dict&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;OrderedDict&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;sorted_by_freq_tuples&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;vocab_obj&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;vocab&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;ordered_dict&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+
+&lt;span class=&quot;c1&quot;&gt;#common API usage
+&lt;/span&gt;
+&lt;span class=&quot;c1&quot;&gt;#look-up index
+&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;vocab_obj&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;a&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]&lt;/span&gt;
+
+&lt;span class=&quot;c1&quot;&gt;#batch look-up indices
+&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;vocab_obj&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;looup_indices&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;([&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;a&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;b&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;])&lt;/span&gt;
+&lt;span class=&quot;c1&quot;&gt;#support forward API of PyTorch nn Modules
+&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;vocab_obj&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;([&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;a&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;b&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;])&lt;/span&gt;
+
+&lt;span class=&quot;c1&quot;&gt;#batch look-up tokens
+&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;vocab_obj&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;lookup_tokens&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;([&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;])&lt;/span&gt;
+
+&lt;span class=&quot;c1&quot;&gt;#set default index to return when token not found
+&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;vocab_obj&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;set_default_index&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;vocab_obj&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;out_of_vocabulary&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;#prints 0
+&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;For more details, refer to &lt;a href=&quot;https://pytorch.org/text/stable/vocab.html&quot;&gt;the documentation&lt;/a&gt;.&lt;/p&gt;
+
+&lt;p&gt;Thanks for reading. If you’re interested in these updates and want to join the PyTorch community, we encourage you to join &lt;a href=&quot;https://discuss.pytorch.org/&quot;&gt;the discussion&lt;/a&gt; forums and &lt;a href=&quot;https://github.com/pytorch/pytorch/issues&quot;&gt;open GitHub issues&lt;/a&gt;. To get the latest news from PyTorch, follow us on &lt;a href=&quot;https://www.facebook.com/pytorch/&quot;&gt;Facebook&lt;/a&gt;, &lt;a href=&quot;https://twitter.com/PyTorch&quot;&gt;Twitter&lt;/a&gt;, &lt;a href=&quot;https://medium.com/pytorch&quot;&gt;Medium&lt;/a&gt;, &lt;a href=&quot;https://www.youtube.com/pytorch&quot;&gt;YouTube&lt;/a&gt; or &lt;a href=&quot;https://www.linkedin.com/company/pytorch&quot;&gt;LinkedIn&lt;/a&gt;.&lt;/p&gt;
+
+&lt;p&gt;Cheers!&lt;/p&gt;
+
+&lt;p&gt;-Team PyTorch&lt;/p&gt;</content><author><name>Team PyTorch</name></author><summary type="html">Today, we are announcing updates to a number of PyTorch libraries, alongside the PyTorch 1.9 release. The updates include new releases for the domain libraries including TorchVision, TorchText and TorchAudio. These releases, along with the PyTorch 1.9 release, include a number of new features and improvements that will provide a broad set of updates for the PyTorch community.</summary></entry></feed>
