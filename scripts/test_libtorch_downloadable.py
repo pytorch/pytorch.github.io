@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-# Generates published versions based on unstructured quick-start-module
+# Tests libtorch is downloadable
 
-import json
 import sys
 
-def check_url_downloadable(url: str ) -> bool:
+
+def check_url_downloadable(url: str) -> bool:
     from urllib.request import Request, urlopen
     req = Request(url, method="HEAD")
     try:
