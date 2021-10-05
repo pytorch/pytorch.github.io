@@ -17,7 +17,12 @@ with open('/dev/stdin', 'r') as input, open('/dev/stdout', 'w') as output:
         else:
             markdown += [line]
 
-    header = yaml.load(''.join(header))
+    header = yaml.load(''.join(header), Loader=yaml.BaseLoader)
+    if header is None:
+        # This assumes the markdown document has a yaml header
+        # but some documents, like the README.md do not
+        # Don't bother rendering them
+        exit()
 
     images = []
     try:
