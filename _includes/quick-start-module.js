@@ -7,7 +7,7 @@ var supportedOperatingSystems = new Map([
 
 var supportedComputePlatforms = new Map([
   ['cuda10.2', new Set(['linux', 'windows'])],
-  ['cuda11.1', new Set(['linux', 'windows'])],
+  ['cuda11.x', new Set(['linux', 'windows'])],
   ['rocm4.2', new Set(['linux'])],
   ['accnone', new Set(['linux', 'macos', 'windows'])],
 ]);
