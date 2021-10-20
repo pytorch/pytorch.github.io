@@ -115,6 +115,24 @@ function disableUnsupportedPlatforms(os) {
   });
 }
 
+// Change CUDA version depending on build type
+function changeCUDAVersion(ptbuild) {
+  var element = document.getElementById("cuda11.x");
+  if (element == null) {
+    console.log("Failed to find cuda11.x element");
+    return;
+  }
+  if (element.childElementCount != 1) {
+    console.log("Unexpected number of children for cuda11.x element");
+    return;
+  }
+  if (ptbuild == "preview") {
+    element.children[0].textContent = "CUDA 11.3";
+  } else {
+    element.children[0].textContent = "CUDA 11.1";
+  }
+}
+
 function selectedOption(option, selection, category) {
   $(option).removeClass("selected");
   $(selection).addClass("selected");
@@ -151,6 +169,8 @@ function selectedOption(option, selection, category) {
         }
       }
     }
+  } else if (category == "ptbuild") {
+    changeCUDAVersion(opts.ptbuild);
   }
   commandMessage(buildMatcher());
   if (category === "os") {
