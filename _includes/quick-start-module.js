@@ -126,7 +126,7 @@ function changeCUDAVersion(ptbuild) {
     console.log("Unexpected number of children for cuda11.x element");
     return;
   }
-  if (ptbuild == "preview") {
+  if (ptbuild == "preview" || ptbuild == "stable") {
     element.children[0].textContent = "CUDA 11.3";
   } else {
     element.children[0].textContent = "CUDA 11.1";
