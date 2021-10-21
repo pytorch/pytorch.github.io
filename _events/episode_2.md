@@ -1,0 +1,9 @@
+---
+category: live-stream
+title: Episode 2
+guest:  Sylvain Gugger and Lysandre Debut
+company: HuggingFace
+date: May 26, 2021
+time: 1 PM PST
+poster: https://assets.pytorch.org/pted2021/posters/C3.png
+---
