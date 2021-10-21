@@ -10,7 +10,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>torch.distributed.elastic.rendezvous.dynamic_rendezvous &mdash; PyTorch 1.9.1 documentation</title>
+  <title>torch.distributed.elastic.rendezvous.dynamic_rendezvous &mdash; PyTorch 1.10.0 documentation</title>
   
 
   
@@ -30,25 +30,15 @@
 
   <link rel="stylesheet" href="../../../../../_static/css/theme.css" type="text/css" />
   <!-- <link rel="stylesheet" href="../../../../../_static/pygments.css" type="text/css" /> -->
+  <link rel="stylesheet" href="../../../../../_static/copybutton.css" type="text/css" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.10.0-beta/dist/katex.min.css" type="text/css" />
-  <link rel="stylesheet" href="../../../../../_static/css/jit.css" type="text/css" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.13.11/dist/katex.min.css" type="text/css" />
   <link rel="stylesheet" href="../../../../../_static/katex-math.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../../_static/css/jit.css" type="text/css" />
     <link rel="index" title="Index" href="../../../../../genindex.html" />
     <link rel="search" title="Search" href="../../../../../search.html" />
-  <!-- Google Analytics -->
-  
-    <script async src="https://www.googletagmanager.com/gtag/js?id=UA-117752657-2"></script>
-    <script>
-      window.dataLayer = window.dataLayer || [];
-      function gtag(){dataLayer.push(arguments);}
-      gtag('js', new Date());
 
-      gtag('config', 'UA-117752657-2');
-    </script>
-  
-  <!-- End Google Analytics -->
-  
+
 
   
   <script src="../../../../../_static/js/modernizr.min.js"></script>
@@ -197,7 +187,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href='https://pytorch.org/docs/versions.html'>1.9.1 &#x25BC</a>
+      <a href='https://pytorch.org/docs/versions.html'>1.10.0 &#x25BC</a>
     </div>
     
 
@@ -260,6 +250,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../../../../../amp.html">torch.cuda.amp</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../../backends.html">torch.backends</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../../distributed.html">torch.distributed</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../distributed.algorithms.join.html">torch.distributed.algorithms.join</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../../distributed.elastic.html">torch.distributed.elastic</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../../distributed.optim.html">torch.distributed.optim</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../../distributions.html">torch.distributions</a></li>
@@ -394,6 +385,7 @@
 <span class="c1"># This source code is licensed under the BSD-style license found in the</span>
 <span class="c1"># LICENSE file in the root directory of this source tree.</span>
 
+<span class="kn">import</span> <span class="nn">inspect</span>
 <span class="kn">import</span> <span class="nn">logging</span>
 <span class="kn">import</span> <span class="nn">os</span>
 <span class="kn">import</span> <span class="nn">pickle</span>
@@ -408,6 +400,10 @@
 <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Set</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">cast</span>
 
 <span class="kn">from</span> <span class="nn">torch.distributed</span> <span class="kn">import</span> <span class="n">PrefixStore</span><span class="p">,</span> <span class="n">Store</span>
+<span class="kn">from</span> <span class="nn">torch.distributed.elastic.events</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">NodeState</span><span class="p">,</span>
+    <span class="n">construct_and_record_rdzv_event</span><span class="p">,</span>
+<span class="p">)</span>
 
 <span class="kn">from</span> <span class="nn">.api</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">RendezvousClosedError</span><span class="p">,</span>
@@ -417,11 +413,15 @@
     <span class="n">RendezvousStateError</span><span class="p">,</span>
     <span class="n">RendezvousTimeoutError</span><span class="p">,</span>
 <span class="p">)</span>
-
 <span class="kn">from</span> <span class="nn">.utils</span> <span class="kn">import</span> <span class="n">_delay</span><span class="p">,</span> <span class="n">_PeriodicTimer</span>
 
-
 <span class="n">log</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">get_method_name</span><span class="p">(</span><span class="n">depth</span><span class="o">=</span><span class="mi">2</span><span class="p">):</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">inspect</span><span class="o">.</span><span class="n">stack</span><span class="p">())</span> <span class="o">&gt;</span> <span class="n">depth</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">inspect</span><span class="o">.</span><span class="n">stack</span><span class="p">()[</span><span class="n">depth</span><span class="p">]</span><span class="o">.</span><span class="n">function</span>
+    <span class="k">return</span> <span class="s2">&quot;no_method_name&quot;</span>
 
 
 <span class="n">Token</span> <span class="o">=</span> <span class="n">Any</span>
@@ -677,6 +677,18 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">last_heartbeats</span> <span class="o">=</span> <span class="p">{}</span>
 
 
+<span class="k">def</span> <span class="nf">_remove_participant_epilogue</span><span class="p">(</span><span class="n">state</span><span class="p">:</span> <span class="n">_RendezvousState</span><span class="p">,</span> <span class="n">settings</span><span class="p">:</span> <span class="n">RendezvousSettings</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">state</span><span class="o">.</span><span class="n">complete</span><span class="p">:</span>
+        <span class="c1"># If we do not have any participants left, move to the next round.</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">state</span><span class="o">.</span><span class="n">participants</span><span class="p">:</span>
+            <span class="n">state</span><span class="o">.</span><span class="n">complete</span> <span class="o">=</span> <span class="kc">False</span>
+
+            <span class="n">state</span><span class="o">.</span><span class="n">round</span> <span class="o">+=</span> <span class="mi">1</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">state</span><span class="o">.</span><span class="n">participants</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">settings</span><span class="o">.</span><span class="n">min_nodes</span><span class="p">:</span>
+            <span class="n">state</span><span class="o">.</span><span class="n">deadline</span> <span class="o">=</span> <span class="kc">None</span>
+
+
 <span class="k">class</span> <span class="nc">_RendezvousStateHolder</span><span class="p">(</span><span class="n">ABC</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;Holds the shared rendezvous state synced with other nodes.&quot;&quot;&quot;</span>
 
@@ -722,7 +734,10 @@
     <span class="n">_dead_nodes</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">_NodeDesc</span><span class="p">]</span>
 
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">backend</span><span class="p">:</span> <span class="n">RendezvousBackend</span><span class="p">,</span> <span class="n">settings</span><span class="p">:</span> <span class="n">RendezvousSettings</span><span class="p">,</span> <span class="n">cache_duration</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">backend</span><span class="p">:</span> <span class="n">RendezvousBackend</span><span class="p">,</span>
+        <span class="n">settings</span><span class="p">:</span> <span class="n">RendezvousSettings</span><span class="p">,</span>
+        <span class="n">cache_duration</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_backend</span> <span class="o">=</span> <span class="n">backend</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_state</span> <span class="o">=</span> <span class="n">_RendezvousState</span><span class="p">()</span>
@@ -732,6 +747,14 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_dirty</span> <span class="o">=</span> <span class="kc">False</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_last_sync_time</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_dead_nodes</span> <span class="o">=</span> <span class="p">[]</span>
+
+    <span class="k">def</span> <span class="nf">_record</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">message</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">node_state</span><span class="p">:</span> <span class="n">NodeState</span> <span class="o">=</span> <span class="n">NodeState</span><span class="o">.</span><span class="n">RUNNING</span><span class="p">):</span>
+        <span class="n">construct_and_record_rdzv_event</span><span class="p">(</span>
+            <span class="n">name</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">.</span><span class="si">{</span><span class="n">get_method_name</span><span class="p">()</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+            <span class="n">run_id</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_settings</span><span class="o">.</span><span class="n">run_id</span><span class="p">,</span>
+            <span class="n">message</span><span class="o">=</span><span class="n">message</span><span class="p">,</span>
+            <span class="n">node_state</span><span class="o">=</span><span class="n">node_state</span><span class="p">,</span>
+        <span class="p">)</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">state</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">_RendezvousState</span><span class="p">:</span>
@@ -780,10 +803,12 @@
         <span class="k">if</span> <span class="n">has_set</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dead_nodes</span> <span class="ow">and</span> <span class="n">log</span><span class="o">.</span><span class="n">isEnabledFor</span><span class="p">(</span><span class="n">logging</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">):</span>
             <span class="n">node_list</span> <span class="o">=</span> <span class="s2">&quot;, &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;&#39;</span><span class="si">{</span><span class="n">dead_node</span><span class="si">}</span><span class="s2">&#39;&quot;</span> <span class="k">for</span> <span class="n">dead_node</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dead_nodes</span><span class="p">)</span>
 
-            <span class="n">log</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
+            <span class="n">msg</span> <span class="o">=</span> <span class="p">(</span>
                 <span class="sa">f</span><span class="s2">&quot;As part of the sync operation the node(s) </span><span class="si">{</span><span class="n">node_list</span><span class="si">}</span><span class="s2"> have been removed from the &quot;</span>
                 <span class="sa">f</span><span class="s2">&quot;rendezvous &#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_settings</span><span class="o">.</span><span class="n">run_id</span><span class="si">}</span><span class="s2">&#39; since they had no heartbeat.&quot;</span>
             <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_record</span><span class="p">(</span><span class="n">message</span><span class="o">=</span><span class="n">msg</span><span class="p">)</span>
+            <span class="n">log</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_token</span> <span class="o">=</span> <span class="n">token</span>
 
@@ -796,6 +821,8 @@
         <span class="k">return</span> <span class="n">has_set</span>
 
     <span class="k">def</span> <span class="nf">_sanitize</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">state</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_state</span>
+
         <span class="n">expire_time</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">utcnow</span><span class="p">()</span> <span class="o">-</span> <span class="p">(</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_settings</span><span class="o">.</span><span class="n">keep_alive_interval</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">_settings</span><span class="o">.</span><span class="n">keep_alive_max_attempt</span>
         <span class="p">)</span>
@@ -803,22 +830,31 @@
         <span class="c1"># Filter out the dead nodes.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_dead_nodes</span> <span class="o">=</span> <span class="p">[</span>
             <span class="n">node</span>
-            <span class="k">for</span> <span class="n">node</span><span class="p">,</span> <span class="n">last_heartbeat</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_state</span><span class="o">.</span><span class="n">last_heartbeats</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+            <span class="k">for</span> <span class="n">node</span><span class="p">,</span> <span class="n">last_heartbeat</span> <span class="ow">in</span> <span class="n">state</span><span class="o">.</span><span class="n">last_heartbeats</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
             <span class="k">if</span> <span class="n">last_heartbeat</span> <span class="o">&lt;</span> <span class="n">expire_time</span>
         <span class="p">]</span>
 
+        <span class="n">participant_removed</span> <span class="o">=</span> <span class="kc">False</span>
+
         <span class="k">for</span> <span class="n">dead_node</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dead_nodes</span><span class="p">:</span>
-            <span class="k">del</span> <span class="bp">self</span><span class="o">.</span><span class="n">_state</span><span class="o">.</span><span class="n">last_heartbeats</span><span class="p">[</span><span class="n">dead_node</span><span class="p">]</span>
+            <span class="k">del</span> <span class="n">state</span><span class="o">.</span><span class="n">last_heartbeats</span><span class="p">[</span><span class="n">dead_node</span><span class="p">]</span>
 
             <span class="k">try</span><span class="p">:</span>
-                <span class="k">del</span> <span class="bp">self</span><span class="o">.</span><span class="n">_state</span><span class="o">.</span><span class="n">participants</span><span class="p">[</span><span class="n">dead_node</span><span class="p">]</span>
+                <span class="k">del</span> <span class="n">state</span><span class="o">.</span><span class="n">participants</span><span class="p">[</span><span class="n">dead_node</span><span class="p">]</span>
+
+                <span class="n">participant_removed</span> <span class="o">=</span> <span class="kc">True</span>
             <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
                 <span class="k">pass</span>
 
             <span class="k">try</span><span class="p">:</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_state</span><span class="o">.</span><span class="n">wait_list</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="n">dead_node</span><span class="p">)</span>
+                <span class="n">state</span><span class="o">.</span><span class="n">wait_list</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="n">dead_node</span><span class="p">)</span>
             <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
                 <span class="k">pass</span>
+
+        <span class="k">if</span> <span class="n">participant_removed</span><span class="p">:</span>
+            <span class="c1"># Common epilogue shared with the _remove_from_participants()</span>
+            <span class="c1"># function of _DistributedRendezvousOpExecutor.</span>
+            <span class="n">_remove_participant_epilogue</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_settings</span><span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">mark_dirty</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="sd">&quot;&quot;&quot;See base class.</span>
@@ -877,7 +913,9 @@
 
     <span class="nd">@abstractmethod</span>
     <span class="k">def</span> <span class="nf">run</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">state_handler</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">_RendezvousContext</span><span class="p">,</span> <span class="nb">float</span><span class="p">],</span> <span class="n">_Action</span><span class="p">],</span> <span class="n">deadline</span><span class="p">:</span> <span class="nb">float</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">state_handler</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">_RendezvousContext</span><span class="p">,</span> <span class="nb">float</span><span class="p">],</span> <span class="n">_Action</span><span class="p">],</span>
+        <span class="n">deadline</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="sd">&quot;&quot;&quot;Executes a rendezvous operation.</span>
 
@@ -923,8 +961,21 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_state_holder</span> <span class="o">=</span> <span class="n">state_holder</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_settings</span> <span class="o">=</span> <span class="n">settings</span>
 
+    <span class="k">def</span> <span class="nf">_record</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">message</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">node_state</span><span class="p">:</span> <span class="n">NodeState</span> <span class="o">=</span> <span class="n">NodeState</span><span class="o">.</span><span class="n">RUNNING</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">construct_and_record_rdzv_event</span><span class="p">(</span>
+            <span class="n">name</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">.</span><span class="si">{</span><span class="n">get_method_name</span><span class="p">()</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+            <span class="n">run_id</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_settings</span><span class="o">.</span><span class="n">run_id</span><span class="p">,</span>
+            <span class="n">message</span><span class="o">=</span><span class="n">message</span><span class="p">,</span>
+            <span class="n">node_state</span><span class="o">=</span><span class="n">node_state</span><span class="p">,</span>
+            <span class="n">hostname</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_node</span><span class="o">.</span><span class="n">fqdn</span><span class="p">,</span>
+            <span class="n">pid</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_node</span><span class="o">.</span><span class="n">pid</span><span class="p">,</span>
+            <span class="n">local_id</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_node</span><span class="o">.</span><span class="n">local_id</span><span class="p">,</span>
+        <span class="p">)</span>
+
     <span class="k">def</span> <span class="nf">run</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">state_handler</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">_RendezvousContext</span><span class="p">,</span> <span class="nb">float</span><span class="p">],</span> <span class="n">_Action</span><span class="p">],</span> <span class="n">deadline</span><span class="p">:</span> <span class="nb">float</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">state_handler</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">_RendezvousContext</span><span class="p">,</span> <span class="nb">float</span><span class="p">],</span> <span class="n">_Action</span><span class="p">],</span>
+        <span class="n">deadline</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="sd">&quot;&quot;&quot;See base class.&quot;&quot;&quot;</span>
         <span class="n">action</span> <span class="o">=</span> <span class="kc">None</span>
@@ -936,15 +987,18 @@
             <span class="n">has_set</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_state_holder</span><span class="o">.</span><span class="n">sync</span><span class="p">()</span>
             <span class="k">if</span> <span class="n">has_set</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="k">if</span> <span class="n">has_set</span><span class="p">:</span>
-                    <span class="n">log</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
+                    <span class="n">msg</span> <span class="o">=</span> <span class="p">(</span>
                         <span class="sa">f</span><span class="s2">&quot;The node &#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_node</span><span class="si">}</span><span class="s2">&#39; has successfully synced its local changes with &quot;</span>
                         <span class="sa">f</span><span class="s2">&quot;other nodes in the rendezvous &#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_settings</span><span class="o">.</span><span class="n">run_id</span><span class="si">}</span><span class="s2">&#39;.&quot;</span>
                     <span class="p">)</span>
                 <span class="k">else</span><span class="p">:</span>
-                    <span class="n">log</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
+                    <span class="n">msg</span> <span class="o">=</span> <span class="p">(</span>
                         <span class="sa">f</span><span class="s2">&quot;The node &#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_node</span><span class="si">}</span><span class="s2">&#39; has a stale state and failed to sync its local &quot;</span>
                         <span class="sa">f</span><span class="s2">&quot;changes with other nodes in the rendezvous &#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_settings</span><span class="o">.</span><span class="n">run_id</span><span class="si">}</span><span class="s2">&#39;.&quot;</span>
                     <span class="p">)</span>
+
+                <span class="bp">self</span><span class="o">.</span><span class="n">_record</span><span class="p">(</span><span class="n">message</span><span class="o">=</span><span class="n">msg</span><span class="p">)</span>
+                <span class="n">log</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
 
             <span class="bp">self</span><span class="o">.</span><span class="n">_state</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_state_holder</span><span class="o">.</span><span class="n">state</span>
 
@@ -987,18 +1041,22 @@
                 <span class="bp">self</span><span class="o">.</span><span class="n">_state_holder</span><span class="o">.</span><span class="n">mark_dirty</span><span class="p">()</span>
 
     <span class="k">def</span> <span class="nf">_keep_alive</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">log</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
+        <span class="n">msg</span> <span class="o">=</span> <span class="p">(</span>
             <span class="sa">f</span><span class="s2">&quot;The node &#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_node</span><span class="si">}</span><span class="s2">&#39; updated its keep-alive heartbeat time for the rendezvous &quot;</span>
             <span class="sa">f</span><span class="s2">&quot;&#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_settings</span><span class="o">.</span><span class="n">run_id</span><span class="si">}</span><span class="s2">&#39;. Pending sync.&quot;</span>
         <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_record</span><span class="p">(</span><span class="n">message</span><span class="o">=</span><span class="n">msg</span><span class="p">)</span>
+        <span class="n">log</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_state</span><span class="o">.</span><span class="n">last_heartbeats</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_node</span><span class="p">]</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">utcnow</span><span class="p">()</span>
 
     <span class="k">def</span> <span class="nf">_add_to_participants</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">log</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
+        <span class="n">msg</span> <span class="o">=</span> <span class="p">(</span>
             <span class="sa">f</span><span class="s2">&quot;The node &#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_node</span><span class="si">}</span><span class="s2">&#39; added itself to the participants of round &quot;</span>
             <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_state</span><span class="o">.</span><span class="n">round</span><span class="si">}</span><span class="s2"> of the rendezvous &#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_settings</span><span class="o">.</span><span class="n">run_id</span><span class="si">}</span><span class="s2">&#39;. Pending sync.&quot;</span>
         <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_record</span><span class="p">(</span><span class="n">message</span><span class="o">=</span><span class="n">msg</span><span class="p">)</span>
+        <span class="n">log</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
 
         <span class="n">state</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_state</span>
 
@@ -1020,20 +1078,24 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">_mark_rendezvous_complete</span><span class="p">()</span>
 
     <span class="k">def</span> <span class="nf">_add_to_wait_list</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">log</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
+        <span class="n">msg</span> <span class="o">=</span> <span class="p">(</span>
             <span class="sa">f</span><span class="s2">&quot;The node &#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_node</span><span class="si">}</span><span class="s2">&#39; added itself to the wait list of round &quot;</span>
             <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_state</span><span class="o">.</span><span class="n">round</span> <span class="o">+</span> <span class="mi">1</span><span class="si">}</span><span class="s2"> of the rendezvous &#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_settings</span><span class="o">.</span><span class="n">run_id</span><span class="si">}</span><span class="s2">&#39;. Pending sync.&quot;</span>
         <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_record</span><span class="p">(</span><span class="n">message</span><span class="o">=</span><span class="n">msg</span><span class="p">)</span>
+        <span class="n">log</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_state</span><span class="o">.</span><span class="n">wait_list</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_node</span><span class="p">)</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_keep_alive</span><span class="p">()</span>
 
     <span class="k">def</span> <span class="nf">_remove_from_participants</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">log</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
+        <span class="n">msg</span> <span class="o">=</span> <span class="p">(</span>
             <span class="sa">f</span><span class="s2">&quot;The node &#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_node</span><span class="si">}</span><span class="s2">&#39; removed itself from the participants of round &quot;</span>
             <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_state</span><span class="o">.</span><span class="n">round</span><span class="si">}</span><span class="s2"> of the rendezvous &#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_settings</span><span class="o">.</span><span class="n">run_id</span><span class="si">}</span><span class="s2">&#39;. Pending sync.&quot;</span>
         <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_record</span><span class="p">(</span><span class="n">message</span><span class="o">=</span><span class="n">msg</span><span class="p">)</span>
+        <span class="n">log</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
 
         <span class="n">state</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_state</span>
 
@@ -1041,31 +1103,29 @@
 
         <span class="k">del</span> <span class="n">state</span><span class="o">.</span><span class="n">last_heartbeats</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_node</span><span class="p">]</span>
 
-        <span class="k">if</span> <span class="n">state</span><span class="o">.</span><span class="n">complete</span><span class="p">:</span>
-            <span class="c1"># If we do not have any participants left, move to the next round.</span>
-            <span class="k">if</span> <span class="ow">not</span> <span class="n">state</span><span class="o">.</span><span class="n">participants</span><span class="p">:</span>
-                <span class="n">state</span><span class="o">.</span><span class="n">complete</span> <span class="o">=</span> <span class="kc">False</span>
-
-                <span class="n">state</span><span class="o">.</span><span class="n">round</span> <span class="o">+=</span> <span class="mi">1</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">state</span><span class="o">.</span><span class="n">participants</span><span class="p">)</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">_settings</span><span class="o">.</span><span class="n">min_nodes</span><span class="p">:</span>
-                <span class="n">state</span><span class="o">.</span><span class="n">deadline</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="c1"># Common epilogue shared with the sanitizer() function of</span>
+        <span class="c1"># _BackendRendezvousStateHolder.</span>
+        <span class="n">_remove_participant_epilogue</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_settings</span><span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">_remove_from_wait_list</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">log</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
+        <span class="n">msg</span> <span class="o">=</span> <span class="p">(</span>
             <span class="sa">f</span><span class="s2">&quot;The node &#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_node</span><span class="si">}</span><span class="s2">&#39; removed itself from the wait list of round &quot;</span>
             <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_state</span><span class="o">.</span><span class="n">round</span> <span class="o">+</span> <span class="mi">1</span><span class="si">}</span><span class="s2"> of the rendezvous &#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_settings</span><span class="o">.</span><span class="n">run_id</span><span class="si">}</span><span class="s2">&#39;. Pending sync.&quot;</span>
         <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_record</span><span class="p">(</span><span class="n">message</span><span class="o">=</span><span class="n">msg</span><span class="p">)</span>
+        <span class="n">log</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_state</span><span class="o">.</span><span class="n">wait_list</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_node</span><span class="p">)</span>
 
         <span class="k">del</span> <span class="bp">self</span><span class="o">.</span><span class="n">_state</span><span class="o">.</span><span class="n">last_heartbeats</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_node</span><span class="p">]</span>
 
     <span class="k">def</span> <span class="nf">_mark_rendezvous_complete</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">log</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
+        <span class="n">msg</span> <span class="o">=</span> <span class="p">(</span>
             <span class="sa">f</span><span class="s2">&quot;The node &#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_node</span><span class="si">}</span><span class="s2">&#39; marked round </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_state</span><span class="o">.</span><span class="n">round</span><span class="si">}</span><span class="s2"> of the rendezvous &quot;</span>
             <span class="sa">f</span><span class="s2">&quot;&#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_settings</span><span class="o">.</span><span class="n">run_id</span><span class="si">}</span><span class="s2">&#39; as complete. Pending sync.&quot;</span>
         <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_record</span><span class="p">(</span><span class="n">message</span><span class="o">=</span><span class="n">msg</span><span class="p">,</span> <span class="n">node_state</span><span class="o">=</span><span class="n">NodeState</span><span class="o">.</span><span class="n">SUCCEEDED</span><span class="p">)</span>
+        <span class="n">log</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
 
         <span class="n">state</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_state</span>
 
@@ -1077,10 +1137,12 @@
             <span class="n">state</span><span class="o">.</span><span class="n">participants</span><span class="p">[</span><span class="n">node</span><span class="p">]</span> <span class="o">=</span> <span class="n">rank</span>
 
     <span class="k">def</span> <span class="nf">_mark_rendezvous_closed</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">log</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
+        <span class="n">msg</span> <span class="o">=</span> <span class="p">(</span>
             <span class="sa">f</span><span class="s2">&quot;The node &#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_node</span><span class="si">}</span><span class="s2">&#39; marked the rendezvous &#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_settings</span><span class="o">.</span><span class="n">run_id</span><span class="si">}</span><span class="s2">&#39; as closed. &quot;</span>
             <span class="s2">&quot;Pending sync.&quot;</span>
         <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_record</span><span class="p">(</span><span class="n">message</span><span class="o">=</span><span class="n">msg</span><span class="p">,</span> <span class="n">node_state</span><span class="o">=</span><span class="n">NodeState</span><span class="o">.</span><span class="n">SUCCEEDED</span><span class="p">)</span>
+        <span class="n">log</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_state</span><span class="o">.</span><span class="n">closed</span> <span class="o">=</span> <span class="kc">True</span>
 
@@ -1290,6 +1352,23 @@
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_keep_alive_timer</span> <span class="o">=</span> <span class="kc">None</span>
 
+    <span class="k">def</span> <span class="nf">_record</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">message</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">node_state</span><span class="p">:</span> <span class="n">NodeState</span> <span class="o">=</span> <span class="n">NodeState</span><span class="o">.</span><span class="n">RUNNING</span><span class="p">,</span>
+        <span class="n">rank</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">construct_and_record_rdzv_event</span><span class="p">(</span>
+            <span class="n">name</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">.</span><span class="si">{</span><span class="n">get_method_name</span><span class="p">()</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+            <span class="n">run_id</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_settings</span><span class="o">.</span><span class="n">run_id</span><span class="p">,</span>
+            <span class="n">message</span><span class="o">=</span><span class="n">message</span><span class="p">,</span>
+            <span class="n">node_state</span><span class="o">=</span><span class="n">node_state</span><span class="p">,</span>
+            <span class="n">hostname</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_this_node</span><span class="o">.</span><span class="n">fqdn</span><span class="p">,</span>
+            <span class="n">pid</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_this_node</span><span class="o">.</span><span class="n">pid</span><span class="p">,</span>
+            <span class="n">local_id</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_this_node</span><span class="o">.</span><span class="n">local_id</span><span class="p">,</span>
+            <span class="n">rank</span><span class="o">=</span><span class="n">rank</span><span class="p">,</span>
+        <span class="p">)</span>
+
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">settings</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">RendezvousSettings</span><span class="p">:</span>
         <span class="sd">&quot;&quot;&quot;Gets the settings of the rendezvous.&quot;&quot;&quot;</span>
@@ -1301,58 +1380,93 @@
 
     <span class="k">def</span> <span class="nf">next_rendezvous</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">Store</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]:</span>
         <span class="sd">&quot;&quot;&quot;See base class.&quot;&quot;&quot;</span>
-        <span class="n">log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+        <span class="n">msg</span> <span class="o">=</span> <span class="p">(</span>
             <span class="sa">f</span><span class="s2">&quot;The node &#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_this_node</span><span class="si">}</span><span class="s2">&#39; attempts to join the next round of the rendezvous &quot;</span>
             <span class="sa">f</span><span class="s2">&quot;&#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_settings</span><span class="o">.</span><span class="n">run_id</span><span class="si">}</span><span class="s2">&#39;.&quot;</span>
         <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_record</span><span class="p">(</span><span class="n">message</span><span class="o">=</span><span class="n">msg</span><span class="p">)</span>
+        <span class="n">log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">_stop_heartbeats</span><span class="p">()</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_stop_heartbeats</span><span class="p">()</span>
 
-        <span class="c1"># Delay the execution for a small random amount of time if this is our</span>
-        <span class="c1"># first run. This will slightly skew the rendezvous attempts across the</span>
-        <span class="c1"># nodes and reduce the load on the backend.</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_state_holder</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">round</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
-            <span class="n">_delay</span><span class="p">(</span><span class="n">seconds</span><span class="o">=</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mf">0.3</span><span class="p">))</span>
+            <span class="c1"># Delay the execution for a small random amount of time if this is our</span>
+            <span class="c1"># first run. This will slightly skew the rendezvous attempts across the</span>
+            <span class="c1"># nodes and reduce the load on the backend.</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_state_holder</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">round</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="n">_delay</span><span class="p">(</span><span class="n">seconds</span><span class="o">=</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mf">0.3</span><span class="p">))</span>
 
-        <span class="n">exit_op</span> <span class="o">=</span> <span class="n">_RendezvousExitOp</span><span class="p">()</span>
-        <span class="n">join_op</span> <span class="o">=</span> <span class="n">_RendezvousJoinOp</span><span class="p">()</span>
+            <span class="n">exit_op</span> <span class="o">=</span> <span class="n">_RendezvousExitOp</span><span class="p">()</span>
+            <span class="n">join_op</span> <span class="o">=</span> <span class="n">_RendezvousJoinOp</span><span class="p">()</span>
 
-        <span class="n">deadline</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_deadline</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_settings</span><span class="o">.</span><span class="n">timeout</span><span class="o">.</span><span class="n">join</span><span class="p">)</span>
+            <span class="n">deadline</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_deadline</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_settings</span><span class="o">.</span><span class="n">timeout</span><span class="o">.</span><span class="n">join</span><span class="p">)</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">_op_executor</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">exit_op</span><span class="p">,</span> <span class="n">deadline</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_op_executor</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">join_op</span><span class="p">,</span> <span class="n">deadline</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_op_executor</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">exit_op</span><span class="p">,</span> <span class="n">deadline</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_op_executor</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">join_op</span><span class="p">,</span> <span class="n">deadline</span><span class="p">)</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">_start_heartbeats</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_start_heartbeats</span><span class="p">()</span>
 
-        <span class="n">rank</span><span class="p">,</span> <span class="n">world_size</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_world</span><span class="p">()</span>
-        <span class="n">store</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_store</span><span class="p">()</span>
+            <span class="n">rank</span><span class="p">,</span> <span class="n">world_size</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_world</span><span class="p">()</span>
+            <span class="n">store</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_store</span><span class="p">()</span>
 
-        <span class="n">log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_record</span><span class="p">(</span>
+                <span class="n">message</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+                <span class="n">node_state</span><span class="o">=</span><span class="n">NodeState</span><span class="o">.</span><span class="n">FAILED</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">raise</span>
+
+        <span class="n">msg</span> <span class="o">=</span> <span class="p">(</span>
             <span class="sa">f</span><span class="s2">&quot;The node &#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_this_node</span><span class="si">}</span><span class="s2">&#39; has joined round </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_state_holder</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">round</span><span class="si">}</span><span class="s2"> of &quot;</span>
             <span class="sa">f</span><span class="s2">&quot;the rendezvous &#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_settings</span><span class="o">.</span><span class="n">run_id</span><span class="si">}</span><span class="s2">&#39; as rank </span><span class="si">{</span><span class="n">rank</span><span class="si">}</span><span class="s2"> in a world of size &quot;</span>
             <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">world_size</span><span class="si">}</span><span class="s2">.&quot;</span>
         <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_record</span><span class="p">(</span><span class="n">message</span><span class="o">=</span><span class="n">msg</span><span class="p">,</span> <span class="n">rank</span><span class="o">=</span><span class="n">rank</span><span class="p">)</span>
+        <span class="n">log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
 
         <span class="k">return</span> <span class="n">store</span><span class="p">,</span> <span class="n">rank</span><span class="p">,</span> <span class="n">world_size</span>
 
     <span class="k">def</span> <span class="nf">is_closed</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
         <span class="sd">&quot;&quot;&quot;See base class.&quot;&quot;&quot;</span>
-        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_heartbeat_lock</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_state_holder</span><span class="o">.</span><span class="n">sync</span><span class="p">()</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_heartbeat_lock</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_state_holder</span><span class="o">.</span><span class="n">sync</span><span class="p">()</span>
 
-            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_state_holder</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">closed</span>
+                <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_state_holder</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">closed</span>
+
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_record</span><span class="p">(</span>
+                <span class="n">message</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+                <span class="n">node_state</span><span class="o">=</span><span class="n">NodeState</span><span class="o">.</span><span class="n">FAILED</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">raise</span>
 
     <span class="k">def</span> <span class="nf">set_closed</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="sd">&quot;&quot;&quot;See base class.&quot;&quot;&quot;</span>
-        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_heartbeat_lock</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_close</span><span class="p">()</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_heartbeat_lock</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_close</span><span class="p">()</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_record</span><span class="p">(</span>
+                <span class="n">message</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+                <span class="n">node_state</span><span class="o">=</span><span class="n">NodeState</span><span class="o">.</span><span class="n">FAILED</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">raise</span>
 
     <span class="k">def</span> <span class="nf">num_nodes_waiting</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
         <span class="sd">&quot;&quot;&quot;See base class.&quot;&quot;&quot;</span>
-        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_heartbeat_lock</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_state_holder</span><span class="o">.</span><span class="n">sync</span><span class="p">()</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_heartbeat_lock</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_state_holder</span><span class="o">.</span><span class="n">sync</span><span class="p">()</span>
 
-            <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_state_holder</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">wait_list</span><span class="p">)</span>
+                <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_state_holder</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">wait_list</span><span class="p">)</span>
+
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_record</span><span class="p">(</span>
+                <span class="n">message</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+                <span class="n">node_state</span><span class="o">=</span><span class="n">NodeState</span><span class="o">.</span><span class="n">FAILED</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">raise</span>
 
     <span class="k">def</span> <span class="nf">get_run_id</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
         <span class="sd">&quot;&quot;&quot;See base class.&quot;&quot;&quot;</span>
@@ -1367,12 +1481,20 @@
 
             <span class="k">return</span> <span class="kc">True</span>
         <span class="k">except</span> <span class="n">RendezvousError</span> <span class="k">as</span> <span class="n">ex</span><span class="p">:</span>
-            <span class="n">log</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+            <span class="n">msg</span> <span class="o">=</span> <span class="p">(</span>
                 <span class="sa">f</span><span class="s2">&quot;The node &#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_this_node</span><span class="si">}</span><span class="s2">&#39; has failed to shutdown the rendezvous &quot;</span>
                 <span class="sa">f</span><span class="s2">&quot;&#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_settings</span><span class="o">.</span><span class="n">run_id</span><span class="si">}</span><span class="s2">&#39; due to an error of type </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">ex</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">.&quot;</span>
             <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_record</span><span class="p">(</span><span class="n">message</span><span class="o">=</span><span class="n">msg</span><span class="p">,</span> <span class="n">node_state</span><span class="o">=</span><span class="n">NodeState</span><span class="o">.</span><span class="n">FAILED</span><span class="p">)</span>
+            <span class="n">log</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
 
             <span class="k">return</span> <span class="kc">False</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_record</span><span class="p">(</span>
+                <span class="n">message</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+                <span class="n">node_state</span><span class="o">=</span><span class="n">NodeState</span><span class="o">.</span><span class="n">FAILED</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">raise</span>
 
     <span class="k">def</span> <span class="nf">_close</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">op</span> <span class="o">=</span> <span class="n">_RendezvousCloseOp</span><span class="p">()</span>
@@ -1381,9 +1503,9 @@
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_op_executor</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">op</span><span class="p">,</span> <span class="n">deadline</span><span class="p">)</span>
 
-        <span class="n">log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
-            <span class="sa">f</span><span class="s2">&quot;The node &#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_this_node</span><span class="si">}</span><span class="s2">&#39; has closed the rendezvous &#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_settings</span><span class="o">.</span><span class="n">run_id</span><span class="si">}</span><span class="s2">&#39;.&quot;</span>
-        <span class="p">)</span>
+        <span class="n">msg</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;The node &#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_this_node</span><span class="si">}</span><span class="s2">&#39; has closed the rendezvous &#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_settings</span><span class="o">.</span><span class="n">run_id</span><span class="si">}</span><span class="s2">&#39;.&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_record</span><span class="p">(</span><span class="n">message</span><span class="o">=</span><span class="n">msg</span><span class="p">,</span> <span class="n">node_state</span><span class="o">=</span><span class="n">NodeState</span><span class="o">.</span><span class="n">SUCCEEDED</span><span class="p">)</span>
+        <span class="n">log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
 
     <span class="nd">@staticmethod</span>
     <span class="k">def</span> <span class="nf">_keep_alive_weak</span><span class="p">(</span><span class="n">weak_self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
@@ -1401,15 +1523,19 @@
         <span class="k">try</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_op_executor</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">op</span><span class="p">,</span> <span class="n">deadline</span><span class="p">)</span>
 
-            <span class="n">log</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
+            <span class="n">msg</span> <span class="o">=</span> <span class="p">(</span>
                 <span class="sa">f</span><span class="s2">&quot;The node &#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_this_node</span><span class="si">}</span><span class="s2">&#39; has sent a keep-alive heartbeat to the rendezvous &quot;</span>
                 <span class="sa">f</span><span class="s2">&quot;&#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_settings</span><span class="o">.</span><span class="n">run_id</span><span class="si">}</span><span class="s2">&#39;.&quot;</span>
             <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_record</span><span class="p">(</span><span class="n">message</span><span class="o">=</span><span class="n">msg</span><span class="p">)</span>
+            <span class="n">log</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
         <span class="k">except</span> <span class="n">RendezvousError</span> <span class="k">as</span> <span class="n">ex</span><span class="p">:</span>
-            <span class="n">log</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+            <span class="n">msg</span> <span class="o">=</span> <span class="p">(</span>
                 <span class="sa">f</span><span class="s2">&quot;The node &#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_this_node</span><span class="si">}</span><span class="s2">&#39; has failed to send a keep-alive heartbeat to the &quot;</span>
                 <span class="sa">f</span><span class="s2">&quot;rendezvous &#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_settings</span><span class="o">.</span><span class="n">run_id</span><span class="si">}</span><span class="s2">&#39; due to an error of type </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">ex</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">.&quot;</span>
             <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_record</span><span class="p">(</span><span class="n">message</span><span class="o">=</span><span class="n">msg</span><span class="p">,</span> <span class="n">node_state</span><span class="o">=</span><span class="n">NodeState</span><span class="o">.</span><span class="n">FAILED</span><span class="p">)</span>
+            <span class="n">log</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
         <span class="k">finally</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_heartbeat_lock</span><span class="o">.</span><span class="n">release</span><span class="p">()</span>
 
@@ -1479,20 +1605,28 @@
 <span class="sd">    |                   | 30 seconds.                                          |</span>
 <span class="sd">    +-------------------+------------------------------------------------------+</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">timeout</span> <span class="o">=</span> <span class="n">RendezvousTimeout</span><span class="p">(</span>
-        <span class="n">_get_timeout</span><span class="p">(</span><span class="n">params</span><span class="p">,</span> <span class="s2">&quot;join&quot;</span><span class="p">),</span>
-        <span class="n">_get_timeout</span><span class="p">(</span><span class="n">params</span><span class="p">,</span> <span class="s2">&quot;last_call&quot;</span><span class="p">),</span>
-        <span class="n">_get_timeout</span><span class="p">(</span><span class="n">params</span><span class="p">,</span> <span class="s2">&quot;close&quot;</span><span class="p">),</span>
-    <span class="p">)</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">timeout</span> <span class="o">=</span> <span class="n">RendezvousTimeout</span><span class="p">(</span>
+            <span class="n">_get_timeout</span><span class="p">(</span><span class="n">params</span><span class="p">,</span> <span class="s2">&quot;join&quot;</span><span class="p">),</span>
+            <span class="n">_get_timeout</span><span class="p">(</span><span class="n">params</span><span class="p">,</span> <span class="s2">&quot;last_call&quot;</span><span class="p">),</span>
+            <span class="n">_get_timeout</span><span class="p">(</span><span class="n">params</span><span class="p">,</span> <span class="s2">&quot;close&quot;</span><span class="p">),</span>
+        <span class="p">)</span>
 
-    <span class="k">return</span> <span class="n">DynamicRendezvousHandler</span><span class="o">.</span><span class="n">from_backend</span><span class="p">(</span>
-        <span class="n">params</span><span class="o">.</span><span class="n">run_id</span><span class="p">,</span>
-        <span class="n">store</span><span class="p">,</span>
-        <span class="n">backend</span><span class="p">,</span>
-        <span class="n">params</span><span class="o">.</span><span class="n">min_nodes</span><span class="p">,</span>
-        <span class="n">params</span><span class="o">.</span><span class="n">max_nodes</span><span class="p">,</span>
-        <span class="n">timeout</span><span class="p">,</span>
-    <span class="p">)</span></div>
+        <span class="k">return</span> <span class="n">DynamicRendezvousHandler</span><span class="o">.</span><span class="n">from_backend</span><span class="p">(</span>
+            <span class="n">params</span><span class="o">.</span><span class="n">run_id</span><span class="p">,</span>
+            <span class="n">store</span><span class="p">,</span>
+            <span class="n">backend</span><span class="p">,</span>
+            <span class="n">params</span><span class="o">.</span><span class="n">min_nodes</span><span class="p">,</span>
+            <span class="n">params</span><span class="o">.</span><span class="n">max_nodes</span><span class="p">,</span>
+            <span class="n">timeout</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="n">construct_and_record_rdzv_event</span><span class="p">(</span>
+            <span class="n">message</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+            <span class="n">run_id</span><span class="o">=</span><span class="n">params</span><span class="o">.</span><span class="n">run_id</span><span class="p">,</span>
+            <span class="n">node_state</span><span class="o">=</span><span class="n">NodeState</span><span class="o">.</span><span class="n">FAILED</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">raise</span></div>
 </pre></div>
 
              </article>
@@ -1544,7 +1678,8 @@
          <script src="../../../../../_static/jquery.js"></script>
          <script src="../../../../../_static/underscore.js"></script>
          <script src="../../../../../_static/doctools.js"></script>
-         <script src="../../../../../_static/language_data.js"></script>
+         <script src="../../../../../_static/clipboard.min.js"></script>
+         <script src="../../../../../_static/copybutton.js"></script>
      
 
   
