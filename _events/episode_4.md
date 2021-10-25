@@ -6,4 +6,5 @@ company: TorchIO
 date: June 9, 2021
 time: 1 PM PST
 poster: https://assets.pytorch.org/pted2021/posters/B7.png
+video: https://www.youtube.com/watch?v=UEUVSw5-M9M
 ---
