@@ -208,7 +208,7 @@ Similarly, by graph capturing the model, we eliminate CPU overhead and accompany
 
 
 <p align="center">
-	<img src="{{ site.url }}/assets/images/cuda-image-6.png" alt="Synchronization free training eliminates CPU synchronization">
+	<img src="{{ site.url }}/assets/images/cuda-image-6.png" width="100%" alt="Synchronization free training eliminates CPU synchronization">
 	<br>
 	Figure 5. By using a fixed size tensor and a boolean mask as described in the text, we are able to eliminate CPU synchronizations needed for dynamic sized tensors  
 </p>
