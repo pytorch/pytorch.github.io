@@ -73,6 +73,10 @@ def main() -> None:
     # Check that torch is importable after install
     subprocess.check_call([sys.executable, "-c", "import torch;print('PyTorch version is ', torch.__version__)"])
     subprocess.check_call([sys.executable, "-c", "import torchvision;print('torchvision version is ', torchvision.__version__)"])
+    subprocess.check_call([sys.executable,
+                           "-c",
+                           "import torch;import torchvision;print('Is torchvision useable?', all(x is not None for x in [torch.ops.image.decode_png, torch.ops.torchvision.roi_align]))"
+                           ])
 
 
 if __name__ == "__main__":
