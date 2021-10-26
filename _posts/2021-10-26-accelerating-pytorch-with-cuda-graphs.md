@@ -1,7 +1,7 @@
 ---
 layout: blog_detail
 title: 'Accelerating PyTorch with CUDA Graphs'
-authors: Vinh Nguyen, Michael Carilli, Sukru Burc Erylimaz, Vartika Singh, Michelle Lin, Natalia Gimelshein, Alban Desmaison, Edward Yang
+author: Vinh Nguyen, Michael Carilli, Sukru Burc Erylimaz, Vartika Singh, Michelle Lin, Natalia Gimelshein, Alban Desmaison, Edward Yang
 featured-img: 'assets/images/accelerating-pytorch-with-cuda-graphs/overview.png'
 ---
 
