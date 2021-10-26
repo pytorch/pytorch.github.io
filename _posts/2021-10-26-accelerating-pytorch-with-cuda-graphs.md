@@ -1,7 +1,7 @@
 ---
 layout: blog_detail
 title: 'Accelerating PyTorch with CUDA Graphs'
-author: 
+authors: Vinh Nguyen, Michael Carilli, Sukru Burc Erylimaz, Vartika Singh, Michelle Lin, Natalia Gimelshein, Alban Desmaison, Edward Yang
 featured-img: 'assets/images/accelerating-pytorch-with-cuda-graphs/overview.png'
 ---
 
@@ -241,32 +241,40 @@ We thank many NVIDIAN’s and Facebook engineers for their discussions and sugge
 
 [**Vinh Nguyen**](mailto:vinhn@nvidia.com)
 *DL Engineer, NVIDIA*
+
 Vinh is a Deep learning engineer and data scientist, having published more than 50 scientific articles attracting more than 2500 citations. At NVIDIA, his work spans a wide range of deep learning and AI applications, including speech, language and vision processing, and recommender systems.
 
 [**Michael Carilli**](mailto:mcarilli@nvidia.com)
 *Senior Developer Technology Engineer, NVIDIA*
+
 Michael worked at the Air Force Research Laboratory optimizing CFD code for modern parallel architectures. He holds a PhD in computational physics from the University of California, Santa Barbara. A member of the PyTorch team, he focuses on making GPU training fast, numerically stable, and easy(er) for internal teams, external customers, and Pytorch community users.
 
 [**Sukru Burc Eryilmaz**](mailto:seryilmaz@nvidia.com)
 *Senior Architect in Dev Arch, NVIDIA*
+
 Sukru received his PhD from Stanford University, and B.S from Bilkent University. He currently works on improving the end-to-end performance of neural network training both at single-node scale and supercomputer scale. 
 
 [**Vartika Singh**](mailto:vartikas@nvidia.com)
 *Tech Partner Lead for DL Frameworks and Libraries, NVIDIA*
+
 Vartika has led teams working in confluence of cloud and distributed computing, scaling and AI, influencing the design and strategy of major corporations. She currently works with the major frameworks and compiler organizations and developers within and outside NVIDIA, to help the design to work efficiently and optimally on NVIDIA hardware.
 
 [**Michelle Lin**](mailto:miclin@nvidia.com)
 *Product Intern, NVIDIA*
+
 Michelle is currently pursuing an undergraduate degree in Computer Science and Business Administration at UC Berkeley. She is currently managing execution of projects such as conducting market research and creating marketing assets for Magnum IO.
 
 [**Natalia Gimelshein**](mailto:ngimel@fb.com)
 *Applied Research Scientist, Facebook*
+
 Natalia Gimelshein worked on GPU performance optimization for deep learning workloads at NVIDIA and Facebook. She is currently a member of the PyTorch core team, working with partners to seamlessly support new software and hardware features.
 
 [**Alban Desmaison**](mailto:albandes@fb.com)
 *Research Engineer, Facebook*
+
 Alban studied engineering and did a PhD in Machine Learning and Optimization, during which he was an OSS contributor to PyTorch prior to joining Facebook. His main responsibilities are maintaining some core library and features (autograd, optim, nn) and working on making PyTorch better in general.
 
 [**Edward Yang**](mailto:ezyang@fb.com)
 *Research Engineer, Facebook*
+
 Edward studied CS at MIT and then Stanford before starting at Facebook. He is a part of the PyTorch core team and is one of the leading contributors to PyTorch. 
