@@ -2,8 +2,12 @@
 layout: blog_detail
 title: 'Accelerating PyTorch with CUDA Graphs'
 author: Vinh Nguyen, Michael Carilli, Sukru Burc Erylimaz, Vartika Singh, Michelle Lin, Natalia Gimelshein, Alban Desmaison, Edward Yang
-featured-img: 'assets/images/accelerating-pytorch-with-cuda-graphs/overview.png'
+featured-img: 'assets/images/cudagraphs-pytorch.png'
 ---
+
+<div class="text-center">
+  <img src="{{ site.url }}/assets/images/cudagraphs-pytorch.png" width="100%">
+</div>
 
 Today, we are pleased to announce a new advanced CUDA feature, CUDA Graphs, has been brought to PyTorch. Modern DL frameworks have complicated software stacks that incur significant overheads associated with the submission of each operation to the GPU. When DL workloads are strong-scaled to many GPUs for performance, the time taken by each GPU operation diminishes to just a few microseconds and, in these cases, the high work submission latencies of frameworks often lead to low utilization of the GPU. As GPUs get faster and workloads are scaled to more devices, the likelihood of workloads suffering from these launch-induced stalls increases. To overcome these performance overheads, NVIDIA engineers worked with PyTorch developers to enable CUDA graph execution natively in PyTorch. This design was instrumental in scaling NVIDIA’s MLPerf workloads (implemented in PyTorch) to over 4000 GPUs in order to achieve [record-breaking performance](https://blogs.nvidia.com/blog/2021/06/30/mlperf-ai-training-partners/). 
 
@@ -20,7 +24,7 @@ The benefits of CUDA graphs can be demonstrated with the simple example in Figur
 
 
 <p align="center">
-<img src="{{ site.url }}/assets/images/accelerating-pytorch-with-cuda-graphs/image6.png" alt="Cuda graphs reduce launching overhead by bundling multiple GPU operations into a single launchable unit, i.e., a graph. On the top, you can see five individual launches; whereas on the bottom, with CUDA graphs, they are all bundled into a single launch, reducing overhead." width="100%">
+<img src="{{ site.url }}/assets/images/cuda-image-2.png" alt="Cuda graphs reduce launching overhead by bundling multiple GPU operations into a single launchable unit, i.e., a graph. On the top, you can see five individual launches; whereas on the bottom, with CUDA graphs, they are all bundled into a single launch, reducing overhead." width="100%">
 <br>
 	Figure 1. Benefits of using CUDA graphs
 </p>
@@ -37,7 +41,7 @@ For distributed multi-GPU workloads, NCCL is used for collective communications.
 
 
 <p align="center">
-<img src="{{ site.url }}/assets/images/accelerating-pytorch-with-cuda-graphs/image8.png" alt="With NCCL CUDA graph support, all the kernel launches for NCCL AllReduce for  the forward/backward propagation can be bundled into a graph to reduce overhead launch time." width="100%">
+<img src="{{ site.url }}/assets/images/cuda-image-3.png" alt="With NCCL CUDA graph support, all the kernel launches for NCCL AllReduce for  the forward/backward propagation can be bundled into a graph to reduce overhead launch time." width="100%">
 <br>
     Figure 2. Looking at a typical neural network, all the kernel launches for NCCL AllReduce can be bundled into a graph to reduce overhead launch time.
 </p>
@@ -181,7 +185,7 @@ Table 1. MLPerf training v1.0 performance improvement with PyTorch CUDA graph.
 Deep learning frameworks use GPUs to accelerate computations, but a significant amount of code still runs on CPU cores. CPU cores process meta-data like tensor shapes in order to prepare arguments needed to launch GPU kernels. Processing meta-data is a fixed cost while the cost of the computational work done by the GPUs is positively correlated with batch size. For large batch sizes, CPU overhead is a negligible percentage of total run time cost, but at small batch sizes CPU overhead can become larger than GPU run time. When that happens, GPUs go idle between kernel calls. This issue can be identified on an NSight timeline plot in Figure 3. The plot below shows the “backbone” portion of Mask R-CNN with per-gpu batch size of 1 before graphing. The green portion shows CPU load while the blue portion shows GPU load. In this profile we see that the CPU is maxed out at 100% load while GPU is idle most of the time, there is a lot of empty space between GPU kernels.
 
 <p align="center">
-<img src="{{ site.url }}/assets/images/accelerating-pytorch-with-cuda-graphs/image1.png" alt="NSight timeline plot of Mask R-CNN shows that the CPU is maxed out at 100% load while GPU is idle most of the time, and a lot of empty space between GPU kernels" width="100%">
+<img src="{{ site.url }}/assets/images/cuda-image-4.png" alt="NSight timeline plot of Mask R-CNN shows that the CPU is maxed out at 100% load while GPU is idle most of the time, and a lot of empty space between GPU kernels" width="100%">
 <br>
     Figure 3: NSight timeline plot of Mask R-CNN
 </p>
@@ -189,7 +193,7 @@ Deep learning frameworks use GPUs to accelerate computations, but a significant 
 CUDA graphs can automatically eliminate CPU overhead when tensor shapes are static. A complete graph of all the kernel calls is captured during the first step, in subsequent steps the entire graph is launched with a single op, eliminating all the CPU overhead, as observed in Figure 4.. 
 
 <p align="center">
-<img src="{{ site.url }}/assets/images/accelerating-pytorch-with-cuda-graphs/image4.png" alt="With CUDA graph, the entire graph is launched with a single op, eliminating all the CPU overhead.">
+<img src="{{ site.url }}/assets/images/cuda-image-5.png" alt="With CUDA graph, the entire graph is launched with a single op, eliminating all the CPU overhead.">
 <br>
     Figure 4: CUDA graphs optimization
 </p>
@@ -204,7 +208,7 @@ Similarly, by graph capturing the model, we eliminate CPU overhead and accompany
 
 
 <p align="center">
-	<img src="{{ site.url }}/assets/images/accelerating-pytorch-with-cuda-graphs/image7.png" alt="Synchronization free training eliminates CPU synchronization">
+	<img src="{{ site.url }}/assets/images/cuda-image-6.png" alt="Synchronization free training eliminates CPU synchronization">
 	<br>
 	Figure 5. By using a fixed size tensor and a boolean mask as described in the text, we are able to eliminate CPU synchronizations needed for dynamic sized tensors  
 </p>
@@ -218,10 +222,10 @@ CUDA graphs are being actively integrated into other PyTorch NGC model scripts a
 
 
 <p align="center">
-	<img src="{{ site.url }}/assets/images/accelerating-pytorch-with-cuda-graphs/image3.png" alt="CUDA graphs optimization for the DLRM model. The impact is larger for smaller batch sizes where CPU overheads are more pronounced." width="100%">
+	<img src="{{ site.url }}/assets/images/cuda-image-7.png" alt="CUDA graphs optimization for the DLRM model. The impact is larger for smaller batch sizes where CPU overheads are more pronounced." width="100%">
 </p>
 <p align="center">
-	<img src="{{ site.url }}/assets/images/accelerating-pytorch-with-cuda-graphs/image2.png" alt="CUDA graphs optimization for the DLRM model. The impact is larger for smaller batch sizes where CPU overheads are more pronounced." width="100%">
+	<img src="{{ site.url }}/assets/images/cuda-image-8.png" alt="CUDA graphs optimization for the DLRM model. The impact is larger for smaller batch sizes where CPU overheads are more pronounced." width="100%">
 <br>
 	Figure 6: CUDA graphs optimization for the DLRM model.
 </p>
