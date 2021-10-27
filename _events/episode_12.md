@@ -7,4 +7,5 @@ date: August 4, 2021
 time: 1PM PST
 poster:  https://assets.pytorch.org/pted2021/posters/C2.png
 link: https://www.youtube.com/pytorch
+video: https://www.youtube.com/watch?v=QIX9b9EAZOY
 ---
