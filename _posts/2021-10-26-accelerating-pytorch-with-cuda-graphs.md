@@ -174,8 +174,8 @@ The PyTorch CUDA graphs functionality was instrumental in scaling NVIDIA’s MLP
 
 |                             | Number of GPUs  | Speedup from CUDA-graphs |
 |-----------------------------|----------------:|-------------------------:|
-| Mask R-CNN                  | 272          | 1.70×                   |
-| BERT                        | 4096          | 1.12×                    |
+| Mask R-CNN                  | 272             | 1.70×                    |
+| BERT                        | 4096            | 1.12×                    |
 
 Table 1. MLPerf training v1.0 performance improvement with PyTorch CUDA graph.
 
