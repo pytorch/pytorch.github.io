@@ -193,7 +193,7 @@ Deep learning frameworks use GPUs to accelerate computations, but a significant 
 CUDA graphs can automatically eliminate CPU overhead when tensor shapes are static. A complete graph of all the kernel calls is captured during the first step, in subsequent steps the entire graph is launched with a single op, eliminating all the CPU overhead, as observed in Figure 4.. 
 
 <p align="center">
-<img src="{{ site.url }}/assets/images/cuda-image-5.png" alt="With CUDA graph, the entire graph is launched with a single op, eliminating all the CPU overhead.">
+<img src="{{ site.url }}/assets/images/cuda-image-5.png" alt="With CUDA graph, the entire graph is launched with a single op, eliminating all the CPU overhead" width="100%">
 <br>
     Figure 4: CUDA graphs optimization
 </p>
