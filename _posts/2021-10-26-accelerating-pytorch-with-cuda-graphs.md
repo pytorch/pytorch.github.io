@@ -1,7 +1,7 @@
 ---
 layout: blog_detail
 title: 'Accelerating PyTorch with CUDA Graphs'
-author: Vinh Nguyen, Michael Carilli, Sukru Burc Erylimaz, Vartika Singh, Michelle Lin, Natalia Gimelshein, Alban Desmaison, Edward Yang
+author: Vinh Nguyen, Michael Carilli, Sukru Burc Eryilmaz, Vartika Singh, Michelle Lin, Natalia Gimelshein, Alban Desmaison, Edward Yang
 featured-img: 'assets/images/cudagraphs-pytorch.png'
 ---
 
@@ -62,11 +62,11 @@ You should try CUDA graphs if all or part of your network is graph-safe (usually
 
 ### API example
 
-PyTorch exposes graphs via a raw `torch.cuda.CUDAGraph` class and two convenience wrappers, `torch.cuda.graph` and `torch.cuda.make_graphed_callables`.
+PyTorch exposes graphs via a raw `[torch.cuda.CUDAGraph](https://pytorch.org/docs/master/generated/torch.cuda.CUDAGraph.html#torch.cuda.CUDAGraph)` class and two convenience wrappers, `[torch.cuda.graph](https://pytorch.org/docs/master/generated/torch.cuda.CUDAGraph.html#torch.cuda.CUDAGraph)` and `[torch.cuda.make_graphed_callables](https://pytorch.org/docs/master/generated/torch.cuda.make_graphed_callables.html#torch.cuda.make_graphed_callables)`.
 
 <strong>torch.cuda.graph</strong>
 
-`torch.cuda.graph` is a simple, versatile context manager that captures CUDA work in its context. Before capture, warm up the workload to be captured by running a few eager iterations. Warmup must occur on a side stream. Because the graph reads from and writes to the same memory addresses in every replay, you must maintain long-lived references to tensors that hold input and output data during capture. To run the graph on new input data, copy new data to the capture’s input tensor(s), replay the graph, then read the new output from the capture’s output tensor(s).
+`[torch.cuda.graph](https://pytorch.org/docs/master/generated/torch.cuda.graph.html#torch.cuda.graph)` is a simple, versatile context manager that captures CUDA work in its context. Before capture, warm up the workload to be captured by running a few eager iterations. Warmup must occur on a side stream. Because the graph reads from and writes to the same memory addresses in every replay, you must maintain long-lived references to tensors that hold input and output data during capture. To run the graph on new input data, copy new data to the capture’s input tensor(s), replay the graph, then read the new output from the capture’s output tensor(s).
 
 If the entire network is capture safe, one can capture and replay the whole network as in the following example. 
 
@@ -104,7 +104,7 @@ g = torch.cuda.CUDAGraph()
 # .grad attributes with allocations from the graph's private pool
 optimizer.zero_grad(set_to_none=True)
 with torch.cuda.graph(g):
-    static_y_pred = model(static_input)Alban Desmaison
+    static_y_pred = model(static_input)
     # Fills the graph's input memory with new data to compute on
     static_input.copy_(data)
     static_target.copy_(target)
@@ -116,12 +116,12 @@ with torch.cuda.graph(g):
     # attributes hold values from computing on this iteration's data.
 ```
 
-If some of your network is unsafe to capture (e.g., due to dynamic control flow, dynamic shapes, CPU syncs, or essential CPU-side logic), you can run the unsafe part(s) eagerly and use `torch.cuda.make_graphed_callables()` to graph only the capture-safe part(s). This is demonstrated next.
+If some of your network is unsafe to capture (e.g., due to dynamic control flow, dynamic shapes, CPU syncs, or essential CPU-side logic), you can run the unsafe part(s) eagerly and use `[torch.cuda.make_graphed_callables](https://pytorch.org/docs/master/generated/torch.cuda.make_graphed_callables.html#torch.cuda.make_graphed_callables)()` to graph only the capture-safe part(s). This is demonstrated next.
 
 <strong>torch.cuda.make_graphed_callables</strong>
 
-`make_graphed_callables` accepts callables (functions or `nn.Module`s) and returns graphed versions. By default, callables returned by `make_graphed_callables()` are autograd-aware, and can be used in the training loop as direct replacements for the functions or `nn.Module`s you passed. `make_graphed_callables()` internally creates `CUDAGraph` objects, runs warm up iterations, and maintains static inputs and outputs as needed. Therefore, (unlike with `torch.cuda.graph`) you don’t need to handle those manually.
-In the following example, data-dependent dynamic control flow means the network isn’t capturable end-to-end, but `make_graphed_callables()` lets us capture and run graph-safe sections as graphs regardless:
+`[make_graphed_callables](https://pytorch.org/docs/master/generated/torch.cuda.make_graphed_callables.html#torch.cuda.make_graphed_callables)` accepts callables (functions or `[nn.Module](https://pytorch.org/docs/master/generated/torch.nn.Module.html#torch.nn.Module)`s) and returns graphed versions. By default, callables returned by `[make_graphed_callables](https://pytorch.org/docs/master/generated/torch.cuda.make_graphed_callables.html#torch.cuda.make_graphed_callables)()` are autograd-aware, and can be used in the training loop as direct replacements for the functions or `[nn.Module](https://pytorch.org/docs/master/generated/torch.nn.Module.html#torch.nn.Module)`s you passed. `[make_graphed_callables](https://pytorch.org/docs/master/generated/torch.cuda.make_graphed_callables.html#torch.cuda.make_graphed_callables)()` internally creates `[CUDAGraph](https://pytorch.org/docs/master/generated/torch.cuda.CUDAGraph.html#torch.cuda.CUDAGraph)` objects, runs warm up iterations, and maintains static inputs and outputs as needed. Therefore, (unlike with `[torch.cuda.graph](https://pytorch.org/docs/master/generated/torch.cuda.graph.html#torch.cuda.graph)`) you don’t need to handle those manually.
+In the following example, data-dependent dynamic control flow means the network isn’t capturable end-to-end, but `[make_graphed_callables](https://pytorch.org/docs/master/generated/torch.cuda.make_graphed_callables.html#torch.cuda.make_graphed_callables)()` lets us capture and run graph-safe sections as graphs regardless:
 
 
 ```python
@@ -174,8 +174,8 @@ The PyTorch CUDA graphs functionality was instrumental in scaling NVIDIA’s MLP
 
 |                             | Number of GPUs  | Speedup from CUDA-graphs |
 |-----------------------------|----------------:|-------------------------:|
-| Mask R-CNN                  | 74.042          | 91.340                   |
-| BERT                        | 67.668          | 87.402                   |
+| Mask R-CNN                  | 272          | 1.70×                   |
+| BERT                        | 4096          | 1.12×                    |
 
 Table 1. MLPerf training v1.0 performance improvement with PyTorch CUDA graph.
 
@@ -234,7 +234,7 @@ CUDA graphs are being actively integrated into other PyTorch NGC model scripts a
 # Call to action: CUDA Graphs in PyTorch v1.10
 
 CUDA graphs can provide substantial benefits for workloads that comprise many small GPU kernels and hence bogged down by CPU launch overheads. This has been demonstrated in our MLPerf efforts, optimizing PyTorch models. Many of these optimizations, including CUDA graphs, have or will eventually be integrated into our PyTorch NGC model scripts [collection](https://ngc.nvidia.com/catalog/collections?orderBy=scoreDESC&pageNumber=0&query=pytorch&quickFilter=&filters=) and the NVIDIA [Github deep learning examples](https://github.com/NVIDIA/DeepLearningExamples/tree/master/PyTorch/). For now, check out our open-source MLPerf training v1.0 [implementation](https://github.com/mlcommons/training_results_v1.0/tree/master/NVIDIA) which could serve as a good starting point to see CUDA graph in action. Alternatively, try the PyTorch CUDA graphs API on your own workloads.
-Alban Desmaison
+
 We thank many NVIDIAN’s and Facebook engineers for their discussions and suggestions: 
 [Karthik Mandakolathur US](mailto:karthik@nvidia.com),
 [Tomasz Grel](mailto:tgrel@nvidia.com), 
