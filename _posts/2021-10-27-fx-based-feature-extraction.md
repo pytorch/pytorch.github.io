@@ -21,7 +21,7 @@ Did that all sound a little complicated? Not to worry as there’s a little in t
 We’re all used to the idea of having a deep neural network (DNN) that takes inputs and produces outputs, and we don’t necessarily think of what happens in between. Let’s just consider a ResNet-50 classification model as an example:
 
 <p align="center">
-	<img src="{{ site.url }}/assets/images/fx-based-feature-extraction/image4.png" alt="CResNet-50 takes an image of a bird and transforms that into the abstract concept 'bird'" width="100%">
+	<img src="/assets/images/fx-based-feature-extraction/image4.png" alt="CResNet-50 takes an image of a bird and transforms that into the abstract concept 'bird'" width="100%">
 	<br>
 		Figure 1: ResNet-50 takes an image of a bird and transforms that into the abstract concept "bird". Source: Bird image from ImageNet.
 </p>
@@ -29,7 +29,7 @@ We’re all used to the idea of having a deep neural network (DNN) that takes in
 We know though, that there are many sequential “layers” within the ResNet-50 architecture that transform the input step-by-step. In Figure 2 below, we peek under the hood to show the layers within ResNet-50, and we also show the intermediate transformations of the input as it passes through those layers.
 
 <p align="center">
-	<img src="{{ site.url }}/assets/images/fx-based-feature-extraction/image3.png" alt="ResNet-50 transforms the input image in multiple steps. Conceptually, we may access the intermediate transformation of the image after each one of these steps." width="100%">
+	<img src="/assets/images/fx-based-feature-extraction/image3.png" alt="ResNet-50 transforms the input image in multiple steps. Conceptually, we may access the intermediate transformation of the image after each one of these steps." width="100%">
 	<br>
 		Figure 2: ResNet-50 transforms the input image in multiple steps. Conceptually, we may access the intermediate transformation of the image after each one of these steps. Source: Bird image from ImageNet.
 </p>
@@ -244,7 +244,7 @@ So even if we point at this one line, the question then is: “For which step do
 [FX](https://pytorch.org/docs/stable/fx.html) is a core PyTorch toolkit that (oversimplifying) does the unravelling I just mentioned. It does something called “symbolic tracing”, which means the Python code is interpreted and stepped through, operation-by-operation, using some dummy proxy for a real input. Introducing some nomenclature, each step as described above is considered a **“node”**, and consecutive nodes are connected to one another to form a **“graph”** (not unlike the common mathematical notion of a graph). Here are the “steps” above translated to this concept of a graph.
 
 <p align="center">
-	<img src="{{ site.url }}/assets/images/fx-based-feature-extraction/image2.png" alt="Graphical representation of the result of symbolically tracing our example of a simple forward method." width="50%">
+	<img src="/assets/images/fx-based-feature-extraction/image2.png" alt="Graphical representation of the result of symbolically tracing our example of a simple forward method." width="50%">
 	<br>
 		Figure 3: Graphical representation of the result of symbolically tracing our example of a simple forward method.
 </p>
@@ -252,7 +252,7 @@ So even if we point at this one line, the question then is: “For which step do
 Note that we call this a graph, and not just a set of steps, because it’s possible for the graph to branch off and recombine. Think of the skip connection in a residual block. This would look something like:
 
 <p align="center">
-	<img src="{{ site.url }}/assets/images/fx-based-feature-extraction/image1.png" alt="Graphical representation of a residual skip connection. The middle node is like the main branch of a residual block, and the final node represents the sum of the input and output of the main branch." width="25%">
+	<img src="/assets/images/fx-based-feature-extraction/image1.png" alt="Graphical representation of a residual skip connection. The middle node is like the main branch of a residual block, and the final node represents the sum of the input and output of the main branch." width="25%">
 	<br>
 		Figure 4: Graphical representation of a residual skip connection. The middle node is like the main branch of a residual block, and the final node represents the sum of the input and output of the main branch.
 </p>
@@ -328,7 +328,7 @@ Although I would have loved to end the post there, FX does have some of its own 
 The easiest thing to do when these problems crop up is to bundle the underlying code into a “leaf node”. Recall the example graph from Figure 3? Conceptually, we may agree that the `submodule` should be treated as a node in itself rather than a set of nodes representing the underlying operations. If we do so, we can redraw the graph as:
 
 <p align="center">
-	<img src="{{ site.url }}/assets/images/fx-based-feature-extraction/image5.png" alt="The individual operations within `submodule` may (left - within red box), may be consolidated into one node (right - node #2) if we consider the `submodule` as a 'leaf' node." width="100%">
+	<img src="/assets/images/fx-based-feature-extraction/image5.png" alt="The individual operations within `submodule` may (left - within red box), may be consolidated into one node (right - node #2) if we consider the `submodule` as a 'leaf' node." width="100%">
 	<br>
 		Figure 5: The individual operations within `submodule` may (left - within red box), may be consolidated into one node (right - node #2) if we consider the `submodule` as a "leaf" node.
 </p>
