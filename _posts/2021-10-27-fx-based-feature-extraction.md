@@ -397,3 +397,4 @@ In general, you may consult the FX documentation for more detail on the [limitat
 We did a quick recap on feature extraction and why one might want to do it. Although there are existing methods for doing feature extraction in PyTorch they all have rather significant shortcomings. We learned how TorchVision’s FX feature extraction utility works and what makes it so versatile compared to the existing methods. While there are still some minor kinks to iron out for the latter, we understand the limitations, and can trade them off against the limitations of other methods depending on our use case. Hopefully by adding this new utility to your PyTorch toolkit, you’re now equipped to handle the vast majority of feature extraction requirements you may come across.
 
 Happy coding!
+
