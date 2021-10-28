@@ -1,6 +1,6 @@
 ---
 layout: blog_detail
-title: 'FX based Feature Extraction in TorchVision'
+title: 'Feature Extraction in TorchVision using Torch FX'
 author: Alexander Soare and Francisco Massa
 featured-img: 'assets/images/fx-image2.png'
 ---
@@ -98,7 +98,7 @@ model = CNN(3, 4, 10)
 out = model(torch.zeros(1, 3, 32, 32))  # This will be the final logits over classes
 ```
 
-Let’s say we want to get the final feature map before global average pooling. We could…
+Let’s say we want to get the final feature map before global average pooling. We could do the following:
 
 ### Modify the forward method
 
@@ -198,7 +198,7 @@ Here’s a summary of the different methods and their pros/cons:
 
 Table 1: The pros (or cons) of some of the existing methods for feature extraction with PyTorch
 
-In the next section of this article, let’s see how we can get greens across the board.
+In the next section of this article, let’s see how we can get YES across the board.
 
 
 ## FX to The Rescue
@@ -241,7 +241,7 @@ Note that we call this a graph, and not just a set of steps, because it’s poss
 		Figure 4: Graphical representation of a residual skip connection. The middle node is like the main branch of a residual block, and the final node represents the sum of the input and output of the main branch.
 </p>
 
-Now, TorchVision’s **get_graph_node_names** function applies FX as described above, and in the process of doing so, tags each node with a human readable name. Let’s try this with our toy CNN model from the previous section:
+Now, TorchVision’s **[get_graph_node_names](https://pytorch.org/vision/stable/feature_extraction.html#torchvision.models.feature_extraction.get_graph_node_names)** function applies FX as described above, and in the process of doing so, tags each node with a human readable name. Let’s try this with our toy CNN model from the previous section:
 
 ```python
 model = CNN(3, 4, 10)
@@ -297,7 +297,7 @@ Here’s that table again with another row added for FX feature extraction
 | FX                                                                | YES                                                               | YES                                                                                    | YES                                    | YES                  |
 |-------------------------------------------------------------------|:-----------------------------------------------------------------:|:--------------------------------------------------------------------------------------:|:--------------------------------------:|:--------------------:|
 
-Table 2: A copy of Table 1 with an added row for FX feature extraction. FX feature extraction gets greens across the board!
+Table 2: A copy of Table 1 with an added row for FX feature extraction. FX feature extraction gets YES across the board!
 
 
 ## Current FX Limitations
