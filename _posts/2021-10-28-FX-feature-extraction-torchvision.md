@@ -48,54 +48,63 @@ To illustrate these, let’s consider a simple convolutional neural network that
 ```python
 import torch
 from torch import nn
+
+
 class ConvBlock(nn.Module):
-	"""
-	Applies `num_layers` 3x3 convolutions each followed by ReLU then downsamples
-	via 2x2 max pool.
-	"""
-	def __init__(self, num_layers, in_channels, out_channels):
-			super().__init__()
-			self.convs = nn.ModuleList(
-					[nn.Sequential(
-							nn.Conv2d(in_channels if i==0 else out_channels, out_channels, 3, padding=1),
-							nn.ReLU()
-						)
-						for i in range(num_layers)]
-			)
-			self.downsample = nn.MaxPool2d(kernel_size=2, stride=2)
-			
-	def forward(self, x):
-			for conv in self.convs:
-					x = conv(x)
-			x = self.downsample(x)
-			return x
-			
+   """
+   Applies `num_layers` 3x3 convolutions each followed by ReLU then downsamples
+   via 2x2 max pool.
+   """
+
+   def __init__(self, num_layers, in_channels, out_channels):
+       super().__init__()
+       self.convs = nn.ModuleList(
+           [nn.Sequential(
+               nn.Conv2d(in_channels if i==0 else out_channels, out_channels, 3, padding=1),
+               nn.ReLU()
+            )
+            for i in range(num_layers)]
+       )
+       self.downsample = nn.MaxPool2d(kernel_size=2, stride=2)
+      
+   def forward(self, x):
+       for conv in self.convs:
+           x = conv(x)
+       x = self.downsample(x)
+       return x
+      
+
 class CNN(nn.Module):
-	"""
-	Applies several ConvBlocks each doubling the number of channels, and
-	halving the feature map size, before taking a global average and classifying.
-	"""
-	def __init__(self, in_channels, num_blocks, num_classes):
-			super().__init__()
-			first_channels = 64
-			self.blocks = nn.ModuleList(
-					[ConvBlock(
-							2 if i==0 else 3,
-							in_channels=(in_channels if i == 0 else first_channels*(2**(i-1))),
-							out_channels=first_channels*(2**i))
-						for i in range(num_blocks)]
-			)
-			self.global_pool = nn.AdaptiveAvgPool2d((1, 1))
-			self.cls = nn.Linear(first_channels*(2**(num_blocks-1)), num_classes)
-	def forward(self, x):
-			for block in self.blocks:
-					x = block(x)
-			x = self.global_pool(x)
-			x = x.flatten(1)
-			x = self.cls(x)
-			return x
+   """
+   Applies several ConvBlocks each doubling the number of channels, and
+   halving the feature map size, before taking a global average and classifying.
+   """
+
+   def __init__(self, in_channels, num_blocks, num_classes):
+       super().__init__()
+       first_channels = 64
+       self.blocks = nn.ModuleList(
+           [ConvBlock(
+               2 if i==0 else 3,
+               in_channels=(in_channels if i == 0 else first_channels*(2**(i-1))),
+               out_channels=first_channels*(2**i))
+            for i in range(num_blocks)]
+       )
+       self.global_pool = nn.AdaptiveAvgPool2d((1, 1))
+       self.cls = nn.Linear(first_channels*(2**(num_blocks-1)), num_classes)
+
+   def forward(self, x):
+       for block in self.blocks:
+           x = block(x)
+       x = self.global_pool(x)
+       x = x.flatten(1)
+       x = self.cls(x)
+       return x
+
+
 model = CNN(3, 4, 10)
 out = model(torch.zeros(1, 3, 32, 32))  # This will be the final logits over classes
+
 ```
 
 Let’s say we want to get the final feature map before global average pooling. We could do the following:
@@ -104,26 +113,26 @@ Let’s say we want to get the final feature map before global average pooling. 
 
 ```python
 def forward(self, x):
-	for block in self.blocks:
-			x = block(x)
-	self.final_feature_map = x
-	x = self.global_pool(x)
-	x = x.flatten(1)
-	x = self.cls(x)
-	return x
+   for block in self.blocks:
+       x = block(x)
+   self.final_feature_map = x
+   x = self.global_pool(x)
+   x = x.flatten(1)
+   x = self.cls(x)
+   return x
 ```
 
 Or return it directly:
 
 ```python
 def forward(self, x):
-	for block in self.blocks:
-			x = block(x)
-	self.final_feature_map = x
-	x = self.global_pool(x)
-	x = x.flatten(1)
-	x = self.cls(x)
-	return x
+   for block in self.blocks:
+       x = block(x)
+   final_feature_map = x
+   x = self.global_pool(x)
+   x = x.flatten(1)
+   x = self.cls(x)
+   return x, final_feature_map
 ```
 That looks pretty easy. But there are some downsides here which all stem from the same underlying issue: that is, modifying the source code is not ideal:
 
@@ -140,15 +149,18 @@ Following on the example from above, say we want to get a feature map from each 
 
 ```python
 class CNNFeatures(nn.Module):
-	def __init__(self, backbone):
-			super().__init__()
-			self.blocks = backbone.blocks
-	def forward(self, x):
-			feature_maps = []
-			for block in self.blocks:
-					x = block(x)
-					feature_maps.append(x)
-			return feature_maps
+   def __init__(self, backbone):
+       super().__init__()
+       self.blocks = backbone.blocks
+
+   def forward(self, x):
+       feature_maps = []
+       for block in self.blocks:
+           x = block(x)
+           feature_maps.append(x)
+       return feature_maps
+
+
 backbone = CNN(3, 4, 10)
 model = CNNFeatures(backbone)
 out = model(torch.zeros(1, 3, 32, 32))  # This is now a list of Tensors, each representing a feature map
@@ -171,10 +183,13 @@ Hooks move us away from the paradigm of writing source code, towards one of spec
 ```python
 model = CNN(3, 4, 10)
 feature_maps = []  # This will be a list of Tensors, each representing a feature map
+
 def hook_feat_map(mod, inp, out):
 	feature_maps.append(out)
+
 for block in model.blocks:
 	block.register_forward_hook(hook_feat_map)
+
 out = model(torch.zeros(1, 3, 32, 32))  # This will be the final logits over classes
 ```
 
@@ -207,12 +222,13 @@ The natural question for some new-starters in Python and coding at this point mi
 
 ```python
 class MyModule(torch.nn.Module):
-		def __init__(self):
-				super().__init__()
-				self.param = torch.nn.Parameter(torch.rand(3, 4))
-				self.submodule = MySubModule()
-		def forward(self, x):
-				return self.submodule(x + self.param).clamp(min=0.0, max=1.0)
+    def __init__(self):
+        super().__init__()
+        self.param = torch.nn.Parameter(torch.rand(3, 4))
+        self.submodule = MySubModule()
+
+    def forward(self, x):
+        return self.submodule(x + self.param).clamp(min=0.0, max=1.0)
 ```
 
 The forward method has a single line of code which we can unravel as:
@@ -337,10 +353,12 @@ We could do something similar with functions. For example, Python’s inbuilt `l
 
 ```python
 torch.fx.wrap('len')
+
 class MyModule(nn.Module):
-	def forward(self, x):
-			x += 1
-			len(x)
+   def forward(self, x):
+       x += 1
+       len(x)
+
 model = MyModule()
 feature_extractor = create_feature_extractor(model, return_nodes=['add'])
 ```
@@ -350,14 +368,16 @@ For functions you define, you may instead use another keyword argument to `creat
 
 ```python
 def myfunc(x):
-	return len(x)
+   return len(x)
+
 class MyModule(nn.Module):
-	def forward(self, x):
-			x += 1
-			myfunc(x)
+   def forward(self, x):
+       x += 1
+       myfunc(x)
+
 model = MyModule()
 feature_extractor = create_feature_extractor(
-	model, return_nodes=['add'], tracer_kwargs={'autowrap_functions': [myfunc]})
+   model, return_nodes=['add'], tracer_kwargs={'autowrap_functions': [myfunc]})
 ```
 
 Notice that none of the fixes above involved modifying source code.
