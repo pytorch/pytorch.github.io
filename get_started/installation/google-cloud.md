@@ -33,4 +33,4 @@ Google Cloud also offers pre-configured and optimized Deep Learning Containers. 
 ## Installing PyTorch From Scratch
 {: #google-cloud-from-scratch}
 
-You may prefer to start with a bare instance to install PyTorch. Once you have connected to your instance, setting up PyTorch is the same as [setting up locally](get-started) for your operating system of choice.
+You may prefer to start with a bare instance to install PyTorch. Once you have connected to your instance, setting up PyTorch is the same as [setting up locally](/get-started) for your operating system of choice.

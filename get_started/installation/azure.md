@@ -46,4 +46,4 @@ The expense of your virtual machine is directly correlated to the number of GPUs
 ## Installing PyTorch From Scratch
 {: #microsoft-azure-from-scratch}
 
-You may prefer to start with a bare virtual machine to install PyTorch. Once you have connected to your virtual machine, setting up PyTorch is the same as [setting up locally](get-started) for your operating system of choice.
+You may prefer to start with a bare virtual machine to install PyTorch. Once you have connected to your virtual machine, setting up PyTorch is the same as [setting up locally](/get-started) for your operating system of choice.

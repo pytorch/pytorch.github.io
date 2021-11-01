@@ -115,4 +115,4 @@ Amazon has written a good [blog post](https://aws.amazon.com/blogs/machine-learn
 ## Installing PyTorch From Scratch
 {: #aws-from-scratch}
 
-You may prefer to start with a bare instance to install PyTorch. Once you have connected to your instance, setting up PyTorch is the same as [setting up locally](get-started) for your operating system of choice.
+You may prefer to start with a bare instance to install PyTorch. Once you have connected to your instance, setting up PyTorch is the same as [setting up locally](/get-started) for your operating system of choice.
