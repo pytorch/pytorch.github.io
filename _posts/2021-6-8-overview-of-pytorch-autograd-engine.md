@@ -161,5 +161,5 @@ In the next post we will dive inside PyTorch code to see how this graph is const
   <li><a href="https://indico.cern.ch/event/708041/contributions/3308814/attachments/1813852/2963725/automatic_differentiation_and_deep_learning.pdf">https://indico.cern.ch/event/708041/contributions/3308814/attachments/1813852/2963725/automatic_differentiation_and_deep_learning.pdf</a></li>
   <li><a href="https://pytorch.org/docs/stable/notes/autograd.html#complex-autograd-doc">https://pytorch.org/docs/stable/notes/autograd.html#complex-autograd-doc</a></li>
   <p>Recommended: shows why the backprop is formally expressed with the Jacobian</p>
-  <li><a href="cs.ubc.ca/~fwood/CS340/lectures/AD1.pdf">cs.ubc.ca/~fwood/CS340/lectures/AD1.pdf</a></li>
+  <li><a href="https://www.cs.ubc.ca/~fwood/CS340/lectures/AD1.pdf">https://cs.ubc.ca/~fwood/CS340/lectures/AD1.pdf</a></li>
 </ol>
