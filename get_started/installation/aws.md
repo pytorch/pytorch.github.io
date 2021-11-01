@@ -29,7 +29,7 @@ If you want to get started with a Linux AWS instance that has PyTorch already in
 1. Type `ssh -i path/to/downloaded/key-pair.pem ubuntu@<Public DNS that you noted above>`. e.g., `ssh -i ~/Downloads/aws-quick-start.pem ubuntu@ec2-55-181-112-129.us-west-2.compute.amazonaws.com`. If asked to continue connection, type `yes`.
 1. You should now see a prompt similar to `ubuntu@ip-100-30-20-95`. If so, you are now connected to your instance.
 1. Verify that PyTorch is installed by running the [verification steps below](#quick-start-verification).
-   > If you chose the `Deep Learning Base AMI (Ubuntu)` instead of the `Deep Learning AMI (Ubuntu)`, then you will need to install PyTorch. Follow the [Linux getting started instructions](get-started) in order to install it.
+   > If you chose the `Deep Learning Base AMI (Ubuntu)` instead of the `Deep Learning AMI (Ubuntu)`, then you will need to install PyTorch. Follow the [Linux getting started instructions](/get-started) in order to install it.
 
 ### Quick Start Verification
 
