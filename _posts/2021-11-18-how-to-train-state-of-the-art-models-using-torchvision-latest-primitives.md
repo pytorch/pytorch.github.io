@@ -1,6 +1,6 @@
 ---
 layout: blog_detail
-title: 'How to train state-of-the-art models using TorchVision’s latest primitives'
+title: 'How to Train State-Of-The-Art Models Using TorchVision’s Latest Primitives'
 author: Vasilis Vryniotis
 featured-img: 'assets/images/fx-image2.png'
 ---
