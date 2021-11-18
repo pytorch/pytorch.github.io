@@ -2,7 +2,7 @@
 layout: blog_detail
 title: 'How to train state-of-the-art models using TorchVision’s latest primitives'
 author: Vasilis Vryniotis
-featured-img: ''
+featured-img: 'assets/images/fx-image2.png'
 ---
 
 <style type="text/css">
@@ -17,8 +17,7 @@ Though there is still much work to be done, we wanted to share with you some exc
 
 Using our new training recipe found on ResNet50, we’ve refreshed the pre-trained weights of the following models:
 
-| Column 1 | Column 2 | Column 3   |
-|----------|:--------:|:----------:|
+
 | Model    | Accuracy@1 | Accuracy@5| 
 |----------|:--------:|:----------:|
 | ResNet50    | 80.674 | 95.166| 
@@ -152,8 +151,6 @@ As discussed in [earlier blogposts](https://pytorch.org/blog/torchvision-ssdlit
 In the table below, we provide a summary of the performance of stacked incremental improvements on top of Baseline. Unless denoted otherwise, we report the model with best Acc@1 out of 3 runs:
 
 
-| Column 1 | Column 2 | Column 3   | Column 4 | Column 5 |
-|----------|:--------:|:----------:|:---------|:--------:|
 |          | Accuracy@1 | Accuracy@5| Incremental Diff|Absolute Diff|
 |----------|:--------:|:----------:|:---------|:--------:|
 | ResNet50 Baseline    |76.130 | 92.862| 0.000|0.000|
@@ -176,9 +173,10 @@ In the table below, we provide a summary of the performance of stacked increment
 |----------|:--------:|:----------:|:---------|:--------:|
 | + FixRes mitigations   |80.196|94.672| 0.160|4.066|
 |----------|:--------:|:----------:|:---------|:--------:|
-|+ EMA   |80.450|94.908| 0.2544.320|
+|+ EMA   |80.450|94.908| 0.254|4.320|
 |----------|:--------:|:----------:|:---------|:--------:|
 | + Inference Resize tuning *   |80.674|95.166| 0.224|4.544|
+
 *The tuning of the inference size was done on top of the last model. See below for details.
 
 ## Baseline
