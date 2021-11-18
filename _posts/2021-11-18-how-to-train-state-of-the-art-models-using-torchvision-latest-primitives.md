@@ -1,6 +1,6 @@
 ---
 layout: blog_detail
-title: 'Feature Extraction in TorchVision using Torch FX'
+title: 'How to train state-of-the-art models using TorchVision’s latest primitives'
 author: Vasilis Vryniotis
 featured-img: ''
 ---
