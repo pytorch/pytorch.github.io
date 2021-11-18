@@ -148,6 +148,10 @@ There are a few principles we kept in mind during our explorations:
 
 As discussed in [earlier blogposts](https://pytorch.org/blog/torchvision-ssdlite-implementation/#break-down-of-key-accuracy-improvements), training models is not a journey of monotonically increasing accuracies and the process involves a lot of backtracking. To quantify the effect of each optimization, below we attempt to show-case an idealized linear journey of deriving the final recipe starting from the original recipe of TorchVision. We would like to clarify that this is an oversimplification of the actual path we followed and thus it should be taken with a grain of salt. 
 
+<p align="center">
+<img src="/assets/images/sota/Cumulative Accuracy Improvements for ResNet50.png" alt="Cumulative Accuracy Improvements for ResNet50" width="100%">
+</p>
+
 In the table below, we provide a summary of the performance of stacked incremental improvements on top of Baseline. Unless denoted otherwise, we report the model with best Acc@1 out of 3 runs:
 
 
@@ -317,6 +321,10 @@ The above optimization improved our accuracy by an additional 0.160 points and s
 
 It’s worth noting that the FixRes effect still persists, meaning that the model continues to perform better on validation when we increase the resolution. Moreover, further reducing the training crop-size actually hurts the accuracy. This intuitively makes sense because one can only reduce the resolution so much before critical details start disappearing from the picture. Finally, we should note that the above FixRes mitigation seems to benefit models with similar depth to ResNet50. Deeper variants with larger receptive fields seem to be slightly negatively affected (typically by 0.1-0.2 points). Hence we consider this part of the recipe optional. Below we visualize the performance of the best available checkpoints (with the full recipe) for models trained with 176 and 224 resolution:
 
+<div style="display: flex">
+<img src="/assets/images/sota/Best ResNet50 trained with 176 Resolution.png" alt="Best ResNet50 trained with 176 Resolution" width="50%">
+<img src="/assets/images/sota/Best ResNet50 trained with 224 Resolution.png" alt="Best ResNet50 trained with 224 Resolution" width="50%">
+</div>
 
 ## Exponential Moving Average (EMA)
 
@@ -344,6 +352,12 @@ Below you can see the optimal value used on our recipe:
 
 The above is the final optimization which improved our accuracy by 0.224 points. It’s worth noting that the optimal value for ResNet50 works also best for ResNet101, ResNet152 and ResNeXt50, which hints that it generalizes across models:
 
+
+<div style="display: flex">
+<img src="/assets/images/sota/ResNet50 Inference Resize.png" alt="ResNet50 Inference Resize" width="30%">
+<img src="/assets/images/sota/ResNet101 Inference Resize.png" alt="ResNet101 Inference Resize" width="30%">
+<img src="/assets/images/sota/ResNet152 Inference Resize.png" alt="Best ResNet50 trained with 224 Resolution" width="30%">
+</div>
 
 ## Optimizations that were tested but not adopted
 
