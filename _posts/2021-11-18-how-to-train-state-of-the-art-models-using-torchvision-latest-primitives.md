@@ -11,7 +11,7 @@ article.pytorch-article table tr th, article.pytorch-article table td {line-heig
 
 A few weeks ago, TorchVision v0.11 was released packed with numerous new primitives, models and training recipe improvements which allowed achieving state-of-the-art (SOTA) results. The project was dubbed “[TorchVision with Batteries Included](https://github.com/pytorch/vision/issues/3911)” and aimed to modernize our library. We wanted to enable researchers to reproduce papers and conduct research more easily by using common building blocks. Moreover, we aspired to provide the necessary tools to Applied ML practitioners to train their models on their own data using the same SOTA techniques as in research. Finally, we wanted to refresh our pre-trained weights and offer better off-the-shelf models to our users, hoping that they would build better applications.
 
-Though there is still much work to be done, we wanted to share with you some exciting results from the above work. We will showcase how one can use the new tools included in TorchVision to achieve state-of-the-art results on a highly competitive and well-studied architecture such as ResNet50 [1](https://arxiv.org/abs/1512.03385). We will share the exact recipe used to improve our baseline by over 4.5 accuracy points to reach a final top-1 accuracy of 80.7% and share the journey for deriving the new training process. Moreover, we will show that this recipe generalizes well to other model variants and families. We hope that the above will influence future research for developing stronger generalizable training methodologies and will inspire the community to adopt and contribute to our efforts.
+Though there is still much work to be done, we wanted to share with you some exciting results from the above work. We will showcase how one can use the new tools included in TorchVision to achieve state-of-the-art results on a highly competitive and well-studied architecture such as ResNet50 [[1]](https://arxiv.org/abs/1512.03385). We will share the exact recipe used to improve our baseline by over 4.5 accuracy points to reach a final top-1 accuracy of 80.7% and share the journey for deriving the new training process. Moreover, we will show that this recipe generalizes well to other model variants and families. We hope that the above will influence future research for developing stronger generalizable training methodologies and will inspire the community to adopt and contribute to our efforts.
 
 ## The Results
 
@@ -81,7 +81,7 @@ Those who don’t want to use a prototype API have the option of accessing the n
 
 ## The Training Recipe
 
-Our goal was to use the newly introduced primitives of TorchVision to derive a new strong training recipe which achieves state-of-the-art results for the vanilla ResNet50 architecture when trained from scratch on ImageNet with no additional external data. Though by using architecture specific tricks [2](https://arxiv.org/abs/1812.01187) one could further improve the accuracy, we’ve decided not to include them so that the recipe can be used in other architectures. Our recipe heavily focuses on simplicity and builds upon work by FAIR [[3](https://arxiv.org/abs/2103.06877), [4](https://arxiv.org/abs/2106.14881), [5](https://arxiv.org/abs/1906.06423), [6](https://arxiv.org/abs/2012.12877), [7](https://arxiv.org/abs/2110.00476)]. Our findings align with the parallel study of Wightman et al. [7](https://arxiv.org/abs/2110.00476), who also report major accuracy improvements by focusing on the training recipes.
+Our goal was to use the newly introduced primitives of TorchVision to derive a new strong training recipe which achieves state-of-the-art results for the vanilla ResNet50 architecture when trained from scratch on ImageNet with no additional external data. Though by using architecture specific tricks [[2]](https://arxiv.org/abs/1812.01187) one could further improve the accuracy, we’ve decided not to include them so that the recipe can be used in other architectures. Our recipe heavily focuses on simplicity and builds upon work by FAIR [[3]](https://arxiv.org/abs/2103.06877), [[4]](https://arxiv.org/abs/2106.14881), [[5]](https://arxiv.org/abs/1906.06423), [[6]](https://arxiv.org/abs/2012.12877), [[7]](https://arxiv.org/abs/2110.00476)]. Our findings align with the parallel study of Wightman et al. [[7]](https://arxiv.org/abs/2110.00476), who also report major accuracy improvements by focusing on the training recipes.
 
 Without further ado, here are the main parameters of our recipe:
 
@@ -142,7 +142,7 @@ There are a few principles we kept in mind during our explorations:
 1. Training is a stochastic process and the validation metric we try to optimize is a random variable. This is due to the random weight initialization scheme employed and the existence of random effects during the training process. This means that we can’t do a single run to assess the effect of a recipe change. The standard practice is doing multiple runs (usually 3 to 5) and studying the summarization stats (such as mean, std, median, max, etc).
 2. There is usually a significant interaction between different parameters, especially for techniques that focus on Regularization and reducing overfitting. Thus changing the value of one can have effects on the optimal configurations of others. To account for that one can either adopt a greedy search approach (which often leads to suboptimal results but tractable experiments) or apply grid search (which leads to better results but is computationally expensive). In this work, we used a mixture of both.
 3. Techniques that are non-deterministic or introduce noise usually require longer training cycles to improve model performance. To keep things tractable, we initially used short training cycles (small number of epochs) to decide which paths can be eliminated early and which should be explored using longer training.
-4. There is a risk of overfitting the validation dataset [8] because of the repeated experiments. To mitigate some of the risk, we apply only training optimizations that provide a significant accuracy improvements and use K-fold cross validation to verify optimizations done on the validation set. Moreover we confirm that our recipe ingredients generalize well on other models for which we didn’t optimize the hyper-parameters.
+4. There is a risk of overfitting the validation dataset [[8]](https://arxiv.org/abs/1902.10811) because of the repeated experiments. To mitigate some of the risk, we apply only training optimizations that provide a significant accuracy improvements and use K-fold cross validation to verify optimizations done on the validation set. Moreover we confirm that our recipe ingredients generalize well on other models for which we didn’t optimize the hyper-parameters.
 
 ## Break down of key accuracy improvements
 
@@ -235,7 +235,7 @@ The above optimizations increase our top-1 Accuracy by 0.364 points comparing to
 
 ## TrivialAugment
 
-The original model was trained using basic augmentation transforms such as Random resized crops and horizontal flips. An easy way to improve our accuracy is to apply more complex “Automatic-Augmentation” techniques. The one that performed best for us is TrivialAugment [9](https://arxiv.org/abs/2103.10158), which is extremely simple and can be considered “parameter free”, which means it can help us cut down our search space further.
+The original model was trained using basic augmentation transforms such as Random resized crops and horizontal flips. An easy way to improve our accuracy is to apply more complex “Automatic-Augmentation” techniques. The one that performed best for us is TrivialAugment [[9]](https://arxiv.org/abs/2103.10158), which is extremely simple and can be considered “parameter free”, which means it can help us cut down our search space further.
 
 Here is the update applied on top of the previous step:
 
@@ -259,7 +259,7 @@ This further increases our top-1 Accuracy by 1.8 points on top of the previous s
 
 ## Random Erasing
 
-Another data augmentation technique known to help the classification accuracy is Random Erasing [[10](https://arxiv.org/abs/1708.04896), [11](https://arxiv.org/abs/1708.04552)]. Often paired with Automatic Augmentation methods, it usually yields additional improvements in accuracy due to its regularization effect. In our experiments we tuned only the probability of applying the method via a grid search and found that it’s beneficial to keep its probability at low levels, typically around 10%. 
+Another data augmentation technique known to help the classification accuracy is Random Erasing [[10]](https://arxiv.org/abs/1708.04896), [[11]](https://arxiv.org/abs/1708.04552)]. Often paired with Automatic Augmentation methods, it usually yields additional improvements in accuracy due to its regularization effect. In our experiments we tuned only the probability of applying the method via a grid search and found that it’s beneficial to keep its probability at low levels, typically around 10%. 
 
 Here is the extra parameter introduced on top of the previous:
 
@@ -271,7 +271,7 @@ Applying Random Erasing increases our Acc@1 by further 0.190 points.
 
 ## Label Smoothing
 
-A good technique to reduce overfitting is to stop the model from becoming overconfident. This can be achieved by softening the ground truth using Label Smoothing [12](https://www.cv-foundation.org/openaccess/content_cvpr_2016/papers/Szegedy_Rethinking_the_Inception_CVPR_2016_paper.pdf). There is a single parameter which controls the degree of smoothing (the higher the stronger) that we need to specify. Though optimizing it via grid search is possible, we found that values around 0.05-0.15 yield similar results, so to avoid overfitting it we used the same value as on the paper that introduced it.
+A good technique to reduce overfitting is to stop the model from becoming overconfident. This can be achieved by softening the ground truth using Label Smoothing [[12]](https://www.cv-foundation.org/openaccess/content_cvpr_2016/papers/Szegedy_Rethinking_the_Inception_CVPR_2016_paper.pdf). There is a single parameter which controls the degree of smoothing (the higher the stronger) that we need to specify. Though optimizing it via grid search is possible, we found that values around 0.05-0.15 yield similar results, so to avoid overfitting it we used the same value as on the paper that introduced it.
 
 Below we can find the extra config added on this step:
 
@@ -280,9 +280,10 @@ label_smoothing=0.1,
 ```
 
 We use PyTorch’s newly introduced [CrossEntropyLoss](https://pytorch.org/docs/stable/generated/torch.nn.CrossEntropyLoss.html?highlight=label_smoothing) label_smoothing parameter and that increases our accuracy by an additional 0.318 points.
-Mixup and Cutmix
 
-Two data augmentation techniques often used to produce SOTA results are Mixup and Cutmix [[13](https://arxiv.org/abs/1710.09412), [14](https://arxiv.org/abs/1905.04899)]. They both provide strong regularization effects by softening not only the labels but also the images. In our setup we found it beneficial to apply one of them randomly with equal probability. Each is parameterized with a hyperparameter alpha, which controls the shape of the Beta distribution from which the smoothing probability is sampled. We did a very limited grid search, focusing primarily on common values proposed on the papers. 
+## Mixup and Cutmix
+
+Two data augmentation techniques often used to produce SOTA results are Mixup and Cutmix [[13]](https://arxiv.org/abs/1710.09412), [[14]](https://arxiv.org/abs/1905.04899)]. They both provide strong regularization effects by softening not only the labels but also the images. In our setup we found it beneficial to apply one of them randomly with equal probability. Each is parameterized with a hyperparameter alpha, which controls the shape of the Beta distribution from which the smoothing probability is sampled. We did a very limited grid search, focusing primarily on common values proposed on the papers. 
 
 Below you will find the optimal values for the alpha parameters of the two techniques:
 
@@ -342,7 +343,7 @@ The use of EMA increases our accuracy by 0.254 points comparing to the previous
 
 ## Inference Resize tuning
 
-Unlike all other steps of the process which involved training models with different parameters, this optimization was done on top of the final model. During inference, the image is resized to a specific resolution and then a central 224x224 crop is taken from it. The original recipe used a resize size of 256, which caused a similar discrepancy as the one described on the FixRes paper [5]. By bringing this resize value closer to the target inference resolution, one can improve the accuracy. To select the value we run a short grid search between interval [224, 256] with step of 8. To avoid overfitting, the value was selected using half of the validation set and confirmed using the other half.
+Unlike all other steps of the process which involved training models with different parameters, this optimization was done on top of the final model. During inference, the image is resized to a specific resolution and then a central 224x224 crop is taken from it. The original recipe used a resize size of 256, which caused a similar discrepancy as the one described on the FixRes paper [[5]](https://arxiv.org/abs/1906.06423). By bringing this resize value closer to the target inference resolution, one can improve the accuracy. To select the value we run a short grid search between interval [224, 256] with step of 8. To avoid overfitting, the value was selected using half of the validation set and confirmed using the other half.
 
 Below you can see the optimal value used on our recipe:
 
