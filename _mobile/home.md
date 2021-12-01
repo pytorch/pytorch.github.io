@@ -11,6 +11,8 @@ redirect_from: "/mobile/"
 
 # PyTorch Mobile
 
+**New!** Build AI-powered mobile apps in minutes with [PyTorch Live]({{site.baseurl}}/live).
+
 There is a growing need to execute ML models on edge devices to reduce latency, preserve privacy, and enable new interactive use cases.
 
 The PyTorch Mobile runtime beta release allows you to seamlessly go from training a model to deploying it, while staying entirely within the PyTorch ecosystem. It provides an end-to-end workflow that simplifies the research to production environment for mobile devices. In addition, it paves the way for privacy-preserving features via federated learning techniques.
