@@ -11,7 +11,7 @@ redirect_from: "/mobile/"
 
 # PyTorch Mobile
 
-**New** Build AI-powered mobile apps in minutes with [PyTorch Live]({{site.baseurl}}/live)!
+**New!** Build AI-powered mobile apps in minutes with [PyTorch Live]({{site.baseurl}}/live).
 
 There is a growing need to execute ML models on edge devices to reduce latency, preserve privacy, and enable new interactive use cases.
 
