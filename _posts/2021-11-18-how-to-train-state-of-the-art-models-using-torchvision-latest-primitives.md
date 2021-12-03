@@ -42,7 +42,7 @@ We are currently working on a new prototype mechanism which will extend the mode
   img = Image.open("test/assets/encode_jpeg/grace_hopper_517x606.jpg")
    
   # Initialize model
-  weights = P.models.ResNet50Weights.ImageNet1K_RefV2
+  weights = P.models.ResNet50_Weights.ImageNet1K_V2
   model = P.models.resnet50(weights=weights)
   model.eval()
    
