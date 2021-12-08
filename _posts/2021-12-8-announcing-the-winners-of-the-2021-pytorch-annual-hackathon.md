@@ -22,50 +22,50 @@ The virtual hackathon ran from September 8 through November 2, 2021, with more t
 
 Meet the winners of each category below!
 
-# PYTORCH DEVELOPER TOOLS
+## PYTORCH DEVELOPER TOOLS
 
-### **First Place: [RaNNC](https://devpost.com/software/rannc-rapid-neural-network-connector)**
+#### **First Place: [RaNNC](https://devpost.com/software/rannc-rapid-neural-network-connector)**
 RaNNC is a middleware to automate hybrid model/data parallelism for training very large-scale neural networks capable of training 100 billion parameter models without any manual tuning.
 
-### **Second Place: [XiTorch](https://devpost.com/software/xitorch-differentiable-scientific-computing-library)**
+#### **Second Place: [XiTorch](https://devpost.com/software/xitorch-differentiable-scientific-computing-library)**
 XiTorch provides first and higher order gradients of functional routines, such as optimization, rootfinder, and ODE solver. It also contains operations for implicit linear operators (e.g. large matrix that is expressed only by its matrix-vector multiplication) such as symmetric eigen-decomposition, linear solve, and singular value decomposition.
 
-### **Third Place: [TorchLiberator](https://devpost.com/software/torchliberator-partial-weight-loading)**
+#### **Third Place: [TorchLiberator](https://devpost.com/software/torchliberator-partial-weight-loading)**
 TorchLiberator  automates model surgery, finding the maximum correspondence between weights in two networks.
 
-### **Honorable Mentions**
+#### **Honorable Mentions**
 * [PADL](https://devpost.com/software/doch) manages your entire PyTorch work flow with a single python abstraction and a beautiful functional API, so there’s no more complex configuration or juggling preprocessing, postprocessing and forward passes.
 * [PyTree](https://devpost.com/software/pytree) is a PyTorch package for recursive neural networks that provides highly generic recursive neural network implementations as well as efficient batching methods. 
 * [IndicLP](https://devpost.com/software/indiclp) makes it easier for developers and researchers to build applications and models in Indian Languages, thus making NLP a more diverse field. 
 
-# WEB/MOBILE APPLICATIONS POWERED BY PYTORCH
+## WEB/MOBILE APPLICATIONS POWERED BY PYTORCH
 
-### **First Place: [PyTorch Driving Guardian](https://devpost.com/software/pytorch-driving-guardian)**
+#### **First Place: [PyTorch Driving Guardian](https://devpost.com/software/pytorch-driving-guardian)**
 PyTorch Driving Guardian is a tool that monitors driver alertness, emotional state, and potential blind spots on the road. 
 
-### **Second Place: [Kronia](https://devpost.com/software/kronia)**
+#### **Second Place: [Kronia](https://devpost.com/software/kronia)**
 Kronia is an Android mobile app built to maximize the harvest outputs for farmers. 
 
-### **Third Place:[Heyoh camera for Mac](https://devpost.com/software/heyoh-camera)**
+#### **Third Place: [Heyoh camera for Mac](https://devpost.com/software/heyoh-camera)**
 Heyoh is a Mac virtual camera for Zoom and Meets that augments live video by recognizing hand gestures and smiles and shows animated effects to other video participants. 
 
-### **Honorable Mentions**
+#### **Honorable Mentions**
 * [Mamma AI](https://devpost.com/software/mamma-ai) is a tool that helps doctors with the breast cancer identification process by identifying areas likely to have cancer using ultrasonic and x-ray images. 
 * [AgingClock](https://devpost.com/software/agingclock) is a tool that predicts biological age first with methylation genome data, then blood test data and eventually with multimodal omics and lifestyle data.
 * [Iris](https://devpost.com/software/iris-7s3yna) is an open source photos platform which is more of an alternative of Google Photos that includes features such as Listing photos, Detecting Categories, Detecting and Classifying Faces from Photos, Detecting and Clustering by Location and Things in Photos.
 
-# PYTORCH RESPONSIBLE AI DEVELOPMENT TOOLS
+## PYTORCH RESPONSIBLE AI DEVELOPMENT TOOLS
 
-### **First Place: [FairWell](https://devpost.com/software/fairwell-a-tool-to-bid-goodbye-to-unknown-ai-biasness)**
+#### **First Place: [FairWell](https://devpost.com/software/fairwell-a-tool-to-bid-goodbye-to-unknown-ai-biasness)**
 FairWell aims to address model bias on specific groups of people by allowing data scientists to evaluate their dataset and model predictions and take steps to make their datasets more inclusive and their models less biased. 
 
-### **Second Place: [promp2slip](https://devpost.com/software/promp2slip)**
+#### **Second Place: [promp2slip](https://devpost.com/software/promp2slip)**
 Promp2slip is a library that tests the ethics of language models by using natural adversarial texts. 
 
-### **Third Place: [Phorch](https://devpost.com/software/phorch)**
+#### **Third Place: [Phorch](https://devpost.com/software/phorch)**
 Phorch adversarially attacks the data using FIGA (Feature Importance Guided Attack) and creates 3 different attack sets of data based on certain parameters. These features are utilized to implement adversarial training as a defense against FIGA using neural net architecture in PyTorch.
 
-### **Honorable Mentions**
+#### **Honorable Mentions**
 * [Greenops](https://devpost.com/software/greenops) helps to measure the footprints of deep learning models at training, testing and evaluating to reduce energy consumption and carbon footprints.
 * [Xaitk-saliency](https://devpost.com/software/xaitk-saliency) is an open-source, explainable AI toolkit for visual saliency algorithm interfaces and implementations, built for analytic and autonomy applications.
 
