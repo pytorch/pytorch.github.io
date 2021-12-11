@@ -1,0 +1,6 @@
+﻿torch.clone
+===========
+
+.. currentmodule:: torch
+
+.. autofunction:: clone
