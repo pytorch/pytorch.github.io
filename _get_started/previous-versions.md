@@ -17,6 +17,55 @@ your convenience.
 
 ## Commands for Versions >= 1.0.0
 
+### v1.9.0
+
+#### Conda
+
+##### OSX
+
+```
+# conda
+conda install pytorch==1.9.0 torchvision==0.10.0 torchaudio==0.9.0 -c pytorch
+```
+
+#####  Linux and Windows
+
+```
+# CUDA 10.2
+conda install pytorch==1.9.0 torchvision==0.10.0 torchaudio==0.9.0 cudatoolkit=10.2 -c pytorch
+
+# CUDA 11.3
+conda install pytorch==1.9.0 torchvision==0.10.0 torchaudio==0.9.0 cudatoolkit=11.3 -c pytorch -c conda-forge
+
+# CPU Only
+conda install pytorch==1.9.0 torchvision==0.10.0 torchaudio==0.9.0 cpuonly -c pytorch
+```
+
+### v1.8.1
+
+#### Conda
+
+##### OSX
+
+```
+# conda
+conda install pytorch==1.8.1 torchvision==0.9.1 torchaudio==0.8.1 -c pytorch
+```
+
+#####  Linux and Windows
+
+```
+# CUDA 10.2
+conda install pytorch==1.8.1 torchvision==0.9.1 torchaudio==0.8.1 cudatoolkit=10.2 -c pytorch
+
+# CUDA 11.3
+conda install pytorch==1.8.1 torchvision==0.9.1 torchaudio==0.8.1 cudatoolkit=11.3 -c pytorch -c conda-forge
+
+# CPU Only
+conda install pytorch==1.8.1 torchvision==0.9.1 torchaudio==0.8.1 cpuonly -c pytorch
+```
+
+
 ### v1.8.0
 
 #### Conda
