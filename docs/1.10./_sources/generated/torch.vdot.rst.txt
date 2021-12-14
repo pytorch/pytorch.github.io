@@ -1,6 +1,0 @@
-﻿torch.vdot
-==========
-
-.. currentmodule:: torch
-
-.. autofunction:: vdot
