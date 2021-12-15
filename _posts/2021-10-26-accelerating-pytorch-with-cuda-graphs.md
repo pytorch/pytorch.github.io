@@ -62,9 +62,61 @@ You should try CUDA graphs if all or part of your network is graph-safe (usually
 
 ### API example
 
-PyTorch exposes graphs via a raw [`torch.cuda.CUDAGraph`](https://pytorch.org/docs/master/generated/torch.cuda.CUDAGraph.html#torch.cuda.CUDAGraph)class and two convenience wrappers, [`torch.cuda.graph`](https://pytorch.org/docs/master/generated/torch.cuda.CUDAGraph.html#torch.cuda.CUDAGraph) and [`torch.cuda.make_graphed_callables`](https://pytorch.org/docs/master/generated/torch.cuda.make_graphed_callables.html#torch.cuda.make_graphed_callables).
+PyTorch exposes graphs via a raw [`torch.cuda.CUDAGraph`](https://pytorch.org/docs/master/generated/torch.cuda.graph.html#torch.cuda.graph)class and two convenience wrappers, [`torch.cuda.graph`](https://pytorch.org/docs/master/generated/torch.cuda.CUDAGraph.html#torch.cuda.CUDAGraph) and [`torch.cuda.make_graphed_callables`](https://pytorch.org/docs/master/generated/torch.cuda.make_graphed_callables.html#torch.cuda.make_graphed_callables).
 
-<strong>torch.cuda.graph</strong>
+```python
+N, D_in, H, D_out = 640, 4096, 2048, 1024
+model = torch.nn.Sequential(torch.nn.Linear(D_in, H),
+                            torch.nn.Dropout(p=0.2),
+                            torch.nn.Linear(H, D_out),
+                            torch.nn.Dropout(p=0.1)).cuda()
+loss_fn = torch.nn.MSELoss()
+optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
+
+# Placeholders used for capture
+static_input = torch.randn(N, D_in, device='cuda')
+static_target = torch.randn(N, D_out, device='cuda')
+
+# warmup
+# Uses static_input and static_target here for convenience,
+# but in a real setting, because the warmup includes optimizer.step()
+# you must use a few batches of real data.
+s = torch.cuda.Stream()
+s.wait_stream(torch.cuda.current_stream())
+with torch.cuda.stream(s):
+    for i in range(3):
+        optimizer.zero_grad(set_to_none=True)
+        y_pred = model(static_input)
+        loss = loss_fn(y_pred, static_target)
+        loss.backward()
+        optimizer.step()
+torch.cuda.current_stream().wait_stream(s)
+
+# capture
+g = torch.cuda.CUDAGraph()
+# Sets grads to None before capture, so backward() will create
+# .grad attributes with allocations from the graph's private pool
+optimizer.zero_grad(set_to_none=True)
+with torch.cuda.graph(g):
+    static_y_pred = model(static_input)
+    static_loss = loss_fn(static_y_pred, static_target)
+    static_loss.backward()
+    optimizer.step()
+
+real_inputs = [torch.rand_like(static_input) for _ in range(10)]
+real_targets = [torch.rand_like(static_target) for _ in range(10)]
+
+for data, target in zip(real_inputs, real_targets):
+    # Fills the graph's input memory with new data to compute on
+    static_input.copy_(data)
+    static_target.copy_(target)
+    # replay() includes forward, backward, and step.
+    # You don't even need to call optimizer.zero_grad() between iterations
+    # because the captured backward refills static .grad tensors in place.
+    g.replay()
+    # Params have been updated. static_y_pred, static_loss, and .grad
+    # attributes hold values from computing on this iteration's data.
+```
 
 [`torch.cuda.graph`](https://pytorch.org/docs/master/generated/torch.cuda.graph.html#torch.cuda.graph) is a simple, versatile context manager that captures CUDA work in its context. Before capture, warm up the workload to be captured by running a few eager iterations. Warmup must occur on a side stream. Because the graph reads from and writes to the same memory addresses in every replay, you must maintain long-lived references to tensors that hold input and output data during capture. To run the graph on new input data, copy new data to the capture’s input tensor(s), replay the graph, then read the new output from the capture’s output tensor(s).
 
@@ -116,11 +168,27 @@ with torch.cuda.graph(g):
     # attributes hold values from computing on this iteration's data.
 ```
 
-If some of your network is unsafe to capture (e.g., due to dynamic control flow, dynamic shapes, CPU syncs, or essential CPU-side logic), you can run the unsafe part(s) eagerly and use [`torch.cuda.make_graphed_callables`](https://pytorch.org/docs/master/generated/torch.cuda.make_graphed_callables.html#torch.cuda.make_graphed_callables)() to graph only the capture-safe part(s). This is demonstrated next.
+If some of your network is unsafe to capture (e.g., due to dynamic control flow, dynamic shapes, CPU syncs, or essential CPU-side logic), you can run the unsafe part(s) eagerly and use [`torch.cuda.make_graphed_callables`](https://pytorch.org/docs/master/generated/torch.cuda.make_graphed_callables.html#torch.cuda.make_graphed_callables) to graph only the capture-safe part(s). This is demonstrated next.
 
-<strong>torch.cuda.make_graphed_callables</strong>
+```python
+optimizer = torch.optim.SGD(chain(module1.parameters() + 
 
-[`make_graphed_callables`](https://pytorch.org/docs/master/generated/torch.cuda.make_graphed_callables.html#torch.cuda.make_graphed_callables) accepts callables (functions or [`nn.Module`](https://pytorch.org/docs/master/generated/torch.nn.Module.html#torch.nn.Module) and returns graphed versions. By default, callables returned by [`make_graphed_callables`](https://pytorch.org/docs/master/generated/torch.cuda.make_graphed_callables.html#torch.cuda.make_graphed_callables)() are autograd-aware, and can be used in the training loop as direct replacements for the functions or [`nn.Module`](https://pytorch.org/docs/master/generated/torch.nn.Module.html#torch.nn.Module) you passed. [`make_graphed_callables`](https://pytorch.org/docs/master/generated/torch.cuda.make_graphed_callables.html#torch.cuda.make_graphed_callables)() internally creates [`CUDAGraph`](https://pytorch.org/docs/master/generated/torch.cuda.CUDAGraph.html#torch.cuda.CUDAGraph) objects, runs warm up iterations, and maintains static inputs and outputs as needed. Therefore, (unlike with [`torch.cuda.graph`](https://pytorch.org/docs/master/generated/torch.cuda.graph.html#torch.cuda.graph)) you don’t need to handle those manually.
+                                  module2.parameters() +
+
+                                  module3.parameters()),
+->
+optimizer = torch.optim.SGD(chain(module1.parameters(), 
+
+                                  module2.parameters(),
+
+                                  module3.parameters()),
+
+loss = loss_fn(tmp, y)
+->
+loss = loss_fn(tmp, target)
+```
+
+[`make_graphed_callables`](https://pytorch.org/docs/master/generated/torch.cuda.make_graphed_callables.html#torch.cuda.make_graphed_callables) accepts callables (functions or [`nn.Module`](https://pytorch.org/docs/master/generated/torch.nn.Module.html#torch.nn.Module) and returns graphed versions. By default, callables returned by [`make_graphed_callables`](https://pytorch.org/docs/master/generated/torch.cuda.make_graphed_callables.html#torch.cuda.make_graphed_callables) are autograd-aware, and can be used in the training loop as direct replacements for the functions or [`nn.Module`](https://pytorch.org/docs/master/generated/torch.nn.Module.html#torch.nn.Module) you passed. [`make_graphed_callables`](https://pytorch.org/docs/master/generated/torch.cuda.make_graphed_callables.html#torch.cuda.make_graphed_callables) internally creates [`CUDAGraph`](https://pytorch.org/docs/master/generated/torch.cuda.CUDAGraph.html#torch.cuda.CUDAGraph) objects, runs warm up iterations, and maintains static inputs and outputs as needed. Therefore, (unlike with [`torch.cuda.graph`](https://pytorch.org/docs/master/generated/torch.cuda.graph.html#torch.cuda.graph)) you don’t need to handle those manually.
 
 In the following example, data-dependent dynamic control flow means the network isn’t capturable end-to-end, but [`make_graphed_callables`](https://pytorch.org/docs/master/generated/torch.cuda.make_graphed_callables.html#torch.cuda.make_graphed_callables)() lets us capture and run graph-safe sections as graphs regardless:
 
