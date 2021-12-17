@@ -64,6 +64,10 @@ You should try CUDA graphs if all or part of your network is graph-safe (usually
 
 PyTorch exposes graphs via a raw [`torch.cuda.CUDAGraph`](https://pytorch.org/docs/master/generated/torch.cuda.graph.html#torch.cuda.graph)class and two convenience wrappers, [`torch.cuda.graph`](https://pytorch.org/docs/master/generated/torch.cuda.graph.html#torch.cuda.graph) and [`torch.cuda.make_graphed_callables`](https://pytorch.org/docs/master/generated/torch.cuda.make_graphed_callables.html#torch.cuda.make_graphed_callables).
 
+[`torch.cuda.graph`](https://pytorch.org/docs/master/generated/torch.cuda.graph.html#torch.cuda.graph) is a simple, versatile context manager that captures CUDA work in its context. Before capture, warm up the workload to be captured by running a few eager iterations. Warmup must occur on a side stream. Because the graph reads from and writes to the same memory addresses in every replay, you must maintain long-lived references to tensors that hold input and output data during capture. To run the graph on new input data, copy new data to the capture’s input tensor(s), replay the graph, then read the new output from the capture’s output tensor(s).
+
+If the entire network is capture safe, one can capture and replay the whole network as in the following example. 
+
 ```python
 N, D_in, H, D_out = 640, 4096, 2048, 1024
 model = torch.nn.Sequential(torch.nn.Linear(D_in, H),
@@ -118,56 +122,6 @@ for data, target in zip(real_inputs, real_targets):
     # attributes hold values from computing on this iteration's data.
 ```
 
-[`torch.cuda.graph`](https://pytorch.org/docs/master/generated/torch.cuda.graph.html#torch.cuda.graph) is a simple, versatile context manager that captures CUDA work in its context. Before capture, warm up the workload to be captured by running a few eager iterations. Warmup must occur on a side stream. Because the graph reads from and writes to the same memory addresses in every replay, you must maintain long-lived references to tensors that hold input and output data during capture. To run the graph on new input data, copy new data to the capture’s input tensor(s), replay the graph, then read the new output from the capture’s output tensor(s).
-
-If the entire network is capture safe, one can capture and replay the whole network as in the following example. 
-
-```python
-N, D_in, H, D_out = 640, 4096, 2048, 1024
-model = torch.nn.Sequential(torch.nn.Linear(D_in, H),
-                            torch.nn.Dropout(p=0.2),
-                            torch.nn.Linear(H, D_out),
-                            torch.nn.Dropout(p=0.1)).cuda()
-loss_fn = torch.nn.MSELoss()
-optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
-
-# Placeholders used for capture
-static_input = torch.randn(N, D_in, device='cuda')
-static_target = torch.randn(N, D_out, device='cuda')
-
-# warmup
-# Uses static_input and static_target here for convenience,
-# but in a real setting, because the warmup includes optimizer.step()
-# you must use a few batches of real data.
-s = torch.cuda.Stream()
-s.wait_stream(torch.cuda.current_stream())
-with torch.cuda.stream(s):
-    for i in range(3):
-        optimizer.zero_grad(set_to_none=True)
-        y_pred = model(static_input)
-        loss = loss_fn(y_pred, static_target)
-        loss.backward()
-        optimizer.step()
-torch.cuda.current_stream().wait_stream(s)
-
-# capture
-g = torch.cuda.CUDAGraph()
-# Sets grads to None before capture, so backward() will create
-# .grad attributes with allocations from the graph's private pool
-optimizer.zero_grad(set_to_none=True)
-with torch.cuda.graph(g):
-    static_y_pred = model(static_input)
-    # Fills the graph's input memory with new data to compute on
-    static_input.copy_(data)
-    static_target.copy_(target)
-    # replay() includes forward, backward, and step.
-    # You don't even need to call optimizer.zero_grad() between iterations
-    # because the captured backward refills static .grad tensors in place.
-    g.replay()
-    # Params have been updated. static_y_pred, static_loss, and .grad
-    # attributes hold values from computing on this iteration's data.
-```
-
 If some of your network is unsafe to capture (e.g., due to dynamic control flow, dynamic shapes, CPU syncs, or essential CPU-side logic), you can run the unsafe part(s) eagerly and use [`torch.cuda.make_graphed_callables`](https://pytorch.org/docs/master/generated/torch.cuda.make_graphed_callables.html#torch.cuda.make_graphed_callables) to graph only the capture-safe part(s). This is demonstrated next.
 
 ```python
@@ -201,8 +155,8 @@ module2 = torch.nn.Linear(H, D_out).cuda()
 module3 = torch.nn.Linear(H, D_out).cuda()
 
 loss_fn = torch.nn.MSELoss()
-optimizer = torch.optim.SGD(chain(module1.parameters() +
-                                  module2.parameters() +
+optimizer = torch.optim.SGD(chain(module1.parameters(),
+                                  module2.parameters(),
                                   module3.parameters()),
                             lr=0.1)
 
@@ -229,7 +183,7 @@ for data, target in zip(real_inputs, real_targets):
     else:
         tmp = module3(tmp)  # forward ops run as a graph
 
-    loss = loss_fn(tmp, y)
+    loss = loss_fn(tmp, target)
     # module2's or module3's (whichever was chosen) backward ops,
     # as well as module1's backward ops, run as graphs
     loss.backward()
