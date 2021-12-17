@@ -1,0 +1,6 @@
+﻿torch.isneginf
+==============
+
+.. currentmodule:: torch
+
+.. autofunction:: isneginf
