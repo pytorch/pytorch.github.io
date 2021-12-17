@@ -52,13 +52,13 @@ pip install torch==1.9.0 torchvision==0.10.0 torchaudio==0.9.0
 ##### Linux and Windows
 
 ```
-# ROCM 4.2
+# ROCM 4.2 (Linux only)
 pip install torch==1.9.0+rocm4.2 torchvision==0.10.0+rocm4.2 torchaudio==0.9.0 -f https://download.pytorch.org/whl/torch_stable.html
 
-# ROCM 4.1
+# ROCM 4.1 (Linux only)
 pip install torch==1.9.0+rocm4.1 torchvision==0.10.0+rocm4.1 torchaudio==0.9.0 -f https://download.pytorch.org/whl/torch_stable.html
 
-# ROCM 4.0.1
+# ROCM 4.0.1 (Linux only)
 pip install torch==1.9.0+rocm4.0.1 torchvision==0.10.0+rocm4.0.1 torchaudio==0.9.0 -f https://download.pytorch.org/whl/torch_stable.html
 
 # CUDA 11.1
@@ -106,10 +106,10 @@ pip install torch==1.8.1 torchvision==0.9.1 torchaudio==0.8.1
 ##### Linux and Windows
 
 ```
-# ROCM 4.0.1
+# ROCM 4.0.1 (Linux only)
 pip install torch==1.8.1+rocm4.0.1 torchvision==0.9.1+rocm4.0.1 torchaudio==0.8.1 -f https://download.pytorch.org/whl/torch_stable.html
 
-# ROCM 3.10
+# ROCM 3.10 (Linux only)
 pip install torch==1.8.1+rocm3.10 torchvision==0.9.1+rocm3.10 torchaudio==0.8.1 -f https://download.pytorch.org/whl/torch_stable.html
 
 # CUDA 11.1
