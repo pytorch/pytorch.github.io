@@ -1,0 +1,6 @@
+﻿torch.kaiser\_window
+====================
+
+.. currentmodule:: torch
+
+.. autofunction:: kaiser_window

@@ -1,0 +1,6 @@
+﻿torch.isreal
+============
+
+.. currentmodule:: torch
+
+.. autofunction:: isreal
