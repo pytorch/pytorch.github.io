@@ -124,24 +124,6 @@ for data, target in zip(real_inputs, real_targets):
 
 If some of your network is unsafe to capture (e.g., due to dynamic control flow, dynamic shapes, CPU syncs, or essential CPU-side logic), you can run the unsafe part(s) eagerly and use [`torch.cuda.make_graphed_callables`](https://pytorch.org/docs/master/generated/torch.cuda.make_graphed_callables.html#torch.cuda.make_graphed_callables) to graph only the capture-safe part(s). This is demonstrated next.
 
-```python
-optimizer = torch.optim.SGD(chain(module1.parameters() + 
-
-                                  module2.parameters() +
-
-                                  module3.parameters()),
-->
-optimizer = torch.optim.SGD(chain(module1.parameters(), 
-
-                                  module2.parameters(),
-
-                                  module3.parameters()),
-
-loss = loss_fn(tmp, y)
-->
-loss = loss_fn(tmp, target)
-```
-
 [`make_graphed_callables`](https://pytorch.org/docs/master/generated/torch.cuda.make_graphed_callables.html#torch.cuda.make_graphed_callables) accepts callables (functions or [`nn.Module`](https://pytorch.org/docs/master/generated/torch.nn.Module.html#torch.nn.Module) and returns graphed versions. By default, callables returned by [`make_graphed_callables`](https://pytorch.org/docs/master/generated/torch.cuda.make_graphed_callables.html#torch.cuda.make_graphed_callables) are autograd-aware, and can be used in the training loop as direct replacements for the functions or [`nn.Module`](https://pytorch.org/docs/master/generated/torch.nn.Module.html#torch.nn.Module) you passed. [`make_graphed_callables`](https://pytorch.org/docs/master/generated/torch.cuda.make_graphed_callables.html#torch.cuda.make_graphed_callables) internally creates [`CUDAGraph`](https://pytorch.org/docs/master/generated/torch.cuda.CUDAGraph.html#torch.cuda.CUDAGraph) objects, runs warm up iterations, and maintains static inputs and outputs as needed. Therefore, (unlike with [`torch.cuda.graph`](https://pytorch.org/docs/master/generated/torch.cuda.graph.html#torch.cuda.graph)) you don’t need to handle those manually.
 
 In the following example, data-dependent dynamic control flow means the network isn’t capturable end-to-end, but [`make_graphed_callables`](https://pytorch.org/docs/master/generated/torch.cuda.make_graphed_callables.html#torch.cuda.make_graphed_callables)() lets us capture and run graph-safe sections as graphs regardless:
