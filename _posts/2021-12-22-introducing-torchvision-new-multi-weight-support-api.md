@@ -17,7 +17,7 @@ We are hoping to get your thoughts about the API prior finalizing it. To collect
 
 TorchVision currently provides pre-trained models which could be a starting point for transfer learning or used as-is in Computer Vision applications. The typical way to instantiate a pre-trained model and make a prediction is:
 
-```
+```python
 import torch
 
 from PIL import Image
@@ -50,7 +50,7 @@ score = prediction[class_id].item()
 with open("imagenet_classes.txt", "r") as f:
     categories = [s.strip() for s in f.readlines()]
     category_name = categories[class_id]
-print(f"{category_name}: **** {100 * score}%")
+print(f"{category_name}: ** {100 * score}%")
 
 ```
 
@@ -66,7 +66,7 @@ The new API addresses the above limitations and reduces the amount of boilerplat
 
 Let’s see how we can achieve exactly the same results as above using the new API:
 
-```
+```python
 from PIL import Image
 from torchvision.prototype import models as PM
 
@@ -89,8 +89,7 @@ prediction = model(batch).squeeze(0).softmax(0)
 class_id = prediction.argmax().item()
 score = prediction[class_id].item()
 category_name = weights.meta["categories"][class_id]
-print(f"{category_name}: **** {100 * score}**%**")
-
+print(f"{category_name}: ** {100 * score}*%*")
 ```
 
 As we can see the new API eliminates the aforementioned limitations. Let’s explore the new features in detail.
@@ -101,7 +100,7 @@ At the heart of the new API, we have the ability to define multiple different we
 
 Here is an example of initializing models with different weights:
 
-```
+```python
 from torchvision.prototype.models import resnet50, ResNet50_Weights
 
 # Legacy weights with accuracy 76.130%
@@ -115,14 +114,13 @@ model = resnet50(weights=ResNet50_Weights.default)
 
 # No weights - random initialization
 model = resnet50(weights=None)
-
 ```
 
 ### Associated meta-data &  preprocessing transforms
 
 The weights of each model are associated with meta-data. The type of information we store depends on the task of the model (Classification, Detection, Segmentation etc). Typical information includes a link to the training recipe, the interpolation mode, information such as the categories and validation metrics. These values are programmatically accessible via the `meta` attribute:
 
-```
+```python
 from torchvision.prototype.models import ResNet50_Weights
 
 # Accessing a single record
@@ -131,12 +129,11 @@ size = ResNet50_Weights.ImageNet1K_V2.meta["size"]
 # Iterating the items of the meta-data dictionary
 for k, v in ResNet50_Weights.ImageNet1K_V2.meta.items():
     print(k, v)
-
 ```
 
 Additionally, each weights entry is associated with the necessary preprocessing transforms. All current preprocessing transforms are JIT-scriptable and can be accessed via the `transforms` attribute. Prior using them with the data, the transforms need to be initialized/constructed. This lazy initialization scheme is done to ensure the solution is memory efficient. The input of the transforms can be either a `PIL.Image` or a `Tensor` read using `torchvision.io`.
 
-```
+```python
 from torchvision.prototype.models import ResNet50_Weights
 
 # Initializing preprocessing at standard 224x224 resolution
@@ -147,7 +144,6 @@ preprocess = ResNet50_Weights.ImageNet1K.transforms(crop_size=400, resize_size=4
 
 # Once initialized the callable can accept the image data:
 # img_preprocessed = preprocess(img)
-
 ```
 
 Associating the weights with their meta-data and preprocessing will boost transparency, improve reproducibility and make it easier to document how a set of weights was produced. 
@@ -156,7 +152,7 @@ Associating the weights with their meta-data and preprocessing will boost transp
 
 The ability to link directly the weights with their properties (meta data, preprocessing callables etc) is the reason why our implementation uses Enums instead of Strings. Nevertheless for cases when only the name of the weights is available, we offer a method capable of linking Weight names to their Enums:
 
-```
+```python
 from torchvision.prototype.models import get_weight
 
 # Weights can be retrieved by name:
@@ -165,14 +161,13 @@ assert get_weight("ResNet50_Weights.ImageNet1K_V2") == ResNet50_Weights.ImageNet
 
 # Including using the default alias:
 assert get_weight("ResNet50_Weights.default") == ResNet50_Weights.ImageNet1K_V2
-
 ```
 
 ## Deprecations
 
 In the new API the boolean `pretrained` and `pretrained_backbone` parameters, which were previously used to load weights to the full model or to its backbone, are deprecated. The current implementation is fully backwards compatible as it seamlessly maps the old parameters to the new ones. Using the old parameters to the new builders emits the following deprecation warnings:
 
-```
+```python
 >>> model = torchvision.prototype.models.resnet50(pretrained=True)
  UserWarning: The parameter 'pretrained' is deprecated, please use 'weights' instead.
 UserWarning: 
@@ -183,7 +178,7 @@ You can also use `weights=ResNet50_Weights.default` to get the most up-to-date w
 
 Additionally the builder methods require using keyword parameters. The use of positional parameter is deprecated and using them emits the following warning:
 
-```
+```python
 >>> model = torchvision.prototype.models.resnet50(None)
 UserWarning: 
 Using 'weights' as positional parameter(s) is deprecated. 
@@ -217,27 +212,31 @@ For alternative ways to install the nightly have a look on the PyTorch [download
 ## Accessing state-of-the-art model weights with the new API
 
 If you are still unconvinced about giving a try to the new API, here is one more reason to do so. We’ve recently refreshed our [training recipe](https://pytorch.org/blog/how-to-train-state-of-the-art-models-using-torchvision-latest-primitives/) and achieved SOTA accuracy from many of our models. The improved weights can easily be accessed via the new API. Here is a quick overview of the model improvements:
-[Image: chart.png]
+
+<div class="text-center">
+  <img src="{{ site.baseurl }}/assets/images/torchvision_chart1.png" width="100%">
+</div>
+
 |Model	|Old Acc@1	|New Acc@1	|
 |---	|---	|---	|
 |EfficientNet B1	|78.642	|79.838	|
 |MobileNetV3 Large	|74.042	|75.274	|
 |Quantized ResNet50	|75.92	|80.282	|
 |Quantized ResNeXt101 32x8d	|78.986	|82.574	|
-|RegNet X 400mf *	|72.834	|74.864	|
-|RegNet X 800mf *	|75.212	|77.522	|
-|RegNet X 1 6gf *	|77.04	|79.668	|
-|RegNet X 3 2gf *	|78.364	|81.198	|
-|RegNet X 8gf *	|79.344	|81.682	|
-|RegNet X 16gf *	|80.058	|82.72	|
-|RegNet X 32gf *	|80.622	|83.018	|
-|RegNet Y 400mf *	|74.046	|75.806	|
-|RegNet Y 800mf *	|76.42	|78.838	|
-|RegNet Y 1 6gf *	|77.95	|80.882	|
-|RegNet Y 3 2gf *	|78.948	|81.984	|
-|RegNet Y 8gf *	|80.032	|82.828	|
-|RegNet Y 16gf *	|80.424	|82.89	|
-|RegNet Y 32gf *	|80.878	|83.366	|
+|RegNet X 400mf |72.834	|74.864	|
+|RegNet X 800mf |75.212	|77.522	|
+|RegNet X 1 6gf |77.04	|79.668	|
+|RegNet X 3 2gf |78.364	|81.198	|
+|RegNet X 8gf |79.344	|81.682	|
+|RegNet X 16gf |80.058	|82.72	|
+|RegNet X 32gf |80.622	|83.018	|
+|RegNet Y 400mf |74.046	|75.806	|
+|RegNet Y 800mf |76.42	|78.838	|
+|RegNet Y 1 6gf |77.95	|80.882	|
+|RegNet Y 3 2gf |78.948	|81.984	|
+|RegNet Y 8gf |80.032	|82.828	|
+|RegNet Y 16gf	|80.424	|82.89	|
+|RegNet Y 32gf	|80.878	|83.366	|
 |ResNet50	|76.13	|80.674	|
 |ResNet101	|77.374	|81.886	|
 |ResNet152	|78.312	|82.284	|
@@ -245,7 +244,5 @@ If you are still unconvinced about giving a try to the new API, here is one more
 |ResNeXt101 32x8d	|79.312	|82.834	|
 |Wide ResNet50 2	|78.468	|81.602	|
 |Wide ResNet101 2	|78.848	|82.51	|
-
-* At the time of writing, the RegNet refresh work is in progress, see [PR 5107](https://github.com/pytorch/vision/pull/5107).
 
 Please spare a few minutes to provide your feedback on the new API, as this is crucial for graduating it from prototype and including it in the next release. You can do this on the dedicated [Github Issue](https://github.com/pytorch/vision/issues/5088). We are looking forward to reading your comments!
