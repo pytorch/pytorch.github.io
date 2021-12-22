@@ -4,7 +4,7 @@
   <generator uri="https://jekyllrb.com/" version="3.9.0">Jekyll</generator>
   <link href="https://pytorch.org/feed.xml" rel="self" type="application/atom+xml" />
   <link href="https://pytorch.org/" rel="alternate" type="text/html" />
-  <updated>2021-12-22T08:02:53-08:00</updated>
+  <updated>2021-12-22T08:27:59-08:00</updated>
   <id>https://pytorch.org/feed.xml</id>
 
   
@@ -29,6 +29,273 @@
 
   
   
+  
+    <entry>
+      <title type="html"></title>
+      <link href="https://pytorch.org/blog/2021-12-22-introducing-torchvision-new-multi-weight-support-api/" rel="alternate" type="text/html" title="" />
+      <published>2021-12-22T08:27:59-08:00</published>
+      <updated>2021-12-22T08:27:59-08:00</updated>
+      <id>https://pytorch.org/blog/2021-12-22-introducing-torchvision-new-multi-weight-support-api</id>
+      <content type="html" xml:base="https://pytorch.org/blog/2021-12-22-introducing-torchvision-new-multi-weight-support-api/">&lt;p&gt;TorchVision has a new backwards compatible API for building models with multi-weight support. The new API allows loading different pre-trained weights on the same model variant, keeps track of vital meta-data such as the classification labels and includes the preprocessing transforms necessary for using the models. In this blog post, we plan to review the prototype API, show-case its features and highlight key differences with the existing one.&lt;/p&gt;
+
+&lt;div class=&quot;text-center&quot;&gt;
+  &lt;img src=&quot;/assets/images/torchvision_gif.gif&quot; width=&quot;100%&quot; /&gt;
+&lt;/div&gt;
+
+&lt;p&gt;We are hoping to get your thoughts about the API prior finalizing it. To collect your feedback, we have created a &lt;a href=&quot;https://github.com/pytorch/vision/issues/5088&quot;&gt;Github issue&lt;/a&gt; where you can post your thoughts, questions and comments.&lt;/p&gt;
+
+&lt;h2 id=&quot;limitations-of-the-current-api&quot;&gt;Limitations of the current API&lt;/h2&gt;
+
+&lt;p&gt;TorchVision currently provides pre-trained models which could be a starting point for transfer learning or used as-is in Computer Vision applications. The typical way to instantiate a pre-trained model and make a prediction is:&lt;/p&gt;
+
+&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;import torch
+
+from PIL import Image
+from torchvision import models as M
+from torchvision.transforms import transforms as T
+
+
+img = Image.open(&quot;test/assets/encode_jpeg/grace_hopper_517x606.jpg&quot;)
+
+# Step 1: Initialize model
+model = M.resnet50(pretrained=True)
+model.eval()
+
+# Step 2: Define and initialize the inference transforms
+preprocess = T.Compose([
+    T.Resize([256, ]),
+    T.CenterCrop(224),
+    T.PILToTensor(),
+    T.ConvertImageDtype(torch.float),
+    T.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+])
+
+# Step 3: Apply inference preprocessing transforms
+batch = preprocess(img).unsqueeze(0)
+prediction = model(batch).squeeze(0).softmax(0)
+
+# Step 4: Use the model and print the predicted category
+class_id = prediction.argmax().item()
+score = prediction[class_id].item()
+with open(&quot;imagenet_classes.txt&quot;, &quot;r&quot;) as f:
+    categories = [s.strip() for s in f.readlines()]
+    category_name = categories[class_id]
+print(f&quot;{category_name}: **** {100 * score}%&quot;)
+
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;There are a few limitations with the above approach:&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;&lt;strong&gt;Inability to support multiple pre-trained weights:&lt;/strong&gt; Since the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;pretrained&lt;/code&gt; variable is boolean, we can only offer one set of weights. This poses a severe limitation when we significantly &lt;a href=&quot;https://pytorch.org/blog/how-to-train-state-of-the-art-models-using-torchvision-latest-primitives/&quot;&gt;improve the accuracy of existing models&lt;/a&gt; and we want to make those improvements available to the community. It also stops us from offering pre-trained weights of the same model variant on different datasets.&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;Missing inference/preprocessing transforms:&lt;/strong&gt; The user is forced to define the necessary transforms prior using the model. The inference transforms are usually linked to the training process and dataset used to estimate the weights. Any minor discrepancies in these transforms (such as interpolation value, resize/crop sizes etc) can lead to major reductions in accuracy or unusable models.&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;Lack of meta-data:&lt;/strong&gt; Critical pieces of information in relation to the weights are unavailable to the users. For example, one needs to look into external sources and the documentation to find things like the &lt;a href=&quot;https://github.com/pytorch/vision/issues/1946&quot;&gt;category labels&lt;/a&gt;, the training recipe, the accuracy metrics etc.&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;The new API addresses the above limitations and reduces the amount of boilerplate code needed for standard tasks.&lt;/p&gt;
+
+&lt;h2 id=&quot;overview-of-the-prototype-api&quot;&gt;Overview of the prototype API&lt;/h2&gt;
+
+&lt;p&gt;Let’s see how we can achieve exactly the same results as above using the new API:&lt;/p&gt;
+
+&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;from PIL import Image
+from torchvision.prototype import models as PM
+
+
+img = Image.open(&quot;test/assets/encode_jpeg/grace_hopper_517x606.jpg&quot;)
+
+# Step 1: Initialize model
+weights = PM.ResNet50_Weights.ImageNet1K_V1
+model = PM.resnet50(weights=weights)
+model.eval()
+
+# Step 2: Initialize the inference transforms
+preprocess = weights.transforms()
+
+# Step 3: Apply inference preprocessing transforms
+batch = preprocess(img).unsqueeze(0)
+prediction = model(batch).squeeze(0).softmax(0)
+
+# Step 4: Use the model and print the predicted category
+class_id = prediction.argmax().item()
+score = prediction[class_id].item()
+category_name = weights.meta[&quot;categories&quot;][class_id]
+print(f&quot;{category_name}: **** {100 * score}**%**&quot;)
+
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;As we can see the new API eliminates the aforementioned limitations. Let’s explore the new features in detail.&lt;/p&gt;
+
+&lt;h3 id=&quot;multi-weight-support&quot;&gt;Multi-weight support&lt;/h3&gt;
+
+&lt;p&gt;At the heart of the new API, we have the ability to define multiple different weights for the same model variant. Each model building method (eg &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;resnet50&lt;/code&gt;) has an associated Enum class (eg &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;ResNet50_Weights&lt;/code&gt;) which has as many entries as the number of pre-trained weights available. Additionally, each Enum class has a &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;default&lt;/code&gt; alias which points to the best available weights for the specific model. This allows the users who want to always use the best available weights to do so without modifying their code.&lt;/p&gt;
+
+&lt;p&gt;Here is an example of initializing models with different weights:&lt;/p&gt;
+
+&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;from torchvision.prototype.models import resnet50, ResNet50_Weights
+
+# Legacy weights with accuracy 76.130%
+model = resnet50(weights=ResNet50_Weights.ImageNet1K_V1)
+
+# New weights with accuracy 80.674%
+model = resnet50(weights=ResNet50_Weights.ImageNet1K_V2)
+
+# Best available weights (currently alias for ImageNet1K_V2)
+model = resnet50(weights=ResNet50_Weights.default)
+
+# No weights - random initialization
+model = resnet50(weights=None)
+
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;h3 id=&quot;associated-meta-data---preprocessing-transforms&quot;&gt;Associated meta-data &amp;amp;  preprocessing transforms&lt;/h3&gt;
+
+&lt;p&gt;The weights of each model are associated with meta-data. The type of information we store depends on the task of the model (Classification, Detection, Segmentation etc). Typical information includes a link to the training recipe, the interpolation mode, information such as the categories and validation metrics. These values are programmatically accessible via the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;meta&lt;/code&gt; attribute:&lt;/p&gt;
+
+&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;from torchvision.prototype.models import ResNet50_Weights
+
+# Accessing a single record
+size = ResNet50_Weights.ImageNet1K_V2.meta[&quot;size&quot;]
+
+# Iterating the items of the meta-data dictionary
+for k, v in ResNet50_Weights.ImageNet1K_V2.meta.items():
+    print(k, v)
+
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Additionally, each weights entry is associated with the necessary preprocessing transforms. All current preprocessing transforms are JIT-scriptable and can be accessed via the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;transforms&lt;/code&gt; attribute. Prior using them with the data, the transforms need to be initialized/constructed. This lazy initialization scheme is done to ensure the solution is memory efficient. The input of the transforms can be either a &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;PIL.Image&lt;/code&gt; or a &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;Tensor&lt;/code&gt; read using &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;torchvision.io&lt;/code&gt;.&lt;/p&gt;
+
+&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;from torchvision.prototype.models import ResNet50_Weights
+
+# Initializing preprocessing at standard 224x224 resolution
+preprocess = ResNet50_Weights.ImageNet1K.transforms()
+
+# Initializing preprocessing at 400x400 resolution
+preprocess = ResNet50_Weights.ImageNet1K.transforms(crop_size=400, resize_size=400)
+
+# Once initialized the callable can accept the image data:
+# img_preprocessed = preprocess(img)
+
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Associating the weights with their meta-data and preprocessing will boost transparency, improve reproducibility and make it easier to document how a set of weights was produced.&lt;/p&gt;
+
+&lt;h3 id=&quot;get-weights-by-name&quot;&gt;Get weights by name&lt;/h3&gt;
+
+&lt;p&gt;The ability to link directly the weights with their properties (meta data, preprocessing callables etc) is the reason why our implementation uses Enums instead of Strings. Nevertheless for cases when only the name of the weights is available, we offer a method capable of linking Weight names to their Enums:&lt;/p&gt;
+
+&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;from torchvision.prototype.models import get_weight
+
+# Weights can be retrieved by name:
+assert get_weight(&quot;ResNet50_Weights.ImageNet1K_V1&quot;) == ResNet50_Weights.ImageNet1K_V1
+assert get_weight(&quot;ResNet50_Weights.ImageNet1K_V2&quot;) == ResNet50_Weights.ImageNet1K_V2
+
+# Including using the default alias:
+assert get_weight(&quot;ResNet50_Weights.default&quot;) == ResNet50_Weights.ImageNet1K_V2
+
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;h2 id=&quot;deprecations&quot;&gt;Deprecations&lt;/h2&gt;
+
+&lt;p&gt;In the new API the boolean &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;pretrained&lt;/code&gt; and &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;pretrained_backbone&lt;/code&gt; parameters, which were previously used to load weights to the full model or to its backbone, are deprecated. The current implementation is fully backwards compatible as it seamlessly maps the old parameters to the new ones. Using the old parameters to the new builders emits the following deprecation warnings:&lt;/p&gt;
+
+&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&amp;gt;&amp;gt;&amp;gt; model = torchvision.prototype.models.resnet50(pretrained=True)
+ UserWarning: The parameter 'pretrained' is deprecated, please use 'weights' instead.
+UserWarning: 
+Arguments other than a weight enum or `None` for 'weights' are deprecated. 
+The current behavior is equivalent to passing `weights=ResNet50_Weights.ImageNet1K_V1`. 
+You can also use `weights=ResNet50_Weights.default` to get the most up-to-date weights.
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Additionally the builder methods require using keyword parameters. The use of positional parameter is deprecated and using them emits the following warning:&lt;/p&gt;
+
+&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&amp;gt;&amp;gt;&amp;gt; model = torchvision.prototype.models.resnet50(None)
+UserWarning: 
+Using 'weights' as positional parameter(s) is deprecated. 
+Please use keyword parameter(s) instead.
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;h2 id=&quot;testing-the-new-api&quot;&gt;Testing the new API&lt;/h2&gt;
+
+&lt;p&gt;Migrating to the new API is very straightforward. The following method calls between the 2 APIs are all equivalent:&lt;/p&gt;
+
+&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;# Using pretrained weights:
+torchvision.prototype.models.resnet50(weights=ResNet50_Weights.ImageNet1K_V1)
+torchvision.models.resnet50(pretrained=True)
+torchvision.models.resnet50(True)
+
+# Using no weights:
+torchvision.prototype.models.resnet50(weights=None)
+torchvision.models.resnet50(pretrained=False)
+torchvision.models.resnet50(False)
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Note that the prototype features are available only on the nightly versions of TorchVision, so to use it you need to install it as follows:&lt;/p&gt;
+
+&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;conda install torchvision -c pytorch-nightly
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;For alternative ways to install the nightly have a look on the PyTorch &lt;a href=&quot;https://pytorch.org/get-started/locally/&quot;&gt;download page&lt;/a&gt;. You can also install TorchVision from source from the latest main; for more information have a look on our &lt;a href=&quot;https://github.com/pytorch/vision/blob/main/CONTRIBUTING.md&quot;&gt;repo&lt;/a&gt;.&lt;/p&gt;
+
+&lt;h2 id=&quot;accessing-state-of-the-art-model-weights-with-the-new-api&quot;&gt;Accessing state-of-the-art model weights with the new API&lt;/h2&gt;
+
+&lt;p&gt;If you are still unconvinced about giving a try to the new API, here is one more reason to do so. We’ve recently refreshed our &lt;a href=&quot;https://pytorch.org/blog/how-to-train-state-of-the-art-models-using-torchvision-latest-primitives/&quot;&gt;training recipe&lt;/a&gt; and achieved SOTA accuracy from many of our models. The improved weights can easily be accessed via the new API. Here is a quick overview of the model improvements:
+[Image: chart.png]
+|Model	|Old Acc@1	|New Acc@1	|
+|—	|—	|—	|
+|EfficientNet B1	|78.642	|79.838	|
+|MobileNetV3 Large	|74.042	|75.274	|
+|Quantized ResNet50	|75.92	|80.282	|
+|Quantized ResNeXt101 32x8d	|78.986	|82.574	|
+|RegNet X 400mf *	|72.834	|74.864	|
+|RegNet X 800mf *	|75.212	|77.522	|
+|RegNet X 1 6gf *	|77.04	|79.668	|
+|RegNet X 3 2gf *	|78.364	|81.198	|
+|RegNet X 8gf *	|79.344	|81.682	|
+|RegNet X 16gf *	|80.058	|82.72	|
+|RegNet X 32gf *	|80.622	|83.018	|
+|RegNet Y 400mf *	|74.046	|75.806	|
+|RegNet Y 800mf *	|76.42	|78.838	|
+|RegNet Y 1 6gf *	|77.95	|80.882	|
+|RegNet Y 3 2gf *	|78.948	|81.984	|
+|RegNet Y 8gf *	|80.032	|82.828	|
+|RegNet Y 16gf *	|80.424	|82.89	|
+|RegNet Y 32gf *	|80.878	|83.366	|
+|ResNet50	|76.13	|80.674	|
+|ResNet101	|77.374	|81.886	|
+|ResNet152	|78.312	|82.284	|
+|ResNeXt50 32x4d	|77.618	|81.198	|
+|ResNeXt101 32x8d	|79.312	|82.834	|
+|Wide ResNet50 2	|78.468	|81.602	|
+|Wide ResNet101 2	|78.848	|82.51	|&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;At the time of writing, the RegNet refresh work is in progress, see &lt;a href=&quot;https://github.com/pytorch/vision/pull/5107&quot;&gt;PR 5107&lt;/a&gt;.&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;Please spare a few minutes to provide your feedback on the new API, as this is crucial for graduating it from prototype and including it in the next release. You can do this on the dedicated &lt;a href=&quot;https://github.com/pytorch/vision/issues/5088&quot;&gt;Github Issue&lt;/a&gt;. We are looking forward to reading your comments!&lt;/p&gt;</content>
+
+      
+      
+      
+      
+      
+
+      <author>
+          <name>Facebook</name>
+        
+        
+      </author>
+
+      
+
+      
+
+      
+
+      
+      
+    </entry>
   
     <entry>
       <title type="html">Efficient PyTorch: Tensor Memory Format Matters</title>
@@ -2736,63 +3003,6 @@ Assign the created &lt;code class=&quot;language-plaintext highlighter-rouge&quo
 
       
         <summary type="html">In the previous post we went over the theoretical foundations of automatic differentiation and reviewed the implementation in PyTorch. In this post, we will be showing the parts of PyTorch involved in creating the graph and executing it. In order to understand the following contents, please read @ezyang’s wonderful blog post about PyTorch internals.</summary>
-      
-
-      
-      
-    </entry>
-  
-    <entry>
-      <title type="html">Announcing PyTorch Developer Day 2021</title>
-      <link href="https://pytorch.org/blog/pytorch-developer-day-2021/" rel="alternate" type="text/html" title="Announcing PyTorch Developer Day 2021" />
-      <published>2021-08-23T00:00:00-07:00</published>
-      <updated>2021-08-23T00:00:00-07:00</updated>
-      <id>https://pytorch.org/blog/pytorch-developer-day-2021</id>
-      <content type="html" xml:base="https://pytorch.org/blog/pytorch-developer-day-2021/">&lt;p&gt;We are excited to announce PyTorch Developer Day (#PTD2), taking place virtually from December 1 &amp;amp; 2, 2021. Developer Day is designed for developers and users to discuss core technical developments, ideas, and roadmaps.&lt;/p&gt;
-
-&lt;div class=&quot;text-center&quot;&gt;
-  &lt;img src=&quot;/assets/images/ptdevday21.gif&quot; width=&quot;100%&quot; /&gt;
-&lt;/div&gt;
-
-&lt;h2 id=&quot;event-details&quot;&gt;Event Details&lt;/h2&gt;
-&lt;p&gt;&lt;strong&gt;Technical Talks Live Stream - December 1, 2021&lt;/strong&gt;&lt;/p&gt;
-
-&lt;p&gt;Join us for technical talks on a variety of topics, including updates to the core framework, new tools and libraries to support development across a variety of domains, responsible AI and industry use cases. All talks will take place on December 1 and will be live streamed on PyTorch channels.&lt;/p&gt;
-
-&lt;p&gt;Stay up to date by following us on our social channels: &lt;a href=&quot;https://twitter.com/PyTorch&quot;&gt;Twitter&lt;/a&gt;, &lt;a href=&quot;https://facebook.com/PyTorch&quot;&gt;Facebook&lt;/a&gt;, or &lt;a href=&quot;https://www.linkedin.com/company/pytorch&quot;&gt;LinkedIn&lt;/a&gt;.&lt;/p&gt;
-
-&lt;p&gt;&lt;strong&gt;Poster Exhibition &amp;amp; Networking - December 2, 2021&lt;/strong&gt;&lt;/p&gt;
-
-&lt;p&gt;On the second day, we’ll be hosting an online poster exhibition on Gather.Town. There will be opportunities to meet the authors and learn more about their PyTorch projects as well as network with the community. This poster and networking event is limited to people composed of PyTorch maintainers and contributors, long-time stakeholders and experts in areas relevant to PyTorch’s future. Conversations from the networking event will strongly shape the future of PyTorch. As such, invitations are required to attend the networking event.&lt;/p&gt;
-
-&lt;p&gt;Apply for an invitation to the networking event by clicking &lt;a href=&quot;https://pytorchdeveloperday.fbreg.com/&quot;&gt;here&lt;/a&gt;.&lt;/p&gt;
-
-&lt;h2 id=&quot;call-for-content-now-open&quot;&gt;Call for Content Now Open&lt;/h2&gt;
-
-&lt;p&gt;Submit your poster abstracts today! Please send us the title and brief summary of your project, tools and libraries that could benefit PyTorch researchers in academia and industry, application developers, and ML engineers for consideration. The focus must be on academic papers, machine learning research, or open-source projects related to PyTorch development, Responsible AI or Mobile. Please no sales pitches. &lt;strong&gt;Deadline for submission is September 24, 2021&lt;/strong&gt;.&lt;/p&gt;
-
-&lt;p&gt;You can submit your poster abstract during your application &amp;amp; registration process &lt;a href=&quot;https://pytorchdeveloperday.fbreg.com/apply&quot;&gt;here&lt;/a&gt;.&lt;/p&gt;
-
-&lt;p&gt;Visit the &lt;a href=&quot;https://pytorchdeveloperday.fbreg.com/&quot;&gt;event website&lt;/a&gt; for more information and we look forward to having you at PyTorch Developer Day. For any questions about the event, contact &lt;a href=&quot;mailto:pytorch@fbreg.com&quot;&gt;pytorch@fbreg.com&lt;/a&gt;.&lt;/p&gt;</content>
-
-      
-      
-      
-      
-      
-
-      <author>
-          <name>Team PyTorch</name>
-        
-        
-      </author>
-
-      
-
-      
-
-      
-        <summary type="html">We are excited to announce PyTorch Developer Day (#PTD2), taking place virtually from December 1 &amp;amp; 2, 2021. Developer Day is designed for developers and users to discuss core technical developments, ideas, and roadmaps.</summary>
       
 
       
