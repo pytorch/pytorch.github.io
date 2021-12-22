@@ -1,7 +1,7 @@
 ---
 layout: blog_detail
 title: 'Introducing TorchVision’s New Multi-Weight Support API'
-author: 'Vasilis Vryniotis
+author: Vasilis Vryniotis
 featured-img: 'assets/images/torchvision_featured.png'
 ---
 
