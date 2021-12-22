@@ -50,7 +50,7 @@ score = prediction[class_id].item()
 with open("imagenet_classes.txt", "r") as f:
     categories = [s.strip() for s in f.readlines()]
     category_name = categories[class_id]
-print(f"{category_name}: ** {100 * score}%")
+print(f"{category_name}: {100 * score}%")
 
 ```
 
@@ -89,7 +89,7 @@ prediction = model(batch).squeeze(0).softmax(0)
 class_id = prediction.argmax().item()
 score = prediction[class_id].item()
 category_name = weights.meta["categories"][class_id]
-print(f"{category_name}: ** {100 * score}*%*")
+print(f"{category_name}: {100 * score}*%*")
 ```
 
 As we can see the new API eliminates the aforementioned limitations. Let’s explore the new features in detail.
