@@ -2,9 +2,14 @@
 layout: blog_detail
 title: 'Introducing TorchVision’s New Multi-Weight Support API'
 author: 'Vasilis Vryniotis
+featured-img: 'assets/images/torchvision_featured.png'
 ---
 
 TorchVision has a new backwards compatible API for building models with multi-weight support. The new API allows loading different pre-trained weights on the same model variant, keeps track of vital meta-data such as the classification labels and includes the preprocessing transforms necessary for using the models. In this blog post, we plan to review the prototype API, show-case its features and highlight key differences with the existing one. 
+
+<div class="text-center">
+  <img src="{{ site.baseurl }}/assets/images/torchvision_gif.gif" width="100%">
+</div>
 
 We are hoping to get your thoughts about the API prior finalizing it. To collect your feedback, we have created a [Github issue](https://github.com/pytorch/vision/issues/5088) where you can post your thoughts, questions and comments.
 
