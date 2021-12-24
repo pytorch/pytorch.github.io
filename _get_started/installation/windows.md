@@ -115,7 +115,7 @@ Additionally, to check if your GPU driver and CUDA is enabled and accessible by 
 
 ```python
 import torch
-torch.cuda.is_available()
+print(torch.cuda.is_available())
 ```
 
 ## Building from source
