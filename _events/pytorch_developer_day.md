@@ -9,6 +9,6 @@ The PyTorch Developer Day is a virtual event that brings together leading resear
 
 - [Keynotes](https://www.youtube.com/watch?v=7yQ4FgtYvj8): Learn about the innovations, the new features, updates, and release of PyTorch, and how industries are using it for production and deployment.
  
-- [Fireside Chat](https://www.youtube.com/watch?v=7yQ4FgtYvj8): An informal and intimate conversation with two pioneers in the field of AI (and PyTorch) sharing their thoughts and vision for the future, commentary on top-of-mind trends they are seeing
+- [Fireside Chat](https://www.youtube.com/watch?v=7yQ4FgtYvj8): An informal and intimate conversation with two pioneers in the field of AI (and PyTorch) sharing their thoughts and vision for the future, commentary on top-of-mind trends they are seeing.
 
 - [Community Talks](https://www.youtube.com/watch?v=7yQ4FgtYvj8): PyTorch has grown thanks to our community. Hear from our members on the work being done with PyTorch.
