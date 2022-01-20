@@ -1,7 +1,7 @@
 ---
 layout: blog_detail
 title: 'Quantization in Practice'
-author: Suraj Subramanian
+author: Suraj Subramanian, Jerry Zhang
 featured-img: ''
 ---
 
