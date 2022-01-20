@@ -11,13 +11,11 @@ There are a few different ways to quantize your model with PyTorch. In this blog
   <img src="/assets/images/quantization_gif.gif" width="60%">
 </div>
 
-## What happens when you "quantize" a model?
-
-Two things, generally - the model gets smaller and runs faster. This is because adding and multiplying 8-bit numbers is faster than 32-bit numbers. Loading a smaller model from memory reduces I/O, making models more energy efficient.
+## A quick introduction to quantization
 
 > If someone asks you what time it is, you don't respond "10:14:34:430705", but you might say "a quarter past 10".
 
-Quantizing a model means reducing the numerical precision of its weights and/or activations a.k.a information compression. Quantization of deep networks is especially interesting because overparameterized DNNs have more degrees of freedom and this makes them good candidates for information compression.
+Quantization has roots in information compression; in deep networks it refers to reducing the numerical precision of its weights and/or activations. Overparameterized DNNs have more degrees of freedom and this makes them good candidates for information compression. When you quantize a model, two things generally happen - the model gets smaller and runs with better efficiency. Processing 8-bit numbers is faster than 32-bit numbers, and a smaller model has lower memory footprint and power consumption.
 
 At the heart of it all is a **mapping function**, a linear projection from floating-point to integer space: $Q(r) = round(r/S + Z)$
 
@@ -28,13 +26,14 @@ where [$\alpha, \beta$] is the clipping range of the input, i.e. the boundaries 
 
 The process of choosing the appropriate input range is known as **calibration**; commonly used methods are MinMax and Entropy. 
 
-The zero-point $Z$ acts as a bias to ensure that a 0 in the input space maps perfectly to a 0 in the quantized space. $Z = -(\frac{\alpha}{S} - \alpha_q)$
+The zero-point $Z$ acts as a bias to ensure that a 0 in the input space maps perfectly to a 0 in the quantized space. $Z = -(\frac{\alpha}{S} - \alpha_q)$ 
 
 
 ### Quantization Schemes
 $S, Z$ can be calculated and used for quantizing an entire tensor ("per-tensor"), or individually for each channel ("per-channel").
 
-When [$\alpha, \beta$] are centered around 0, it is called **symmetric quantization**. The range is calculated as $-\alpha = \beta = max(|max(r)|,|min(r)|)$. This removes the need of a zero-point offset in the mapping function. Asymmetric or **affine** schemes simply assign the boundaries to the minimum and maximum observed values. Asymmetric schemes have a tighter clipping range (for non-negative ReLU activations, for instance) but require a non-zero offset.
+When [$\alpha, \beta$] are centered around 0, it is called **symmetric quantization**. The range is calculated as 
+$-\alpha = \beta = max(|max(r)|,|min(r)|)$. This removes the need of a zero-point offset in the mapping function. Asymmetric or **affine** schemes simply assign the boundaries to the minimum and maximum observed values. Asymmetric schemes have a tighter clipping range (for non-negative ReLU activations, for instance) but require a non-zero offset.
 
 
 ### PyTorch Classes
@@ -45,7 +44,7 @@ The `QConfig` ([code](https://github.com/PyTorch/PyTorch/blob/d6b15bfcbdaff8eb73
 
 ## In PyTorch
 
-PyTorch allows you a few different ways to quantize your model, depending on
+PyTorch allows you a few different ways to quantize your model on the CPU, depending on
 - if you prefer a manual, or a more automatic process (*Eager Mode* v/s *FX Graph Mode*)
 - if $S, Z$ for quantizing activations (layer outputs) are precomputed for all inputs, or calculated afresh with each input (*static* v/s *dynamic*),
 - if $S, Z$ are computed during, or after training (*quantization-aware training* v/s *post-training quantization*)
@@ -170,9 +169,10 @@ It's likely that you can still use QAT by "fine-tuning" it on a sample of the tr
 
 ## Quantizing "real-world" models
 
+**Download the [notebook](https://gist.github.com/suraj813/735357e56321237950a0348b50f2f3b4) or run it on [Colab](https://colab.research.google.com/gist/suraj813/735357e56321237950a0348b50f2f3b4/fx-and-eager-mode-quantization-example.ipynb) (note that Colab runtimes may differ significantly from local machines).**
+
 Traceable models can be easily quantized with FX Graph Mode, but it's possible the model you're using is not traceable end-to-end. Maybe it has loops or `if` statements on inputs (dynamic control flow), or relies on third-party libraries. The model I use in this example has [dynamic control flow and uses third-party libraries](https://github.com/facebookresearch/demucs/blob/v2/demucs/model.py). As a result, it cannot be symbolically traced directly. In this code walkthrough, I show how you can bypass this limitation by quantizing the child modules individually for FX Graph Mode, and how to patch Quant/DeQuant stubs in Eager Mode.
 
-Download the [notebook](https://gist.github.com/suraj813/735357e56321237950a0348b50f2f3b4) or run it on [Colab](https://colab.research.google.com/gist/suraj813/735357e56321237950a0348b50f2f3b4/fx-and-eager-mode-quantization-example.ipynb) (note that Colab runtimes may differ significantly from local machines).
 
 
 ## What's next - Define-by-Run Quantization
@@ -194,7 +194,6 @@ DBR is an early prototype [code](https://github.com/PyTorch/PyTorch/tree/master/
 
 
 ## References
-[Quantization Docs](https://pytorch.org/docs/stable/quantization.html#prototype-fx-graph-mode-quantization)
-[Integer quantization for deep learning inference: Principles and empirical evaluation (arxiv)](https://arxiv.org/abs/2004.09602)
-[A Survey of Quantization Methods for Efficient Neural Network Inference (arxiv)](https://arxiv.org/pdf/2103.13630.pdf)
-arxiv
+- [Quantization Docs](https://pytorch.org/docs/stable/quantization.html#prototype-fx-graph-mode-quantization)
+- [Integer quantization for deep learning inference: Principles and empirical evaluation (arxiv)](https://arxiv.org/abs/2004.09602)
+- [A Survey of Quantization Methods for Efficient Neural Network Inference (arxiv)](https://arxiv.org/pdf/2103.13630.pdf)
