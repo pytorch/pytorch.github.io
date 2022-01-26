@@ -16,6 +16,11 @@ To get started with PyTorch on iOS, we recommend exploring the following [HelloW
 
 HelloWorld is a simple image classification application that demonstrates how to use PyTorch C++ libraries on iOS. The code is written in Swift and uses Objective-C as a bridge.
 
+### Requirements
+
+- XCode 11.0 or above
+- iOS 12.0 or above
+
 ### Model Preparation
 
 Let's start with model preparation. If you are familiar with PyTorch, you probably should already know how to train and save your model. In case you don't, we are going to use a pre-trained image classification model - [MobileNet v2](https://pytorch.org/hub/pytorch_vision_mobilenet_v2/), which is already packaged in [TorchVision](https://pytorch.org/docs/stable/torchvision/index.html). To install it, run the command below.
@@ -32,7 +37,7 @@ Once we have TorchVision installed successfully, let's navigate to the HelloWorl
 python trace_model.py
 ```
 
-If everything works well, we should have our model - `model.pt` generated in the `HelloWorld` folder. Now copy the model file to our application folder `HelloWorld/model`.
+If everything works well, `model.pt` should be generated and saved in the `HelloWorld/HelloWorld/model` folder.
 
 > To find out more details about TorchScript, please visit [tutorials on pytorch.org](https://pytorch.org/tutorials/advanced/cpp_export.html)
 
@@ -65,7 +70,7 @@ guard var pixelBuffer = resizedImage.normalized() else {
 }
 ```
 
-We first load the image from our bundle and resize it to 224x224. Then we call this `normalized()` category method to normalized the pixel buffer. Let's take a closer look at the code below.
+We first load the image from our bundle and resize it to 224x224. Then we call this `normalized()` category method to normalize the pixel buffer. Let's take a closer look at the code below.
 
 ```swift
 var normalizedBuffer: [Float32] = [Float32](repeating: 0, count: w * h * 3)
@@ -82,7 +87,7 @@ The code might look weird at first glance, but it’ll make sense once we unders
 
 ####  TorchScript Module
 
-Now that we have preprocessed our input data and we have a pre-trained TorchScript model, the next step is to use them to run predication. To do that, we'll first load our model into the application.
+Now that we have preprocessed our input data and we have a pre-trained TorchScript model, the next step is to use them to run prediction. To do that, we'll first load our model into the application.
 
 ```swift
 private lazy var module: TorchModule = {
