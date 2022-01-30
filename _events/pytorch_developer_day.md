@@ -5,10 +5,10 @@ date: December 1, 2021
 header-image: assets/images/pytorch_developer_day_2021.png
 ---
 
-The PyTorch Developer Day is a virtual event that brings together leading researchers and developers from the Machine Learning (ML) community to join a multiple set of talks covering new software releases, ways PyTorch is being used in academia and industry, and current trends in ML development.  There will also be ample opportunity for networking with your peers and colleagues.
+The PyTorch Developer Day is a virtual event that brings together leading researchers and developers from the Machine Learning (ML) community to join a multiple set of talks covering new software releases, ways PyTorch is being used in academia and industry, and current trends in ML development. Find all the talks below:
+ 
+- [Keynotes](https://www.youtube.com/c/PyTorch/playlists?view=50&sort=dd&shelf_id=4): Learn about the innovations, the new features, updates, and release of PyTorch, and how industries are using it for production and deployment.
+ 
+- [Fireside Chat](https://youtu.be/JWdDl9Tvw6g): An informal and intimate conversation with two pioneers in the field of AI (and PyTorch) sharing their thoughts and vision for the future, commentary on top-of-mind trends they are seeing.
 
-*Call for Content Now Open!*
-
-We want to hear from you, our community. Submit your poster abstracts today. Please submit the **title** and **brief summary** of your project, tools, and libraries that could benefit PyTorch researchers in academia and industry, application developers, and ML engineers for consideration. The focus must be on academic papers, machine learning research, or open-source projects related to PyTorch development, Responsible AI or Mobile. Please no sales pitches. **Deadline for submission is September 24, 2021**.
-
-Submit your Poster abstract [HERE](http://pytorchdeveloperday.fbreg.com) You can submit your poster abstract in your registration form.
+- [Community Talks](https://www.youtube.com/watch?v=7yQ4FgtYvj8): PyTorch has grown thanks to our community. Hear from our members on the work being done with PyTorch.

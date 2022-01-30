@@ -1,0 +1,6 @@
+﻿torch.hypot
+===========
+
+.. currentmodule:: torch
+
+.. autofunction:: hypot
