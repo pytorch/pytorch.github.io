@@ -47,7 +47,7 @@ We are currently working on a new prototype mechanism which will extend the mode
   weights = P.models.ResNet50_Weights.IMAGENET1K_V2
   model = P.models.resnet50(weights=weights)
   model.eval()
-   
+
   # Initialize inference transforms
   preprocess = weights.transforms()
    
