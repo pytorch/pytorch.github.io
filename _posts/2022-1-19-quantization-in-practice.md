@@ -5,7 +5,7 @@ author: Suraj Subramanian, Jerry Zhang
 featured-img: ''
 ---
 
-There are a few different ways to quantize your model with PyTorch. In this blog post, we'll take a look at how each technique looks like in practice. I will use a non-standard model that is not traceable, to paint an accurate picture of how much effort is really needed when quantizing your model.
+Quantization is a cheap and easy way to make your DNN run faster and with lower memory requirements. PyTorch offers a few different approaches to quantize your model. In this blog post, we'll lay a (quick) foundation of quantization in deep learning, and then take a look at how each technique looks like in practice. Finally we'll end with recommendations from the literature for using quantization in your workflows.
 
 <p align="center">
   <img src="/assets/images/quantization-practice/hero.gif" width="60%">
@@ -23,7 +23,7 @@ Overparameterized DNNs have more degrees of freedom and this makes them good can
 
 At the heart of it all is a **mapping function**, a linear projection from floating-point to integer space: <img src="https://latex.codecogs.com/gif.latex?Q(r) = round(r/S + Z)">
 
-To reconvert to floating point space, the inverse function is given by <img src="https://latex.codecogs.com/gif.latex?math=\tilde r = (Q(r) - Z) \cdot S">. 
+To reconvert to floating point space, the inverse function is given by <img src="https://latex.codecogs.com/gif.latex?\tilde r = (Q(r) - Z) \cdot S">. 
 
 <img src="https://latex.codecogs.com/gif.latex?\tilde r \neq r">, and their difference constitutes the *quantization error*.
 
@@ -36,7 +36,9 @@ The zero-point <img src="https://latex.codecogs.com/gif.latex?Z"> acts as a bias
 
 
 ### Calibration
-The process of choosing the input range is known as **calibration**. The simplest technique (also the default in PyTorch) is to record the running mininmum and maximum values and assign them to <img src="https://latex.codecogs.com/gif.latex?\alpha"> and <img src="https://latex.codecogs.com/gif.latex?\beta">. [TensorRT](https://docs.nvidia.com/deeplearning/tensorrt/pytorch-quantization-toolkit/docs/calib.html) also uses entropy minimization (KL divergence), mean-square-error minimization, or percentiles of the input range.  In PyTorch, `Observer` modules ([docs](https://PyTorch.org/docs/stable/torch.quantization.html?highlight=observer#observers), [code](https://github.com/PyTorch/PyTorch/blob/748d9d24940cd17938df963456c90fa1a13f3932/torch/ao/quantization/observer.py#L88)) collect statistics on the input values and calculate the qparams <img src="https://latex.codecogs.com/gif.latex?S, Z">. Different calibration schemes result in different quantized outputs, and it's best to empirically verify which scheme works best for your application and architecture (more on that later).
+The process of choosing the input range is known as **calibration**. The simplest technique (also the default in PyTorch) is to record the running mininmum and maximum values and assign them to <img src="https://latex.codecogs.com/gif.latex?\alpha"> and <img src="https://latex.codecogs.com/gif.latex?\beta">. [TensorRT](https://docs.nvidia.com/deeplearning/tensorrt/pytorch-quantization-toolkit/docs/calib.html) also uses entropy minimization (KL divergence), mean-square-error minimization, or percentiles of the input range. 
+
+In PyTorch, `Observer` modules ([docs](https://PyTorch.org/docs/stable/torch.quantization.html?highlight=observer#observers), [code](https://github.com/PyTorch/PyTorch/blob/748d9d24940cd17938df963456c90fa1a13f3932/torch/ao/quantization/observer.py#L88)) collect statistics on the input values and calculate the qparams <img src="https://latex.codecogs.com/gif.latex?S, Z">. Different calibration schemes result in different quantized outputs, and it's best to empirically verify which scheme works best for your application and architecture (more on that later).
 
 ```python
 from torch.quantization.observer import MinMaxObserver, MovingAverageMinMaxObserver, HistogramObserver
