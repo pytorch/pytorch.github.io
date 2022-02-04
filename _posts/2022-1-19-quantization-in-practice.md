@@ -13,7 +13,10 @@ Quantization is a cheap and easy way to make your DNN run faster and with lower 
   Fig 1. PyTorch <3 Quantization
 </p>
 
-## A quick introduction to quantization
+**Contents**
+* TOC
+{:toc}
+## Fundamentals of Quantization
 
 > If someone asks you what time it is, you don't respond "10:14:34:430705", but you might say "a quarter past 10".
 
@@ -21,22 +24,28 @@ Quantization has roots in information compression; in deep networks it refers to
 
 Overparameterized DNNs have more degrees of freedom and this makes them good candidates for information compression [[1]]. When you quantize a model, two things generally happen - the model gets smaller and runs with better efficiency. Hardware vendors explicitly allow for faster processing of 8-bit data (than 32-bit data) resulting in higher throughput. A smaller model has lower memory footprint and power consumption [[2]], crucial for deployment at the edge.
 
-At the heart of it all is a **mapping function**, a linear projection from floating-point to integer space: <img src="https://latex.codecogs.com/gif.latex?Q(r) = round(r/S + Z)">
+### Mapping function
+The mapping function is what you might guess - a function that maps values from floating-point to integer space. A commonly used mapping function is a linear transformation given by <img src="https://latex.codecogs.com/gif.latex?Q(r) = round(r/S + Z)">, where <img src="https://latex.codecogs.com/gif.latex?r"> is the input and <img src="https://latex.codecogs.com/gif.latex?S, Z"> are **quantization parameters**.
 
 To reconvert to floating point space, the inverse function is given by <img src="https://latex.codecogs.com/gif.latex?\tilde r = (Q(r) - Z) \cdot S">. 
 
 <img src="https://latex.codecogs.com/gif.latex?\tilde r \neq r">, and their difference constitutes the *quantization error*.
 
-The scaling factor <img src="https://latex.codecogs.com/gif.latex?S"> is simply the ratio of the input range to the output range: <img src="https://latex.codecogs.com/gif.latex?S = \frac{\beta - \alpha}{\beta_q - \alpha_q}">
+### Quantization Parameters
+The mapping function is parameterized by the **scaling factor** <img src="https://latex.codecogs.com/gif.latex?S"> and **zero-point** <img src="https://latex.codecogs.com/gif.latex?Z">. 
+
+<img src="https://latex.codecogs.com/gif.latex?S"> is simply the ratio of the input range to the output range 
+<img src="https://latex.codecogs.com/gif.latex?S = \frac{\beta - \alpha}{\beta_q - \alpha_q}">
+
 where [<img src="https://latex.codecogs.com/gif.latex?\alpha, \beta">] is the clipping range of the input, i.e. the boundaries of permissible inputs. [<img src="https://latex.codecogs.com/gif.latex?\alpha_q, \beta_q">] is the range in quantized output space that it is mapped to. For 8-bit quantization, the output range <img src="https://latex.codecogs.com/gif.latex?\beta_q - \alpha_q <= (2^8 - 1)">.
 
-The zero-point <img src="https://latex.codecogs.com/gif.latex?Z"> acts as a bias to ensure that a 0 in the input space maps perfectly to a 0 in the quantized space. <img src="https://latex.codecogs.com/gif.latex?Z = -(\frac{\alpha}{S} - \alpha_q)">
 
-<img src="https://latex.codecogs.com/gif.latex?S, Z"> can be calculated and used for quantizing an entire tensor ("per-tensor"), or individually for each channel ("per-channel").
+<img src="https://latex.codecogs.com/gif.latex?Z"> acts as a bias to ensure that a 0 in the input space maps perfectly to a 0 in the quantized space. <img src="https://latex.codecogs.com/gif.latex?Z = -(\frac{\alpha}{S} - \alpha_q)">
+
 
 
 ### Calibration
-The process of choosing the input range is known as **calibration**. The simplest technique (also the default in PyTorch) is to record the running mininmum and maximum values and assign them to <img src="https://latex.codecogs.com/gif.latex?\alpha"> and <img src="https://latex.codecogs.com/gif.latex?\beta">. [TensorRT](https://docs.nvidia.com/deeplearning/tensorrt/pytorch-quantization-toolkit/docs/calib.html) also uses entropy minimization (KL divergence), mean-square-error minimization, or percentiles of the input range. 
+The process of choosing the input clipping range is known as **calibration**. The simplest technique (also the default in PyTorch) is to record the running mininmum and maximum values and assign them to <img src="https://latex.codecogs.com/gif.latex?\alpha"> and <img src="https://latex.codecogs.com/gif.latex?\beta">. [TensorRT](https://docs.nvidia.com/deeplearning/tensorrt/pytorch-quantization-toolkit/docs/calib.html) also uses entropy minimization (KL divergence), mean-square-error minimization, or percentiles of the input range. 
 
 In PyTorch, `Observer` modules ([docs](https://PyTorch.org/docs/stable/torch.quantization.html?highlight=observer#observers), [code](https://github.com/PyTorch/PyTorch/blob/748d9d24940cd17938df963456c90fa1a13f3932/torch/ao/quantization/observer.py#L88)) collect statistics on the input values and calculate the qparams <img src="https://latex.codecogs.com/gif.latex?S, Z">. Different calibration schemes result in different quantized outputs, and it's best to empirically verify which scheme works best for your application and architecture (more on that later).
 
@@ -145,8 +154,6 @@ print(obs.calculate_qparams())
 # (tensor([0.0090, 0.0075, 0.0055]), tensor([125, 187,  82], dtype=torch.int32))
 ```
 
-
-
 ### Backend Engine
 Currently, quantized operators run on x86 machines via the [FBGEMM backend](https://github.com/pytorch/FBGEMM), or use [QNNPACK](https://github.com/pytorch/QNNPACK) primitives on ARM machines. Backend support for server GPUs (via TensorRT and cuDNN) is coming soon. Learn more about extending quantization to custom backends: [RFC-0019](https://github.com/pytorch/rfcs/blob/master/RFC-0019-Extending-PyTorch-Quantization-to-Custom-Backends.md).
 
@@ -173,9 +180,9 @@ my_qconfig = torch.quantization.QConfig(
 ```
 
 
-## Techniques in PyTorch
+## In PyTorch
 
-PyTorch allows you a few different ways to quantize your model on the CPU, depending on
+PyTorch allows you a few different ways to quantize your model depending on
 - if you prefer a flexible but manual, or a restricted automagic process (*Eager Mode* v/s *FX Graph Mode*)
 - if qparams for quantizing activations (layer outputs) are precomputed for all inputs, or calculated afresh with each input (*static* v/s *dynamic*),
 - if qparams are computed with or without retraining (*quantization-aware training* v/s *post-training quantization*)
