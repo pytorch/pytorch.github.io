@@ -1,6 +1,6 @@
 ---
 layout: blog_detail
-title: 'Quantization in Practice'
+title: 'Practical Quantization in PyTorch'
 author: Suraj Subramanian, Jerry Zhang
 featured-img: ''
 ---
