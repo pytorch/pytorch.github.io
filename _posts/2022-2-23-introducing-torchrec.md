@@ -68,3 +68,19 @@ for epoch in range(epochs):
 ```
 
 
+## Scaling Performance
+TorchRec has state-of-the-art models for scaled Recommendations AI, powering some of the largest models at Meta. It was used to train a 1.25 trillion parameter model, pushed to production in January, and a 3 trillion parameter model which will be in production soon. This should be a good indication that PyTorch is fully capable of the largest scale RecSys problems in industry. We’ve heard from many in the community that sharded embeddings are a pain point. TorchRec cleanly addresses that. Unfortunately it is challenging to provide large-scale benchmarks with public datasets, as most open-source benchmarks are too small to show performance at scale.
+
+
+## Looking ahead
+Open-source and open-technology have universal benefits. Meta is seeding the PyTorch community with a state-of-the-art RecSys package, with the hope that many join in on building it forward, enabling new research and helping many companies. The team behind TorchRec plan to continue this program indefinitely, building up TorchRec to meet the needs of the RecSys community, to welcome new contributors, and to continue to power personalization at Meta. We’re excited to begin this journey and look forward to contributions, ideas, and feedback!
+
+
+## References
+[[1]] Sampling-Bias-Corrected Neural Modeling for Large Corpus Item Recommendations
+
+[[2]] DLRM: An advanced, open source deep learning recommendation model
+
+
+[1]: https://research.google/pubs/pub48840/
+[2]: https://ai.facebook.com/blog/dlrm-an-advanced-open-source-deep-learning-recommendation-model/
