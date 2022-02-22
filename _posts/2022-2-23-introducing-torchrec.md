@@ -1,7 +1,7 @@
 ---
 layout: blog_detail
 title: 'Introducing TorchRec, a library for modern production recommendation systems'
-author: Donny Greenberg, Colin Taylor, Dmytro Ivchenko, Meta AI'
+author: Donny Greenberg, Colin Taylor, Dmytro Ivchenko, Meta AI
 featured-img: ''
 ---
 
@@ -21,13 +21,13 @@ By mid-2020, the PyTorch team received a lot of feedback that there hasn't been 
 TorchRec includes a scalable low-level modeling foundation alongside rich batteries-included modules. We initially target “two-tower” ([[1]], [[2]]) architectures that have separate submodules to learn representations of candidate items and the query or context. Input signals can be a mix of floating point “dense” features or high-cardinality categorical “sparse” features that require large embedding tables to be trained. Efficient training of such architectures involves combining data parallelism that replicates the “dense” part of computation and model parallelism that  partitions large embedding tables across many nodes.
 
 In particular, the library includes:
-  - Modeling primitives, such as embedding bags and jagged tensors, that enable easy authoring of large, performant multi-device/multi-node models using hybrid data-parallelism and model-parallelism.
-  - Optimized RecSys kernels powered by [FBGEMM](https://github.com/pytorch/FBGEMM), including support for sparse and quantized operations.
-  - A sharder which can partition embedding tables with a variety of different strategies including data-parallel, table-wise, row-wise, table-wise-row-wise, and column-wise sharding.
-  - A planner which can automatically generate optimized sharding plans for models.
-  - Pipelining to overlap dataloading device transfer (copy to GPU), inter-device communications (input_dist), and computation (forward, backward) for increased performance.
-  - GPU inference support.
-  - Common modules for RecSys, such as models and public datasets (Criteo & Movielens).
+- Modeling primitives, such as embedding bags and jagged tensors, that enable easy authoring of large, performant multi-device/multi-node models using hybrid data-parallelism and model-parallelism.
+- Optimized RecSys kernels powered by [FBGEMM](https://github.com/pytorch/FBGEMM) , including support for sparse and quantized operations.
+- A sharder which can partition embedding tables with a variety of different strategies including data-parallel, table-wise, row-wise, table-wise-row-wise, and column-wise sharding.
+- A planner which can automatically generate optimized sharding plans for models.
+- Pipelining to overlap dataloading device transfer (copy to GPU), inter-device communications (input_dist), and computation (forward, backward) for increased performance.
+- GPU inference support.
+- Common modules for RecSys, such as models and public datasets (Criteo & Movielens).
 
 To showcase the flexibility of this tooling, let’s look at the following code snippet, pulled from our DLRM Event Prediction example:
 ```python
@@ -68,19 +68,3 @@ for epoch in range(epochs):
 ```
 
 
-## Scaling Performance
-TorchRec has state-of-the-art models for scaled Recommendations AI, powering some of the largest models at Meta. It was used to train a 1.25 trillion parameter model, pushed to production in January, and a 3 trillion parameter model which will be in production soon. This should be a good indication that PyTorch is fully capable of the largest scale RecSys problems in industry. We’ve heard from many in the community that sharded embeddings are a pain point. TorchRec cleanly addresses that. Unfortunately it is challenging to provide large-scale benchmarks with public datasets, as most open-source benchmarks are too small to show performance at scale.
-
-
-## Looking ahead
-Open-source and open-technology have universal benefits. Meta is seeding the PyTorch community with a state-of-the-art RecSys package, with the hope that many join in on building it forward, enabling new research and helping many companies. The team behind TorchRec plan to continue this program indefinitely, building up TorchRec to meet the needs of the RecSys community, to welcome new contributors, and to continue to power personalization at Meta. We’re excited to begin this journey and look forward to contributions, ideas, and feedback!
-
-
-## References
-[[1]] Sampling-Bias-Corrected Neural Modeling for Large Corpus Item Recommendations
-
-[[2]] DLRM: An advanced, open source deep learning recommendation model
-
-
-[1]: https://research.google/pubs/pub48840/
-[2]: https://ai.facebook.com/blog/dlrm-an-advanced-open-source-deep-learning-recommendation-model/
