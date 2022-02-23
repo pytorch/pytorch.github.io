@@ -5,7 +5,7 @@ author: Donny Greenberg, Colin Taylor, Dmytro Ivchenko, Meta AI
 featured-img: ''
 ---
 
-We are excited to announce TorchRec (https://github.com/pytorch/torchrec), a PyTorch domain library for Recommendation Systems. This new library provides common sparsity and parallelism primitives, enabling researchers to build state-of-the-art personalization models and deploy them in production.
+We are excited to announce TorchRec [https://github.com/pytorch/torchrec](https://github.com/pytorch/torchrec), a PyTorch domain library for Recommendation Systems. This new library provides common sparsity and parallelism primitives, enabling researchers to build state-of-the-art personalization models and deploy them in production.
 
 <p align="center">
   <img src="/assets/images/introducing-torchrec/torchrec_lookup.png" width="60%">
