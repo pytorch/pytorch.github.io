@@ -1,7 +1,7 @@
 ---
 layout: blog_detail
 title: 'Introducing TorchRec, a library for modern production recommendation systems'
-author: Donny Greenberg, Colin Taylor, Dmytro Ivchenko, Meta AI
+author: Meta AI - Donny Greenberg, Colin Taylor, Dmytro Ivchenko, Xing Liu 
 featured-img: ''
 ---
 
