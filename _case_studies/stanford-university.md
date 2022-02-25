@@ -3,7 +3,7 @@ layout: blog_detail
 title: Stanford University
 logo: assets/images/stanford-university.png
 featured-home: true
-order: 2
+order: 3
 link:
 ---
 
