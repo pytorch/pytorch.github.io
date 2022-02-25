@@ -5,6 +5,8 @@ author: Yashal Kanungo – Applied Scientist, Kamran Khan -  Sr. Technical Produ
 featured-img: ""
 ---
 
+Amazon Ads uses PyTorch, TorchServe, and AWS Inferentia to reduce inference costs by 71% and drive scale out.
+
 Amazon Ads helps companies build their brand and connect with shoppers through ads shown both within and beyond Amazon’s store, including websites, apps, and streaming TV content in more than 15 countries. Businesses and brands of all sizes, including registered sellers, vendors, book vendors, Kindle Direct Publishing (KDP) authors, app developers, and agencies can upload their own ad creatives, which can include images, video, audio, and, of course, products sold on Amazon.
 
 <p align="center">
