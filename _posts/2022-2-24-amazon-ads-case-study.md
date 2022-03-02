@@ -52,7 +52,7 @@ The flexibility of a dynamic graph enriches training, but in deployment we want 
 ### Neuron SDK and AWS Inferentia powered compute
 
 We deploy our models on [Amazon EC2 Inf1 instances](https://aws.amazon.com/ec2/instance-types/inf1/) powered by AWS Inferentia, Amazon's first ML silicon designed to accelerate deep learning inference workloads. Inferentia has shown to reduce inference costs by up to 70% compared to Amazon EC2 GPU-based instances.
-We used the [AWS Neuron](https://aws.amazon.com/machine-learning/neuron/) SDK — a set of software tools used with Inferentia — to compile and optimize our models for deployment on EC2 Inf1 instances. Neuron is designed to be easy to use: With minimal changes to our programming, we could deploy our DL models that were built and trained on PyTorch.
+We used the [AWS Neuron](https://aws.amazon.com/machine-learning/neuron/) SDK — a set of software tools used with Inferentia — to compile and optimize our models for deployment on EC2 Inf1 instances.
 
 The code snippet below shows how to compile a Hugging Face BERT model with Neuron. Like torch.jit.trace(), neuron.trace() records the model’s operations on an example input during the forward pass to build a static IR graph.
 
