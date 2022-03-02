@@ -13,7 +13,7 @@ Amazon Ads helps companies build their brand and connect with shoppers through a
 
 To promote an accurate, safe, and pleasant shopping experience, these ads must comply with content guidelines. For example, ads cannot flash on and off, products must be featured in an appropriate context, and images and text should be appropriate for a general audience. To help ensure that ads meet the required policies and standards, we needed to develop scalable mechanisms and tools.
 
-As a solution, we used machine learning (ML) models to surface ads that might need revision. As deep neural networks flourished over the past decade, our data science team began exploring more versatile deep learning (DL) methods capable of processing text, images, audio, or video with minimal human intervention. To that end, we’ve used PyTorch to build computer vision (CV) and natural language processing (NLP) models that automatically flag potentially non-compliant ads. PyTorch is intuitive, flexible, and user-friendly, and has made our transition to using DL models seamless. Deploying these new models on AWS [Inferentia](https://aws.amazon.com/machine-learning/inferentia/)-based Amazon EC2 Inf1 instances, rather than on GPU-based instances, reduced our inference latency by 30 percent and our inference costs by 71 percent for the same workloads.
+As a solution, we used machine learning (ML) models to surface ads that might need revision. As deep neural networks flourished over the past decade, our data science team began exploring more versatile deep learning (DL) methods capable of processing text, images, audio, or video with minimal human intervention. To that end, we’ve used PyTorch to build computer vision (CV) and natural language processing (NLP) models that automatically flag potentially non-compliant ads. PyTorch is intuitive, flexible, and user-friendly, and has made our transition to using DL models seamless. Deploying these new models on [AWS Inferentia-based Amazon EC2 Inf1 instances](https://aws.amazon.com/ec2/instance-types/inf1/), rather than on GPU-based instances, reduced our inference latency by 30 percent and our inference costs by 71 percent for the same workloads.
 
 ## Transition to deep learning
 
@@ -50,7 +50,7 @@ The flexibility of a dynamic graph enriches training, but in deployment we want 
 ### Neuron SDK and AWS Inferentia powered compute
 
 We deploy our models on [Amazon EC2 Inf1 instances](https://aws.amazon.com/ec2/instance-types/inf1/) powered by AWS Inferentia, Amazon's first ML silicon designed to accelerate deep learning inference workloads. Inferentia has shown to reduce inference sosts by up to 70% compared to Amazon EC2 GPU-based instances.
-Developers can use the AWS Neuron SDK — a set of software tools used with Inferentia — to compile and optimize their models for deployment on EC2 Inf1 instances. [Neuron](https://aws.amazon.com/machine-learning/neuron/) is designed to be easy to use: With minimal changes to our programming, developers can deploy the complex DL models they used PyTorch to build and train.
+We used the [AWS Neuron](https://aws.amazon.com/machine-learning/neuron/) SDK — a set of software tools used with Inferentia — to compile and optimize our models for deployment on EC2 Inf1 instances. Neuron is designed to be easy to use: With minimal changes to our programming, we could deploy our DL models that were built and trained on PyTorch.
 
 The code snippet below shows how to compile a Hugging Face BERT model with Neuron. Like torch.jit.trace(), neuron.trace() records the model’s operations on an example input during the forward pass to build a static IR graph.
 
@@ -147,7 +147,6 @@ Model Parallel:
 <p align="center">
   <img src="/assets/images/amazon-ads-case-study/model-parallel.png" width="100%">
 </p>
-**< Diagram: Inferentia pipeline parallelism >**
 
 ### Monitoring
 
