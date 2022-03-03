@@ -82,7 +82,7 @@ We saw that the computation graph is compiled and executed when a LazyTensor bar
 The second scenario where a barrier is introduced is when PyTorch/XLA finds an op with no mapping (lowering) to equivalent XLA HLO ops. PyTorch has [2000+](https://dev-discuss.pytorch.org/t/where-do-the-2000-pytorch-operators-come-from-more-than-you-wanted-to-know/373) operations. Although most of these operations are composite (i.e. can be expressed in terms of other fundamental operations), some of these operations do not have corresponding lowering in XLA.
 
 <p align="center">
-  <img src="/assets/images/unlowered-op.jpg" width="60%">
+  <img src="/assets/images/unlowered-op.jpg">
 </p>
 
 What happens when an op with no XLA lowering is used? PyTorch XLA stops the operation recording and cuts the graph(s) leading to the input(s) of the unlowered op. This cut graph is then compiled and dispatched for execution. The results (materialized tensor) of execution are sent back from device to host, the unlowered op is then executed on the host (cpu), and then downstream LazyTensor operations creating a new graph(s) until a barrier is encountered again.
@@ -172,7 +172,7 @@ def train_imagenet():
 Notice the start_server api call. The port number that you have used here is the same port number you will use with the tensorboard profiler in order to view the op trace similar to:
 
 <p align="center">
-  <img src="/assets/images/port-numbers.png" width="60%">
+  <img src="/assets/images/port-numbers.png" width="100%">
 </p>
 
 Op trace along with the client-side debugging function is a powerful set of tools to debug and optimize your training performance with PyTorch/XLA. For more detailed instructions on the profiler usage, the reader is encouraged to explore blogs [part-1](https://cloud.google.com/blog/topics/developers-practitioners/pytorchxla-performance-debugging-tpu-vm-part-1), [part-2](https://cloud.google.com/blog/topics/developers-practitioners/pytorchxla-performance-debugging-cloud-tpu-vm-part-ii), and [part-3](https://cloud.google.com/blog/topics/developers-practitioners/pytorchxla-performance-debugging-tpu-vm-part-3) of the blog series on PyTorch/XLA performance debugging.
