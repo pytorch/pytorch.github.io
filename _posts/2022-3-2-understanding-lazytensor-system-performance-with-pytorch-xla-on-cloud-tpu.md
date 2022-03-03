@@ -9,7 +9,7 @@ featured-img: ""
 
 AEase of use, expressivity, and debuggability are among the core principles of PyTorch. One of the key drivers for the ease of use is that PyTorch execution is by default “eager, i.e. op by op execution preserves the imperative nature of the program. However, eager execution does not offer the compiler based optimization, for example, the optimizations when the computation can be expressed as a graph.
 
-LazyTensor[1], first introduced with PyTorch/XLA, helps combine these seemingly disparate approaches. While PyTorch eager execution is widely used, intuitive, and well understood, lazy execution is not as prevalent yet.
+LazyTensor [[1]], first introduced with PyTorch/XLA, helps combine these seemingly disparate approaches. While PyTorch eager execution is widely used, intuitive, and well understood, lazy execution is not as prevalent yet.
 
 In this post we will explore some of the basic concepts of the LazyTensor System with the goal of applying these concepts to understand and debug performance of LazyTensor based implementations in PyTorch. Although we will use PyTorch/XLA on Cloud TPU as the vehicle for exploring these concepts, we hope that these ideas will be useful to understand other system(s) built on LazyTensors.
 
@@ -189,6 +189,6 @@ A big thank you to my outstanding colleagues Jack Cao, Milad Mohammedi, Karl Wei
 
 ## Refrences
 
-[1]: LazyTensor: combining eager execution with domain-specific compilers
+[[1]] LazyTensor: combining eager execution with domain-specific compilers
 
 [1]: https://arxiv.org/pdf/2102.13267.pdf
