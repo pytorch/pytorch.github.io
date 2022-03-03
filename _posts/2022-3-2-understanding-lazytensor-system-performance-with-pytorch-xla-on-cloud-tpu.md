@@ -33,14 +33,14 @@ y1 = torch.einsum('bs,st->bt', x1, x2)
 print(torch_xla._XLAC._get_xla_tensors_text([y1]))
 ```
 
-You can execute [this](https://github.com/ultrons/xla/blob/lazy-tensor-post/contrib/colab/LazyTensor_Basics.ipynb) colab notebook to examine the resulting graph for y1. Notice that no computation has been performed yet. 
+You can execute [this](https://github.com/ultrons/xla/blob/lazy-tensor-post/contrib/colab/LazyTensor_Basics.ipynb) colab notebook to examine the resulting graph for y1. Notice that no computation has been performed yet.
 
 ```python
 y1 = y1 + x2
 print(torch_xla._XLAC._get_xla_tensors_text([y1]))
 ```
 
-The operations will continue until PyTorch/XLA encounters a barrier. This barrier can either be a [mark step()](https://github.com/pytorch/xla/blob/ff079bb48744e5aa6696201ccf34057f15fc7cac/torch_xla/core/xla_model.py#L751) api call or any other event which forces the execution of the graph recorded so far.  
+The operations will continue until PyTorch/XLA encounters a barrier. This barrier can either be a [mark step()](https://github.com/pytorch/xla/blob/ff079bb48744e5aa6696201ccf34057f15fc7cac/torch_xla/core/xla_model.py#L751) api call or any other event which forces the execution of the graph recorded so far.
 
 ```python
 xm.mark_step()
@@ -51,9 +51,10 @@ Once the mark_step() is called, the graph is compiled and then executed on TPU, 
 
 ### Compile Once, Execute Often
 
-XLA compilation passes offer optimizations (e.g. op-fusion, which reduces HBM pressure by using scratch-pad memory for multiple ops, [ref](https://arxiv.org/pdf/2004.13336.pdf) )  and leverages lower level XLA infrastructure to optimally use the underlying hardware. However, there is one caveat, compilation passes are expensive, i.e. can add to the training step time. Therefore, this approach scales well if and only if we can **compile once and execute often** (compilation cache helps, such that the same graph is not compiled more than once).
+XLA compilation passes offer optimizations (e.g. op-fusion, which reduces HBM pressure by using scratch-pad memory for multiple ops, [ref](https://arxiv.org/pdf/2004.13336.pdf) ) and leverages lower level XLA infrastructure to optimally use the underlying hardware. However, there is one caveat, compilation passes are expensive, i.e. can add to the training step time. Therefore, this approach scales well if and only if we can **compile once and execute often** (compilation cache helps, such that the same graph is not compiled more than once).
 
 In the following example, we create a small computation graph and time the execution:
+
 ```python
 y1 = torch.rand((3, 8)).to(dev)
 def dummy_step() :
@@ -71,7 +72,7 @@ The slowest run took 29.74 times longer than the fastest. This could mean that a
 10000000 loops, best of 5: 34.2 ns per loop
 ```
 
-You notice that the slowest step is quite longer than the fastest. This is because of the graph compilation overhead which is incurred only once for a given shape of graph, input shape, and output shape. Subsequent steps are faster because no graph compilation is necessary. 
+You notice that the slowest step is quite longer than the fastest. This is because of the graph compilation overhead which is incurred only once for a given shape of graph, input shape, and output shape. Subsequent steps are faster because no graph compilation is necessary.
 
 This also implies that we expect to see performance cliffs when the “compile once and execute often” assumption breaks. Understanding when this assumption breaks is the key to understanding and optimizing the performance of a LazyTensor system. Let’s examine what triggers the compilation.
 
@@ -93,7 +94,7 @@ Other examples of such methods include .item(), isEqual(). In general, any opera
 
 ### Dynamic Graph
 
-As illustrated in the preceding section, graph compilation cost is amortized if the same shape of the graph is executed many times. It’s because the compiled graph is cached with a hash derived from the graph shape, input shape, and the output shape. If these shapes change it will trigger compilation, and too frequent compilation will result in training time degradation. 
+As illustrated in the preceding section, graph compilation cost is amortized if the same shape of the graph is executed many times. It’s because the compiled graph is cached with a hash derived from the graph shape, input shape, and the output shape. If these shapes change it will trigger compilation, and too frequent compilation will result in training time degradation.
 
 Let’s consider the following example:
 
@@ -101,7 +102,7 @@ Let’s consider the following example:
 def dummy_step(x, y, loss, acc=False):
   z = torch.einsum('bs,st->bt', y, x)
   step_loss = z.sum().view(1,)
-  if acc: 
+  if acc:
     loss = torch.cat((loss, step_loss))
   else:
     loss = step_loss
