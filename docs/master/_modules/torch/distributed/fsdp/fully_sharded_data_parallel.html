@@ -34,6 +34,8 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.10.0-beta/dist/katex.min.css" type="text/css" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.13.11/dist/katex.min.css" type="text/css" />
   <link rel="stylesheet" href="../../../../_static/katex-math.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/panels-main.c949a650a448cc0ae9fd3441c0e17fb0.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/panels-variables.06eb56fa6e07937060861dad626602ad.css" type="text/css" />
   <link rel="stylesheet" href="../../../../_static/css/jit.css" type="text/css" />
     <link rel="index" title="Index" href="../../../../genindex.html" />
     <link rel="search" title="Search" href="../../../../search.html" />
@@ -211,7 +213,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href='https://pytorch.org/docs/versions.html'>master (1.12.0a0+git1d49711 ) &#x25BC</a>
+      <a href='https://pytorch.org/docs/versions.html'>master (1.12.0a0+git943085f ) &#x25BC</a>
     </div>
     
 
@@ -582,11 +584,17 @@
 <span class="sd">        since FSDP will shard parameters in-place and this will break any</span>
 <span class="sd">        previously initialized optimizers.</span>
 
-<span class="sd">    .. warning:</span>
+<span class="sd">    .. warning::</span>
 <span class="sd">        Module should be already placed on the destination device or</span>
 <span class="sd">        device is set properly using torch.cuda.set_device(device_id).</span>
 <span class="sd">        FSDP will get compute device from module first, if module device</span>
 <span class="sd">        is CPU, FSDP will then get compute device from current device.</span>
+
+<span class="sd">    .. warning::</span>
+<span class="sd">        FSDP currently does not support gradient accumulation outside</span>
+<span class="sd">        `no_sync()` when using CPU offloading. Trying to do so yields incorrect</span>
+<span class="sd">        results since FSDP will use the newly-reduced gradient instead of</span>
+<span class="sd">        accumulating with any existing gradient.</span>
 
 <span class="sd">    Args:</span>
 <span class="sd">        module (nn.Module):</span>
@@ -1783,10 +1791,24 @@
                 <span class="c1"># Average grad by world_size for consistency with PyTorch DDP.</span>
                 <span class="n">param</span><span class="o">.</span><span class="n">grad</span><span class="o">.</span><span class="n">div_</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">gradient_predivide_factor</span><span class="p">)</span>
 
+            <span class="n">grad</span> <span class="o">=</span> <span class="n">param</span><span class="o">.</span><span class="n">grad</span><span class="o">.</span><span class="n">data</span>
             <span class="k">if</span> <span class="n">param</span><span class="o">.</span><span class="n">_is_sharded</span><span class="p">:</span>  <span class="c1"># type: ignore[attr-defined]</span>
-                <span class="n">grad_flatten</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">flatten</span><span class="p">(</span><span class="n">param</span><span class="o">.</span><span class="n">grad</span><span class="p">)</span>
+                <span class="c1"># We clear `param.grad` to permit repeated gradient</span>
+                <span class="c1"># computations when this FSDP module is called multiple times.</span>
+                <span class="c1"># This is to avoid a race among multiple re-entrant backward</span>
+                <span class="c1"># passes. For example, the second backward pass computation</span>
+                <span class="c1"># precedes ahead of the first backward pass reduction, which is</span>
+                <span class="c1"># possible since the reduction is in a different stream and is</span>
+                <span class="c1"># async. Then, the first backward pass may be incorrectly</span>
+                <span class="c1"># reducing the second backward pass&#39;s `param.grad`.</span>
+                <span class="c1"># The reduced gradients are accumulated in</span>
+                <span class="c1"># `param._saved_grad_shard`, and the gradient reductions can</span>
+                <span class="c1"># happen in arbitrary order, though we tolerate this due to the</span>
+                <span class="c1"># (approximate) commutativity of floating-point addition.</span>
+                <span class="n">param</span><span class="o">.</span><span class="n">grad</span> <span class="o">=</span> <span class="kc">None</span>
+                <span class="n">grad_flatten</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">flatten</span><span class="p">(</span><span class="n">grad</span><span class="p">)</span>
                 <span class="n">chunks</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">grad_flatten</span><span class="o">.</span><span class="n">chunk</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">world_size</span><span class="p">))</span>
-                <span class="n">num_pad</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">world_size</span> <span class="o">*</span> <span class="n">chunks</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span> <span class="o">-</span> <span class="n">param</span><span class="o">.</span><span class="n">grad</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span>
+                <span class="n">num_pad</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">world_size</span> <span class="o">*</span> <span class="n">chunks</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span> <span class="o">-</span> <span class="n">grad</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span>
                 <span class="n">input_flattened</span> <span class="o">=</span> <span class="n">F</span><span class="o">.</span><span class="n">pad</span><span class="p">(</span><span class="n">grad_flatten</span><span class="p">,</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="n">num_pad</span><span class="p">])</span>
                 <span class="n">output</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">chunks</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
                 <span class="n">dist</span><span class="o">.</span><span class="n">_reduce_scatter_base</span><span class="p">(</span>
@@ -1795,7 +1817,29 @@
                 <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">gradient_postdivide_factor</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
                     <span class="c1"># Average grad by world_size for consistency with PyTorch DDP.</span>
                     <span class="n">output</span><span class="o">.</span><span class="n">div_</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">gradient_postdivide_factor</span><span class="p">)</span>
-                <span class="n">param</span><span class="o">.</span><span class="n">grad</span><span class="o">.</span><span class="n">data</span> <span class="o">=</span> <span class="n">output</span>
+                <span class="c1"># To support gradient accumulation outside `no_sync()`, we save</span>
+                <span class="c1"># the gradient data to `param._saved_grad_shard` before the</span>
+                <span class="c1"># backward pass, accumulate gradients into it here, and set</span>
+                <span class="c1"># `param.grad` with the accumulated value at the end of the</span>
+                <span class="c1"># backward pass in preparation for the optimizer step.</span>
+                <span class="n">accumulate_grad</span> <span class="o">=</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">param</span><span class="p">,</span> <span class="s2">&quot;_saved_grad_shard&quot;</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">accumulate_grad</span><span class="p">:</span>
+                    <span class="n">p_assert</span><span class="p">(</span>
+                        <span class="n">param</span><span class="o">.</span><span class="n">_saved_grad_shard</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="n">output</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span>  <span class="c1"># type: ignore[attr-defined]</span>
+                        <span class="s2">&quot;Shape mismatch when accumulating gradients: &quot;</span>  <span class="c1"># type: ignore[attr-defined]</span>
+                        <span class="sa">f</span><span class="s2">&quot;existing grad shape=</span><span class="si">{</span><span class="n">param</span><span class="o">.</span><span class="n">_saved_grad_shard</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2"> &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;new grad shape=</span><span class="si">{</span><span class="n">output</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">&quot;</span>  <span class="c1"># type: ignore[attr-defined]</span>
+                    <span class="p">)</span>
+                    <span class="n">p_assert</span><span class="p">(</span>
+                        <span class="n">param</span><span class="o">.</span><span class="n">_saved_grad_shard</span><span class="o">.</span><span class="n">device</span> <span class="o">==</span> <span class="n">output</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>  <span class="c1"># type: ignore[attr-defined]</span>
+                        <span class="s2">&quot;Device mismatch when accumulating gradients: &quot;</span>  <span class="c1"># type: ignore[attr-defined]</span>
+                        <span class="sa">f</span><span class="s2">&quot;existing grad device=</span><span class="si">{</span><span class="n">param</span><span class="o">.</span><span class="n">_saved_grad_shard</span><span class="o">.</span><span class="n">device</span><span class="si">}</span><span class="s2"> &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;new grad device=</span><span class="si">{</span><span class="n">output</span><span class="o">.</span><span class="n">device</span><span class="si">}</span><span class="s2">&quot;</span>  <span class="c1"># type: ignore[attr-defined]</span>
+                    <span class="p">)</span>
+                    <span class="n">param</span><span class="o">.</span><span class="n">_saved_grad_shard</span> <span class="o">+=</span> <span class="n">output</span>  <span class="c1"># type: ignore[attr-defined]</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">param</span><span class="o">.</span><span class="n">_saved_grad_shard</span> <span class="o">=</span> <span class="n">output</span>  <span class="c1"># type: ignore[attr-defined]</span>
+                <span class="n">grad</span> <span class="o">=</span> <span class="n">param</span><span class="o">.</span><span class="n">_saved_grad_shard</span>  <span class="c1"># type: ignore[attr-defined]</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="c1"># Currently the only way for _is_sharded to be False is if</span>
                 <span class="c1"># world_size == 1. This could be relaxed in the future, e.g,</span>
@@ -1814,14 +1858,10 @@
                 <span class="c1"># and ensure the appropriate synchronization is done by waiting</span>
                 <span class="c1"># streams in _wait_for_post_backward.</span>
                 <span class="n">param</span><span class="o">.</span><span class="n">_cpu_grad</span><span class="o">.</span><span class="n">copy_</span><span class="p">(</span>  <span class="c1"># type: ignore[attr-defined]</span>
-                    <span class="n">param</span><span class="o">.</span><span class="n">grad</span><span class="o">.</span><span class="n">detach</span><span class="p">(),</span> <span class="n">non_blocking</span><span class="o">=</span><span class="kc">True</span>
+                    <span class="n">grad</span><span class="o">.</span><span class="n">detach</span><span class="p">(),</span> <span class="n">non_blocking</span><span class="o">=</span><span class="kc">True</span>
                 <span class="p">)</span>
                 <span class="c1"># Don&#39;t let this memory get reused until after the transfer.</span>
-                <span class="n">param</span><span class="o">.</span><span class="n">grad</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">record_stream</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">current_stream</span><span class="p">())</span>
-                <span class="c1"># Point param.grad.data to CPU grad to offload it. Note that</span>
-                <span class="c1"># the transfer is async so it is not necessarily done until we</span>
-                <span class="c1"># explicitly synchronize in backward.</span>
-                <span class="n">param</span><span class="o">.</span><span class="n">grad</span><span class="o">.</span><span class="n">data</span> <span class="o">=</span> <span class="n">param</span><span class="o">.</span><span class="n">_cpu_grad</span>  <span class="c1"># type: ignore[attr-defined]</span>
+                <span class="n">grad</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">record_stream</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">current_stream</span><span class="p">())</span>
 
             <span class="c1"># After _post_backward_hook returns, orig_grad_data will eventually</span>
             <span class="c1"># go out of scope, at which point it could otherwise be freed for</span>
@@ -1868,7 +1908,7 @@
 
         <span class="c1"># A backward pass is done, clean up below.</span>
 
-        <span class="k">def</span> <span class="nf">_remove_shard_bwd_hook</span><span class="p">(</span><span class="n">fsdp_module</span><span class="p">:</span> <span class="n">FullyShardedDataParallel</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">def</span> <span class="nf">_finalize_params</span><span class="p">(</span><span class="n">fsdp_module</span><span class="p">:</span> <span class="n">FullyShardedDataParallel</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
             <span class="sd">&quot;&quot;&quot;Helper used below on all fsdp modules.&quot;&quot;&quot;</span>
             <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">fsdp_module</span><span class="o">.</span><span class="n">params</span><span class="p">:</span>
                 <span class="k">if</span> <span class="n">p</span><span class="o">.</span><span class="n">requires_grad</span><span class="p">:</span>
@@ -1880,11 +1920,41 @@
                         <span class="p">)</span>
                         <span class="n">p</span><span class="o">.</span><span class="n">_shard_bwd_hook</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">remove</span><span class="p">()</span>  <span class="c1"># type: ignore[attr-defined]</span>
                         <span class="nb">delattr</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="s2">&quot;_shard_bwd_hook&quot;</span><span class="p">)</span>
+                    <span class="c1"># Preserve the gradient accumulation state if not</span>
+                    <span class="c1"># synchronizing: `p.grad` remains the unsharded gradient</span>
+                    <span class="c1"># accumulated from prior `no_sync()` iterations, and</span>
+                    <span class="c1"># `p._saved_grad_shard` remains the sharded gradient from</span>
+                    <span class="c1"># the last synchronized iteration</span>
+                    <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_require_backward_grad_sync</span><span class="p">:</span>
+                        <span class="k">continue</span>
+                    <span class="c1"># Set `p.grad` as needed to ensure optimizer correctness</span>
+                    <span class="c1"># since optimizers operate on the `grad` attribute</span>
+                    <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="s2">&quot;_cpu_grad&quot;</span><span class="p">):</span>
+                        <span class="n">p_assert</span><span class="p">(</span>
+                            <span class="n">p</span><span class="o">.</span><span class="n">device</span> <span class="o">==</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s2">&quot;cpu&quot;</span><span class="p">),</span>
+                            <span class="sa">f</span><span class="s2">&quot;Device mismatch: p=</span><span class="si">{</span><span class="n">p</span><span class="o">.</span><span class="n">device</span><span class="si">}</span><span class="s2"> &quot;</span>  <span class="c1"># type: ignore[attr-defined]</span>
+                            <span class="sa">f</span><span class="s2">&quot;p._cpu_grad=</span><span class="si">{</span><span class="n">p</span><span class="o">.</span><span class="n">_cpu_grad</span><span class="si">}</span><span class="s2">&quot;</span>
+                        <span class="p">)</span>
+                        <span class="n">p</span><span class="o">.</span><span class="n">grad</span> <span class="o">=</span> <span class="n">p</span><span class="o">.</span><span class="n">_cpu_grad</span>  <span class="c1"># type: ignore[attr-defined]</span>
+                    <span class="k">elif</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="s2">&quot;_saved_grad_shard&quot;</span><span class="p">):</span>
+                        <span class="n">p_assert</span><span class="p">(</span>
+                            <span class="n">p</span><span class="o">.</span><span class="n">device</span> <span class="o">==</span> <span class="n">p</span><span class="o">.</span><span class="n">_saved_grad_shard</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>  <span class="c1"># type: ignore[attr-defined]</span>
+                            <span class="sa">f</span><span class="s2">&quot;Device mismatch: p=</span><span class="si">{</span><span class="n">p</span><span class="o">.</span><span class="n">device</span><span class="si">}</span><span class="s2"> &quot;</span>  <span class="c1"># type: ignore[attr-defined]</span>
+                            <span class="sa">f</span><span class="s2">&quot;p._saved_grad_shard=</span><span class="si">{</span><span class="n">p</span><span class="o">.</span><span class="n">_saved_grad_shard</span><span class="o">.</span><span class="n">device</span><span class="si">}</span><span class="s2">&quot;</span>
+                        <span class="p">)</span>
+                        <span class="n">p</span><span class="o">.</span><span class="n">grad</span> <span class="o">=</span> <span class="n">p</span><span class="o">.</span><span class="n">_saved_grad_shard</span>  <span class="c1"># type: ignore[attr-defined]</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="n">p_assert</span><span class="p">(</span>
+                            <span class="ow">not</span> <span class="n">p</span><span class="o">.</span><span class="n">_is_sharded</span><span class="p">,</span> <span class="s2">&quot;All sharded parameters should &quot;</span>
+                            <span class="s2">&quot;use `_saved_grad_shard`&quot;</span>
+                        <span class="p">)</span>
+                    <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="s2">&quot;_saved_grad_shard&quot;</span><span class="p">):</span>
+                        <span class="nb">delattr</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="s2">&quot;_saved_grad_shard&quot;</span><span class="p">)</span>
 
         <span class="c1"># Update root and nested FSDP&#39;s hooks and flags.</span>
         <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">modules</span><span class="p">():</span>  <span class="c1"># includes self</span>
             <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">m</span><span class="p">,</span> <span class="n">FullyShardedDataParallel</span><span class="p">):</span>
-                <span class="n">_remove_shard_bwd_hook</span><span class="p">(</span><span class="n">m</span><span class="p">)</span>
+                <span class="n">_finalize_params</span><span class="p">(</span><span class="n">m</span><span class="p">)</span>
                 <span class="n">m</span><span class="o">.</span><span class="n">_pre_backward_hook_has_run</span> <span class="o">=</span> <span class="kc">False</span>
                 <span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">requires_grad</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">m</span><span class="o">.</span><span class="n">parameters</span><span class="p">()):</span>
                     <span class="c1"># Check if the module has params and if any of them has</span>
@@ -1975,6 +2045,26 @@
                 <span class="n">p</span><span class="o">.</span><span class="n">grad</span><span class="o">.</span><span class="n">size</span><span class="p">()</span> <span class="o">!=</span> <span class="n">p</span><span class="o">.</span><span class="n">_orig_size</span>  <span class="c1"># type: ignore[attr-defined]</span>
                 <span class="ow">or</span> <span class="n">p</span><span class="o">.</span><span class="n">grad</span><span class="o">.</span><span class="n">device</span> <span class="o">!=</span> <span class="n">p</span><span class="o">.</span><span class="n">device</span>
             <span class="p">):</span>
+                <span class="n">offloaded</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="n">p</span><span class="o">.</span><span class="n">grad</span><span class="o">.</span><span class="n">device</span> <span class="o">!=</span> <span class="n">p</span><span class="o">.</span><span class="n">device</span>
+                <span class="k">if</span> <span class="n">offloaded</span><span class="p">:</span>
+                    <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">cpu_offload</span><span class="o">.</span><span class="n">offload_params</span><span class="p">,</span> \
+                        <span class="s2">&quot;`p.grad.device` and `p.device` should be the same &quot;</span> \
+                        <span class="s2">&quot;if not offloading parameters to CPU&quot;</span>
+                <span class="n">prev_iter_outside_no_sync</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> \
+                    <span class="n">p</span><span class="o">.</span><span class="n">grad</span><span class="o">.</span><span class="n">size</span><span class="p">()</span> <span class="o">==</span> <span class="n">p</span><span class="o">.</span><span class="n">_local_shard</span><span class="o">.</span><span class="n">shape</span>  <span class="c1"># type: ignore[attr-defined]</span>
+                <span class="c1"># As long as the previous iteration was outside `no_sync()`,</span>
+                <span class="c1"># then we must save the gradient in `_saved_grad_shard`, even</span>
+                <span class="c1"># if the current iteration is inside `no_sync()`. This is to</span>
+                <span class="c1"># prepare for the next iteration outside `no_sync()`, which may</span>
+                <span class="c1"># try to accumulate gradients. FSDP accumulates gradients in</span>
+                <span class="c1"># the separate variable `p._saved_grad_shard` to leave `p.grad`</span>
+                <span class="c1"># for the per-iteration gradient.</span>
+                <span class="k">if</span> <span class="n">prev_iter_outside_no_sync</span><span class="p">:</span>
+                    <span class="c1"># FSDP currently does not support gradient accumulation</span>
+                    <span class="c1"># outside `no_sync()` when using CPU offloading (see the</span>
+                    <span class="c1"># warning in the class&#39;s docstring).</span>
+                    <span class="k">if</span> <span class="ow">not</span> <span class="n">offloaded</span><span class="p">:</span>
+                        <span class="n">p</span><span class="o">.</span><span class="n">_saved_grad_shard</span> <span class="o">=</span> <span class="n">p</span><span class="o">.</span><span class="n">grad</span><span class="o">.</span><span class="n">data</span>  <span class="c1"># type: ignore[attr-defined]</span>
                 <span class="n">p</span><span class="o">.</span><span class="n">grad</span> <span class="o">=</span> <span class="kc">None</span>
 
     <span class="nd">@torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">()</span>
@@ -2049,6 +2139,10 @@
 <span class="sd">        .. note:: This likely results in higher memory usage because FSDP will</span>
 <span class="sd">            accumulate the full model gradients (instead of gradient shards)</span>
 <span class="sd">            until the eventual sync.</span>
+
+<span class="sd">        .. note:: When used with CPU offloading, the gradients will not be</span>
+<span class="sd">            offloaded to CPU when inside the context manager. Instead, they</span>
+<span class="sd">            will only be offloaded right after the eventual sync.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_lazy_init</span><span class="p">()</span>
         <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_root</span><span class="p">,</span> <span class="s2">&quot;`no_sync()` on inner FSDP instances is not supported&quot;</span>
@@ -2103,6 +2197,13 @@
         <span class="n">data</span><span class="o">.</span><span class="n">storage</span><span class="p">()</span><span class="o">.</span><span class="n">size</span><span class="p">()</span> <span class="o">==</span> <span class="mi">0</span>
     <span class="p">),</span> <span class="s2">&quot;Then tensor storage should have been resized to be 0.&quot;</span>
     <span class="n">data</span><span class="o">.</span><span class="n">storage</span><span class="p">()</span><span class="o">.</span><span class="n">resize_</span><span class="p">(</span><span class="n">size</span><span class="o">.</span><span class="n">numel</span><span class="p">())</span>  <span class="c1"># type: ignore[attr-defined]</span>
+
+<span class="k">def</span> <span class="nf">p_assert</span><span class="p">(</span><span class="n">cond</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">s</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;This is used as an alternate to ``assert`` when in the backward context</span>
+<span class="sd">    to print the error message ``s`` since otherwise, it is swallowed.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">cond</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="n">s</span><span class="p">)</span>
+        <span class="k">raise</span> <span class="ne">AssertionError</span>
 </pre></div>
 
              </article>
