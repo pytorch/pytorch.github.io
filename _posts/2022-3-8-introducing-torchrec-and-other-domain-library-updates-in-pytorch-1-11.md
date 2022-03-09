@@ -36,7 +36,9 @@ We published a paper, [TorchAudio: Building Blocks for Audio and Speech Processi
 
 #### (Beta) RNN-T & (Prototype) Emformer Models and Recipes
 
-Video [https://drive.google.com/file/d/1d06YSl8iduVKc6w2X9IuiZCUw_xUwO6U/view](https://drive.google.com/file/d/1d06YSl8iduVKc6w2X9IuiZCUw_xUwO6U/view)
+<p align="center">
+  <img src="/assets/images/torchaudio-rnnt-emformer-demo.gif" width="60%">
+</p>
 
 Emformer is an efficient memory-transformer-based streaming acoustic model that has demonstrated state-of-the-art streaming automatic speech recognition (ASR) performance in low-latency, resource-constrained scenarios, such as on-device applications (citation: [https://arxiv.org/abs/2010.10759](https://arxiv.org/abs/2010.10759)).
 
@@ -233,30 +235,12 @@ Team PyTorch
                 </li>
                 <li>
                     <a class="reference internal title-link has-children" href="#">TorchAudio 0.11</a>
-                    <ul>
-                        <li><a class="reference internal" href="#torchaudio-building-blocks-for-audio-and-speech-processing">TorchAudio: Building Blocks for Audio and Speech Processing</a></li>
-                        <li><a class="reference internal" href="#beta-rnn-t-prototype-emformer-models-and-recipes">(Beta) RNN-T & (Prototype) Emformer Models and Recipes</a></li>
-                        <li><a class="reference internal" href="#beta-hubert-pretrain-model">(Beta) HuBERT Pretrain Model</a></li>
-                        <li><a class="reference internal" href="#prototype-ctc-beam-search-decoder">(Prototype) CTC Beam Search Decoder</a></li>
-						 <li><a class="reference internal" href="#prototype-streaming-api">(Prototype) Streaming API</a></li>
-                    </ul>
-                </li>
+                          </li>
                 <li>
                     <a class="reference internal title-link has-children" href="#">TorchText 0.12</a>
-                    <ul>
-                        <li><a class="reference internal" href="#beta-roberta-and-xlm-r-models">(Beta) RoBERTa and XLM-R Models</a></li>
-                        <li><a class="reference internal" href="#beta-byte-level-bpe-tokenizer">(Beta) byte-level BPE tokenizer</a></li>
-                        <li><a class="reference internal" href="#beta-text-datasets-backed-by-torchdata">(Beta) Text datasets backed by TorchData</a></li>
-                    </ul>
-                </li>
+                               </li>
 				<li>
-                    <a class="reference internal title-link has-children" href="#">TorchVision 0.12</a>
-                    <ul>
-                        <li><a class="reference internal" href="#new-models">New Models</a></li>
-                        <li><a class="reference internal" href="#new-datasets">New Datasets</a></li>
-                        <li><a class="reference internal" href="#other-updates">Other Updates:</a></li>
-						 <li><a class="reference internal" href="#captum-0-5">Captum 0.5</a></li>
-                    </ul>
+                    <a class="reference internal title-link has-children" href="#">TorchVision 0.12</a>                  
                 </li>
             </ul>
         </div>
