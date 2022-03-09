@@ -36,7 +36,7 @@ We published a paper, [TorchAudio: Building Blocks for Audio and Speech Processi
 
 #### (Beta) RNN-T & (Prototype) Emformer Models and Recipes
 
-Video https://drive.google.com/file/d/1d06YSl8iduVKc6w2X9IuiZCUw_xUwO6U/view
+Video [https://drive.google.com/file/d/1d06YSl8iduVKc6w2X9IuiZCUw_xUwO6U/view](https://drive.google.com/file/d/1d06YSl8iduVKc6w2X9IuiZCUw_xUwO6U/view)
 
 Emformer is an efficient memory-transformer-based streaming acoustic model that has demonstrated state-of-the-art streaming automatic speech recognition (ASR) performance in low-latency, resource-constrained scenarios, such as on-device applications (citation: [https://arxiv.org/abs/2010.10759](https://arxiv.org/abs/2010.10759)).
 
@@ -190,9 +190,9 @@ reader.seek(seek_time)
 
 ### New Datasets
 
-We have implemented 14 new classification datasets: CLEVR, GTSRB, FER2013, SUN397, Country211, Flowers102, fvgc_aircraft, OxfordIIITPet, DTD, Food 101, Rendered SST2, Stanford cars, PCAM, and EuroSAT.
+We have implemented 14 new [classification datasets](https://pytorch.org/vision/0.12/datasets.html#image-classification): CLEVR, GTSRB, FER2013, SUN397, Country211, Flowers102, fvgc_aircraft, OxfordIIITPet, DTD, Food 101, Rendered SST2, Stanford cars, PCAM, and EuroSAT.
 
-As part of our work on Optical Flow support (see above for more details), we also added 5 new optical flow datasets: Flying Chairs, Flying Things, Sintel, Kitti, and HD1K.
+As part of our work on Optical Flow support (see above for more details), we also added 5 new [optical flow datasets](https://pytorch.org/vision/0.12/datasets.html#optical-flow): Flying Chairs, Flying Things, Sintel, Kitti, and HD1K.
 
 ### Other Updates:
 
