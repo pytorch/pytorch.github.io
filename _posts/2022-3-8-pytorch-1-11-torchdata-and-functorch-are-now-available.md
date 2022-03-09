@@ -2,15 +2,15 @@
 layout: blog_detail
 title: "PyTorch 1.11, TorchData, and functorch are now available"
 author: Team PyTorch
-featured-img: ""
+featured-img: "assets/images/pytorch-logo.jpg"
 ---
 
-We are excited to announce the release of PyTorch 1.11 ([release notes](https://github.com/pytorch/pytorch/releases/tag/v1.11.0)). This release is composed of over 3,300 commits since 1.10, made by 434 contributors. Along with 1.11, we are releasing beta versions of TorchData and functorch.  We want to sincerely thank our community for continuously improving PyTorch.
+We are excited to announce the release of PyTorch 1.11 ([release notes](https://github.com/pytorch/pytorch/releases/tag/v1.11.0)). This release is composed of over 3,300 commits since 1.10, made by 434 contributors. Along with 1.11, we are releasing beta versions of TorchData and functorch.
 
 Summary:
 
 * **TorchData** is a new library for common modular data loading primitives for easily constructing flexible and performant data pipelines. [View it on GitHub](https://github.com/pytorch/data).
-* **functorch**, a library that adds composable function transforms to PyTorch, is now available in beta. [View it on GitHub](https://github.com/pytorch/functorch)
+* **functorch**, a library that adds composable function transforms to PyTorch, is now available in beta. [View it on GitHub](https://github.com/pytorch/functorch).
 * Distributed Data Parallel (DDP) static graph optimizations available in stable.
 
 ## Introducing TorchData
@@ -23,7 +23,7 @@ We have implemented over 50 DataPipes that provide different core functionalitie
 
 In this release, some of the PyTorch domain libraries have migrated their datasets to use DataPipes. In TorchText, the [popular datasets provided by the library](https://github.com/pytorch/text/tree/release/0.12/torchtext/datasets) are implemented using DataPipes and a [section of its SST-2 binary text classification tutorial](https://pytorch.org/text/0.12.0/tutorials/sst2_classification_non_distributed.html#dataset) demonstrates how you can use DataPipes to preprocess data for your model. There also are other prototype implementations of datasets with DataPipes in [TorchVision (available in nightly releases)](https://github.com/pytorch/vision/tree/main/torchvision/prototype/datasets/_builtin) and in [TorchRec](https://pytorch.org/torchrec/torchrec.datasets.html). You can find more [specific examples here](https://pytorch.org/data/0.3.0/examples.html).
 
-The d[ocumentation for TorchData](https://pytorch.org/data) is now live. It contains a tutorial that covers [how to use DataPipes](https://pytorch.org/data/0.3.0/tutorial.html#using-datapipes), [use them with DataLoader](https://pytorch.org/data/0.3.0/tutorial.html#working-with-dataloader), and [implement custom ones](https://pytorch.org/data/0.3.0/tutorial.html#implementing-a-custom-datapipe). FAQs and future plans related to DataLoader are described in [our project’s README file](https://github.com/pytorch/data#readme).
+The [documentation for TorchData](https://pytorch.org/data) is now live. It contains a tutorial that covers [how to use DataPipes](https://pytorch.org/data/0.3.0/tutorial.html#using-datapipes), [use them with DataLoader](https://pytorch.org/data/0.3.0/tutorial.html#working-with-dataloader), and [implement custom ones](https://pytorch.org/data/0.3.0/tutorial.html#implementing-a-custom-datapipe). FAQs and future plans related to DataLoader are described in [our project’s README file](https://github.com/pytorch/data#readme).
 
 ## Introducing functorch
 
@@ -59,52 +59,3 @@ Thanks for reading, If you’re interested in these updates and want to join the
 Cheers!
 
 Team PyTorch
-
-
-<div class="pytorch-content-right">
-    <div class="pytorch-right-menu">
-        <div class="pytorch-side-scroll">
-            <ul>
-                <li>
-                    <a class="reference internal title-link has-children" href="#introducing-torchdata">Introducing TorchData</a>
-                </li>
-                  <li>
-                    <a class="reference internal title-link has-children" href="#introducing-functorch">Introducing functorch</a>
-                </li>
-<li>
-                    <a class="reference internal title-link has-children" href="#distributed-training">Distributed Training</a>
-    <ul>
-                        <li><a class="reference internal" href="#stable-ddp-static-graph">(Stable) DDP static graph</a></li>
-    </ul>
-                </li>	
-            </ul>
-        </div>
-    </div>
-</div>
-<style>
-    article.pytorch-article {
-        position: relative;
-    }
-    .pytorch-content-right {
-        position: absolute;
-        top: 1.8%;
-        right: -27%;
-    }
-    article.pytorch-article .pytorch-content-right ul {
-        padding-left: 1rem;
-        list-style-type: none;
-        margin: 0;
-    }
-    article.pytorch-article .pytorch-content-right ul li {
-        margin-bottom: 0;
-    }
-    article.pytorch-article .pytorch-content-right ul>li>a {
-        color: #262626;
-        font-weight: 500;
-        font-size: 0.825rem;
-    }
-    article.pytorch-article .pytorch-content-right ul>li>ul>li>a {
-        color: #6c6c6d;
-        font-weight: 400;
-    }
-</style>
