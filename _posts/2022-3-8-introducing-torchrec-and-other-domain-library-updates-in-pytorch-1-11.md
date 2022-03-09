@@ -2,7 +2,7 @@
 layout: blog_detail
 title: "Introducing TorchRec, and other domain library updates in PyTorch 1.11"
 author: Team PyTorch
-featured-img: ""
+featured-img: "assets/images/pytorch-logo.jpg"
 ---
 
 We are introducing the beta release of TorchRec and a number of improvements to the current PyTorch domain libraries, alongside the [PyTorch 1.11 release](https://pytorch.org/blog/pytorch-1.11-released/). These updates demonstrate our focus on developing common and extensible APIs across all domains to make it easier for our community to build ecosystem projects on PyTorch. Highlights include: 
@@ -14,7 +14,7 @@ We are introducing the beta release of TorchRec and a number of improvements to 
 
 ## TorchRec 0.1
 
-We [announced TorchRec a few weeks ago](https://pytorch.org/blog/introducing-torchrec/) and we are excited to release the beta version today. To recap, TorchRec is a PyTorch domain library for Recommendation Systems. This new library provides common sparsity and parallelism primitives, enabling researchers to build state-of-the-art personalization models and deploy them in production. TorchRec was used to train a 1.25 trillion parameter model, pushed to production in January 2022.
+We [announced TorchRec](https://pytorch.org/blog/introducing-torchrec/) a few weeks ago and we are excited to release the beta version today. To recap, TorchRec is a PyTorch domain library for Recommendation Systems. This new library provides common sparsity and parallelism primitives, enabling researchers to build state-of-the-art personalization models and deploy them in production. TorchRec was used to train a 1.25 trillion parameter model, pushed to production in January 2022.
 
  In particular, the library includes:
 
@@ -72,7 +72,6 @@ The CTC decoder in TorchAudio supports customizable beam search decoding with le
 For more details, please check out the [API tutorial](https://pytorch.org/audio/main/tutorials/asr_inference_with_ctc_decoder_tutorial.html) and [documentation](https://pytorch.org/audio/main/prototype.ctc_decoder.html). This prototype feature is available through nightly builds.
 
 #### (Prototype) Streaming API
-PoC: Moto Hira
 
 TorchAudio started as simple audio I/O APIs that supplement PyTorch. With the recent addition of ASR models and training recipes, the project has received requests to support high-level application development.
 
@@ -196,7 +195,7 @@ We have implemented 14 new [classification datasets](https://pytorch.org/vision/
 
 As part of our work on Optical Flow support (see above for more details), we also added 5 new [optical flow datasets](https://pytorch.org/vision/0.12/datasets.html#optical-flow): Flying Chairs, Flying Things, Sintel, Kitti, and HD1K.
 
-### Other Updates:
+### Other Updates
 
 * **New documentation layout**: Each function / class is now documented in a separate page, clearing up some space in the per-module pages, and easing the discovery of the proposed APIs. Compare e.g. our [previous docs](https://pytorch.org/vision/0.11/transforms.html) vs the [new ones](https://pytorch.org/vision/0.12/transforms.html). Please let us know if you have any [feedback](https://github.com/pytorch/vision/issues/5511)!
 * **New [model contribution guidelines](https://github.com/pytorch/vision/blob/main/CONTRIBUTING_MODELS.md)** have been published following the success of the [FCOS](https://github.com/pytorch/vision/pull/4961) model which was contributed by the community. These guidelines aim to be an overview of the model contribution process for anyone who would like to suggest, implement and train a new model.
