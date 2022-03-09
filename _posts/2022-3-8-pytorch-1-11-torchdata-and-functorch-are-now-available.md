@@ -69,7 +69,7 @@ Team PyTorch
                     <a class="reference internal title-link has-children" href="#introducing-torchdata">Introducing TorchData</a>
                 </li>
                   <li>
-                    <a class="reference internal title-link has-children" href="#introducing-funtorch">Introducing functorch</a>
+                    <a class="reference internal title-link has-children" href="#introducing-functorch">Introducing functorch</a>
                 </li>
 <li>
                     <a class="reference internal title-link has-children" href="#distributed-training">Distributed Training</a>
