@@ -231,16 +231,16 @@ Team PyTorch
         <div class="pytorch-side-scroll">
             <ul>
                 <li>
-                    <a class="reference internal title-link has-children" href="#">TorchRec 0.1</a>
+                    <a class="reference internal title-link has-children" href="#torchrec-01">TorchRec 0.1</a>
                 </li>
                 <li>
-                    <a class="reference internal title-link has-children" href="#">TorchAudio 0.11</a>
+                    <a class="reference internal title-link has-children" href="#torchaudio-011">TorchAudio 0.11</a>
                           </li>
                 <li>
-                    <a class="reference internal title-link has-children" href="#">TorchText 0.12</a>
+                    <a class="reference internal title-link has-children" href="#torchtext-012">TorchText 0.12</a>
                                </li>
 				<li>
-                    <a class="reference internal title-link has-children" href="#">TorchVision 0.12</a>                  
+                    <a class="reference internal title-link has-children" href="#torchvision-012">TorchVision 0.12</a>                  
                 </li>
             </ul>
         </div>
