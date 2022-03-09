@@ -10,22 +10,22 @@ We are excited to announce the release of PyTorch 1.11 ([release notes](https://
 Summary:
 
 * **TorchData** is a new library for common modular data loading primitives for easily constructing flexible and performant data pipelines. [View it on GitHub](https://github.com/pytorch/data).
-* **functorch**, a library that adds composable function transforms to PyTorch, is now available in beta.
+* **functorch**, a library that adds composable function transforms to PyTorch, is now available in beta. [View it on GitHub](https://github.com/pytorch/functorch)
 * Distributed Data Parallel (DDP) static graph optimizations available in stable.
 
-### Introducing TorchData
+## Introducing TorchData
 
-We are delighted to present the Beta release of [TorchData](https://github.com/pytorch/data). This is a library of common modular data loading primitives for easily constructing flexible and performant data pipelines. Based on community feedback, we have found that the existing DataLoader bundled too many features together and can be difficult to extend. Moreover, different use cases often have to rewrite the same data loading utilities over and over again. The goal here is to enable composable data loading through Iterable-style and Map-style building blocks called “[DataPipes](https://github.com/pytorch/data#what-are-datapipes)” that work well out of the box with the [PyTorch’s `DataLoader`](https://pytorch.org/docs/stable/data.html#torch.utils.data.DataLoader).
+We are delighted to present the Beta release of [TorchData](https://github.com/pytorch/data). This is a library of common modular data loading primitives for easily constructing flexible and performant data pipelines. Based on community feedback, we have found that the existing DataLoader bundled too many features together and can be difficult to extend. Moreover, different use cases often have to rewrite the same data loading utilities over and over again. The goal here is to enable composable data loading through Iterable-style and Map-style building blocks called “[DataPipes](https://github.com/pytorch/data#what-are-datapipes)” that work well out of the box with the [PyTorch’s DataLoader](https://pytorch.org/docs/stable/data.html#torch.utils.data.DataLoader).
 
 A `DataPipe` takes in some access function over Python data structures, `__iter__` for `IterDataPipe` and `__getitem__` for `MapDataPipe`, and returns a new access function with a slight transformation applied. You can chain multiple DataPipes together to form a data pipeline that performs all the necessary data transformation.
 
-We have implemented over 50 DataPipes that provide different core functionalities, such as opening files, parsing texts, transforming samples, caching, shuffling, and batching. For users who are interested in connecting to cloud providers (such as Google Drive or AWS S3), the [fsspec](https://pytorch.org/data/0.3.0/torchdata.datapipes.iter.html#io-datapipes) and iopath DataPipes will allow you to do so. The documentation provides detailed explanations and usage examples of each `[IterDataPipe](https://pytorch.org/data/0.3.0/torchdata.datapipes.iter.html)` and `[MapDataPipe](https://pytorch.org/data/0.3.0/torchdata.datapipes.map.html)`.
+We have implemented over 50 DataPipes that provide different core functionalities, such as opening files, parsing texts, transforming samples, caching, shuffling, and batching. For users who are interested in connecting to cloud providers (such as Google Drive or AWS S3), the [fsspec](https://pytorch.org/data/0.3.0/torchdata.datapipes.iter.html#io-datapipes) and iopath DataPipes will allow you to do so. The documentation provides detailed explanations and usage examples of each [IterDataPipe](https://pytorch.org/data/0.3.0/torchdata.datapipes.iter.html) and [MapDataPipe](https://pytorch.org/data/0.3.0/torchdata.datapipes.map.html).
 
 In this release, some of the PyTorch domain libraries have migrated their datasets to use DataPipes. In TorchText, the [popular datasets provided by the library](https://github.com/pytorch/text/tree/release/0.12/torchtext/datasets) are implemented using DataPipes and a [section of its SST-2 binary text classification tutorial](https://pytorch.org/text/0.12.0/tutorials/sst2_classification_non_distributed.html#dataset) demonstrates how you can use DataPipes to preprocess data for your model. There also are other prototype implementations of datasets with DataPipes in [TorchVision (available in nightly releases)](https://github.com/pytorch/vision/tree/main/torchvision/prototype/datasets/_builtin) and in [TorchRec](https://pytorch.org/torchrec/torchrec.datasets.html). You can find more [specific examples here](https://pytorch.org/data/0.3.0/examples.html).
 
 The d[ocumentation for TorchData](https://pytorch.org/data) is now live. It contains a tutorial that covers [how to use DataPipes](https://pytorch.org/data/0.3.0/tutorial.html#using-datapipes), [use them with DataLoader](https://pytorch.org/data/0.3.0/tutorial.html#working-with-dataloader), and [implement custom ones](https://pytorch.org/data/0.3.0/tutorial.html#implementing-a-custom-datapipe). FAQs and future plans related to DataLoader are described in [our project’s README file](https://github.com/pytorch/data#readme).
 
-### functorch now in beta
+## Introducing functorch
 
 We’re excited to announce the first beta release of [functorch](https://github.com/pytorch/functorch). Heavily inspired by [Google JAX](https://github.com/google/jax), functorch is a library that adds composable function transforms to PyTorch. It aims to provide composable vmap (vectorization) and autodiff transforms that work with PyTorch modules and PyTorch autograd with good eager-mode performance.
 
@@ -40,9 +40,9 @@ Composing vmap (vectorization), vjp (reverse-mode AD), and jvp (forward-mode AD)
 
 For more details, please see our [documentation](https://pytorch.org/functorch/), [tutorials](https://pytorch.org/functorch), and [installation instructions](https://pytorch.org/functorch/stable/install.html).
 
-### Distributed Training
+## Distributed Training
 
-## (Stable) DDP static graph
+### (Stable) DDP static graph
 
 DDP static graph assumes that your model employs the same set of used/unused parameters in every iteration, so that it can deterministically know states like which hooks will fire, how many times the hooks will fire and gradients computation ready order after the first iteration. Static graph caches these states in the first iteration, and thus it could support features that DDP can not support in previous releases, e.g., support multiple activation checkpoints on the same parameters regardless of whether there are unused parameters or not. The static graph feature also applies performance optimizations when there are unused parameters, e.g., it avoids traversing graphs to search unused parameters every iteration, and enables dynamic bucketing order. These optimizations in the DDP static graph brought 10% QPS gain for some recommendation models.
 
@@ -73,10 +73,10 @@ Team PyTorch
                 </li>
 <li>
                     <a class="reference internal title-link has-children" href="#distributed-training">Distributed Training</a>
-                </li>
-<li>
-                    <a class="reference internal title-link has-children" href="#stable-ddp-static-graph">(Stable) DDP static graph</a>
-                </li>		
+    <ul>
+                        <li><a class="reference internal" href="#stable-ddp-static-graph">(Stable) DDP static graph</a></li>
+    </ul>
+                </li>	
             </ul>
         </div>
     </div>
