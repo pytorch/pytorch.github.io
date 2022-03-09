@@ -47,11 +47,11 @@ The TorchAudio v0.11 release includes the following beta features:
 * Implementation of Emformer ([docs](https://pytorch.org/audio/main/models.html#emformer))
 * Recurrent neural network transducer (RNN-T) streaming ASR model that uses Emformer for its transcription network ([docs](https://pytorch.org/audio/main/models.html#rnn-t))
 * RNN-T beam search decoder with TorchScript support ([docs](https://pytorch.org/audio/main/models.html#rnntbeamsearch))
-* LibriSpeech Emformer RNN-T training recipe ([github](https://github.com/pytorch/audio/tree/release/0.11/examples/asr/librispeech_emformer_rnnt)) and corresponding pre-trained streaming ASR inference pipeline ([docs](https://pytorch.org/audio/main/pipelines.html#emformer-rnnt-base-librispeech))
+* LibriSpeech Emformer RNN-T training recipe ([GitHub](https://github.com/pytorch/audio/tree/release/0.11/examples/asr/librispeech_emformer_rnnt)) and corresponding pre-trained streaming ASR inference pipeline ([docs](https://pytorch.org/audio/main/pipelines.html#emformer-rnnt-base-librispeech))
 
 Also there are prototype features that are available from nightly builds or the main branch.
 
-* Training recipes trained on MuST-C and TED-LIUM3 datasets. ([github](https://github.com/pytorch/audio/tree/main/examples/asr/emformer_rnnt))
+* Training recipes trained on MuST-C and TED-LIUM3 datasets. ([GitHub](https://github.com/pytorch/audio/tree/main/examples/asr/emformer_rnnt))
 * Pre-trained pipelines corresponding to the recipes. ([docs](https://pytorch.org/audio/main/prototype.pipelines.html))
 * Tutorial that steps through performing online speech recognition with RNN-T Emformer model. ([docs](https://pytorch.org/audio/main/tutorials/online_asr_tutorial.html))
 
@@ -216,7 +216,6 @@ More specifically the new, influence, subsection of Captum includes:
 * **[TracInCPFastRandProj](https://captum.ai/api/influence.html#tracincpfastrandproj)** uses a nearest neighbor approximation library such as annoy to compute the dot product between the training and test quantities. In order to reduce the dimensionality of layer activations and corresponding gradients this method, in addition, allows to project those vectors into a lower dimensional space using random projection matrices.
 
 More about the implementation of influential instances can be found on our [GitHub](https://github.com/pytorch/captum/tree/master/captum/influence) page and [tutorials](https://captum.ai/tutorials/TracInCP_Tutorial).
-
 
 Thanks for reading, If you’re interested in these updates and want to join the PyTorch community, we encourage you to join the [discussion forums](https://discuss.pytorch.org/) and [open GitHub issues](https://github.com/pytorch/pytorch/issues). To get the latest news from PyTorch, follow us on [Twitter](https://twitter.com/PyTorch), [Medium](https://medium.com/pytorch), [YouTube](https://www.youtube.com/pytorch), and [LinkedIn](https://www.linkedin.com/company/pytorch).
 
