@@ -34,6 +34,8 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.10.0-beta/dist/katex.min.css" type="text/css" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.13.11/dist/katex.min.css" type="text/css" />
   <link rel="stylesheet" href="../../../../_static/katex-math.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/panels-main.c949a650a448cc0ae9fd3441c0e17fb0.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/panels-variables.06eb56fa6e07937060861dad626602ad.css" type="text/css" />
   <link rel="stylesheet" href="../../../../_static/css/jit.css" type="text/css" />
     <link rel="index" title="Index" href="../../../../genindex.html" />
     <link rel="search" title="Search" href="../../../../search.html" />
@@ -134,8 +136,12 @@
                   <span class="dropdown-title">torchvision</span>
                   <p></p>
                 </a>
-                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/elastic/">
-                  <span class="dropdown-title">TorchElastic</span>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/torchrec">
+                  <span class="dropdown-title">TorchRec</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/data">
+                  <span class="dropdown-title">TorchData</span>
                   <p></p>
                 </a>
                 <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/serve/">
@@ -207,7 +213,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href='https://pytorch.org/docs/versions.html'>master (1.12.0a0+gitc2255c3 ) &#x25BC</a>
+      <a href='https://pytorch.org/docs/versions.html'>master (1.12.0a0+gitf71eede ) &#x25BC</a>
     </div>
     
 
@@ -304,6 +310,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../../../../quantization.html">Quantization</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../rpc.html">Distributed RPC Framework</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../random.html">torch.random</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../nested.html">torch.nested</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../sparse.html">torch.sparse</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../storage.html">torch.Storage</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../testing.html">torch.testing</a></li>
@@ -408,7 +415,8 @@
              <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
               
   <h1>Source code for torch.nn.parallel.distributed</h1><div class="highlight"><pre>
-<span></span><span class="kn">import</span> <span class="nn">collections.abc</span>
+<span></span><span class="kn">import</span> <span class="nn">sys</span>
+<span class="kn">import</span> <span class="nn">collections.abc</span>
 <span class="kn">import</span> <span class="nn">copy</span>
 <span class="kn">from</span> <span class="nn">dataclasses</span> <span class="kn">import</span> <span class="n">dataclass</span>
 <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Type</span>
@@ -1097,14 +1105,32 @@
 <span class="sd">        (5) passing a handle of DDP to SyncBatchNorm Layer</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">num_iterations</span> <span class="o">=</span> <span class="mi">0</span>
-        <span class="c1"># The bucket size limit is specified in the constructor.</span>
-        <span class="c1"># Additionally, we allow for a single small bucket for parameters</span>
-        <span class="c1"># that are defined first, such that their gradients don&#39;t spill into</span>
-        <span class="c1"># a much larger bucket, adding unnecessary latency after gradient</span>
-        <span class="c1"># computation finishes. Experiments showed 1MB is a reasonable value.</span>
+        <span class="c1"># Notice, the parameters order is not in the order in which they are used,</span>
+        <span class="c1"># especially in models with control flow.</span>
+        <span class="c1">#</span>
+        <span class="c1"># Alongside parameters are not presented in the real execution order,</span>
+        <span class="c1"># if a certain model happens to also</span>
+        <span class="c1">#   1) have other collectives comm ops in its backward graph.</span>
+        <span class="c1">#   2) have unused parameter in subset ranks of the whole world.</span>
+        <span class="c1"># bucketing could insert ALL-REDUCE comm op too early on the rank with unused parameter,</span>
+        <span class="c1"># matching up with other collectives comm ops on other ranks unexpectedly.</span>
+        <span class="c1">#</span>
+        <span class="c1"># In order to handle this corner case, when the parameters are not in the real execution order,</span>
+        <span class="c1"># we don&#39;t do bucketing, thus only one ALL-REDUCE is inserted after all the gradients</span>
+        <span class="c1"># of the whole graph are computed.</span>
+        <span class="c1">#</span>
+        <span class="c1"># Notice, here we only disable bucketing for the first iteration.</span>
+        <span class="c1"># After the first iteration, it&#39;s OK to rebuild buckets,</span>
+        <span class="c1"># because &quot;bucket rebuild&quot; bucketizes parameters based on its real execution order in backward graph.</span>
+
+        <span class="c1"># Can remove this branching once #73732 is landed.</span>
+        <span class="k">if</span> <span class="n">static_graph</span> <span class="ow">is</span> <span class="kc">True</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">find_unused_parameters</span> <span class="ow">is</span> <span class="kc">False</span><span class="p">:</span>
+            <span class="n">bucket_size_limits</span> <span class="o">=</span> <span class="p">[</span><span class="n">sys</span><span class="o">.</span><span class="n">maxsize</span><span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">bucket_size_limits</span> <span class="o">=</span> <span class="p">[</span><span class="n">dist</span><span class="o">.</span><span class="n">_DEFAULT_FIRST_BUCKET_BYTES</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">bucket_bytes_cap</span><span class="p">]</span>
         <span class="n">bucket_indices</span><span class="p">,</span> <span class="n">per_bucket_size_limits</span> <span class="o">=</span> <span class="n">dist</span><span class="o">.</span><span class="n">_compute_bucket_assignment_by_size</span><span class="p">(</span>
             <span class="n">parameters</span><span class="p">,</span>
-            <span class="p">[</span><span class="n">dist</span><span class="o">.</span><span class="n">_DEFAULT_FIRST_BUCKET_BYTES</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">bucket_bytes_cap</span><span class="p">],</span>
+            <span class="n">bucket_size_limits</span><span class="p">,</span>
             <span class="n">expect_sparse_gradient</span><span class="p">,</span>
         <span class="p">)</span>
 
@@ -1117,6 +1143,11 @@
             <span class="nb">list</span><span class="p">(</span><span class="nb">reversed</span><span class="p">(</span><span class="n">per_bucket_size_limits</span><span class="p">)),</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">process_group</span><span class="p">,</span>
             <span class="n">expect_sparse_gradient</span><span class="p">,</span>
+            <span class="c1"># The bucket size limit is specified in the constructor.</span>
+            <span class="c1"># Additionally, we allow for a single small bucket for parameters</span>
+            <span class="c1"># that are defined first, such that their gradients don&#39;t spill into</span>
+            <span class="c1"># a much larger bucket, adding unnecessary latency after gradient</span>
+            <span class="c1"># computation finishes. Experiments showed 1MB is a reasonable value.</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">bucket_bytes_cap</span><span class="p">,</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">find_unused_parameters</span><span class="p">,</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">gradient_as_bucket_view</span><span class="p">,</span>
@@ -1244,7 +1275,7 @@
         <span class="p">}</span>
 
     <span class="k">def</span> <span class="nf">_build_debug_param_to_name_mapping</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">parameters</span><span class="p">):</span>
-        <span class="k">if</span> <span class="n">dist</span><span class="o">.</span><span class="n">_get_debug_mode</span><span class="p">()</span> <span class="o">==</span> <span class="n">dist</span><span class="o">.</span><span class="n">_DistributedDebugLevel</span><span class="o">.</span><span class="n">OFF</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">dist</span><span class="o">.</span><span class="n">get_debug_level</span><span class="p">()</span> <span class="o">==</span> <span class="n">dist</span><span class="o">.</span><span class="n">DebugLevel</span><span class="o">.</span><span class="n">OFF</span><span class="p">:</span>
             <span class="k">return</span> <span class="p">{}</span>
 
         <span class="n">param_to_param_index</span> <span class="o">=</span> <span class="p">{</span><span class="n">parameters</span><span class="p">[</span><span class="n">i</span><span class="p">]:</span> <span class="n">i</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">parameters</span><span class="p">))}</span>

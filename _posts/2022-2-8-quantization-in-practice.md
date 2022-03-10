@@ -1,7 +1,7 @@
 ---
 layout: blog_detail
 title: 'Practical Quantization in PyTorch'
-author: Suraj Subramanian, Jerry Zhang
+author: Suraj Subramanian, Mark Saroufim, Jerry Zhang
 featured-img: ''
 ---
 
@@ -463,8 +463,6 @@ for key in act_compare_dict:
 That was a lot to digest, congratulations for sticking with it! Next, we'll take a look at quantizing a "real-world" model that uses dynamic control structures (if-else, loops). These elements disallow symbolic tracing a model, which makes it a bit tricky to directly quantize the model out of the box. In the next post of this series, we'll get our hands dirty on a model that is chock full of loops and if-else blocks, and even uses third-party libraries in the `forward` call. 
 
 We'll also cover a cool new feature in PyTorch Quantization called Define-by-Run, that tries to ease this constraint by needing only subsets of the model's computational graph to be free of dynamic flow. Check out the [Define-by-Run poster at PTDD'21](https://s3.amazonaws.com/assets.pytorch.org/ptdd2021/posters/C8.png) for a preview.
-
-***Thanks to Mark Saroufim for useful comments and feedback!***
 
 
 ## References
