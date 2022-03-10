@@ -1,5 +1,5 @@
 ---
 order: 2
-link: https://pytorch.org/blog/pytorch-1.10-released/
-summary: PyTorch 1.10 Release, including CUDA Graphs APIs, TorchScript improvements
+link: https://pytorch.org/blog/pytorch-1.11-new-library-releases
+summary: NEW! Introducing TorchRec, and other domain library updates in PyTorch 1.11
 ---
