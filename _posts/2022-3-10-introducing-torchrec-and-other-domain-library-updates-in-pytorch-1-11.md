@@ -5,28 +5,28 @@ author: Team PyTorch
 featured-img: "assets/images/pytorch-logo.jpg"
 ---
 
-We are introducing the beta release of TorchRec and a number of improvements to the current PyTorch domain libraries, alongside the [PyTorch 1.11 release](https://pytorch.org/blog/pytorch-1.11-released/). These updates demonstrate our focus on developing common and extensible APIs across all domains to make it easier for our community to build ecosystem projects on PyTorch. Highlights include: 
+We are introducing the beta release of TorchRec and a number of improvements to the current PyTorch domain libraries, alongside the [PyTorch 1.11 release](https://pytorch.org/blog/pytorch-1.11-released/). These updates demonstrate our focus on developing common and extensible APIs across all domains to make it easier for our community to build ecosystem projects on PyTorch. Highlights include:
 
-* **TorchRec**, a PyTorch domain library for Recommendation Systems, is available in beta. [View it on GitHub](https://github.com/pytorch/torchrec).
-* **TorchAudio** - Added Enformer- and RNN-T-based models and recipes to support the full development lifecycle of a streaming ASR model. See the release notes [here](https://github.com/pytorch/torchrec).
-* **TorchText** - Added beta support for RoBERTa and XLM-R models, byte-level BPE tokenizer, and text datasets backed by TorchData. See the release notes [here](https://github.com/pytorch/text/releases).
-* **TorchVision** - Added 4 new model families and 14 new classification datasets such as CLEVR, GTSRB, FER2013. See the release notes [here](https://github.com/pytorch/vision/releases).
+- **TorchRec**, a PyTorch domain library for Recommendation Systems, is available in beta. [View it on GitHub](https://github.com/pytorch/torchrec).
+- **TorchAudio** - Added Enformer- and RNN-T-based models and recipes to support the full development lifecycle of a streaming ASR model. See the release notes [here](https://github.com/pytorch/torchrec).
+- **TorchText** - Added beta support for RoBERTa and XLM-R models, byte-level BPE tokenizer, and text datasets backed by TorchData. See the release notes [here](https://github.com/pytorch/text/releases).
+- **TorchVision** - Added 4 new model families and 14 new classification datasets such as CLEVR, GTSRB, FER2013. See the release notes [here](https://github.com/pytorch/vision/releases).
 
 ## TorchRec 0.1
 
 We [announced TorchRec](https://pytorch.org/blog/introducing-torchrec/) a few weeks ago and we are excited to release the beta version today. To recap, TorchRec is a PyTorch domain library for Recommendation Systems. This new library provides common sparsity and parallelism primitives, enabling researchers to build state-of-the-art personalization models and deploy them in production. TorchRec was used to train a 1.25 trillion parameter model, pushed to production in January 2022.
 
- In particular, the library includes:
+In particular, the library includes:
 
-* Modeling primitives, such as embedding bags and jagged tensors, that enable easy authoring of large, performant multi-device/multi-node models using hybrid data-parallelism and model-parallelism.
-* Optimized RecSys kernels powered by [FBGEMM](https://github.com/pytorch/FBGEMM), including support for sparse and quantized operations.
-* A sharder which can partition embedding tables with a variety of different strategies including data-parallel, table-wise, row-wise, table-wise-row-wise, and column-wise sharding.
-* A planner which can automatically generate optimized sharding plans for models.
-* Pipelining to overlap dataloading device transfer (copy to GPU), inter-device communications (input_dist), and computation (forward, backward) for increased performance.
-* GPU inference support.
-* Common modules for RecSys, such as models and public datasets (Criteo & Movielens).
+- Modeling primitives, such as embedding bags and jagged tensors, that enable easy authoring of large, performant multi-device/multi-node models using hybrid data-parallelism and model-parallelism.
+- Optimized RecSys kernels powered by [FBGEMM](https://github.com/pytorch/FBGEMM), including support for sparse and quantized operations.
+- A sharder which can partition embedding tables with a variety of different strategies including data-parallel, table-wise, row-wise, table-wise-row-wise, and column-wise sharding.
+- A planner which can automatically generate optimized sharding plans for models.
+- Pipelining to overlap dataloading device transfer (copy to GPU), inter-device communications (input_dist), and computation (forward, backward) for increased performance.
+- GPU inference support.
+- Common modules for RecSys, such as models and public datasets (Criteo & Movielens).
 
-Please check the TorchRec announcement post [here](https://pytorch.org/blog/introducing-torchrec/), [video tutorial](https://www.youtube.com/watch?v=cjgj41dvSeQ), install instructions [here](https://github.com/pytorch/torchrec#readme), test drive the feature through this tutorial here, and refer to the reference document [here](https://pytorch.org/torchrec/). 
+Please check the TorchRec announcement post [here](https://pytorch.org/blog/introducing-torchrec/), [video tutorial](https://www.youtube.com/watch?v=cjgj41dvSeQ), install instructions [here](https://github.com/pytorch/torchrec#readme), test drive the feature through this tutorial [here](https://pytorch.org/tutorials/intermediate/torchrec_tutorial.html), and refer to the reference document [here](https://pytorch.org/torchrec/).
 
 ## TorchAudio 0.11
 
@@ -44,16 +44,16 @@ Emformer is an efficient memory-transformer-based streaming acoustic model that 
 
 The TorchAudio v0.11 release includes the following beta features:
 
-* Implementation of Emformer ([docs](https://pytorch.org/audio/main/models.html#emformer))
-* Recurrent neural network transducer (RNN-T) streaming ASR model that uses Emformer for its transcription network ([docs](https://pytorch.org/audio/main/models.html#rnn-t))
-* RNN-T beam search decoder with TorchScript support ([docs](https://pytorch.org/audio/main/models.html#rnntbeamsearch))
-* LibriSpeech Emformer RNN-T training recipe ([GitHub](https://github.com/pytorch/audio/tree/release/0.11/examples/asr/librispeech_emformer_rnnt)) and corresponding pre-trained streaming ASR inference pipeline ([docs](https://pytorch.org/audio/main/pipelines.html#emformer-rnnt-base-librispeech))
+- Implementation of Emformer ([docs](https://pytorch.org/audio/main/models.html#emformer))
+- Recurrent neural network transducer (RNN-T) streaming ASR model that uses Emformer for its transcription network ([docs](https://pytorch.org/audio/main/models.html#rnn-t))
+- RNN-T beam search decoder with TorchScript support ([docs](https://pytorch.org/audio/main/models.html#rnntbeamsearch))
+- LibriSpeech Emformer RNN-T training recipe ([GitHub](https://github.com/pytorch/audio/tree/release/0.11/examples/asr/librispeech_emformer_rnnt)) and corresponding pre-trained streaming ASR inference pipeline ([docs](https://pytorch.org/audio/main/pipelines.html#emformer-rnnt-base-librispeech))
 
 Also there are prototype features that are available from nightly builds or the main branch.
 
-* Training recipes trained on MuST-C and TED-LIUM3 datasets. ([GitHub](https://github.com/pytorch/audio/tree/main/examples/asr/emformer_rnnt))
-* Pre-trained pipelines corresponding to the recipes. ([docs](https://pytorch.org/audio/main/prototype.pipelines.html))
-* Tutorial that steps through performing online speech recognition with RNN-T Emformer model. ([docs](https://pytorch.org/audio/main/tutorials/online_asr_tutorial.html))
+- Training recipes trained on MuST-C and TED-LIUM3 datasets. ([GitHub](https://github.com/pytorch/audio/tree/main/examples/asr/emformer_rnnt))
+- Pre-trained pipelines corresponding to the recipes. ([docs](https://pytorch.org/audio/main/prototype.pipelines.html))
+- Tutorial that steps through performing online speech recognition with RNN-T Emformer model. ([docs](https://pytorch.org/audio/main/tutorials/online_asr_tutorial.html))
 
 Collectively, these features cover the full development lifecycle of a streaming ASR model, from definition through training and inference, and enable users to easily develop their own Emformer- and RNN-T-based models.
 
@@ -63,9 +63,9 @@ Special thanks to Yangyang Shi, Jay Mahadeokar, and Gil Keren for their code con
 
 The masked prediction training of HuBERT model requires the masked logits, unmasked logits, and feature norm as the outputs. The logits are for cross-entropy losses and the feature norm is for penalty loss. The release adds [HuBERTPretrainModel](https://github.com/pytorch/audio/blob/main/torchaudio/models/wav2vec2/model.py#L120-L205) and corresponding factory functions ([hubert_pretrain_base](https://github.com/pytorch/audio/blob/main/torchaudio/models/wav2vec2/model.py#L964-L1027), [hubert_pretrain_large](https://github.com/pytorch/audio/blob/main/torchaudio/models/wav2vec2/model.py#L1030-L1090), and [hubert_pretrain_xlarge](https://github.com/pytorch/audio/blob/main/torchaudio/models/wav2vec2/model.py#L1093-L1153)) to enable training from scratch.
 
-#### (Prototype) CTC Beam Search Decoder 
+#### (Prototype) CTC Beam Search Decoder
 
-In recent releases, TorchAudio has added support for ASR models fine-tuned on CTC loss. The addition of an inference time CTC beam search decoder enables running end-to-end ASR evaluation using TorchAudio utils. 
+In recent releases, TorchAudio has added support for ASR models fine-tuned on CTC loss. The addition of an inference time CTC beam search decoder enables running end-to-end ASR evaluation using TorchAudio utils.
 
 The CTC decoder in TorchAudio supports customizable beam search decoding with lexicon constraint. It also has optional KenLM language model support.
 
@@ -83,15 +83,15 @@ Please checkout the [API tutorial](https://pytorch.org/audio/main/tutorials/stre
 
 #### (Beta) RoBERTa and XLM-R Models
 
-TorchText has added support for pre-trained RoBERTa and XLM-R models. It would allow users to train end-2-end Transformer Encoder based models on standard NLP tasks using TorchText. 
+TorchText has added support for pre-trained RoBERTa and XLM-R models. It would allow users to train end-2-end Transformer Encoder based models on standard NLP tasks using TorchText.
 
 More specifically:
 
-* The models are torchscriptable and hence can be employed for production use-cases.
-* The model APIs let users to easily attach custom task-specific heads with pre-trained encoders. 
-* The API also comes equipped with data pre-processing transforms to match the pre-trained weights and model configuration. 
+- The models are torchscriptable and hence can be employed for production use-cases.
+- The model APIs let users to easily attach custom task-specific heads with pre-trained encoders.
+- The API also comes equipped with data pre-processing transforms to match the pre-trained weights and model configuration.
 
-We have added a [tutorial](https://pytorch.org/text/main/tutorials/sst2_classification_non_distributed.html) to demonstrate SST-2 binary text classification task with pre-trained XLM-R base architecture. 
+We have added a [tutorial](https://pytorch.org/text/main/tutorials/sst2_classification_non_distributed.html) to demonstrate SST-2 binary text classification task with pre-trained XLM-R base architecture.
 
 For additional details on model APIs and usage examples, please refer to the [documentation](https://pytorch.org/text/main/models.html).
 
@@ -101,11 +101,11 @@ TorchText has added support for a Byte-Level BPE tokenizer, as used in GPT-2. Th
 
 #### (Beta) Text datasets backed by TorchData
 
-TorchText has modernized its datasets by migrating from older-style Iterable Datasets to [TorchData’s](https://github.com/pytorch/data#readme) DataPipes. TorchData is a library that provides modular/composable primitives, allowing users to load and transform data in performant data pipelines. 
+TorchText has modernized its datasets by migrating from older-style Iterable Datasets to [TorchData’s](https://github.com/pytorch/data#readme) DataPipes. TorchData is a library that provides modular/composable primitives, allowing users to load and transform data in performant data pipelines.
 
-These DataPipes work out-of-the-box with PyTorch DataLoader and would enable new functionalities like auto-sharding. Users can now easily do data manipulation and pre-processing using user-defined functions and transformations in a functional style programming. Datasets backed by DataPipes also enable standard flow-control like batching, collation, shuffling and bucketizing. 
+These DataPipes work out-of-the-box with PyTorch DataLoader and would enable new functionalities like auto-sharding. Users can now easily do data manipulation and pre-processing using user-defined functions and transformations in a functional style programming. Datasets backed by DataPipes also enable standard flow-control like batching, collation, shuffling and bucketizing.
 
-Collectively, DataPipes provides a comprehensive experience for data preprocessing and tensorization needs in a pythonic and flexible way for model training. We have added a [tutorial](https://pytorch.org/text/main/tutorials/sst2_classification_non_distributed.html) to demonstrate data-processing pipelining using the modernized dataset for binary text-classification. 
+Collectively, DataPipes provides a comprehensive experience for data preprocessing and tensorization needs in a pythonic and flexible way for model training. We have added a [tutorial](https://pytorch.org/text/main/tutorials/sst2_classification_non_distributed.html) to demonstrate data-processing pipelining using the modernized dataset for binary text-classification.
 
 You can learn more about TorchData DataPipe APIs in its [official documentation](https://pytorch.org/data).
 
@@ -130,8 +130,8 @@ predictions =  fcos(x)
 
 The box AP of the pre-trained model on COCO val2017 is 39.2 (see [#4961](https://github.com/pytorch/vision/pull/4961) for more details).
 
-We would like to thank [Hu Ye](https://github.com/xiaohu2015) and [Zhiqiang Wang](https://github.com/zhiqwang) for contributing to the model implementation and initial training. This was the first community-contributed model in a long while, and given its success, we decided to use the learnings from this process and create a new [model contribution guidelines](https://github.com/pytorch/vision/blob/main/CONTRIBUTING_MODELS.md). 
- 
+We would like to thank [Hu Ye](https://github.com/xiaohu2015) and [Zhiqiang Wang](https://github.com/zhiqwang) for contributing to the model implementation and initial training. This was the first community-contributed model in a long while, and given its success, we decided to use the learnings from this process and create a new [model contribution guidelines](https://github.com/pytorch/vision/blob/main/CONTRIBUTING_MODELS.md).
+
 #### #2 Optical Flow support and RAFT model
 
 TorchVision now supports optical flow! Optical Flow models try to predict movement in a video: given two consecutive frames, the model predicts where each pixel of the first frame ends up in the second frame. Check out our [new tutorial on Optical Flow](https://pytorch.org/vision/0.12/auto_examples/plot_optical_flow.html#sphx-glr-auto-examples-plot-optical-flow-py)!
@@ -143,6 +143,7 @@ We implemented a torchscript-compatible [RAFT](https://arxiv.org/abs/2003.12039)
 </p>
 
 #### #3. Image Classification
+
 [Vision Transformer](https://arxiv.org/abs/2010.11929) (ViT) and [ConvNeXt](https://arxiv.org/abs/2201.03545) are two popular architectures which can be used as image classifiers or as backbones for downstream vision tasks. In this release we include 8 pre-trained weights for their classification variants. The models were trained on ImageNet and can be used as follows:
 
 ```python
@@ -159,7 +160,7 @@ predictions2 = convnext(x)
 The accuracies of the pre-trained models obtained on ImageNet val are seen below:
 
 | **Model**      | **Acc@1** | **Acc@5** |
-|----------------|----------:|----------:|
+| -------------- | --------: | --------: |
 | vit_b_16       |    81.072 |    95.318 |
 | vit_b_32       |    75.912 |    92.466 |
 | vit_l_16       |    79.662 |    94.638 |
@@ -181,13 +182,13 @@ import torchvision
 reader = torchvision.io.VideoReader(file_name, device="cuda:0")
 for frame in reader:
     print(frame)
-```	
+```
 
 We also support seeking to anyframe or a keyframe in the video before reading, as shown below:
 
 ```python
 reader.seek(seek_time)
-```	
+```
 
 ### New Datasets
 
@@ -197,23 +198,23 @@ As part of our work on Optical Flow support (see above for more details), we als
 
 ### Other Updates
 
-* **New documentation layout**: Each function / class is now documented in a separate page, clearing up some space in the per-module pages, and easing the discovery of the proposed APIs. Compare e.g. our [previous docs](https://pytorch.org/vision/0.11/transforms.html) vs the [new ones](https://pytorch.org/vision/0.12/transforms.html). Please let us know if you have any [feedback](https://github.com/pytorch/vision/issues/5511)!
-* **New [model contribution guidelines](https://github.com/pytorch/vision/blob/main/CONTRIBUTING_MODELS.md)** have been published following the success of the [FCOS](https://github.com/pytorch/vision/pull/4961) model which was contributed by the community. These guidelines aim to be an overview of the model contribution process for anyone who would like to suggest, implement and train a new model.
-* **Upcoming Prototype API** - We are currently working on a prototype API which adds Multi-weight support on all of our model builder methods. This will enable us to offer multiple pre-trained weights, associated with their meta-data and inference transforms. The API is still under review and thus was not included in the release but you can read more about it on our [blogpost](https://pytorch.org/blog/introducing-torchvision-new-multi-weight-support-api/) and provide your feedback on the dedicated [Github issue](https://github.com/pytorch/vision/issues/5088).
-* **Changes in our deprecation policy** - Up until now, torchvision would almost never remove deprecated APIs. In order to be more aligned and consistent with pytorch core, we are updating our deprecation policy. We are now following a 2-release deprecation cycle: deprecated APIs will raise a warning for 2 versions, and will be removed after that. To reflect these changes and to smooth the transition, we have decided to:
-	* Remove all APIs that had been deprecated before or on v0.8, released 1.5 years ago.
-	* Update the removal timeline of all other deprecated APIs to v0.14, to reflect the new 2-cycle policy starting now in v0.12.
+- **New documentation layout**: Each function / class is now documented in a separate page, clearing up some space in the per-module pages, and easing the discovery of the proposed APIs. Compare e.g. our [previous docs](https://pytorch.org/vision/0.11/transforms.html) vs the [new ones](https://pytorch.org/vision/0.12/transforms.html). Please let us know if you have any [feedback](https://github.com/pytorch/vision/issues/5511)!
+- **New [model contribution guidelines](https://github.com/pytorch/vision/blob/main/CONTRIBUTING_MODELS.md)** have been published following the success of the [FCOS](https://github.com/pytorch/vision/pull/4961) model which was contributed by the community. These guidelines aim to be an overview of the model contribution process for anyone who would like to suggest, implement and train a new model.
+- **Upcoming Prototype API** - We are currently working on a prototype API which adds Multi-weight support on all of our model builder methods. This will enable us to offer multiple pre-trained weights, associated with their meta-data and inference transforms. The API is still under review and thus was not included in the release but you can read more about it on our [blogpost](https://pytorch.org/blog/introducing-torchvision-new-multi-weight-support-api/) and provide your feedback on the dedicated [Github issue](https://github.com/pytorch/vision/issues/5088).
+- **Changes in our deprecation policy** - Up until now, torchvision would almost never remove deprecated APIs. In order to be more aligned and consistent with pytorch core, we are updating our deprecation policy. We are now following a 2-release deprecation cycle: deprecated APIs will raise a warning for 2 versions, and will be removed after that. To reflect these changes and to smooth the transition, we have decided to:
+  - Remove all APIs that had been deprecated before or on v0.8, released 1.5 years ago.
+  - Update the removal timeline of all other deprecated APIs to v0.14, to reflect the new 2-cycle policy starting now in v0.12.
 
 ### Captum 0.5
 
-[Captum](https://captum.ai/) is a PyTorch library for model interpretability. For this release, we expanded Captum with influential instances and added support for both similarity based influences and novel algorithms, [TracIn](https://arxiv.org/abs/2002.08484) and its variants. TracIn variants offer faster approximation of influence scores based on random projections for fully connected layers. 
+[Captum](https://captum.ai/) is a PyTorch library for model interpretability. For this release, we expanded Captum with influential instances and added support for both similarity based influences and novel algorithms, [TracIn](https://arxiv.org/abs/2002.08484) and its variants. TracIn variants offer faster approximation of influence scores based on random projections for fully connected layers.
 
 More specifically the new, influence, subsection of Captum includes:
 
-* **[SimilarityInfluence](https://captum.ai/api/influence.html#similarityinfluence)** computes similarity scores between test and training examples using default (cosine or euclidean) or custom user definite metrics w.r.t. given input model layers. 
-* **[TracInCP](https://captum.ai/api/influence.html#tracincp)** approximates the influential score of each training example on a given test example based on the dot-product similarity between loss gradients w.r.t. model parameters for test and training examples. Note that if we use training examples as test examples then we compute self influence. This method and its variants described below also return top-k proponents and opponents which are the top-k largest positive and negative influential examples respectively. 
-* **[TracInCPFast](https://captum.ai/api/influence.html#tracincpfast)** is an approximation of TracInCP that avoids computing the gradients w.r.t. large parameter matrices. It approximates influence score based on the dot products between last fully connected layer activations and loss gradients w.r.t. that layer for training and test examples.
-* **[TracInCPFastRandProj](https://captum.ai/api/influence.html#tracincpfastrandproj)** uses a nearest neighbor approximation library such as annoy to compute the dot product between the training and test quantities. In order to reduce the dimensionality of layer activations and corresponding gradients this method, in addition, allows to project those vectors into a lower dimensional space using random projection matrices.
+- **[SimilarityInfluence](https://captum.ai/api/influence.html#similarityinfluence)** computes similarity scores between test and training examples using default (cosine or euclidean) or custom user definite metrics w.r.t. given input model layers.
+- **[TracInCP](https://captum.ai/api/influence.html#tracincp)** approximates the influential score of each training example on a given test example based on the dot-product similarity between loss gradients w.r.t. model parameters for test and training examples. Note that if we use training examples as test examples then we compute self influence. This method and its variants described below also return top-k proponents and opponents which are the top-k largest positive and negative influential examples respectively.
+- **[TracInCPFast](https://captum.ai/api/influence.html#tracincpfast)** is an approximation of TracInCP that avoids computing the gradients w.r.t. large parameter matrices. It approximates influence score based on the dot products between last fully connected layer activations and loss gradients w.r.t. that layer for training and test examples.
+- **[TracInCPFastRandProj](https://captum.ai/api/influence.html#tracincpfastrandproj)** uses a nearest neighbor approximation library such as annoy to compute the dot product between the training and test quantities. In order to reduce the dimensionality of layer activations and corresponding gradients this method, in addition, allows to project those vectors into a lower dimensional space using random projection matrices.
 
 More about the implementation of influential instances can be found on our [GitHub](https://github.com/pytorch/captum/tree/master/captum/influence) page and [tutorials](https://captum.ai/tutorials/TracInCP_Tutorial).
 
@@ -222,7 +223,6 @@ Thanks for reading, If you’re interested in these updates and want to join the
 Cheers!
 
 Team PyTorch
-
 
 <div class="pytorch-content-right">
     <div class="pytorch-right-menu">
