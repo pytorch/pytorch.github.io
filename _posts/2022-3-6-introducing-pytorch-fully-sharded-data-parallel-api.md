@@ -1,7 +1,7 @@
 ---
 layout: blog_detail
 title: "Introducing PyTorch Fully Sharded Data Parallel (FSDP) API"
-author: Yanli Zhao
+author: Yanli Zhao, Rohan Varma, Chien-Chin Huang, Shen Li, Min Xu, Alban Desmaison
 featured-img: ""
 ---
 
@@ -27,7 +27,7 @@ The figure below shows how FSDP works for 2 data-parallel processes:
 
 
 <p align="center">
-  <img src="/assets/images/fsdp_workflow.png" width="60%">
+  <img src="/assets/images/fsdp_workflow.png" width="100%">
 </p>
 
 <p align = "center">
@@ -38,7 +38,7 @@ Usually, model layers are wrapped with FSDP in a nested way, so that only layers
 
 ### Using FSDP in PyTorch
 
-There are two ways to wrap a model with PyTorch FSDP. Auto wrapping is a drop-in replacement for DDP; manual wrapping needs minimal changes of model definition code with the ability to explore complex sharding strategies. Please see more details in this [tutorial](http://www.google.com).
+There are two ways to wrap a model with PyTorch FSDP. Auto wrapping is a drop-in replacement for DDP; manual wrapping needs minimal changes of model definition code with the ability to explore complex sharding strategies.
 
 
 # Auto Wrapping
