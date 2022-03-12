@@ -213,7 +213,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href='https://pytorch.org/docs/versions.html'>master (1.12.0a0+git00b01ec ) &#x25BC</a>
+      <a href='https://pytorch.org/docs/versions.html'>master (1.12.0a0+git1f04a00 ) &#x25BC</a>
     </div>
     
 
@@ -423,6 +423,7 @@
 <span class="kn">from</span> <span class="nn">contextlib</span> <span class="kn">import</span> <span class="n">contextmanager</span>
 <span class="kn">from</span> <span class="nn">dataclasses</span> <span class="kn">import</span> <span class="n">dataclass</span>
 <span class="kn">from</span> <span class="nn">enum</span> <span class="kn">import</span> <span class="n">Enum</span><span class="p">,</span> <span class="n">auto</span>
+<span class="kn">from</span> <span class="nn">math</span> <span class="kn">import</span> <span class="n">inf</span>
 <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">TYPE_CHECKING</span><span class="p">,</span>
     <span class="n">Any</span><span class="p">,</span>
@@ -2174,7 +2175,68 @@
                     <span class="s2">&quot;`_require_backward_grad_sync` was incorrectly set to &quot;</span>
                     <span class="s2">&quot;`True` while in the `no_sync()` context manager&quot;</span>
                 <span class="p">)</span>
-                <span class="n">m</span><span class="o">.</span><span class="n">_require_backward_grad_sync</span> <span class="o">=</span> <span class="n">old_flag</span></div></div>
+                <span class="n">m</span><span class="o">.</span><span class="n">_require_backward_grad_sync</span> <span class="o">=</span> <span class="n">old_flag</span></div>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">params_with_grad</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Parameter</span><span class="p">]:</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Recursively returns a list of all module parameters that have a gradient.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="p">[</span><span class="n">p</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">parameters</span><span class="p">()</span> <span class="k">if</span> <span class="n">p</span><span class="o">.</span><span class="n">grad</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">]</span>
+
+<div class="viewcode-block" id="FullyShardedDataParallel.clip_grad_norm_"><a class="viewcode-back" href="../../../../fsdp.html#torch.distributed.fsdp.FullyShardedDataParallel.clip_grad_norm_">[docs]</a>    <span class="nd">@torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">()</span>
+    <span class="k">def</span> <span class="nf">clip_grad_norm_</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">max_norm</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">int</span><span class="p">],</span> <span class="n">norm_type</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="mf">2.0</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Clip all gradients at this point in time. The norm is computed over all</span>
+<span class="sd">        gradients together, as if they were concatenated into a single vector.</span>
+<span class="sd">        Gradients are modified in-place.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            max_norm (float or int): max norm of the gradients</span>
+<span class="sd">            norm_type (float or int): type of the used p-norm. Can be ``&#39;inf&#39;``</span>
+<span class="sd">                for infinity norm.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            Total norm of the parameters (viewed as a single vector).</span>
+
+<span class="sd">        .. note:: This is analogous to `torch.nn.utils.clip_grad_norm_` but</span>
+<span class="sd">            handles the partitioning and multiple devices per rank under the</span>
+<span class="sd">            hood. The default torch util is not applicable here, because each</span>
+<span class="sd">            rank only has a partial view of all the grads in the model, so</span>
+<span class="sd">            calling it for FSDP models would lead to different scaling being</span>
+<span class="sd">            applied per subset of model parameters.</span>
+
+<span class="sd">        .. warning:: This needs to be called on all ranks, since synchronization</span>
+<span class="sd">            primitives will be used.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Call `_lazy_init` to ensure the stream synchronization is done appropriately.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_lazy_init</span><span class="p">()</span>
+        <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_root</span><span class="p">,</span> <span class="s2">&quot;clip_grad_norm should only be called on the root (parent) instance&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_assert_state</span><span class="p">(</span><span class="n">TrainingState_</span><span class="o">.</span><span class="n">IDLE</span><span class="p">)</span>
+
+        <span class="n">max_norm</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">max_norm</span><span class="p">)</span>
+        <span class="n">norm_type</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">norm_type</span><span class="p">)</span>
+        <span class="c1"># Computes the max norm for this shard&#39;s gradients and sync&#39;s across workers</span>
+        <span class="n">local_norm</span> <span class="o">=</span> <span class="n">_calc_grad_norm</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">params_with_grad</span><span class="p">,</span> <span class="n">norm_type</span><span class="p">)</span><span class="o">.</span><span class="n">cuda</span><span class="p">()</span>  <span class="c1"># type: ignore[arg-type]</span>
+        <span class="k">if</span> <span class="n">norm_type</span> <span class="o">==</span> <span class="n">inf</span><span class="p">:</span>
+            <span class="n">total_norm</span> <span class="o">=</span> <span class="n">local_norm</span>
+            <span class="n">dist</span><span class="o">.</span><span class="n">all_reduce</span><span class="p">(</span><span class="n">total_norm</span><span class="p">,</span> <span class="n">op</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">distributed</span><span class="o">.</span><span class="n">ReduceOp</span><span class="o">.</span><span class="n">MAX</span><span class="p">,</span> <span class="n">group</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">process_group</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">total_norm</span> <span class="o">=</span> <span class="n">local_norm</span> <span class="o">**</span> <span class="n">norm_type</span>
+            <span class="n">dist</span><span class="o">.</span><span class="n">all_reduce</span><span class="p">(</span><span class="n">total_norm</span><span class="p">,</span> <span class="n">group</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">process_group</span><span class="p">)</span>
+            <span class="n">total_norm</span> <span class="o">=</span> <span class="n">total_norm</span> <span class="o">**</span> <span class="p">(</span><span class="mf">1.0</span> <span class="o">/</span> <span class="n">norm_type</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">cpu_offload</span><span class="p">:</span>
+            <span class="n">total_norm</span> <span class="o">=</span> <span class="n">total_norm</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span>
+
+        <span class="n">clip_coef</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">max_norm</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">total_norm</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">total_norm</span><span class="o">.</span><span class="n">device</span><span class="p">)</span> <span class="o">/</span> <span class="p">(</span><span class="n">total_norm</span> <span class="o">+</span> <span class="mf">1e-6</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">clip_coef</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="c1"># multiply by clip_coef, aka, (max_norm/total_norm).</span>
+            <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">params_with_grad</span><span class="p">:</span>
+                <span class="k">assert</span> <span class="n">p</span><span class="o">.</span><span class="n">grad</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+                <span class="n">p</span><span class="o">.</span><span class="n">grad</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">mul_</span><span class="p">(</span><span class="n">clip_coef</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">grad</span><span class="o">.</span><span class="n">device</span><span class="p">))</span></div></div>
 
 
 <span class="k">def</span> <span class="nf">_get_default_cuda_device</span><span class="p">(</span><span class="n">module</span><span class="p">:</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">:</span>
@@ -2218,6 +2280,31 @@
     <span class="k">if</span> <span class="ow">not</span> <span class="n">cond</span><span class="p">:</span>
         <span class="nb">print</span><span class="p">(</span><span class="n">s</span><span class="p">)</span>
         <span class="k">raise</span> <span class="ne">AssertionError</span>
+
+<span class="k">def</span> <span class="nf">_calc_grad_norm</span><span class="p">(</span><span class="n">parameters</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Parameter</span><span class="p">],</span> <span class="n">p</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+    <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Calculate gradient norm of an iterable of parameters.</span>
+<span class="sd">    Returns:</span>
+<span class="sd">        Total norm of the parameters (viewed as a single vector).</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">parameters</span> <span class="o">=</span> <span class="p">[</span><span class="n">p</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">parameters</span> <span class="k">if</span> <span class="n">p</span><span class="o">.</span><span class="n">grad</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">]</span>
+
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">parameters</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="mf">0.0</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">p</span> <span class="o">==</span> <span class="n">inf</span><span class="p">:</span>
+        <span class="n">local_norm</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="nb">max</span><span class="p">(</span><span class="n">par</span><span class="o">.</span><span class="n">grad</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">abs</span><span class="p">()</span><span class="o">.</span><span class="n">max</span><span class="p">()</span> <span class="k">for</span> <span class="n">par</span> <span class="ow">in</span> <span class="n">parameters</span><span class="p">))</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="c1"># Compute the norm in full precision no matter what</span>
+        <span class="n">local_norm</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span>
+                <span class="p">[</span>
+                    <span class="n">torch</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">par</span><span class="o">.</span><span class="n">grad</span><span class="o">.</span><span class="n">detach</span><span class="p">(),</span> <span class="n">p</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+                    <span class="k">for</span> <span class="n">par</span> <span class="ow">in</span> <span class="n">parameters</span>
+                <span class="p">]</span>
+            <span class="p">),</span>
+            <span class="n">p</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="n">local_norm</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">dtype</span><span class="o">=</span><span class="n">parameters</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">local_norm</span>
 </pre></div>
 
              </article>
