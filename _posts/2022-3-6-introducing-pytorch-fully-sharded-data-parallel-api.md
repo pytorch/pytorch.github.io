@@ -37,7 +37,7 @@ Usually, model layers are wrapped with FSDP in a nested way, so that only layers
 There are two ways to wrap a model with PyTorch FSDP. Auto wrapping is a drop-in replacement for DDP; manual wrapping needs minimal changes of model definition code with the ability to explore complex sharding strategies.
 
 
-# Auto Wrapping
+#### Auto Wrapping
 
 Model layers should be wrapped in FSDP in a nested way to save peak memory and enable communication and computation overlapping. The simplest way to do it is auto wrapping, which can serve as a drop-in replacement for DDP without changing the rest of the code.
 
@@ -72,7 +72,7 @@ fsdp_model = FullyShardedDataParallel(
 )
 ```
 
-# Manual Wrapping
+#### Manual Wrapping
 
 Manual wrapping can be useful to explore complex sharding strategies by applying `wrap` selectively to some parts of the model. Overall settings can be passed to the enable_wrap()  context manager.
 
