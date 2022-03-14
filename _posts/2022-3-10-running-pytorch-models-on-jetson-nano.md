@@ -105,15 +105,15 @@ $ ls -lt ~/jetson_inference/
 ```
 
 
-<div style="display: flex">
-  <img src="/assets/images/blog-2022-3-10-using-jetson-interface-1.jpeg" alt="Using jest interface example 1" width="30%">
-  <img src="/assets/images/blog-2022-3-10-using-jetson-interface-2.jpeg" alt="Using jest interface example 2" width="70%">
+<div style="display: flex; justify-content: space-between;">
+  <img src="/assets/images/blog-2022-3-10-using-jetson-interface-1.jpeg" alt="Using jest interface example 1" width="35%" height="300px">
+  <img src="/assets/images/blog-2022-3-10-using-jetson-interface-2.jpeg" alt="Using jest interface example 2" width="60%" height="300px">
 </div>
 
 
-<div style="display: flex">
-  <img src="/assets/images/blog-2022-3-10-using-jetson-interface-3.jpeg" alt="Using jest interface example 3" width="30%">
-  <img src="/assets/images/blog-2022-3-10-using-jetson-interface-4.jpeg" alt="Using jest interface example 4" width="70%">
+<div style="display: flex; justify-content: space-between;">
+  <img src="/assets/images/blog-2022-3-10-using-jetson-interface-3.jpeg" alt="Using jest interface example 3" width="60%" height="300px">
+  <img src="/assets/images/blog-2022-3-10-using-jetson-interface-4.jpeg" alt="Using jest interface example 4" width="35%" height="300px">
 </div>
 
 You can also use the docker image to run PyTorch models because the image has PyTorch, torchvision and torchaudio installed:
@@ -183,7 +183,7 @@ You can also use the docker image described in the section *Using Jetson Inferen
 
 The official [YOLOv5](https://github.com/ultralytics/yolov5) repo is used to run the PyTorch YOLOv5 model on Jetson Nano. After logging in to Jetson Nano, follow the steps below:
 
-1. Get the repo and install what’s required:
+* Get the repo and install what’s required:
 
 ```
 git clone https://github.com/ultralytics/yolov5
@@ -191,7 +191,7 @@ cd yolov5
 pip install -r requirements.txt
 ```
 
-2. Run `python3 detect.py`, which by default uses the PyTorch yolov5s.pt model. You should see something like:
+* Run `python3 detect.py`, which by default uses the PyTorch yolov5s.pt model. You should see something like:
 
 ```
 detect: weights=yolov5s.pt, source=data/images, imgsz=[640, 640], conf_thres=0.25, iou_thres=0.45, max_det=1000, device=, view_img=False, save_txt=False, save_conf=False, save_crop=False, nosave=False, classes=None, agnostic_nms=False, augment=False, visualize=False, update=False, project=runs/detect, name=exp, exist_ok=False, line_thickness=3, hide_labels=False, hide_conf=False, half=False
@@ -228,20 +228,20 @@ total 1456
 Using the same test files used in the PyTorch iOS YOLOv5 demo app or Android YOLOv5 demo app, you can compare the results generated with running the YOLOv5 PyTorch model on mobile devices and Jetson Nano:
 
 <div style="display: flex">
-  <img src="{{ site.baseurl }}/assets/images/blog-2022-3-10-using-pytorch-1.png" alt="PyTorch YOLOv5 on Jetson Nano, example with a dog" width="50%">
-  <img src="{{ site.baseurl }}/assets/images/blog-2022-3-10-using-pytorch-2.png" alt="PyTorch YOLOv5 on Jetson Nano, example with a horse and a rider" width="50%">
+  <img src="{{ site.baseurl }}/assets/images/blog-2022-3-10-using-pytorch-1.png" alt="PyTorch YOLOv5 on Jetson Nano, example with a dog" width="35%" height="300px">
+  <img src="{{ site.baseurl }}/assets/images/blog-2022-3-10-using-pytorch-2.jpeg" alt="PyTorch YOLOv5 on Jetson Nano, example with a horse and a rider" width="60%" height="300px">
 </div>
 **Figure 1**. *PyTorch YOLOv5 on Jetson Nano*.  
 
 <div style="display: flex">
-  <img src="{{ site.baseurl }}/assets/images/blog-2022-3-10-using-pytorch-3.png" alt="PyTorch YOLOv5 on iOS, example with a dog" width="50%">
-  <img src="{{ site.baseurl }}/assets/images/blog-2022-3-10-using-pytorch-4.png" alt="PyTorch YOLOv5 on iOS, example with a horse and a rider" width="50%">
+  <img src="{{ site.baseurl }}/assets/images/blog-2022-3-10-using-pytorch-3.png" alt="PyTorch YOLOv5 on iOS, example with a dog" width="35%" height="300px">
+  <img src="{{ site.baseurl }}/assets/images/blog-2022-3-10-using-pytorch-4.png" alt="PyTorch YOLOv5 on iOS, example with a horse and a rider" width="60%" height="300px">
 </div>
 **Figure 2**. *PyTorch YOLOv5 on iOS*.  
 
 <div style="display: flex">
-  <img src="{{ site.baseurl }}/assets/images/blog-2022-3-10-using-pytorch-5.png" alt="PyTorch YOLOv5 on Android, example with a dog" width="50%">
-  <img src="{{ site.baseurl }}/assets/images/blog-2022-3-10-using-pytorch-6.png" alt="PyTorch YOLOv5 on Android, example with a horse and a rider" width="50%">
+  <img src="{{ site.baseurl }}/assets/images/blog-2022-3-10-using-pytorch-5.png" alt="PyTorch YOLOv5 on Android, example with a dog" width="35%" height="300px">
+  <img src="{{ site.baseurl }}/assets/images/blog-2022-3-10-using-pytorch-6.png" alt="PyTorch YOLOv5 on Android, example with a horse and a rider" width="60%" height="300px">
 </div>
 **Figure 2**. *PyTorch YOLOv5 on Android*.  
 
