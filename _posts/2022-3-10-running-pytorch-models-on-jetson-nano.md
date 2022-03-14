@@ -1,7 +1,7 @@
 ---
 layout: blog_detail
 title: 'Running PyTorch Models on Jetson Nano'
-author: Team PyTorch
+author: Jeff Tang, Hamid Shojanazeri, Geeta Chauhan
 featured-img: ''
 ---
 
@@ -129,7 +129,10 @@ Although Jetson Inference includes models already converted to the TensorRT engi
 ### Using TensorRT
 [TensorRT](https://docs.nvidia.com/deeplearning/tensorrt/) is a high-performance inference framework from Nvidia. Jetson Nano supports TensorRT via the Jetpack SDK, included in the SD Card image used to set up Jetson Nano. To confirm that TensorRT is already installed in Nano, `run dpkg -l|grep -i tensorrt`:
 
-<img src="/assets/images/blog-2022-3-10-using-tensorrt.png" width="60%">
+
+<div class="text-center">
+  <img src="{{ site.baseurl }}/assets/images/blog-2022-3-10-using-tensorrt.png" width="80%">
+</div>
 
 Theoretically, TensorRT can be used to “take a trained PyTorch model and optimize it to run more efficiently during inference on an NVIDIA GPU.” Follow the instructions and code in the [notebook](https://github.com/NVIDIA/TensorRT/blob/master/quickstart/IntroNotebooks/4.%20Using%20PyTorch%20through%20ONNX.ipynb) to see how to use PyTorch with TensorRT through ONNX on a torchvision Resnet50 model:
 
@@ -179,7 +182,7 @@ You can also use the docker image described in the section *Using Jetson Inferen
 
 The official [YOLOv5](https://github.com/ultralytics/yolov5) repo is used to run the PyTorch YOLOv5 model on Jetson Nano. After logging in to Jetson Nano, follow the steps below:
 
-  1. Get the repo and install what’s required:
+1. Get the repo and install what’s required:
 
 ```
 git clone https://github.com/ultralytics/yolov5
@@ -187,7 +190,7 @@ cd yolov5
 pip install -r requirements.txt
 ```
 
-  2. Run `python3 detect.py`, which by default uses the PyTorch yolov5s.pt model. You should see something like:
+2. Run `python3 detect.py`, which by default uses the PyTorch yolov5s.pt model. You should see something like:
 
 ```
 detect: weights=yolov5s.pt, source=data/images, imgsz=[640, 640], conf_thres=0.25, iou_thres=0.45, max_det=1000, device=, view_img=False, save_txt=False, save_conf=False, save_crop=False, nosave=False, classes=None, agnostic_nms=False, augment=False, visualize=False, update=False, project=runs/detect, name=exp, exist_ok=False, line_thickness=3, hide_labels=False, hide_conf=False, half=False
@@ -224,20 +227,20 @@ total 1456
 Using the same test files used in the PyTorch iOS YOLOv5 demo app or Android YOLOv5 demo app, you can compare the results generated with running the YOLOv5 PyTorch model on mobile devices and Jetson Nano:
 
 <div style="display: flex">
-  <img src="/assets/images/sota/blog-2022-3-10-using-pytorch-1.png" alt="PyTorch YOLOv5 on Jetson Nano, example with a dog" width="50%">
-  <img src="/assets/images/sota/blog-2022-3-10-using-pytorch-2.png" alt="PyTorch YOLOv5 on Jetson Nano, example with a horse and a rider" width="50%">
+  <img src="{{ site.baseurl }}/assets/images/sota/blog-2022-3-10-using-pytorch-1.png" alt="PyTorch YOLOv5 on Jetson Nano, example with a dog" width="50%">
+  <img src="{{ site.baseurl }}/assets/images/sota/blog-2022-3-10-using-pytorch-2.png" alt="PyTorch YOLOv5 on Jetson Nano, example with a horse and a rider" width="50%">
 </div>
 **Figure 1**. *PyTorch YOLOv5 on Jetson Nano*.  
 
 <div style="display: flex">
-  <img src="/assets/images/sota/blog-2022-3-10-using-pytorch-3.png" alt="PyTorch YOLOv5 on iOS, example with a dog" width="50%">
-  <img src="/assets/images/sota/blog-2022-3-10-using-pytorch-4.png" alt="PyTorch YOLOv5 on iOS, example with a horse and a rider" width="50%">
+  <img src="{{ site.baseurl }}/assets/images/sota/blog-2022-3-10-using-pytorch-3.png" alt="PyTorch YOLOv5 on iOS, example with a dog" width="50%">
+  <img src="{{ site.baseurl }}/assets/images/sota/blog-2022-3-10-using-pytorch-4.png" alt="PyTorch YOLOv5 on iOS, example with a horse and a rider" width="50%">
 </div>
 **Figure 2**. *PyTorch YOLOv5 on iOS*.  
 
 <div style="display: flex">
-  <img src="/assets/images/sota/blog-2022-3-10-using-pytorch-5.png" alt="PyTorch YOLOv5 on Android, example with a dog" width="50%">
-  <img src="/assets/images/sota/blog-2022-3-10-using-pytorch-6.png" alt="PyTorch YOLOv5 on Android, example with a horse and a rider" width="50%">
+  <img src="{{ site.baseurl }}/assets/images/sota/blog-2022-3-10-using-pytorch-5.png" alt="PyTorch YOLOv5 on Android, example with a dog" width="50%">
+  <img src="{{ site.baseurl }}/assets/images/sota/blog-2022-3-10-using-pytorch-6.png" alt="PyTorch YOLOv5 on Android, example with a horse and a rider" width="50%">
 </div>
 **Figure 2**. *PyTorch YOLOv5 on Android*.  
 
@@ -251,16 +254,16 @@ But if you just need to run some common computer vision models on Jetson Nano us
 
 ### References
 Jetson Inference docker image details
-https://github.com/dusty-nv/jetson-inference/blob/master/docs/aux-docker.md
+[https://github.com/dusty-nv/jetson-inference/blob/master/docs/aux-docker.md](https://github.com/dusty-nv/jetson-inference/blob/master/docs/aux-docker.md)
 
 A guide to using TensorRT on the Nvidia Jetson Nano
-https://docs.donkeycar.com/guide/robot_sbc/tensorrt_jetson_nano/  
+[https://docs.donkeycar.com/guide/robot_sbc/tensorrt_jetson_nano/](https://docs.donkeycar.com/guide/robot_sbc/tensorrt_jetson_nano/) 
 including:
 
   1. Use Jetson as a portable GPU device to run a NN chess engine model 
-  https://medium.com/@ezchess/jetson-lc0-running-leela-chess-zero-on-nvidia-jetson-a-portable-gpu-device-a213afc9c018 
+  [https://medium.com/@ezchess/jetson-lc0-running-leela-chess-zero-on-nvidia-jetson-a-portable-gpu-device-a213afc9c018](https://medium.com/@ezchess/jetson-lc0-running-leela-chess-zero-on-nvidia-jetson-a-portable-gpu-device-a213afc9c018)
 
   2. A MaskEraser app using PyTorch and Torchvision, installed directly with pip
-  https://github.com/INTEC-ATI/MaskEraser#install-pytorch 
+  [https://github.com/INTEC-ATI/MaskEraser#install-pytorch](https://github.com/INTEC-ATI/MaskEraser#install-pytorch)
 
-A PyTorch to TensorRT converter https://github.com/NVIDIA-AI-IOT/torch2trt 
+A PyTorch to TensorRT converter [https://github.com/NVIDIA-AI-IOT/torch2trt](https://github.com/NVIDIA-AI-IOT/torch2trt) 
