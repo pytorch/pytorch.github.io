@@ -2,7 +2,7 @@
 layout: blog_detail
 title: 'Running PyTorch Models on Jetson Nano'
 author: Jeff Tang, Hamid Shojanazeri, Geeta Chauhan
-featured-img: ''
+featured-img: 'assets/images/pytorch-logo.jpg'
 ---
 
 ### Overview
@@ -231,19 +231,19 @@ Using the same test files used in the PyTorch iOS YOLOv5 demo app or Android YOL
   <img src="{{ site.baseurl }}/assets/images/blog-2022-3-10-using-pytorch-1.png" alt="PyTorch YOLOv5 on Jetson Nano, example with a dog" width="35%">
   <img src="{{ site.baseurl }}/assets/images/blog-2022-3-10-using-pytorch-2.jpeg" alt="PyTorch YOLOv5 on Jetson Nano, example with a horse and a rider" width="50%">
 </div>
-**Figure 1**. *PyTorch YOLOv5 on Jetson Nano*.  
+Figure 1. PyTorch YOLOv5 on Jetson Nano.  
 
 <div style="display: flex">
   <img src="{{ site.baseurl }}/assets/images/blog-2022-3-10-using-pytorch-3.png" alt="PyTorch YOLOv5 on iOS, example with a dog" width="35%">
   <img src="{{ site.baseurl }}/assets/images/blog-2022-3-10-using-pytorch-4.png" alt="PyTorch YOLOv5 on iOS, example with a horse and a rider" width="50%">
 </div>
-**Figure 2**. *PyTorch YOLOv5 on iOS*.  
+Figure 2. PyTorch YOLOv5 on iOS.  
 
 <div style="display: flex">
   <img src="{{ site.baseurl }}/assets/images/blog-2022-3-10-using-pytorch-5.png" alt="PyTorch YOLOv5 on Android, example with a dog" width="35%">
   <img src="{{ site.baseurl }}/assets/images/blog-2022-3-10-using-pytorch-6.png" alt="PyTorch YOLOv5 on Android, example with a horse and a rider" width="50%">
 </div>
-**Figure 2**. *PyTorch YOLOv5 on Android*.  
+Figure 3. PyTorch YOLOv5 on Android.  
 
 ### Summary
 Based on our experience of running different PyTorch models for potential demo apps on Jetson Nano, we see that even Jetson Nano, a lower-end of the Jetson family of products, provides a powerful GPU and embedded system that can directly run some of the latest PyTorch models, pre-trained or transfer learned, efficiently.
