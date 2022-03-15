@@ -2,7 +2,7 @@
 layout: blog_detail
 title: "Introducing PyTorch Fully Sharded Data Parallel (FSDP) API"
 author: Yanli Zhao, Rohan Varma, Chien-Chin Huang, Shen Li, Min Xu, Alban Desmaison
-featured-img: ""
+featured-img: "assets/images/pytorch-logo.jpg"
 ---
 
 Recent studies have shown that large model training will be beneficial for improving model quality. During the last 3 years, model size grew 10,000 times from [BERT](https://arxiv.org/abs/1810.04805) with 110M parameters to [Megatron-2](https://arxiv.org/abs/2104.04473) with one trillion. However, training large AI models is not easy—aside from the need for large amounts of computing resources, software engineering complexity is also challenging. PyTorch has been working on building tools and infrastructure to make it easier.
