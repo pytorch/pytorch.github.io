@@ -254,17 +254,21 @@ But if you just need to run some common computer vision models on Jetson Nano us
 
 
 ### References
-Jetson Inference docker image details
+Torch-TensorRT, a compiler for PyTorch via TensorRT:
+[https://github.com/NVIDIA/Torch-TensorRT/](https://github.com/NVIDIA/Torch-TensorRT/)
+
+Jetson Inference docker image details:
 [https://github.com/dusty-nv/jetson-inference/blob/master/docs/aux-docker.md](https://github.com/dusty-nv/jetson-inference/blob/master/docs/aux-docker.md)
 
-A guide to using TensorRT on the Nvidia Jetson Nano
+A guide to using TensorRT on the Nvidia Jetson Nano:
 [https://docs.donkeycar.com/guide/robot_sbc/tensorrt_jetson_nano/](https://docs.donkeycar.com/guide/robot_sbc/tensorrt_jetson_nano/) 
 including:
 
-  1. Use Jetson as a portable GPU device to run a NN chess engine model 
-  [https://medium.com/@ezchess/jetson-lc0-running-leela-chess-zero-on-nvidia-jetson-a-portable-gpu-device-a213afc9c018](https://medium.com/@ezchess/jetson-lc0-running-leela-chess-zero-on-nvidia-jetson-a-portable-gpu-device-a213afc9c018)
+1. Use Jetson as a portable GPU device to run an NN chess engine model: 
+[https://medium.com/@ezchess/jetson-lc0-running-leela-chess-zero-on-nvidia-jetson-a-portable-gpu-device-a213afc9c018](https://medium.com/@ezchess/jetson-lc0-running-leela-chess-zero-on-nvidia-jetson-a-portable-gpu-device-a213afc9c018)
 
-  2. A MaskEraser app using PyTorch and Torchvision, installed directly with pip
-  [https://github.com/INTEC-ATI/MaskEraser#install-pytorch](https://github.com/INTEC-ATI/MaskEraser#install-pytorch)
+2. A MaskEraser app using PyTorch and torchvision, installed directly with pip:
+[https://github.com/INTEC-ATI/MaskEraser#install-pytorch](https://github.com/INTEC-ATI/MaskEraser#install-pytorch)
 
-A PyTorch to TensorRT converter [https://github.com/NVIDIA-AI-IOT/torch2trt](https://github.com/NVIDIA-AI-IOT/torch2trt) 
+A PyTorch to TensorRT converter:
+[https://github.com/NVIDIA-AI-IOT/torch2trt](https://github.com/NVIDIA-AI-IOT/torch2trt) 
