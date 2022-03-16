@@ -15,7 +15,7 @@ Nvidia [Jetson Nano](https://developer.nvidia.com/embedded/jetson-nano-developer
   3. PyTorch with the direct PyTorch API `torch.nn` for inference.
 
 ### Setting up Jetson Nano
-After purchasing a Jetson Nano [here](https://developer.nvidia.com/buy-jetson?product=jetson_nano&location=US), simply follow the clear step-by-step [instructions](https://developer.nvidia.com/embedded/jetson-modules) to download and write the Jetson Nano Developer Kit SD Card Image to a microSD card, and complete the setup. After the setup is done and the Nano is booted, you’ll see the standard Linux prompt along with the username and the Nano name used in the setup.
+After purchasing a Jetson Nano [here](https://developer.nvidia.com/buy-jetson?product=jetson_nano&location=US), simply follow the clear step-by-step [instructions](https://developer.nvidia.com/embedded/learn/get-started-jetson-nano-devkit) to download and write the Jetson Nano Developer Kit SD Card Image to a microSD card, and complete the setup. After the setup is done and the Nano is booted, you’ll see the standard Linux prompt along with the username and the Nano name used in the setup.
 
 To check the GPU status on Nano, run the following commands:
 
