@@ -295,7 +295,7 @@ They are specified as environment variables:
 
 `ANDROID_HOME` - path to [Android SDK](https://developer.android.com/studio/command-line/sdkmanager.html)
 
-`ANDROID_NDK` - path to [Android NDK](https://developer.android.com/studio/projects/install-ndk)
+`ANDROID_NDK` - path to [Android NDK](https://developer.android.com/studio/projects/install-ndk). It's recommended to use NDK 21.x.
 
 `GRADLE_HOME` - path to [gradle](https://gradle.org/releases/)
 
