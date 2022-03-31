@@ -405,8 +405,10 @@
               
   <h1>Source code for torch.distributed.fsdp.fully_sharded_data_parallel</h1><div class="highlight"><pre>
 <span></span><span class="kn">import</span> <span class="nn">contextlib</span>
+<span class="kn">import</span> <span class="nn">copy</span>
 <span class="kn">import</span> <span class="nn">functools</span>
 <span class="kn">import</span> <span class="nn">traceback</span>
+<span class="kn">import</span> <span class="nn">warnings</span>
 <span class="kn">from</span> <span class="nn">contextlib</span> <span class="kn">import</span> <span class="n">contextmanager</span>
 <span class="kn">from</span> <span class="nn">dataclasses</span> <span class="kn">import</span> <span class="n">dataclass</span>
 <span class="kn">from</span> <span class="nn">enum</span> <span class="kn">import</span> <span class="n">Enum</span><span class="p">,</span> <span class="n">auto</span>
@@ -417,6 +419,7 @@
     <span class="n">Callable</span><span class="p">,</span>
     <span class="n">Dict</span><span class="p">,</span>
     <span class="n">Generator</span><span class="p">,</span>
+    <span class="n">Iterable</span><span class="p">,</span>
     <span class="n">Iterator</span><span class="p">,</span>
     <span class="n">List</span><span class="p">,</span>
     <span class="n">NamedTuple</span><span class="p">,</span>
@@ -426,7 +429,6 @@
     <span class="n">Union</span><span class="p">,</span>
     <span class="n">cast</span><span class="p">,</span>
 <span class="p">)</span>
-<span class="kn">import</span> <span class="nn">warnings</span>
 
 <span class="kn">import</span> <span class="nn">torch</span>
 <span class="kn">import</span> <span class="nn">torch.distributed</span> <span class="k">as</span> <span class="nn">dist</span>
@@ -447,6 +449,14 @@
     <span class="n">FPW_MODULE</span><span class="p">,</span>
     <span class="n">FlatParameter</span><span class="p">,</span>
     <span class="n">FlattenParamsWrapper</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span> <span class="nn">.optim_utils</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">OPTIM_TARGET_RANK</span><span class="p">,</span>
+    <span class="n">_flatten_optim_state</span><span class="p">,</span>
+    <span class="n">_get_flat_param_to_fsdp_module</span><span class="p">,</span>
+    <span class="n">_get_param_id_to_param</span><span class="p">,</span>
+    <span class="n">_get_param_to_param_id</span><span class="p">,</span>
+    <span class="n">_unflatten_optim_state</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span> <span class="nn">.utils</span> <span class="kn">import</span> <span class="n">_apply_to_tensors</span><span class="p">,</span> <span class="n">_replace_by_prefix</span>
 <span class="kn">from</span> <span class="nn">.wrap</span> <span class="kn">import</span> <span class="n">_recursive_wrap</span>
@@ -584,6 +594,11 @@
     <span class="n">FULL_STATE_DICT</span> <span class="o">=</span> <span class="n">auto</span><span class="p">()</span>
     <span class="n">LOCAL_STATE_DICT</span> <span class="o">=</span> <span class="n">auto</span><span class="p">()</span>
     <span class="n">SHARDED_STATE_DICT</span> <span class="o">=</span> <span class="n">auto</span><span class="p">()</span>
+
+
+<span class="k">class</span> <span class="nc">OptimStateKeyType</span><span class="p">(</span><span class="n">Enum</span><span class="p">):</span>
+    <span class="n">PARAM_NAME</span> <span class="o">=</span> <span class="n">auto</span><span class="p">()</span>
+    <span class="n">PARAM_ID</span> <span class="o">=</span> <span class="n">auto</span><span class="p">()</span>
 
 
 <div class="viewcode-block" id="FullyShardedDataParallel"><a class="viewcode-back" href="../../../../fsdp.html#torch.distributed.fsdp.FullyShardedDataParallel">[docs]</a><span class="k">class</span> <span class="nc">FullyShardedDataParallel</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
@@ -1165,8 +1180,8 @@
                 <span class="c1"># again in FSDP later, for example after training to run inference.</span>
                 <span class="k">assert</span> <span class="p">(</span>
                     <span class="n">m</span><span class="o">.</span><span class="n">_is_root</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">m</span><span class="o">.</span><span class="n">_is_root</span>
-                <span class="p">),</span> <span class="s2">&quot;Non-root instance&#39;s _is_root flag should have not been set yet </span><span class="se">\</span>
-<span class="s2">                    or has already been set as False.&quot;</span>
+                <span class="p">),</span> <span class="s2">&quot;Non-root instance&#39;s _is_root flag should have not been set yet&quot;</span> \
+                    <span class="s2">&quot;or has already been set as False.&quot;</span>
                 <span class="k">if</span> <span class="n">m</span><span class="o">.</span><span class="n">_is_root</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                     <span class="n">m</span><span class="o">.</span><span class="n">_is_root</span> <span class="o">=</span> <span class="kc">False</span>
 
@@ -2429,7 +2444,347 @@
             <span class="c1"># multiply by clip_coef, aka, (max_norm/total_norm).</span>
             <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">params_with_grad</span><span class="p">:</span>
                 <span class="k">assert</span> <span class="n">p</span><span class="o">.</span><span class="n">grad</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
-                <span class="n">p</span><span class="o">.</span><span class="n">grad</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">mul_</span><span class="p">(</span><span class="n">clip_coef</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">grad</span><span class="o">.</span><span class="n">device</span><span class="p">))</span></div></div>
+                <span class="n">p</span><span class="o">.</span><span class="n">grad</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">mul_</span><span class="p">(</span><span class="n">clip_coef</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">grad</span><span class="o">.</span><span class="n">device</span><span class="p">))</span></div>
+
+<div class="viewcode-block" id="FullyShardedDataParallel.full_optim_state_dict"><a class="viewcode-back" href="../../../../fsdp.html#torch.distributed.fsdp.FullyShardedDataParallel.full_optim_state_dict">[docs]</a>    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">full_optim_state_dict</span><span class="p">(</span>
+        <span class="n">model</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">,</span>
+        <span class="n">optim</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">optim</span><span class="o">.</span><span class="n">Optimizer</span><span class="p">,</span>
+        <span class="n">optim_input</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span>
+            <span class="n">List</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]],</span> <span class="n">Iterable</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Parameter</span><span class="p">],</span>
+        <span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Consolidates the full optimizer state on rank 0 and returns it</span>
+<span class="sd">        as a :class:`dict` following the convention of</span>
+<span class="sd">        :meth:`torch.optim.Optimizer.state_dict`, i.e. with keys ``&quot;state&quot;``</span>
+<span class="sd">        and ``&quot;param_groups&quot;``. The flattened parameters in ``FSDP`` modules</span>
+<span class="sd">        contained in ``model`` are mapped back to their unflattened parameters.</span>
+
+<span class="sd">        .. warning:: This needs to be called on all ranks since synchronization</span>
+<span class="sd">            primitives are used.</span>
+
+<span class="sd">        .. warning:: Unlike ``torch.optim.Optimizer.state_dict()``, this method</span>
+<span class="sd">            uses full parameter names as keys instead of parameter IDs.</span>
+
+<span class="sd">        .. warning:: If you do not pass ``model.parameters()`` as the first</span>
+<span class="sd">            argument to the optimizer, then you should pass that same value to</span>
+<span class="sd">            this method as ``optim_input``.</span>
+
+<span class="sd">        .. note:: Like in :meth:`torch.optim.Optimizer.state_dict`, the tensors</span>
+<span class="sd">            contained in the optimizer state dict are not cloned, so there may</span>
+<span class="sd">            be aliasing surprises. For best practices, consider saving the</span>
+<span class="sd">            returned optimizer state dict immediately, e.g. using</span>
+<span class="sd">            ``torch.save()``.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            model (torch.nn.Module): Root module (which may or may not be a</span>
+<span class="sd">                :class:`FullyShardedDataParallel` instance) whose parameters</span>
+<span class="sd">                were passed into the optimizer ``optim``.</span>
+<span class="sd">            optim (torch.optim.Optimizer): Optimizer for ``model`` &#39;s</span>
+<span class="sd">                parameters.</span>
+<span class="sd">            optim_input (Optional[Union[List[Dict[str, Any]], Iterable[torch.nn.Parameter]]]):</span>
+<span class="sd">                Input passed into the optimizer ``optim`` representing either a</span>
+<span class="sd">                :class:`list` of parameter groups or an iterable of parameters;</span>
+<span class="sd">                if ``None``, then this method assumes the input was</span>
+<span class="sd">                ``model.parameters()``. (Default: ``None``)</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            full_osd (Dict[str, Any]): A :class:`dict` containing the optimizer</span>
+<span class="sd">                state for ``model`` &#39;s original unflattened parameters and</span>
+<span class="sd">                including keys &quot;state&quot; and &quot;param_groups&quot; following the</span>
+<span class="sd">                convention of :meth:`torch.optim.Optimizer.state_dict`.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">osd</span> <span class="o">=</span> <span class="n">optim</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()</span>
+        <span class="n">osd_state</span><span class="p">,</span> <span class="n">osd_param_groups</span> <span class="o">=</span> <span class="n">osd</span><span class="p">[</span><span class="s2">&quot;state&quot;</span><span class="p">],</span> <span class="n">osd</span><span class="p">[</span><span class="s2">&quot;param_groups&quot;</span><span class="p">]</span>  <span class="c1"># alias</span>
+
+        <span class="n">group</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">process_group</span> <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="s2">&quot;process_group&quot;</span><span class="p">)</span> \
+            <span class="k">else</span> <span class="kc">None</span>  <span class="c1"># not all `torch.nn.Module`s have `process_group`</span>
+        <span class="n">rank</span> <span class="o">=</span> <span class="n">dist</span><span class="o">.</span><span class="n">get_rank</span><span class="p">(</span><span class="n">group</span><span class="p">)</span>
+        <span class="n">to_save</span> <span class="o">=</span> <span class="n">rank</span> <span class="o">==</span> <span class="n">OPTIM_TARGET_RANK</span>
+        <span class="n">full_osd</span><span class="p">:</span> <span class="n">Dict</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;state&quot;</span><span class="p">:</span> <span class="p">{},</span> <span class="s2">&quot;param_groups&quot;</span><span class="p">:</span> <span class="p">[]}</span> <span class="k">if</span> <span class="n">to_save</span> <span class="k">else</span> <span class="p">{}</span>
+        <span class="n">full_osd_state</span> <span class="o">=</span> <span class="n">full_osd</span><span class="p">[</span><span class="s2">&quot;state&quot;</span><span class="p">]</span> <span class="k">if</span> <span class="n">to_save</span> <span class="k">else</span> <span class="kc">None</span>  <span class="c1"># alias</span>
+
+        <span class="c1"># Handle the &quot;state&quot; part of the optimizer state dict</span>
+        <span class="n">param_to_unflat_param_names</span> <span class="o">=</span> <span class="n">_get_param_to_unflat_param_names</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
+        <span class="n">flat_param_id_to_param</span> <span class="o">=</span> <span class="n">_get_param_id_to_param</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">optim_input</span><span class="p">)</span>
+        <span class="n">flat_param_to_fsdp_module</span> <span class="o">=</span> <span class="n">_get_flat_param_to_fsdp_module</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">flat_param_id</span><span class="p">,</span> <span class="n">param</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">flat_param_id_to_param</span><span class="p">):</span>  <span class="c1"># type: ignore[assignment]</span>
+            <span class="c1"># Do not include parameters without state to avoid empty mappings</span>
+            <span class="k">if</span> <span class="n">flat_param_id</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">osd_state</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="k">assert</span> <span class="n">param</span> <span class="ow">in</span> <span class="n">param_to_unflat_param_names</span><span class="p">,</span> \
+                <span class="s2">&quot;Check the `param_to_unflat_params` construction</span><span class="se">\n</span><span class="s2">&quot;</span> \
+                <span class="sa">f</span><span class="s2">&quot;param: </span><span class="si">{</span><span class="n">param</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="n">unflat_param_names</span> <span class="o">=</span> <span class="n">param_to_unflat_param_names</span><span class="p">[</span><span class="n">param</span><span class="p">]</span>
+            <span class="c1"># For FSDP parameters, we need to unflatten</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">param</span><span class="p">,</span> <span class="n">FlatParameter</span><span class="p">):</span>
+                <span class="k">assert</span> <span class="n">param</span> <span class="ow">in</span> <span class="n">flat_param_to_fsdp_module</span><span class="p">,</span> \
+                    <span class="s2">&quot;Check the `flat_param_to_fsdp_module` construction</span><span class="se">\n</span><span class="s2">&quot;</span> \
+                    <span class="sa">f</span><span class="s2">&quot;param: </span><span class="si">{</span><span class="n">param</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="n">unflat_state</span> <span class="o">=</span> <span class="n">_unflatten_optim_state</span><span class="p">(</span>
+                    <span class="n">flat_param_to_fsdp_module</span><span class="p">[</span><span class="n">param</span><span class="p">],</span> <span class="n">param</span><span class="p">,</span>
+                    <span class="n">osd_state</span><span class="p">[</span><span class="n">flat_param_id</span><span class="p">],</span>
+                <span class="p">)</span>
+                <span class="k">if</span> <span class="n">to_save</span><span class="p">:</span>
+                    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">unflat_state</span><span class="p">)</span> <span class="o">==</span> <span class="nb">len</span><span class="p">(</span><span class="n">unflat_param_names</span><span class="p">)</span> <span class="ow">and</span> \
+                        <span class="nb">len</span><span class="p">(</span><span class="n">unflat_state</span><span class="p">)</span> <span class="o">==</span> <span class="n">param</span><span class="o">.</span><span class="n">_num_unflattened_params</span><span class="p">,</span> \
+                        <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">unflat_state</span><span class="p">)</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">unflat_param_names</span><span class="p">)</span><span class="si">}</span><span class="s2"> &quot;</span> \
+                        <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">param</span><span class="o">.</span><span class="n">_num_unflattened_params</span><span class="si">}</span><span class="s2">&quot;</span>
+                    <span class="k">for</span> <span class="n">unflat_param_name</span><span class="p">,</span> <span class="n">unflat_param_state</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span>
+                        <span class="n">unflat_param_names</span><span class="p">,</span> <span class="n">unflat_state</span><span class="p">,</span>
+                    <span class="p">):</span>
+                        <span class="n">full_osd_state</span><span class="p">[</span><span class="n">unflat_param_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">unflat_param_state</span>
+            <span class="c1"># For parameters from non-FSDP modules, we do not need to unflatten</span>
+            <span class="k">elif</span> <span class="n">to_save</span><span class="p">:</span>
+                <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">unflat_param_names</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span>
+                <span class="n">unflat_param_name</span> <span class="o">=</span> <span class="n">unflat_param_names</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+                <span class="c1"># Do not `deepcopy()` to avoid unnecessarily duplicating</span>
+                <span class="c1"># tensor storage</span>
+                <span class="n">full_osd_state</span><span class="p">[</span><span class="n">unflat_param_name</span><span class="p">]</span> <span class="o">=</span> \
+                    <span class="n">copy</span><span class="o">.</span><span class="n">copy</span><span class="p">(</span><span class="n">osd_state</span><span class="p">[</span><span class="n">flat_param_id</span><span class="p">])</span>
+                <span class="c1"># Move all tensor state to CPU</span>
+                <span class="n">param_state</span> <span class="o">=</span> <span class="n">full_osd_state</span><span class="p">[</span><span class="n">unflat_param_name</span><span class="p">]</span>
+                <span class="k">for</span> <span class="n">state_name</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">param_state</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                    <span class="k">if</span> <span class="n">torch</span><span class="o">.</span><span class="n">is_tensor</span><span class="p">(</span><span class="n">value</span><span class="p">):</span>
+                        <span class="n">param_state</span><span class="p">[</span><span class="n">state_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span>
+
+        <span class="c1"># Non-target ranks may return since there is no more communication</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">to_save</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">full_osd</span>
+
+        <span class="c1"># Handle the &quot;param_groups&quot; part of the optimizer state dict</span>
+        <span class="n">full_osd_param_groups</span> <span class="o">=</span> <span class="n">full_osd</span><span class="p">[</span><span class="s2">&quot;param_groups&quot;</span><span class="p">]</span>  <span class="c1"># alias</span>
+        <span class="k">for</span> <span class="n">flat_param_group</span> <span class="ow">in</span> <span class="n">osd_param_groups</span><span class="p">:</span>
+            <span class="n">unflat_param_group</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="n">flat_param_group</span><span class="p">)</span>
+            <span class="n">param_group_params</span> <span class="o">=</span> <span class="p">[</span>
+                <span class="n">flat_param_id_to_param</span><span class="p">[</span><span class="n">flat_param_id</span><span class="p">]</span>
+                <span class="k">for</span> <span class="n">flat_param_id</span> <span class="ow">in</span> <span class="n">flat_param_group</span><span class="p">[</span><span class="s2">&quot;params&quot;</span><span class="p">]</span>
+            <span class="p">]</span>
+            <span class="n">nested_unflat_param_names</span> <span class="o">=</span> <span class="p">[</span>
+                <span class="n">param_to_unflat_param_names</span><span class="p">[</span><span class="n">param</span><span class="p">]</span>
+                <span class="k">for</span> <span class="n">param</span> <span class="ow">in</span> <span class="n">param_group_params</span>
+            <span class="p">]</span>
+            <span class="n">unflat_param_group</span><span class="p">[</span><span class="s2">&quot;params&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span>
+                <span class="n">unflat_param_name</span>
+                <span class="k">for</span> <span class="n">unflat_param_names</span> <span class="ow">in</span> <span class="n">nested_unflat_param_names</span>
+                <span class="k">for</span> <span class="n">unflat_param_name</span> <span class="ow">in</span> <span class="n">unflat_param_names</span>
+            <span class="p">]</span>  <span class="c1"># flatten the list of lists</span>
+            <span class="n">full_osd_param_groups</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">unflat_param_group</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">full_osd</span></div>
+
+
+<div class="viewcode-block" id="FullyShardedDataParallel.shard_full_optim_state_dict"><a class="viewcode-back" href="../../../../fsdp.html#torch.distributed.fsdp.FullyShardedDataParallel.shard_full_optim_state_dict">[docs]</a>    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">shard_full_optim_state_dict</span><span class="p">(</span>
+        <span class="n">full_optim_state_dict</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
+        <span class="n">model</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">,</span>
+        <span class="n">optim_input</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span>
+            <span class="n">List</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]],</span> <span class="n">Iterable</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Parameter</span><span class="p">],</span>
+        <span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Shards the full optimizer state dict ``full_optim_state_dict`` by</span>
+<span class="sd">        remapping the state to flattened parameters instead of unflattened</span>
+<span class="sd">        parameters and restricting to only this rank&#39;s part of the optimizer</span>
+<span class="sd">        state. The first argument should be the return value of</span>
+<span class="sd">        :meth:`full_optim_state_dict`.</span>
+
+<span class="sd">        Example::</span>
+
+<span class="sd">            &gt;&gt;&gt; from torch.distributed.fsdp import FullyShardedDataParallel as FSDP</span>
+<span class="sd">            &gt;&gt;&gt; model, optim = ...</span>
+<span class="sd">            &gt;&gt;&gt; full_osd = FSDP.full_optim_state_dict(model, optim)</span>
+<span class="sd">            &gt;&gt;&gt; torch.save(full_osd, PATH)</span>
+<span class="sd">            &gt;&gt;&gt; # Define new model with possibly different world size</span>
+<span class="sd">            &gt;&gt;&gt; new_model, new_optim = ...</span>
+<span class="sd">            &gt;&gt;&gt; full_osd = torch.load(PATH)</span>
+<span class="sd">            &gt;&gt;&gt; sharded_osd = FSDP.shard_full_optim_state_dict(full_osd, new_model)</span>
+<span class="sd">            &gt;&gt;&gt; new_optim.load_state_dict(sharded_osd)</span>
+
+<span class="sd">        .. warning:: If you do not pass ``model.parameters()`` as the first</span>
+<span class="sd">            argument to the optimizer, then you should pass that same value to</span>
+<span class="sd">            this method as ``optim_input``.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            full_optim_state_dict (Dict[str, Any]): Optimizer state dict</span>
+<span class="sd">                corresponding to the unflattened parameters and holding the</span>
+<span class="sd">                full non-sharded optimizer state.</span>
+<span class="sd">            model (torch.nn.Module): Root module (which may or may not be a</span>
+<span class="sd">                :class:`FullyShardedDataParallel` instance) whose parameters</span>
+<span class="sd">                correspond to the optimizer state in ``full_optim_state_dict``.</span>
+<span class="sd">            optim_input (Optional[Union[List[Dict[str, Any]], Iterable[torch.nn.Parameter]]]):</span>
+<span class="sd">                Input passed into the optimizer representing either a</span>
+<span class="sd">                :class:`list` of parameter groups or an iterable of parameters;</span>
+<span class="sd">                if ``None``, then this method assumes the input was</span>
+<span class="sd">                ``model.parameters()``. (Default: ``None``)</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            sharded_optim_state_dict (Dict[str, Any]): The full optimizer</span>
+<span class="sd">                state dict remapped to flattened parameters instead of</span>
+<span class="sd">                unflattened parameters and restricted to only include this</span>
+<span class="sd">                rank&#39;s part of the optimizer state.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">full_osd</span> <span class="o">=</span> <span class="n">full_optim_state_dict</span>  <span class="c1"># alias</span>
+        <span class="k">if</span> <span class="s2">&quot;state&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">full_osd</span> <span class="ow">or</span> <span class="s2">&quot;param_groups&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">full_osd</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;`full_optim_state_dict` must have the keys </span><span class="se">\&quot;</span><span class="s2">state</span><span class="se">\&quot;</span><span class="s2"> and &quot;</span>
+                <span class="s2">&quot;</span><span class="se">\&quot;</span><span class="s2">param_groups</span><span class="se">\&quot;</span><span class="s2"> to be a valid optimizer state dict&quot;</span>
+            <span class="p">)</span>
+
+        <span class="n">flat_param_id_to_param</span> <span class="o">=</span> <span class="n">_get_param_id_to_param</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">optim_input</span><span class="p">)</span>
+        <span class="n">flat_param_to_fsdp_module</span> <span class="o">=</span> <span class="n">_get_flat_param_to_fsdp_module</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
+        <span class="n">param_to_unflat_param_names</span> <span class="o">=</span> <span class="n">_get_param_to_unflat_param_names</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
+
+        <span class="c1"># Handle the &quot;state&quot; part of the optimizer state dict</span>
+        <span class="n">sharded_osd_state</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">full_osd_state</span> <span class="o">=</span> <span class="n">full_osd</span><span class="p">[</span><span class="s2">&quot;state&quot;</span><span class="p">]</span>
+        <span class="n">unflat_param_names_to_flat_param_id</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">flat_param_id</span><span class="p">,</span> <span class="n">param</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">flat_param_id_to_param</span><span class="p">):</span>  <span class="c1"># type: ignore[assignment]</span>
+            <span class="k">assert</span> <span class="n">param</span> <span class="ow">in</span> <span class="n">param_to_unflat_param_names</span><span class="p">,</span> \
+                <span class="s2">&quot;Check the `param_to_unflat_params` construction</span><span class="se">\n</span><span class="s2">&quot;</span> \
+                <span class="sa">f</span><span class="s2">&quot;param: </span><span class="si">{</span><span class="n">param</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="n">unflat_param_names</span> <span class="o">=</span> <span class="n">param_to_unflat_param_names</span><span class="p">[</span><span class="n">param</span><span class="p">]</span>
+            <span class="c1"># For FSDP parameters, we need to flatten</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">param</span><span class="p">,</span> <span class="n">FlatParameter</span><span class="p">):</span>
+                <span class="k">assert</span> <span class="n">param</span> <span class="ow">in</span> <span class="n">flat_param_to_fsdp_module</span><span class="p">,</span> \
+                    <span class="s2">&quot;Check the `flat_param_to_fsdp_module` mapping &quot;</span> \
+                    <span class="sa">f</span><span class="s2">&quot;construction</span><span class="se">\n</span><span class="s2">param=</span><span class="si">{</span><span class="n">param</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="n">unflat_param_names</span> <span class="o">=</span> <span class="n">param_to_unflat_param_names</span><span class="p">[</span><span class="n">param</span><span class="p">]</span>
+                <span class="n">fsdp_module</span> <span class="o">=</span> <span class="n">flat_param_to_fsdp_module</span><span class="p">[</span><span class="n">param</span><span class="p">]</span>
+                <span class="n">flat_state</span> <span class="o">=</span> <span class="n">_flatten_optim_state</span><span class="p">(</span>
+                    <span class="n">full_osd_state</span><span class="p">,</span> <span class="n">unflat_param_names</span><span class="p">,</span> <span class="n">fsdp_module</span><span class="p">,</span> <span class="n">param</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="n">sharded_osd_state</span><span class="p">[</span><span class="n">flat_param_id</span><span class="p">]</span> <span class="o">=</span> <span class="n">flat_state</span>
+                <span class="k">for</span> <span class="n">unflat_param_name</span> <span class="ow">in</span> <span class="n">unflat_param_names</span><span class="p">:</span>
+                    <span class="n">unflat_param_names_to_flat_param_id</span><span class="p">[</span><span class="n">unflat_param_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">flat_param_id</span>
+            <span class="c1"># For parameters from non-FSDP modules, we do not need to flatten</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">unflat_param_names</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span>
+                <span class="n">unflat_param_name</span> <span class="o">=</span> <span class="n">unflat_param_names</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+                <span class="c1"># Remap from unflattened to flattened parameter ID -- do not</span>
+                <span class="c1"># deepcopy to avoid unnecessarily duplicating tensor storage</span>
+                <span class="n">sharded_osd_state</span><span class="p">[</span><span class="n">flat_param_id</span><span class="p">]</span> <span class="o">=</span> \
+                    <span class="n">copy</span><span class="o">.</span><span class="n">copy</span><span class="p">(</span><span class="n">full_osd_state</span><span class="p">[</span><span class="n">unflat_param_name</span><span class="p">])</span>
+                <span class="n">unflat_param_names_to_flat_param_id</span><span class="p">[</span><span class="n">unflat_param_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">flat_param_id</span>
+
+        <span class="c1"># Handle the &quot;param_groups&quot; part of the optimizer state dict</span>
+        <span class="n">sharded_osd_param_groups</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">unflat_param_group</span> <span class="ow">in</span> <span class="n">full_osd</span><span class="p">[</span><span class="s2">&quot;param_groups&quot;</span><span class="p">]:</span>
+            <span class="n">flat_param_group</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="n">unflat_param_group</span><span class="p">)</span>
+            <span class="c1"># Map from unflattened parameter names to flattened parameter IDs</span>
+            <span class="n">flat_param_ids</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span>
+                <span class="n">unflat_param_names_to_flat_param_id</span><span class="p">[</span><span class="n">unflat_param_name</span><span class="p">]</span>
+                <span class="k">for</span> <span class="n">unflat_param_name</span> <span class="ow">in</span> <span class="n">unflat_param_group</span><span class="p">[</span><span class="s2">&quot;params&quot;</span><span class="p">]</span>
+            <span class="p">))</span>
+            <span class="n">flat_param_group</span><span class="p">[</span><span class="s2">&quot;params&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">flat_param_ids</span>
+            <span class="n">sharded_osd_param_groups</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">flat_param_group</span><span class="p">)</span>
+
+        <span class="n">sharded_optim_state_dict</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;state&quot;</span><span class="p">:</span> <span class="n">sharded_osd_state</span><span class="p">,</span>
+            <span class="s2">&quot;param_groups&quot;</span><span class="p">:</span> <span class="n">sharded_osd_param_groups</span><span class="p">,</span>
+        <span class="p">}</span>
+        <span class="k">return</span> <span class="n">sharded_optim_state_dict</span></div>
+
+<div class="viewcode-block" id="FullyShardedDataParallel.rekey_optim_state_dict"><a class="viewcode-back" href="../../../../fsdp.html#torch.distributed.fsdp.FullyShardedDataParallel.rekey_optim_state_dict">[docs]</a>    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">rekey_optim_state_dict</span><span class="p">(</span>
+        <span class="n">optim_state_dict</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
+        <span class="n">optim_state_key_type</span><span class="p">:</span> <span class="n">OptimStateKeyType</span><span class="p">,</span>
+        <span class="n">model</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">,</span>
+        <span class="n">optim_input</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span>
+            <span class="n">List</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]],</span> <span class="n">Iterable</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Parameter</span><span class="p">],</span>
+        <span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Re-keys the optimizer state dict ``optim_state_dict`` to use the key</span>
+<span class="sd">        type ``optim_state_key_type``. This can be used to achieve</span>
+<span class="sd">        compatibility between optimizer state dicts from models with FSDP</span>
+<span class="sd">        instances and ones without.</span>
+
+<span class="sd">        To re-key an FSDP full optimizer state dict (i.e. from</span>
+<span class="sd">        :meth:`full_optim_state_dict`) to use parameter IDs and be loadable to</span>
+<span class="sd">        a non-wrapped model::</span>
+
+<span class="sd">            &gt;&gt;&gt; wrapped_model, wrapped_optim = ...</span>
+<span class="sd">            &gt;&gt;&gt; full_osd = FSDP.full_optim_state_dict(wrapped_model, wrapped_optim)</span>
+<span class="sd">            &gt;&gt;&gt; nonwrapped_model, nonwrapped_optim = ...</span>
+<span class="sd">            &gt;&gt;&gt; rekeyed_osd = FSDP.rekey_optim_state_dict(full_osd, OptimStateKeyType.PARAM_ID, nonwrapped_model)</span>
+<span class="sd">            &gt;&gt;&gt; nonwrapped_optim.load_state_dict(rekeyed_osd)</span>
+
+<span class="sd">        To re-key a normal optimizer state dict from a non-wrapped model to be</span>
+<span class="sd">        loadable to a wrapped model::</span>
+
+<span class="sd">            &gt;&gt;&gt; nonwrapped_model, nonwrapped_optim = ...</span>
+<span class="sd">            &gt;&gt;&gt; osd = nonwrapped_optim.state_dict()</span>
+<span class="sd">            &gt;&gt;&gt; rekeyed_osd = FSDP.rekey_optim_state_dict(osd, OptimStateKeyType.PARAM_NAME, nonwrapped_model)</span>
+<span class="sd">            &gt;&gt;&gt; wrapped_model, wrapped_optim = ...</span>
+<span class="sd">            &gt;&gt;&gt; sharded_osd = FSDP.shard_full_optim_state_dict(rekeyed_osd, wrapped_model)</span>
+<span class="sd">            &gt;&gt;&gt; wrapped_optim.load_state_dict(sharded_osd)</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            rekeyed_osd (Dict[str, Any]): The optimizer state dict re-keyed</span>
+<span class="sd">                using the parameter keys specified by ``optim_state_key_type``.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">assert</span> <span class="n">optim_state_key_type</span> <span class="ow">in</span> \
+            <span class="p">(</span><span class="n">OptimStateKeyType</span><span class="o">.</span><span class="n">PARAM_NAME</span><span class="p">,</span> <span class="n">OptimStateKeyType</span><span class="o">.</span><span class="n">PARAM_ID</span><span class="p">)</span>
+        <span class="n">osd</span> <span class="o">=</span> <span class="n">optim_state_dict</span>  <span class="c1"># alias</span>
+        <span class="c1"># Validate that the existing parameter keys are uniformly typed</span>
+        <span class="n">uses_param_name_mask</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="nb">type</span><span class="p">(</span><span class="n">param_key</span><span class="p">)</span> <span class="ow">is</span> <span class="nb">str</span> <span class="k">for</span> <span class="n">param_key</span> <span class="ow">in</span> <span class="n">osd</span><span class="p">[</span><span class="s2">&quot;state&quot;</span><span class="p">]</span>
+        <span class="p">]</span>
+        <span class="n">uses_param_id_mask</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="nb">type</span><span class="p">(</span><span class="n">param_key</span><span class="p">)</span> <span class="ow">is</span> <span class="nb">int</span> <span class="k">for</span> <span class="n">param_key</span> <span class="ow">in</span> <span class="n">osd</span><span class="p">[</span><span class="s2">&quot;state&quot;</span><span class="p">]</span>
+        <span class="p">]</span>
+        <span class="k">if</span> <span class="p">(</span><span class="nb">any</span><span class="p">(</span><span class="n">uses_param_name_mask</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">all</span><span class="p">(</span><span class="n">uses_param_name_mask</span><span class="p">))</span> <span class="ow">or</span> \
+                <span class="p">(</span><span class="nb">any</span><span class="p">(</span><span class="n">uses_param_id_mask</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">all</span><span class="p">(</span><span class="n">uses_param_id_mask</span><span class="p">)):</span>
+            <span class="n">error_msg</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;Invalid parameter keys: </span><span class="si">{</span><span class="n">osd</span><span class="p">[</span><span class="s1">&#39;state&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">error_msg</span><span class="p">)</span>
+        <span class="c1"># Return directly if the existing key type matches the target key type</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">optim_state_key_type</span> <span class="o">==</span> <span class="n">OptimStateKeyType</span><span class="o">.</span><span class="n">PARAM_NAME</span> <span class="ow">and</span>
+            <span class="nb">all</span><span class="p">(</span><span class="n">uses_param_name_mask</span><span class="p">))</span> <span class="ow">or</span> \
+            <span class="p">(</span><span class="n">optim_state_key_type</span> <span class="o">==</span> <span class="n">OptimStateKeyType</span><span class="o">.</span><span class="n">PARAM_ID</span> <span class="ow">and</span>
+                <span class="nb">all</span><span class="p">(</span><span class="n">uses_param_id_mask</span><span class="p">)):</span>
+            <span class="k">return</span> <span class="n">osd</span>
+        <span class="c1"># Otherwise, actually perform the re-keying</span>
+        <span class="n">new_osd</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">if</span> <span class="n">optim_state_key_type</span> <span class="o">==</span> <span class="n">OptimStateKeyType</span><span class="o">.</span><span class="n">PARAM_NAME</span><span class="p">:</span>  <span class="c1"># ID -&gt; name</span>
+            <span class="n">param_id_to_param</span> <span class="o">=</span> <span class="n">_get_param_id_to_param</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">optim_input</span><span class="p">)</span>
+            <span class="n">param_to_param_name</span> <span class="o">=</span> <span class="n">_get_param_to_param_name</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
+            <span class="n">param_id_to_param_name</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span>
+                <span class="n">param_to_param_name</span><span class="p">[</span><span class="n">param</span><span class="p">]</span> <span class="k">for</span> <span class="n">param</span> <span class="ow">in</span> <span class="n">param_id_to_param</span>
+            <span class="p">]</span>
+            <span class="n">new_osd</span><span class="p">[</span><span class="s2">&quot;state&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+                <span class="n">param_id_to_param_name</span><span class="p">[</span><span class="n">param_id</span><span class="p">]:</span> <span class="n">param_state</span>
+                <span class="k">for</span> <span class="n">param_id</span><span class="p">,</span> <span class="n">param_state</span> <span class="ow">in</span> <span class="n">osd</span><span class="p">[</span><span class="s2">&quot;state&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+            <span class="p">}</span>
+            <span class="n">new_osd</span><span class="p">[</span><span class="s2">&quot;param_groups&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="n">osd</span><span class="p">[</span><span class="s2">&quot;param_groups&quot;</span><span class="p">])</span>
+            <span class="k">for</span> <span class="n">param_group</span> <span class="ow">in</span> <span class="n">new_osd</span><span class="p">[</span><span class="s2">&quot;param_groups&quot;</span><span class="p">]:</span>
+                <span class="n">param_group</span><span class="p">[</span><span class="s2">&quot;params&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">([</span>
+                    <span class="n">param_id_to_param_name</span><span class="p">[</span><span class="n">param_id</span><span class="p">]</span>
+                    <span class="k">for</span> <span class="n">param_id</span> <span class="ow">in</span> <span class="n">param_group</span><span class="p">[</span><span class="s2">&quot;params&quot;</span><span class="p">]</span>
+                <span class="p">])</span>
+            <span class="k">return</span> <span class="n">new_osd</span>
+        <span class="k">elif</span> <span class="n">optim_state_key_type</span> <span class="o">==</span> <span class="n">OptimStateKeyType</span><span class="o">.</span><span class="n">PARAM_ID</span><span class="p">:</span>  <span class="c1"># name -&gt; ID</span>
+            <span class="n">param_name_to_param</span> <span class="o">=</span> <span class="n">_get_param_name_to_param</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
+            <span class="n">param_to_param_id</span> <span class="o">=</span> <span class="n">_get_param_to_param_id</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">optim_input</span><span class="p">)</span>
+            <span class="c1"># Because not all model parameters may be passed as the optimizer</span>
+            <span class="c1"># input, we may need to drop some parameters from this mapping</span>
+            <span class="n">param_name_to_param_id</span> <span class="o">=</span> <span class="p">{</span>
+                <span class="n">param_name</span><span class="p">:</span> <span class="n">param_to_param_id</span><span class="p">[</span><span class="n">param</span><span class="p">]</span>
+                <span class="k">for</span> <span class="n">param_name</span><span class="p">,</span> <span class="n">param</span> <span class="ow">in</span> <span class="n">param_name_to_param</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+                <span class="k">if</span> <span class="n">param</span> <span class="ow">in</span> <span class="n">param_to_param_id</span>
+            <span class="p">}</span>
+            <span class="n">new_osd</span><span class="p">[</span><span class="s2">&quot;state&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+                <span class="n">param_name_to_param_id</span><span class="p">[</span><span class="n">param_name</span><span class="p">]:</span> <span class="n">param_state</span>
+                <span class="k">for</span> <span class="n">param_name</span><span class="p">,</span> <span class="n">param_state</span> <span class="ow">in</span> <span class="n">osd</span><span class="p">[</span><span class="s2">&quot;state&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+            <span class="p">}</span>
+            <span class="n">new_osd</span><span class="p">[</span><span class="s2">&quot;param_groups&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="n">osd</span><span class="p">[</span><span class="s2">&quot;param_groups&quot;</span><span class="p">])</span>
+            <span class="k">for</span> <span class="n">param_group</span> <span class="ow">in</span> <span class="n">new_osd</span><span class="p">[</span><span class="s2">&quot;param_groups&quot;</span><span class="p">]:</span>
+                <span class="n">param_group</span><span class="p">[</span><span class="s2">&quot;params&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">([</span>
+                    <span class="n">param_name_to_param_id</span><span class="p">[</span><span class="n">param_name</span><span class="p">]</span>
+                    <span class="k">for</span> <span class="n">param_name</span> <span class="ow">in</span> <span class="n">param_group</span><span class="p">[</span><span class="s2">&quot;params&quot;</span><span class="p">]</span>
+                <span class="p">])</span>
+            <span class="k">return</span> <span class="n">new_osd</span>
+        <span class="k">return</span> <span class="n">new_osd</span>  <span class="c1"># should never reach here</span></div></div>
 
 
 <span class="k">def</span> <span class="nf">_get_default_cuda_device</span><span class="p">(</span><span class="n">module</span><span class="p">:</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">:</span>
@@ -2498,6 +2853,96 @@
         <span class="p">)</span>
     <span class="n">local_norm</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">dtype</span><span class="o">=</span><span class="n">parameters</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">local_norm</span>
+
+
+<span class="k">def</span> <span class="nf">_get_param_to_unflat_param_names</span><span class="p">(</span>
+    <span class="n">model</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Parameter</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]:</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Constructs a mapping from flattened parameters (including non-FSDP-module</span>
+<span class="sd">    parameters) to their unflattened parameter names. For non-FSDP-module</span>
+<span class="sd">    parameters, these mapped-to lists always contain a single element. The</span>
+<span class="sd">    unflattened parameter names should match the keys of the model state dict.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        model (torch.nn.Module): Root module (which may or may not be a</span>
+<span class="sd">            :class:`FullyShardedDataParallel` instance).</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">param_to_unflat_param_names</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Parameter</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{}</span>
+
+    <span class="k">def</span> <span class="nf">clean_param_name</span><span class="p">(</span><span class="n">prefix</span><span class="p">,</span> <span class="n">param_info</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;This replicates the parameter name cleaning logic in model state</span>
+<span class="sd">        dict but avoids gathering any parameters.&quot;&quot;&quot;</span>
+        <span class="n">name</span> <span class="o">=</span> <span class="n">prefix</span> <span class="o">+</span> <span class="n">param_info</span><span class="o">.</span><span class="n">module_name</span> <span class="o">+</span> <span class="s2">&quot;.&quot;</span> <span class="o">+</span> <span class="n">param_info</span><span class="o">.</span><span class="n">param_name</span>
+        <span class="c1"># FSDP full parameter names may not have both (i.e. `FSDP_PREFIX`), so</span>
+        <span class="c1"># we call `replace()` twice separately</span>
+        <span class="n">name</span> <span class="o">=</span> <span class="n">name</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="n">FSDP_WRAPPED_MODULE</span> <span class="o">+</span> <span class="s2">&quot;.&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
+        <span class="n">name</span> <span class="o">=</span> <span class="n">name</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="n">FPW_MODULE</span> <span class="o">+</span> <span class="s2">&quot;.&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">name</span>
+
+    <span class="k">def</span> <span class="nf">f</span><span class="p">(</span><span class="n">param_to_unflat_param_names</span><span class="p">,</span> <span class="n">module</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">,</span> <span class="n">prefix</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+        <span class="c1"># For FSDP modules, only add the entry when considering the contained</span>
+        <span class="c1"># `FlattenParamsWrapper` to avoid duplication</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">FullyShardedDataParallel</span><span class="p">):</span>
+            <span class="k">for</span> <span class="n">param_name</span><span class="p">,</span> <span class="n">param</span> <span class="ow">in</span> <span class="n">module</span><span class="o">.</span><span class="n">named_parameters</span><span class="p">(</span><span class="n">recurse</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+                <span class="k">assert</span> <span class="n">param</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">param_to_unflat_param_names</span><span class="p">,</span> \
+                    <span class="sa">f</span><span class="s2">&quot;Incorrect recursion; already visited </span><span class="si">{</span><span class="n">param_name</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">param</span><span class="p">,</span> <span class="n">FlatParameter</span><span class="p">):</span>
+                    <span class="n">param_to_unflat_param_names</span><span class="p">[</span><span class="n">param</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span>
+                        <span class="n">clean_param_name</span><span class="p">(</span><span class="n">prefix</span><span class="p">,</span> <span class="n">param_info</span><span class="p">)</span>
+                        <span class="k">for</span> <span class="n">param_info</span> <span class="ow">in</span> <span class="n">param</span><span class="o">.</span><span class="n">_param_infos</span>
+                    <span class="p">]</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">param_to_unflat_param_names</span><span class="p">[</span><span class="n">param</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="n">prefix</span> <span class="o">+</span> <span class="n">param_name</span><span class="p">]</span>
+
+        <span class="k">for</span> <span class="n">submodule_name</span><span class="p">,</span> <span class="n">submodule</span> <span class="ow">in</span> <span class="n">module</span><span class="o">.</span><span class="n">named_children</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">submodule</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">new_prefix</span> <span class="o">=</span> <span class="n">prefix</span> <span class="o">+</span> <span class="n">submodule_name</span> <span class="o">+</span> <span class="s2">&quot;.&quot;</span>
+                <span class="n">f</span><span class="p">(</span><span class="n">param_to_unflat_param_names</span><span class="p">,</span> <span class="n">submodule</span><span class="p">,</span> <span class="n">new_prefix</span><span class="p">)</span>
+
+    <span class="n">f</span><span class="p">(</span><span class="n">param_to_unflat_param_names</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">param_to_unflat_param_names</span>
+
+
+<span class="k">def</span> <span class="nf">_get_param_to_param_name</span><span class="p">(</span>
+    <span class="n">model</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Parameter</span><span class="p">,</span> <span class="nb">str</span><span class="p">]:</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Constructs a mapping from parameters to their parameter names. ``model``</span>
+<span class="sd">    should not contain any :class:`FullyShardedDataParallel` instances, which</span>
+<span class="sd">    means that none of the parameters should be ``FlatParameter`` s. As a</span>
+<span class="sd">    result, compared to :meth:`_get_param_to_unflat_param_names`, the mapped</span>
+<span class="sd">    values may be flattened from singleton :class:`list` s to the contained</span>
+<span class="sd">    names themselves.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        model (torch.nn.Module): Root module, which should not contain any</span>
+<span class="sd">            :class:`FullyShardedDataParallel` instances.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">param_to_param_names</span> <span class="o">=</span> <span class="n">_get_param_to_unflat_param_names</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">param_names</span> <span class="ow">in</span> <span class="n">param_to_param_names</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+        <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">param_names</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;`_get_param_to_unflat_param_names()` &quot;</span> \
+            <span class="s2">&quot;should not construct empty lists&quot;</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">param_names</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;Each parameter should only map to one parameter name but got &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">param_names</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+    <span class="n">param_to_param_name</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="n">param</span><span class="p">:</span> <span class="n">param_names</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">for</span> <span class="n">param</span><span class="p">,</span> <span class="n">param_names</span> <span class="ow">in</span> <span class="n">param_to_param_names</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="n">param_to_param_name</span>
+
+
+<span class="k">def</span> <span class="nf">_get_param_name_to_param</span><span class="p">(</span>
+    <span class="n">model</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Parameter</span><span class="p">]:</span>
+    <span class="sd">&quot;&quot;&quot;Constructs the inverse mapping of :meth:`_get_param_to_param_name`.&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="p">{</span>
+        <span class="n">param_name</span><span class="p">:</span> <span class="n">param</span>
+        <span class="k">for</span> <span class="n">param</span><span class="p">,</span> <span class="n">param_name</span> <span class="ow">in</span> <span class="n">_get_param_to_param_name</span><span class="p">(</span><span class="n">model</span><span class="p">)</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+    <span class="p">}</span>
 </pre></div>
 
              </article>
