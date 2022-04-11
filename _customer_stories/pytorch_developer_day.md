@@ -1,8 +1,10 @@
 ---
+layout: blog_detail
 category: natural-language-processing
 title: PyTorch Customer Story 2
 date: December 1, 2021
 header-image: assets/images/pytorch_developer_day_2021.png
+link: /customer-stories/natural-language-processing-1/
 ---
 
 The PyTorch Developer Day is a virtual event that brings together leading researchers and developers from the Machine Learning (ML) community to join a multiple set of talks covering new software releases, ways PyTorch is being used in academia and industry, and current trends in ML development. Find all the talks below:
