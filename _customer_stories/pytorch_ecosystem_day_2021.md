@@ -1,5 +1,5 @@
 ---
-category: customer-story
+category: natural_language_processing
 title: PyTorch Customer Story 3
 date: April 21, 2021
 header-image: assets/images/pytorch_ecosystem_day_2021.jpeg

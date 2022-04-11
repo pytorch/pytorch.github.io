@@ -1,5 +1,5 @@
 ---
-category: customer-story
+category: computer-vision
 title: PyTorch Customer Story 1
 date: November 12, 2020
 header-image: assets/images/pytorch_developer_day_2020.png

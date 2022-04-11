@@ -1,5 +1,5 @@
 ---
-category: customer-story
+category: natural_language_processing
 title: PyTorch Customer Story 2
 date: December 1, 2021
 header-image: assets/images/pytorch_developer_day_2021.png
