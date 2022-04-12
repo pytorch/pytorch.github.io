@@ -451,7 +451,6 @@
     <span class="n">FlattenParamsWrapper</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span> <span class="nn">.optim_utils</span> <span class="kn">import</span> <span class="p">(</span>
-    <span class="n">OPTIM_TARGET_RANK</span><span class="p">,</span>
     <span class="n">_flatten_optim_state</span><span class="p">,</span>
     <span class="n">_get_flat_param_to_fsdp_module</span><span class="p">,</span>
     <span class="n">_get_param_id_to_param</span><span class="p">,</span>
@@ -2773,6 +2772,7 @@
         <span class="n">optim_input</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span>
             <span class="n">List</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]],</span> <span class="n">Iterable</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Parameter</span><span class="p">],</span>
         <span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">rank0_only</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Consolidates the full optimizer state on rank 0 and returns it</span>
@@ -2782,8 +2782,9 @@
 <span class="sd">        contained in ``model`` are mapped back to their unflattened parameters.</span>
 
 <span class="sd">        .. warning:: This needs to be called on all ranks since synchronization</span>
-<span class="sd">            primitives are used. However, the state dict is only populated on</span>
-<span class="sd">            rank 0. All other ranks return an empty :class:`dict`.</span>
+<span class="sd">            primitives are used. However, if ``rank0_only=True``, then the</span>
+<span class="sd">            state dict is only populated on rank 0, and all other ranks return</span>
+<span class="sd">            an empty :class:`dict`.</span>
 
 <span class="sd">        .. warning:: Unlike ``torch.optim.Optimizer.state_dict()``, this method</span>
 <span class="sd">            uses full parameter names as keys instead of parameter IDs.</span>
@@ -2809,13 +2810,16 @@
 <span class="sd">                :class:`list` of parameter groups or an iterable of parameters;</span>
 <span class="sd">                if ``None``, then this method assumes the input was</span>
 <span class="sd">                ``model.parameters()``. (Default: ``None``)</span>
+<span class="sd">            rank0_only (bool): If ``True``, saves the populated :class:`dict`</span>
+<span class="sd">                only on rank 0; if ``False``, saves it on all ranks. (Default:</span>
+<span class="sd">                ``True``)</span>
 
 <span class="sd">        Returns:</span>
 <span class="sd">            Dict[str, Any]: A :class:`dict` containing the optimizer state for</span>
 <span class="sd">            ``model`` &#39;s original unflattened parameters and including keys</span>
 <span class="sd">            &quot;state&quot; and &quot;param_groups&quot; following the convention of</span>
-<span class="sd">            :meth:`torch.optim.Optimizer.state_dict` if on rank 0, and an empty</span>
-<span class="sd">            :class:`dict` otherwise.</span>
+<span class="sd">            :meth:`torch.optim.Optimizer.state_dict`. If ``rank0_only=False``,</span>
+<span class="sd">            then nonzero ranks return an empty :class:`dict`.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">osd</span> <span class="o">=</span> <span class="n">optim</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()</span>
         <span class="n">osd_state</span><span class="p">,</span> <span class="n">osd_param_groups</span> <span class="o">=</span> <span class="n">osd</span><span class="p">[</span><span class="s2">&quot;state&quot;</span><span class="p">],</span> <span class="n">osd</span><span class="p">[</span><span class="s2">&quot;param_groups&quot;</span><span class="p">]</span>  <span class="c1"># alias</span>
@@ -2823,7 +2827,7 @@
         <span class="n">group</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">process_group</span> <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="s2">&quot;process_group&quot;</span><span class="p">)</span> \
             <span class="k">else</span> <span class="kc">None</span>  <span class="c1"># not all `torch.nn.Module`s have `process_group`</span>
         <span class="n">rank</span> <span class="o">=</span> <span class="n">dist</span><span class="o">.</span><span class="n">get_rank</span><span class="p">(</span><span class="n">group</span><span class="p">)</span>
-        <span class="n">to_save</span> <span class="o">=</span> <span class="n">rank</span> <span class="o">==</span> <span class="n">OPTIM_TARGET_RANK</span>
+        <span class="n">to_save</span> <span class="o">=</span> <span class="ow">not</span> <span class="n">rank0_only</span> <span class="ow">or</span> <span class="n">rank</span> <span class="o">==</span> <span class="mi">0</span>
         <span class="n">full_osd</span><span class="p">:</span> <span class="n">Dict</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;state&quot;</span><span class="p">:</span> <span class="p">{},</span> <span class="s2">&quot;param_groups&quot;</span><span class="p">:</span> <span class="p">[]}</span> <span class="k">if</span> <span class="n">to_save</span> <span class="k">else</span> <span class="p">{}</span>
         <span class="n">full_osd_state</span> <span class="o">=</span> <span class="n">full_osd</span><span class="p">[</span><span class="s2">&quot;state&quot;</span><span class="p">]</span> <span class="k">if</span> <span class="n">to_save</span> <span class="k">else</span> <span class="kc">None</span>  <span class="c1"># alias</span>
 
@@ -2846,7 +2850,7 @@
                     <span class="sa">f</span><span class="s2">&quot;param: </span><span class="si">{</span><span class="n">param</span><span class="si">}</span><span class="s2">&quot;</span>
                 <span class="n">unflat_state</span> <span class="o">=</span> <span class="n">_unflatten_optim_state</span><span class="p">(</span>
                     <span class="n">flat_param_to_fsdp_module</span><span class="p">[</span><span class="n">param</span><span class="p">],</span> <span class="n">param</span><span class="p">,</span>
-                    <span class="n">osd_state</span><span class="p">[</span><span class="n">flat_param_id</span><span class="p">],</span>
+                    <span class="n">osd_state</span><span class="p">[</span><span class="n">flat_param_id</span><span class="p">],</span> <span class="n">to_save</span><span class="p">,</span>
                 <span class="p">)</span>
                 <span class="k">if</span> <span class="n">to_save</span><span class="p">:</span>
                     <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">unflat_state</span><span class="p">)</span> <span class="o">==</span> <span class="nb">len</span><span class="p">(</span><span class="n">unflat_param_names</span><span class="p">)</span> <span class="ow">and</span> \
@@ -3185,6 +3189,9 @@
 <span class="sd">    parameters, these mapped-to lists always contain a single element. The</span>
 <span class="sd">    unflattened parameter names should match the keys of the model state dict.</span>
 
+<span class="sd">    For shared parameters, only the first parameter name is included (following</span>
+<span class="sd">    the ``torch.nn.Module.parameters()`` order).</span>
+
 <span class="sd">    Args:</span>
 <span class="sd">        model (torch.nn.Module): Root module (which may or may not be a</span>
 <span class="sd">            :class:`FullyShardedDataParallel` instance).</span>
@@ -3206,15 +3213,15 @@
         <span class="c1"># `FlattenParamsWrapper` to avoid duplication</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">FullyShardedDataParallel</span><span class="p">):</span>
             <span class="k">for</span> <span class="n">param_name</span><span class="p">,</span> <span class="n">param</span> <span class="ow">in</span> <span class="n">module</span><span class="o">.</span><span class="n">named_parameters</span><span class="p">(</span><span class="n">recurse</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
-                <span class="k">assert</span> <span class="n">param</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">param_to_unflat_param_names</span><span class="p">,</span> \
-                    <span class="sa">f</span><span class="s2">&quot;Incorrect recursion; already visited </span><span class="si">{</span><span class="n">param_name</span><span class="si">}</span><span class="s2">&quot;</span>
-                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">param</span><span class="p">,</span> <span class="n">FlatParameter</span><span class="p">):</span>
-                    <span class="n">param_to_unflat_param_names</span><span class="p">[</span><span class="n">param</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span>
-                        <span class="n">clean_param_name</span><span class="p">(</span><span class="n">prefix</span><span class="p">,</span> <span class="n">param_info</span><span class="p">)</span>
-                        <span class="k">for</span> <span class="n">param_info</span> <span class="ow">in</span> <span class="n">param</span><span class="o">.</span><span class="n">_param_infos</span>
-                    <span class="p">]</span>
-                <span class="k">else</span><span class="p">:</span>
-                    <span class="n">param_to_unflat_param_names</span><span class="p">[</span><span class="n">param</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="n">prefix</span> <span class="o">+</span> <span class="n">param_name</span><span class="p">]</span>
+                <span class="n">prefixed_param_names</span> <span class="o">=</span> <span class="p">[</span>
+                    <span class="n">clean_param_name</span><span class="p">(</span><span class="n">prefix</span><span class="p">,</span> <span class="n">param_info</span><span class="p">)</span>
+                    <span class="k">for</span> <span class="n">param_info</span> <span class="ow">in</span> <span class="n">param</span><span class="o">.</span><span class="n">_param_infos</span>
+                <span class="p">]</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">param</span><span class="p">,</span> <span class="n">FlatParameter</span><span class="p">)</span> <span class="k">else</span> <span class="p">[</span><span class="n">prefix</span> <span class="o">+</span> <span class="n">param_name</span><span class="p">]</span>
+                <span class="c1"># If this parameter has already been visited, then it is a</span>
+                <span class="c1"># shared parameter; then, only take the first parameter name</span>
+                <span class="n">is_shared_param</span> <span class="o">=</span> <span class="n">param</span> <span class="ow">in</span> <span class="n">param_to_unflat_param_names</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">is_shared_param</span><span class="p">:</span>
+                    <span class="n">param_to_unflat_param_names</span><span class="p">[</span><span class="n">param</span><span class="p">]</span> <span class="o">=</span> <span class="n">prefixed_param_names</span>
 
         <span class="k">for</span> <span class="n">submodule_name</span><span class="p">,</span> <span class="n">submodule</span> <span class="ow">in</span> <span class="n">module</span><span class="o">.</span><span class="n">named_children</span><span class="p">():</span>
             <span class="k">if</span> <span class="n">submodule</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
