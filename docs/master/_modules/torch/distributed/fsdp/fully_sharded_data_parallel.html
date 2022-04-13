@@ -436,7 +436,7 @@
 <span class="kn">import</span> <span class="nn">torch.nn.functional</span> <span class="k">as</span> <span class="nn">F</span>
 <span class="kn">from</span> <span class="nn">torch.autograd</span> <span class="kn">import</span> <span class="n">Variable</span>
 <span class="kn">from</span> <span class="nn">torch.distributed</span> <span class="kn">import</span> <span class="n">ProcessGroup</span>
-<span class="kn">from</span> <span class="nn">torch.distributed._sharded_tensor</span> <span class="kn">import</span> <span class="p">(</span>
+<span class="kn">from</span> <span class="nn">torch.distributed._shard.sharded_tensor</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">Shard</span><span class="p">,</span>
     <span class="n">ShardedTensor</span><span class="p">,</span>
     <span class="n">init_from_local_shards</span><span class="p">,</span>
@@ -524,7 +524,7 @@
 <span class="sd">        to their reduced precision) as expected. Note that this checkpoint</span>
 <span class="sd">        support is currently limited to ``StateDictType.FULL_STATE_DICT``.</span>
 
-<span class="sd">    .. note:: In ``summon_full_params``, parameters are summoned in full</span>
+<span class="sd">    .. note:: In ``_summon_full_params``, parameters are summoned in full</span>
 <span class="sd">        precision but buffers are not.</span>
 
 <span class="sd">    .. note:: Parameters and buffers are checkpointed in full precision. For</span>
@@ -723,6 +723,16 @@
 <span class="sd">            the near future. It allows users to enable two different backward_prefetch</span>
 <span class="sd">            algorithms to help backward communication and computation overlapping.</span>
 <span class="sd">            Pros and cons of each algorithm is explained in the class ``BackwardPrefetch``.</span>
+<span class="sd">        ignored_modules (Optional[Iterable[torch.nn.Module]]): Modules whose</span>
+<span class="sd">            own parameters and child modules&#39; parameters are ignored by this</span>
+<span class="sd">            instance. None of the modules directly in ``ignored_modules``</span>
+<span class="sd">            should be :class:`FullyShardedDataParallel` instances, and any</span>
+<span class="sd">            child modules that are already-constructed</span>
+<span class="sd">            :class:`FullyShardedDataParallel` instances will not be ignored if</span>
+<span class="sd">            they are nested under this instance. This argument may be used to</span>
+<span class="sd">            avoid sharding specific parameters when using an</span>
+<span class="sd">            ``auto_wrap_policy`` or if parameters&#39; sharding is not managed by</span>
+<span class="sd">            FSDP. (Default: ``None``)</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
@@ -733,10 +743,24 @@
         <span class="n">cpu_offload</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">CPUOffload</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">auto_wrap_policy</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Callable</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">backward_prefetch</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">BackwardPrefetch</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">mixed_precision</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">MixedPrecision</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="n">mixed_precision</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">MixedPrecision</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">ignored_modules</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Iterable</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">_log_api_usage_once</span><span class="p">(</span><span class="s2">&quot;torch.distributed.fsdp&quot;</span><span class="p">)</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="c1"># Save the ignored modules and their parameters, including the</span>
+        <span class="c1"># parameter names, which are needed to filter the model state dict</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_ignored_modules</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_ignored_modules</span><span class="p">(</span><span class="n">ignored_modules</span><span class="p">)</span>
+        <span class="n">ignored_params</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_ignored_params</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_ignored_modules</span><span class="p">)</span>
+        <span class="n">param_to_unflat_param_names</span> <span class="o">=</span> <span class="n">_get_param_to_unflat_param_names</span><span class="p">(</span><span class="n">module</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_ignored_param_to_param_name</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">param</span> <span class="ow">in</span> <span class="n">ignored_params</span><span class="p">:</span>
+            <span class="n">unflat_param_names</span> <span class="o">=</span> <span class="n">param_to_unflat_param_names</span><span class="p">[</span><span class="n">param</span><span class="p">]</span>
+            <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">unflat_param_names</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">,</span> \
+                <span class="s2">&quot;Only `FlatParameter`s can map to &gt;1 unflattened parameter &quot;</span> \
+                <span class="s2">&quot;name, and `_get_ignored_params()` should have excluded &quot;</span> \
+                <span class="s2">&quot;them; check `_get_param_to_unflat_param_names()`&quot;</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_ignored_param_to_param_name</span><span class="p">[</span><span class="n">param</span><span class="p">]</span> <span class="o">=</span> <span class="n">unflat_param_names</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
         <span class="c1"># if auto_wrap_policy is specified, submodules should not be</span>
         <span class="c1"># already wrapped, otherwise we&#39;d attempt to double wrap them resulting</span>
         <span class="c1"># in errors.</span>
@@ -750,6 +774,8 @@
                 <span class="n">module</span><span class="p">,</span>
                 <span class="n">auto_wrap_policy</span><span class="o">=</span><span class="n">auto_wrap_policy</span><span class="p">,</span>
                 <span class="n">wrapper_cls</span><span class="o">=</span><span class="n">FullyShardedDataParallel</span><span class="p">,</span>
+                <span class="n">ignored_modules</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_ignored_modules</span><span class="p">,</span>
+                <span class="n">ignored_params</span><span class="o">=</span><span class="n">ignored_params</span><span class="p">,</span>
                 <span class="c1"># Note that we have the recursive_wrap skip wrapping for</span>
                 <span class="c1"># the outermost (this) module otherwise it will result in a</span>
                 <span class="c1"># double-wrap causing issues.</span>
@@ -792,8 +818,8 @@
         <span class="c1"># sharding individual layers of a Module, with an outer wrapper to</span>
         <span class="c1"># shard any leftover parameters.</span>
         <span class="n">params</span> <span class="o">=</span> <span class="p">[]</span>
-        <span class="k">for</span> <span class="n">param_name</span><span class="p">,</span> <span class="n">param</span> <span class="ow">in</span> <span class="n">module</span><span class="o">.</span><span class="n">named_parameters</span><span class="p">():</span>
-            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">param</span><span class="p">,</span> <span class="n">FlatParameter</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">param</span> <span class="ow">in</span> <span class="n">module</span><span class="o">.</span><span class="n">parameters</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">param</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">ignored_params</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">param</span><span class="p">,</span> <span class="n">FlatParameter</span><span class="p">):</span>
                 <span class="n">params</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">param</span><span class="p">)</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_fsdp_wrapped_module</span><span class="p">:</span> <span class="n">FlattenParamsWrapper</span> <span class="o">=</span> <span class="n">FlattenParamsWrapper</span><span class="p">(</span>
@@ -811,7 +837,7 @@
 
         <span class="c1"># Make sure all parameters are sharded.</span>
         <span class="k">for</span> <span class="n">n</span><span class="p">,</span> <span class="n">p</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">named_parameters</span><span class="p">():</span>
-            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="n">FlatParameter</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">p</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">ignored_params</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="n">FlatParameter</span><span class="p">):</span>
                 <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
                     <span class="sa">f</span><span class="s2">&quot;found unsharded parameter: </span><span class="si">{</span><span class="n">n</span><span class="si">}</span><span class="s2"> ; </span><span class="si">{</span><span class="n">p</span><span class="o">.</span><span class="n">size</span><span class="p">()</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">p</span><span class="o">.</span><span class="vm">__class__</span><span class="si">}</span><span class="s2">&quot;</span>
                 <span class="p">)</span>
@@ -870,6 +896,60 @@
                 <span class="s2">&quot;sharding_strategy only supports FULL_SHARD and SHARD_GRAD_OP right now.&quot;</span>
             <span class="p">)</span>
 
+    <span class="k">def</span> <span class="nf">_get_ignored_modules</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">_ignored_modules</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Set</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">]:</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Checks that ``_ignored_modules`` is an iterable of ``torch.nn.Module``</span>
+<span class="sd">        s without any :class:`FullyShardedDataParallel` instances and then</span>
+<span class="sd">        returns them and their children as a :class:`set`, excluding nested</span>
+<span class="sd">        :class:`FullyShardedDataParallel` instances.</span>
+
+<span class="sd">        We include the child modules to better match user intuition since</span>
+<span class="sd">        ignoring a module should ignore its child modules as well, and we</span>
+<span class="sd">        exclude :class:`FullyShardedDataParallel` instances since ``self`` may</span>
+<span class="sd">        be the intended root instance that manages them.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">_ignored_modules</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="nb">set</span><span class="p">()</span>
+        <span class="n">msg_prefix</span> <span class="o">=</span> <span class="s2">&quot;`ignored_modules` should be an iterable of &quot;</span> \
+            <span class="s2">&quot;`torch.nn.Module`s &quot;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">ignored_root_modules</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">_ignored_modules</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">TypeError</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="n">msg_prefix</span> <span class="o">+</span> <span class="sa">f</span><span class="s2">&quot;but got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">_ignored_modules</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">module</span> <span class="ow">in</span> <span class="n">ignored_root_modules</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                    <span class="n">msg_prefix</span> <span class="o">+</span> <span class="sa">f</span><span class="s2">&quot;but got an iterable with </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">module</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="p">)</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">FullyShardedDataParallel</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;`ignored_modules` should not include FSDP modules&quot;</span>
+                <span class="p">)</span>
+        <span class="c1"># Include child modules and exclude nested FSDP modules</span>
+        <span class="n">ignored_modules</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span>
+            <span class="n">child</span> <span class="k">for</span> <span class="n">module</span> <span class="ow">in</span> <span class="n">ignored_root_modules</span>
+            <span class="k">for</span> <span class="n">child</span> <span class="ow">in</span> <span class="n">module</span><span class="o">.</span><span class="n">modules</span><span class="p">()</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">child</span><span class="p">,</span> <span class="n">FullyShardedDataParallel</span><span class="p">)</span> <span class="ow">and</span>
+            <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">child</span><span class="p">,</span> <span class="n">FlattenParamsWrapper</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">ignored_modules</span>
+
+    <span class="k">def</span> <span class="nf">_get_ignored_params</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">ignored_modules</span><span class="p">:</span> <span class="n">Set</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">],</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Set</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Parameter</span><span class="p">]:</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Returns the parameters of the modules in ``ignored_modules`` as a</span>
+<span class="sd">        :class:`set`, excluding any :class:`FlatParameter` s.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="nb">set</span><span class="p">(</span>
+            <span class="n">p</span> <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="n">ignored_modules</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">m</span><span class="o">.</span><span class="n">parameters</span><span class="p">()</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="n">FlatParameter</span><span class="p">)</span>
+        <span class="p">)</span>
+
     <span class="nd">@classmethod</span>
     <span class="k">def</span> <span class="nf">_check_wrapped</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">begin_module</span><span class="p">,</span> <span class="n">check_fn</span><span class="p">,</span> <span class="n">err_fn</span><span class="p">):</span>
         <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">mod</span> <span class="ow">in</span> <span class="n">begin_module</span><span class="o">.</span><span class="n">named_modules</span><span class="p">():</span>
@@ -889,25 +969,28 @@
 
 <div class="viewcode-block" id="FullyShardedDataParallel.fsdp_modules"><a class="viewcode-back" href="../../../../fsdp.html#torch.distributed.fsdp.FullyShardedDataParallel.fsdp_modules">[docs]</a>    <span class="nd">@staticmethod</span>
     <span class="k">def</span> <span class="nf">fsdp_modules</span><span class="p">(</span>
-        <span class="n">module</span><span class="p">:</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">,</span> <span class="n">root_only</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="n">module</span><span class="p">:</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">,</span>
+        <span class="n">root_only</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="s2">&quot;FullyShardedDataParallel&quot;</span><span class="p">]:</span>
         <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Helper function to return all nested FSDP instances, including self.</span>
+<span class="sd">        Returns all nested FSDP instances, possibly including ``module`` itself</span>
+<span class="sd">        and only including FSDP root modules if ``root_only=True``.</span>
 
 <span class="sd">        Args:</span>
-<span class="sd">            module: the root module. This module does not have to be a FSDP module.</span>
-<span class="sd">            root_only: whether to return only root FSDP modules (default: False).</span>
+<span class="sd">            module (torch.nn.Module): Root module, which may or may not be an</span>
+<span class="sd">                ``FSDP`` module.</span>
+<span class="sd">            root_only (bool): Whether to return only FSDP root modules.</span>
+<span class="sd">                (Default: ``False``)</span>
 
 <span class="sd">        Returns:</span>
-<span class="sd">            fsdp_modules: the FSDP modules that are nested in the input module.</span>
+<span class="sd">            List[FullyShardedDataParallel]: FSDP modules that are nested in</span>
+<span class="sd">            the input ``module``.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">fsdp_modules</span> <span class="o">=</span> <span class="p">[]</span>
-        <span class="k">for</span> <span class="n">sub_module</span> <span class="ow">in</span> <span class="n">module</span><span class="o">.</span><span class="n">modules</span><span class="p">():</span>
-            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">sub_module</span><span class="p">,</span> <span class="n">FullyShardedDataParallel</span><span class="p">):</span>
-                <span class="k">if</span> <span class="ow">not</span> <span class="n">root_only</span> <span class="ow">or</span> <span class="n">sub_module</span><span class="o">.</span><span class="n">check_is_root</span><span class="p">():</span>
-                    <span class="n">fsdp_modules</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">sub_module</span><span class="p">)</span>
-
-        <span class="k">return</span> <span class="n">fsdp_modules</span></div>
+        <span class="k">return</span> <span class="p">[</span>
+            <span class="n">submodule</span> <span class="k">for</span> <span class="n">submodule</span> <span class="ow">in</span> <span class="n">module</span><span class="o">.</span><span class="n">modules</span><span class="p">()</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">submodule</span><span class="p">,</span> <span class="n">FullyShardedDataParallel</span><span class="p">)</span> <span class="ow">and</span>
+            <span class="p">(</span><span class="ow">not</span> <span class="n">root_only</span> <span class="ow">or</span> <span class="n">submodule</span><span class="o">.</span><span class="n">check_is_root</span><span class="p">())</span>
+        <span class="p">]</span></div>
 
 <div class="viewcode-block" id="FullyShardedDataParallel.apply"><a class="viewcode-back" href="../../../../fsdp.html#torch.distributed.fsdp.FullyShardedDataParallel.apply">[docs]</a>    <span class="k">def</span> <span class="nf">apply</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fn</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">],</span> <span class="kc">None</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="s2">&quot;FullyShardedDataParallel&quot;</span><span class="p">:</span>
         <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Applies ``fn`` recursively to every submodule (as returned by ``.children()``)</span>
@@ -916,7 +999,7 @@
 
 <span class="sd">        Compared to ``torch.nn.Module.apply``, this version additionally gathers</span>
 <span class="sd">        the full parameters before applying ``fn``. It should not be called from</span>
-<span class="sd">        within another ``summon_full_params`` context.</span>
+<span class="sd">        within another ``_summon_full_params`` context.</span>
 
 <span class="sd">        Args:</span>
 <span class="sd">            fn (:class:`Module` -&gt; None): function to be applied to each submodule</span>
@@ -926,10 +1009,10 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">uninitialized</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_root</span> <span class="ow">is</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_assert_state</span><span class="p">(</span><span class="n">TrainingState_</span><span class="o">.</span><span class="n">IDLE</span><span class="p">)</span>
-        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">summon_full_params</span><span class="p">(</span><span class="n">recurse</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">writeback</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_summon_full_params</span><span class="p">(</span><span class="n">recurse</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">writeback</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
             <span class="n">ret</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">fn</span><span class="p">)</span>
 
-        <span class="c1"># Reset lazy init that might be called by summon_full_params, since</span>
+        <span class="c1"># Reset lazy init that might be called by _summon_full_params, since</span>
         <span class="c1"># it could have set is_root incorrectly for non-root FSDP instances.</span>
         <span class="k">if</span> <span class="n">uninitialized</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_root</span><span class="p">:</span>
             <span class="k">for</span> <span class="n">module</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">fsdp_modules</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -1469,12 +1552,18 @@
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Hook that runs after model.state_dict() is called before returning result to</span>
 <span class="sd">        user. For FSDP, we may have to clone the tensors in state_dict as params go</span>
-<span class="sd">        back to sharded version after summon_full_params ends, and also remove</span>
+<span class="sd">        back to sharded version after _summon_full_params ends, and also remove</span>
 <span class="sd">        &quot;_fsdp_wrapped_module&quot; prefix.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_assert_state</span><span class="p">([</span><span class="n">TrainingState_</span><span class="o">.</span><span class="n">SUMMON_FULL_PARAMS</span><span class="p">])</span>
-        <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">state_dict</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
-            <span class="c1"># Due to recursive call of summon_full_params, avoid unnecessasry</span>
+        <span class="n">ignored_param_names</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_ignored_param_to_param_name</span><span class="o">.</span><span class="n">values</span><span class="p">())</span>
+        <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">state_dict</span><span class="p">:</span>
+            <span class="c1"># Do not need to clone ignored parameters since they are not</span>
+            <span class="c1"># sharded</span>
+            <span class="n">clean_param_name</span> <span class="o">=</span> <span class="n">key</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="n">FSDP_WRAPPED_MODULE</span> <span class="o">+</span> <span class="s2">&quot;.&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="n">FPW_MODULE</span> <span class="o">+</span> <span class="s2">&quot;.&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">clean_param_name</span> <span class="ow">in</span> <span class="n">ignored_param_names</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="c1"># Due to recursive call of summon_full_params, avoid unnecessary</span>
             <span class="c1"># reclone of tensors in case they have already been cloned.</span>
             <span class="k">if</span> <span class="p">(</span>
                 <span class="ow">not</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">state_dict</span><span class="p">[</span><span class="n">key</span><span class="p">],</span> <span class="s2">&quot;_has_been_cloned&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
@@ -1599,7 +1688,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_lazy_init</span><span class="p">()</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_state_dict_type</span> <span class="o">==</span> <span class="n">StateDictType</span><span class="o">.</span><span class="n">FULL_STATE_DICT</span><span class="p">:</span>
             <span class="n">summon_ctx</span> <span class="o">=</span> <span class="p">(</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">summon_full_params</span><span class="p">(</span><span class="n">recurse</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">writeback</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_summon_full_params</span><span class="p">(</span><span class="n">recurse</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">writeback</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
                 <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">training_state</span> <span class="o">!=</span> <span class="n">TrainingState_</span><span class="o">.</span><span class="n">SUMMON_FULL_PARAMS</span> <span class="k">else</span>
                 <span class="n">contextlib</span><span class="o">.</span><span class="n">suppress</span><span class="p">()</span>
             <span class="p">)</span>
@@ -1608,7 +1697,7 @@
                 <span class="c1"># original user module specified types for checkpoint. We take care to</span>
                 <span class="c1"># recast in post_state_dict_hook for consistency with the fact that</span>
                 <span class="c1"># buffers stay casted after forward/backward. We must have the</span>
-                <span class="c1"># call here instead of above because summon_full_params itself</span>
+                <span class="c1"># call here instead of above because _summon_full_params itself</span>
                 <span class="c1"># calls _lazy_init() which would cast the buffers.</span>
                 <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">mixed_precision</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_root</span><span class="p">:</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">_cast_buffers</span><span class="p">(</span>
@@ -1747,7 +1836,7 @@
         <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">synchronize</span><span class="p">()</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_state_dict_type</span> <span class="o">==</span> <span class="n">StateDictType</span><span class="o">.</span><span class="n">FULL_STATE_DICT</span><span class="p">:</span>
             <span class="c1"># Note that it needs writeback=True to persist</span>
-            <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">summon_full_params</span><span class="p">(</span><span class="n">writeback</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+            <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_summon_full_params</span><span class="p">(</span><span class="n">writeback</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
                 <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">load_state_dict</span><span class="p">(</span><span class="n">state_dict</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">)</span>
 
         <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">_state_dict_type</span> <span class="o">==</span> <span class="n">StateDictType</span><span class="o">.</span><span class="n">LOCAL_STATE_DICT</span><span class="p">:</span>
@@ -1836,64 +1925,14 @@
             <span class="n">chunk</span> <span class="o">=</span> <span class="n">chunks</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">rank</span><span class="p">]</span>
             <span class="n">p</span><span class="o">.</span><span class="n">_local_shard</span><span class="o">.</span><span class="n">copy_</span><span class="p">(</span><span class="n">chunk</span><span class="p">)</span>  <span class="c1"># type: ignore[attr-defined]</span>
 
-<div class="viewcode-block" id="FullyShardedDataParallel.summon_full_params"><a class="viewcode-back" href="../../../../fsdp.html#torch.distributed.fsdp.FullyShardedDataParallel.summon_full_params">[docs]</a>    <span class="nd">@contextlib</span><span class="o">.</span><span class="n">contextmanager</span>
-    <span class="k">def</span> <span class="nf">summon_full_params</span><span class="p">(</span>
+    <span class="nd">@contextlib</span><span class="o">.</span><span class="n">contextmanager</span>
+    <span class="k">def</span> <span class="nf">_summon_full_params</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">recurse</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
         <span class="n">writeback</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
         <span class="n">rank0_only</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">offload_to_cpu</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Generator</span><span class="p">:</span>
-        <span class="sa">r</span><span class="sd">&quot;&quot;&quot; A context manager to expose full params for the current FSDP</span>
-<span class="sd">        instance. Can be useful *after* forward/backward for a model to get</span>
-<span class="sd">        the params for additional processing or checking.</span>
-
-<span class="sd">        .. note:: This can be used on inner FSDPs.</span>
-<span class="sd">        .. note:: This can *not* be used within a forward or backward pass. Nor</span>
-<span class="sd">            can forward and backward be started from within this context.</span>
-<span class="sd">        .. note:: Parameters will revert to their local shards after the context</span>
-<span class="sd">            manager exits, storage behavior is the same as forward.</span>
-<span class="sd">        .. note:: The full parameters can be modified, but only the portion</span>
-<span class="sd">            corresponding to the local param shard will persist after the</span>
-<span class="sd">            context manager exits (unless ``writeback=False``, in which case</span>
-<span class="sd">            changes will be discarded). In the case where FSDP does not shard</span>
-<span class="sd">            the parameters, currently only when ``world_size == 1``, the</span>
-<span class="sd">            modification is persisted regardless of ``writeback``.</span>
-
-<span class="sd">        .. warning:: Note that ``rank0_only=True`` in conjunction with</span>
-<span class="sd">            ``writeback=True`` is not currently supported and will raise an</span>
-<span class="sd">            error. This is because model parameter shapes would be different</span>
-<span class="sd">            across ranks within the context, and writing to them can lead to</span>
-<span class="sd">            inconsistency across ranks when the context is exited.</span>
-
-<span class="sd">        ..warning:: Note that ``offload_to_cpu`` and ``rank0_only=False`` will</span>
-<span class="sd">            result in full parameters being redundantly copied to CPU memory for</span>
-<span class="sd">            GPUs that reside on the same machine, which may incur the risk of</span>
-<span class="sd">            CPU OOM. It is recommended to use ``offload_to_cpu`` with</span>
-<span class="sd">            ``rank0_only=True``.</span>
-
-<span class="sd">        Args:</span>
-<span class="sd">            recurse (bool, Optional): recursively summon all params for nested</span>
-<span class="sd">                FSDP instances (default: True)</span>
-<span class="sd">            writeback (bool, Optional): if ``False``, modifications to params are</span>
-<span class="sd">                discarded after the context manager exists;</span>
-<span class="sd">                disabling this can be slightly more efficient (default: True)</span>
-<span class="sd">            rank0_only (bool, Optional): if ``True``, full parameters are</span>
-<span class="sd">                materialized on only global rank 0. This means that within the</span>
-<span class="sd">                context, only rank 0 will have full parameters and the other</span>
-<span class="sd">                ranks will have sharded parameters. Note that setting</span>
-<span class="sd">                ``rank0_only=True`` with ``writeback=True`` is not supported,</span>
-<span class="sd">                as model parameter shapes will be different across ranks</span>
-<span class="sd">                within the context, and writing to them can lead to</span>
-<span class="sd">                inconsistency across ranks when the context is exited.</span>
-<span class="sd">            offload_to_cpu (bool, optional): If ``True``, full parameters are</span>
-<span class="sd">                offloaded to CPU. Note that this offloading currently only</span>
-<span class="sd">                occurs if the parameter is sharded (which is only not the case</span>
-<span class="sd">                for world_size = 1). It is recommended to use ``offload_to_cpu``</span>
-<span class="sd">                with ``rank0_only=True`` to avoid redundant copies of model</span>
-<span class="sd">                parameters being offloaded to the same CPU memory.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-
+    <span class="p">):</span>
         <span class="k">if</span> <span class="n">writeback</span> <span class="ow">and</span> <span class="n">rank0_only</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                 <span class="s2">&quot;writeback=True and rank0_only=True is not supported, as model &quot;</span>
@@ -1933,7 +1972,7 @@
                 <span class="c1"># Summon all params for any nested FSDP instances.</span>
                 <span class="k">for</span> <span class="n">module</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">fsdp_modules</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
                     <span class="n">stack</span><span class="o">.</span><span class="n">enter_context</span><span class="p">(</span>
-                        <span class="n">module</span><span class="o">.</span><span class="n">summon_full_params</span><span class="p">(</span>
+                        <span class="n">module</span><span class="o">.</span><span class="n">_summon_full_params</span><span class="p">(</span>
                             <span class="n">recurse</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
                             <span class="n">writeback</span><span class="o">=</span><span class="n">writeback</span><span class="p">,</span>
                             <span class="n">rank0_only</span><span class="o">=</span><span class="n">rank0_only</span><span class="p">,</span>
@@ -2010,7 +2049,91 @@
                             <span class="bp">self</span><span class="o">.</span><span class="n">_write_back_current_shard</span><span class="p">(</span><span class="n">currently_local_params</span><span class="p">)</span>
                         <span class="n">stack</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
                         <span class="n">_free_full_params_and_use_local_shard</span><span class="p">(</span><span class="n">currently_local_params</span><span class="p">)</span>
-                        <span class="bp">self</span><span class="o">.</span><span class="n">training_state</span> <span class="o">=</span> <span class="n">TrainingState_</span><span class="o">.</span><span class="n">IDLE</span></div>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">training_state</span> <span class="o">=</span> <span class="n">TrainingState_</span><span class="o">.</span><span class="n">IDLE</span>
+
+<div class="viewcode-block" id="FullyShardedDataParallel.summon_full_params"><a class="viewcode-back" href="../../../../fsdp.html#torch.distributed.fsdp.FullyShardedDataParallel.summon_full_params">[docs]</a>    <span class="nd">@staticmethod</span>
+    <span class="nd">@contextlib</span><span class="o">.</span><span class="n">contextmanager</span>
+    <span class="k">def</span> <span class="nf">summon_full_params</span><span class="p">(</span>
+        <span class="n">module</span><span class="p">,</span>
+        <span class="n">recurse</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">writeback</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">rank0_only</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">offload_to_cpu</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Generator</span><span class="p">:</span>
+        <span class="sa">r</span><span class="sd">&quot;&quot;&quot; A context manager to expose full params for FSDP instances.</span>
+<span class="sd">        Can be useful *after* forward/backward for a model to get</span>
+<span class="sd">        the params for additional processing or checking. It can take a non-FSDP</span>
+<span class="sd">        module and will summon full params for all contained FSDP modules as</span>
+<span class="sd">        well as their children, depending on the ``recurse`` argument.</span>
+
+<span class="sd">        .. note:: This can be used on inner FSDPs.</span>
+<span class="sd">        .. note:: This can *not* be used within a forward or backward pass. Nor</span>
+<span class="sd">            can forward and backward be started from within this context.</span>
+<span class="sd">        .. note:: Parameters will revert to their local shards after the context</span>
+<span class="sd">            manager exits, storage behavior is the same as forward.</span>
+<span class="sd">        .. note:: The full parameters can be modified, but only the portion</span>
+<span class="sd">            corresponding to the local param shard will persist after the</span>
+<span class="sd">            context manager exits (unless ``writeback=False``, in which case</span>
+<span class="sd">            changes will be discarded). In the case where FSDP does not shard</span>
+<span class="sd">            the parameters, currently only when ``world_size == 1``, the</span>
+<span class="sd">            modification is persisted regardless of ``writeback``.</span>
+<span class="sd">        .. note:: This method works on modules which are not FSDP themselves but</span>
+<span class="sd">            may contain multiple independent FSDP units. In that case, the given</span>
+<span class="sd">            arguments will apply to all contained FSDP units.</span>
+
+<span class="sd">        .. warning:: Note that ``rank0_only=True`` in conjunction with</span>
+<span class="sd">            ``writeback=True`` is not currently supported and will raise an</span>
+<span class="sd">            error. This is because model parameter shapes would be different</span>
+<span class="sd">            across ranks within the context, and writing to them can lead to</span>
+<span class="sd">            inconsistency across ranks when the context is exited.</span>
+
+<span class="sd">        ..warning:: Note that ``offload_to_cpu`` and ``rank0_only=False`` will</span>
+<span class="sd">            result in full parameters being redundantly copied to CPU memory for</span>
+<span class="sd">            GPUs that reside on the same machine, which may incur the risk of</span>
+<span class="sd">            CPU OOM. It is recommended to use ``offload_to_cpu`` with</span>
+<span class="sd">            ``rank0_only=True``.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            recurse (bool, Optional): recursively summon all params for nested</span>
+<span class="sd">                FSDP instances (default: True).</span>
+<span class="sd">            writeback (bool, Optional): if ``False``, modifications to params are</span>
+<span class="sd">                discarded after the context manager exists;</span>
+<span class="sd">                disabling this can be slightly more efficient (default: True)</span>
+<span class="sd">            rank0_only (bool, Optional): if ``True``, full parameters are</span>
+<span class="sd">                materialized on only global rank 0. This means that within the</span>
+<span class="sd">                context, only rank 0 will have full parameters and the other</span>
+<span class="sd">                ranks will have sharded parameters. Note that setting</span>
+<span class="sd">                ``rank0_only=True`` with ``writeback=True`` is not supported,</span>
+<span class="sd">                as model parameter shapes will be different across ranks</span>
+<span class="sd">                within the context, and writing to them can lead to</span>
+<span class="sd">                inconsistency across ranks when the context is exited.</span>
+<span class="sd">            offload_to_cpu (bool, optional): If ``True``, full parameters are</span>
+<span class="sd">                offloaded to CPU. Note that this offloading currently only</span>
+<span class="sd">                occurs if the parameter is sharded (which is only not the case</span>
+<span class="sd">                for world_size = 1). It is recommended to use ``offload_to_cpu``</span>
+<span class="sd">                with ``rank0_only=True`` to avoid redundant copies of model</span>
+<span class="sd">                parameters being offloaded to the same CPU memory.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Note that we specify root_only as FSDP roots will handle summoning</span>
+        <span class="c1"># child FSDP instances based on recurse argument.</span>
+        <span class="n">fsdp_modules</span> <span class="o">=</span> <span class="n">FullyShardedDataParallel</span><span class="o">.</span><span class="n">fsdp_modules</span><span class="p">(</span>
+            <span class="n">module</span><span class="p">,</span> <span class="n">root_only</span><span class="o">=</span><span class="kc">True</span>
+        <span class="p">)</span>
+        <span class="c1"># Summon all params for all FSDP instances</span>
+        <span class="k">with</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">ExitStack</span><span class="p">()</span> <span class="k">as</span> <span class="n">stack</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">module</span> <span class="ow">in</span> <span class="n">fsdp_modules</span><span class="p">:</span>
+                <span class="n">stack</span><span class="o">.</span><span class="n">enter_context</span><span class="p">(</span>
+                    <span class="n">module</span><span class="o">.</span><span class="n">_summon_full_params</span><span class="p">(</span>
+                        <span class="n">recurse</span><span class="o">=</span><span class="n">recurse</span><span class="p">,</span>
+                        <span class="n">writeback</span><span class="o">=</span><span class="n">writeback</span><span class="p">,</span>
+                        <span class="n">rank0_only</span><span class="o">=</span><span class="n">rank0_only</span><span class="p">,</span>
+                        <span class="n">offload_to_cpu</span><span class="o">=</span><span class="n">offload_to_cpu</span><span class="p">,</span>
+                    <span class="p">)</span>
+                <span class="p">)</span>
+            <span class="c1"># Yield to the caller, with full params in all FSDP instances.</span>
+            <span class="k">yield</span>
+        <span class="c1"># Exiting from the ExitStack will reshard all params.</span>
+        <span class="k">return</span></div>
 
 <div class="viewcode-block" id="FullyShardedDataParallel.named_buffers"><a class="viewcode-back" href="../../../../fsdp.html#torch.distributed.fsdp.FullyShardedDataParallel.named_buffers">[docs]</a>    <span class="k">def</span> <span class="nf">named_buffers</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -2020,7 +2143,7 @@
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Overrides :meth:`named_buffers()` to intercept buffer names and</span>
 <span class="sd">        remove all occurrences of the FSDP-specific flattened buffer prefix</span>
-<span class="sd">        when inside the :meth:`summon_full_params` context manager.</span>
+<span class="sd">        when inside the :meth:`_summon_full_params` context manager.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">in_summon_full_params</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;training_state&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="o">==</span> \
             <span class="n">TrainingState_</span><span class="o">.</span><span class="n">SUMMON_FULL_PARAMS</span>
@@ -2039,7 +2162,7 @@
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Overrides :meth:`named_parameters()` to intercept parameter names and</span>
 <span class="sd">        remove all occurrences of the FSDP-specific flattened parameter prefix</span>
-<span class="sd">        when inside the :meth:`summon_full_params` context manager.</span>
+<span class="sd">        when inside the :meth:`_summon_full_params` context manager.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="c1"># Determine which logic to use based on the context at call time</span>
         <span class="n">in_summon_full_params</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;training_state&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="o">==</span> \
@@ -2433,7 +2556,11 @@
             <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">m</span><span class="p">,</span> <span class="n">FullyShardedDataParallel</span><span class="p">):</span>
                 <span class="n">_finalize_params</span><span class="p">(</span><span class="n">m</span><span class="p">)</span>
                 <span class="n">m</span><span class="o">.</span><span class="n">_pre_backward_hook_has_run</span> <span class="o">=</span> <span class="kc">False</span>
-                <span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">requires_grad</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">m</span><span class="o">.</span><span class="n">parameters</span><span class="p">()):</span>
+                <span class="k">if</span> <span class="nb">any</span><span class="p">(</span>
+                    <span class="n">p</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ignored_param_to_param_name</span>
+                    <span class="ow">and</span> <span class="n">p</span><span class="o">.</span><span class="n">requires_grad</span>
+                    <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">m</span><span class="o">.</span><span class="n">parameters</span><span class="p">()</span>
+                <span class="p">):</span>
                     <span class="c1"># Check if the module has params and if any of them has</span>
                     <span class="c1"># the `requires_grad` field set. If `requires_grad=False` for</span>
                     <span class="c1"># all the params, the post_backward hook will not fire and the</span>
@@ -2443,8 +2570,9 @@
                     <span class="k">else</span><span class="p">:</span>
                         <span class="n">m</span><span class="o">.</span><span class="n">_assert_state</span><span class="p">(</span><span class="n">TrainingState_</span><span class="o">.</span><span class="n">BACKWARD_PRE</span><span class="p">)</span>
                 <span class="k">else</span><span class="p">:</span>
-                    <span class="c1"># When `m` and its children has no params or has params but</span>
-                    <span class="c1"># none with `requires_grad==True`, there are two cases:</span>
+                    <span class="c1"># When `m` and its children have no non-ignored params or</span>
+                    <span class="c1"># have non-ignored params but none with `requires_grad==True`,</span>
+                    <span class="c1"># there are two cases:</span>
                     <span class="c1"># 1. output tensors are `requires_grad==True`. In this case,</span>
                     <span class="c1"># pre-backward hook is still registered, so it is in BACKWARD_PRE state.</span>
                     <span class="c1"># 2. output tensors are `requires_grad==False`. In this case,</span>
@@ -2471,12 +2599,12 @@
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Gather all shards of params.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="c1"># summon_full_params must do a full precision rebuild even under mixed</span>
+        <span class="c1"># _summon_full_params must do a full precision rebuild even under mixed</span>
         <span class="c1"># precision, because it is used for e.g. checkpoint where we&#39;d like to</span>
         <span class="c1"># checkpoint in full precision.</span>
         <span class="n">force_full_precision</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">training_state</span> <span class="o">==</span> <span class="n">TrainingState_</span><span class="o">.</span><span class="n">SUMMON_FULL_PARAMS</span><span class="p">)</span>
         <span class="c1"># full param output tensors and a flag indicating whether</span>
-        <span class="c1"># summon_full_params can free them or not. It is possible that we can&#39;t</span>
+        <span class="c1"># _summon_full_params can free them or not. It is possible that we can&#39;t</span>
         <span class="c1"># free the full param, which currently occurs when the returned</span>
         <span class="c1"># parameter points to the unsharded param when world_size == 1, or when</span>
         <span class="c1"># we&#39;re returning the full parameter and reshard_after_forward=False</span>
@@ -2549,8 +2677,8 @@
                     <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">mixed_precision</span> <span class="ow">and</span> <span class="n">force_full_precision</span><span class="p">:</span>
                         <span class="c1"># p._full_param_padded has the reduced precision type,</span>
                         <span class="c1"># but we need full precision rebuild as we&#39;re in</span>
-                        <span class="c1"># summon_full_params. Note that this is why</span>
-                        <span class="c1"># summon_full_params collects locally used params from</span>
+                        <span class="c1"># _summon_full_params. Note that this is why</span>
+                        <span class="c1"># _summon_full_params collects locally used params from</span>
                         <span class="c1"># _rebuild_full_params instead of relying on</span>
                         <span class="c1"># p._full_param_padded, as it may not always be</span>
                         <span class="c1"># allocated such as during mixed precision.</span>
@@ -2567,7 +2695,7 @@
                     <span class="c1"># The full parameter, which can be freed. Note that we</span>
                     <span class="c1"># append here before update_p_data so as to not saved the</span>
                     <span class="c1"># tensor with padding trimmed, which causes issues with</span>
-                    <span class="c1"># writeback in summon_full_params.</span>
+                    <span class="c1"># writeback in _summon_full_params.</span>
                     <span class="n">output_tensors</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">output_tensor</span><span class="p">,</span> <span class="kc">True</span><span class="p">))</span>
                     <span class="c1"># Set p.data = output_tensor (with padding trimmed)</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">_update_p_data</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="n">output_tensor</span><span class="o">=</span><span class="n">output_tensor</span><span class="p">)</span>
@@ -3254,7 +3382,7 @@
         <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">param_names</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
                 <span class="s2">&quot;Each parameter should only map to one parameter name but got &quot;</span>
-                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">param_names</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">param_names</span><span class="p">)</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">param_names</span><span class="si">}</span><span class="s2">&quot;</span>
             <span class="p">)</span>
     <span class="n">param_to_param_name</span> <span class="o">=</span> <span class="p">{</span>
         <span class="n">param</span><span class="p">:</span> <span class="n">param_names</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
