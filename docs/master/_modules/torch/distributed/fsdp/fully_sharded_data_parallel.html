@@ -10,7 +10,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>torch.distributed.fsdp.fully_sharded_data_parallel &mdash; PyTorch 1.12 documentation</title>
+  <title>torch.distributed.fsdp.fully_sharded_data_parallel &mdash; PyTorch master documentation</title>
   
 
   
@@ -39,6 +39,12 @@
   <link rel="stylesheet" href="../../../../_static/css/jit.css" type="text/css" />
     <link rel="index" title="Index" href="../../../../genindex.html" />
     <link rel="search" title="Search" href="../../../../search.html" />
+
+<!--
+  Search engines should not index the master version of documentation.
+  Stable documentation are built without release == 'master'.
+-->
+<meta name="robots" content="noindex">
 
 
   <!-- Google Analytics -->
@@ -207,7 +213,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href='https://pytorch.org/docs/versions.html'>1.12 &#x25BC</a>
+      <a href='https://pytorch.org/docs/versions.html'>master (1.12.0a0+git77665e9 ) &#x25BC</a>
     </div>
     
 
@@ -226,6 +232,13 @@
           </div>
 
           
+
+<div>
+  <a style="color:#F05732" href="https://pytorch.org/docs/stable/_modules/torch/distributed/fsdp/fully_sharded_data_parallel.html">
+    You are viewing unstable developer preview docs.
+    Click here to view docs for latest stable release.
+  </a>
+</div>
 
 
             
@@ -452,11 +465,14 @@
     <span class="n">FlatParameter</span><span class="p">,</span>
     <span class="n">FlattenParamsWrapper</span><span class="p">,</span>
 <span class="p">)</span>
-<span class="kn">from</span> <span class="nn">.optim_utils</span> <span class="kn">import</span> <span class="p">(</span>
-    <span class="n">_flatten_optim_state</span><span class="p">,</span>
+<span class="kn">from</span> <span class="nn">._optim_utils</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">_broadcast_pos_dim_tensor_states</span><span class="p">,</span>
+    <span class="n">_broadcast_processed_optim_state_dict</span><span class="p">,</span>
+    <span class="n">_flatten_full_optim_state_dict</span><span class="p">,</span>
     <span class="n">_get_flat_param_to_fsdp_module</span><span class="p">,</span>
     <span class="n">_get_param_id_to_param</span><span class="p">,</span>
     <span class="n">_get_param_to_param_id</span><span class="p">,</span>
+    <span class="n">_process_pos_dim_tensor_state</span><span class="p">,</span>
     <span class="n">_unflatten_optim_state</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span> <span class="nn">.utils</span> <span class="kn">import</span> <span class="n">_apply_to_tensors</span><span class="p">,</span> <span class="n">_replace_by_prefix</span>
@@ -822,10 +838,10 @@
         <span class="c1"># Only handle params which are not already sharded. This enables</span>
         <span class="c1"># sharding individual layers of a Module, with an outer wrapper to</span>
         <span class="c1"># shard any leftover parameters.</span>
-        <span class="n">params</span> <span class="o">=</span> <span class="p">[]</span>
-        <span class="k">for</span> <span class="n">param</span> <span class="ow">in</span> <span class="n">module</span><span class="o">.</span><span class="n">parameters</span><span class="p">():</span>
-            <span class="k">if</span> <span class="n">param</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">ignored_params</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">param</span><span class="p">,</span> <span class="n">FlatParameter</span><span class="p">):</span>
-                <span class="n">params</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">param</span><span class="p">)</span>
+        <span class="n">params</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="n">p</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">module</span><span class="o">.</span><span class="n">parameters</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">p</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">ignored_params</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="n">FlatParameter</span><span class="p">)</span>
+        <span class="p">]</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_fsdp_wrapped_module</span><span class="p">:</span> <span class="n">FlattenParamsWrapper</span> <span class="o">=</span> <span class="n">FlattenParamsWrapper</span><span class="p">(</span>
             <span class="n">module</span><span class="p">,</span> <span class="n">param_list</span><span class="o">=</span><span class="n">params</span>
@@ -1218,31 +1234,59 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">params</span>
         <span class="p">),</span> <span class="s2">&quot;numel_padded_per_param is not populated correctly.&quot;</span>
 
-    <span class="k">def</span> <span class="nf">_get_shard</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensor</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="nb">int</span><span class="p">]:</span>
-        <span class="sd">&quot;&quot;&quot;Return the local shard of a full tensor.&quot;&quot;&quot;</span>
-        <span class="c1"># Shard using torch.chunk to match all-gather/reduce-scatter.</span>
-        <span class="n">chunks</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">flatten</span><span class="p">(</span><span class="n">tensor</span><span class="p">)</span><span class="o">.</span><span class="n">chunk</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">world_size</span><span class="p">)</span>
-        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">chunks</span><span class="p">)</span> <span class="o">&lt;</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">rank</span> <span class="o">+</span> <span class="mi">1</span><span class="p">):</span>
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">_get_chunk</span><span class="p">(</span>
+        <span class="n">tensor</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">rank</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">world_size</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="nb">int</span><span class="p">]:</span>
+        <span class="sd">&quot;&quot;&quot;Returns the unpadded chunk as a view and the number of padding</span>
+<span class="sd">        elements of a full tensor for the given rank and world size.&quot;&quot;&quot;</span>
+        <span class="c1"># Shard using `torch.chunk()` to match all-gather/reduce-scatter.</span>
+        <span class="n">chunks</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">flatten</span><span class="p">(</span><span class="n">tensor</span><span class="p">)</span><span class="o">.</span><span class="n">chunk</span><span class="p">(</span><span class="n">world_size</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">chunks</span><span class="p">)</span> <span class="o">&lt;</span> <span class="p">(</span><span class="n">rank</span> <span class="o">+</span> <span class="mi">1</span><span class="p">):</span>
             <span class="c1"># If there are not enough chunks to shard across ranks, create an</span>
             <span class="c1"># empty chunk that will just be padded with zeros to be the</span>
             <span class="c1"># appropriate size.</span>
             <span class="n">chunk</span> <span class="o">=</span> <span class="n">chunks</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">new_empty</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="n">chunk</span> <span class="o">=</span> <span class="n">chunks</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">rank</span><span class="p">]</span>
+            <span class="n">chunk</span> <span class="o">=</span> <span class="n">chunks</span><span class="p">[</span><span class="n">rank</span><span class="p">]</span>
         <span class="c1"># Determine number of padding elements.</span>
         <span class="n">num_to_pad</span> <span class="o">=</span> <span class="n">chunks</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span> <span class="o">-</span> <span class="n">chunk</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span>
-        <span class="k">assert</span> <span class="p">(</span>
-            <span class="n">num_to_pad</span> <span class="o">&gt;=</span> <span class="mi">0</span>
-        <span class="p">),</span> <span class="s2">&quot;Chunk&#39;s size should be equal or smaller than </span><span class="se">\</span>
-<span class="s2">            the first chunk&#39;s size.&quot;</span>
+        <span class="k">assert</span> <span class="n">num_to_pad</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">,</span> \
+            <span class="s2">&quot;Chunk&#39;s size should at most the first chunk&#39;s size&quot;</span>
+        <span class="k">return</span> <span class="n">chunk</span><span class="p">,</span> <span class="n">num_to_pad</span>
 
-        <span class="c1"># We always need to clone here, because regardless of padding the</span>
-        <span class="c1"># original parameter, of which this chunk is a view of, is deallocated</span>
-        <span class="c1"># after _get_shard.</span>
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">_get_shard_functional</span><span class="p">(</span>
+        <span class="n">tensor</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">rank</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">world_size</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="nb">int</span><span class="p">]:</span>
+        <span class="sd">&quot;&quot;&quot;Functional version of :meth:`_get_shard`.&quot;&quot;&quot;</span>
+        <span class="n">chunk</span><span class="p">,</span> <span class="n">num_to_pad</span> <span class="o">=</span> <span class="n">FullyShardedDataParallel</span><span class="o">.</span><span class="n">_get_chunk</span><span class="p">(</span>
+            <span class="n">tensor</span><span class="p">,</span> <span class="n">rank</span><span class="p">,</span> <span class="n">world_size</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="c1"># We always need to clone here regardless of the padding and even</span>
+        <span class="c1"># though `chunk` is a view of `tensor` because `tensor` may be</span>
+        <span class="c1"># deallocated after this method returns</span>
         <span class="n">shard</span> <span class="o">=</span> <span class="n">chunk</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
         <span class="k">if</span> <span class="n">num_to_pad</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
             <span class="n">shard</span> <span class="o">=</span> <span class="n">F</span><span class="o">.</span><span class="n">pad</span><span class="p">(</span><span class="n">shard</span><span class="p">,</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="n">num_to_pad</span><span class="p">])</span>
         <span class="k">return</span> <span class="n">shard</span><span class="p">,</span> <span class="n">num_to_pad</span>
+
+    <span class="k">def</span> <span class="nf">_get_shard</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">tensor</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">rank</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="nb">int</span><span class="p">]:</span>
+        <span class="sd">&quot;&quot;&quot;Returns the local shard and the number of padding elements of a full</span>
+<span class="sd">        tensor for the calling rank if ``rank=None`` or for the rank ``rank``</span>
+<span class="sd">        if not ``None``.&quot;&quot;&quot;</span>
+        <span class="n">rank</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">rank</span> <span class="k">if</span> <span class="n">rank</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">rank</span>
+        <span class="k">return</span> <span class="n">FullyShardedDataParallel</span><span class="o">.</span><span class="n">_get_shard_functional</span><span class="p">(</span>
+            <span class="n">tensor</span><span class="p">,</span> <span class="n">rank</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">world_size</span><span class="p">,</span>
+        <span class="p">)</span>
 
     <span class="k">def</span> <span class="fm">__getattr__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
         <span class="sd">&quot;&quot;&quot;Forward missing attributes to wrapped module.&quot;&quot;&quot;</span>
@@ -1420,9 +1464,8 @@
         <span class="c1"># For children instances, if they are checkpointed, state will not be reset to</span>
         <span class="c1"># IDLE after each inner forward/backward.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_assert_state</span><span class="p">(</span><span class="n">TrainingState_</span><span class="o">.</span><span class="n">IDLE</span><span class="p">)</span>
-        <span class="k">for</span> <span class="n">n</span><span class="p">,</span> <span class="n">m</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">named_modules</span><span class="p">():</span>
-            <span class="c1"># `n != &quot;&quot;` excludes self.</span>
-            <span class="k">if</span> <span class="n">n</span> <span class="o">!=</span> <span class="s2">&quot;&quot;</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">m</span><span class="p">,</span> <span class="n">FullyShardedDataParallel</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">modules</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">m</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">self</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">m</span><span class="p">,</span> <span class="n">FullyShardedDataParallel</span><span class="p">):</span>
                 <span class="c1"># We relax the assert for non-root instance, when the nested initialized module is wrapped</span>
                 <span class="c1"># again in FSDP later, for example after training to run inference.</span>
                 <span class="k">assert</span> <span class="p">(</span>
@@ -1450,8 +1493,8 @@
         <span class="c1"># We share streams with all children instances, which allows them to</span>
         <span class="c1"># overlap transfers across the forward pass without synchronizing with</span>
         <span class="c1"># the default stream.</span>
-        <span class="k">for</span> <span class="n">n</span><span class="p">,</span> <span class="n">m</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">named_modules</span><span class="p">():</span>
-            <span class="k">if</span> <span class="n">n</span> <span class="o">!=</span> <span class="s2">&quot;&quot;</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">m</span><span class="p">,</span> <span class="n">FullyShardedDataParallel</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">modules</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">m</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">self</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">m</span><span class="p">,</span> <span class="n">FullyShardedDataParallel</span><span class="p">):</span>
                 <span class="n">m</span><span class="o">.</span><span class="n">_streams</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_streams</span>
                 <span class="n">m</span><span class="o">.</span><span class="n">_fsdp_graph_order</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fsdp_graph_order</span>
 
@@ -1684,6 +1727,8 @@
 <span class="sd">        .. warning:: This needs to be called on all ranks, since synchronization</span>
 <span class="sd">            primitives may be used.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># TODO (rohan-varma): separate these out once a state_dict pre-hook</span>
+        <span class="c1"># is available.</span>
         <span class="k">if</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span><span class="p">():</span>
             <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">synchronize</span><span class="p">()</span>
 
@@ -1788,7 +1833,11 @@
 <span class="sd">        is called. ``self._state_dict_type`` is used to decide what preprocessing</span>
 <span class="sd">        will be done.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Code that is common for all state_dict impls</span>
         <span class="bp">self</span> <span class="o">=</span> <span class="n">cast</span><span class="p">(</span><span class="n">FullyShardedDataParallel</span><span class="p">,</span> <span class="n">module</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span><span class="p">():</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">synchronize</span><span class="p">()</span>
+        <span class="c1"># Dispatch into state_dict specific implementation of pre-hook.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_pre_load_state_dict_hook_fn</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_state_dict_type</span><span class="p">](</span><span class="n">state_dict</span><span class="p">,</span> <span class="n">prefix</span><span class="p">)</span>
 
 <div class="viewcode-block" id="FullyShardedDataParallel.load_state_dict"><a class="viewcode-back" href="../../../../fsdp.html#torch.distributed.fsdp.FullyShardedDataParallel.load_state_dict">[docs]</a>    <span class="k">def</span> <span class="nf">load_state_dict</span><span class="p">(</span>
@@ -1835,7 +1884,6 @@
 <span class="sd">        .. warning:: This needs to be called on all ranks, since synchronization</span>
 <span class="sd">            primitives may be used.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">synchronize</span><span class="p">()</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_state_dict_type</span> <span class="o">==</span> <span class="n">StateDictType</span><span class="o">.</span><span class="n">FULL_STATE_DICT</span><span class="p">:</span>
             <span class="c1"># Note that it needs writeback=True to persist</span>
             <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_summon_full_params</span><span class="p">(</span><span class="n">writeback</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
@@ -2322,14 +2370,13 @@
                 <span class="s2">&quot;FSDP only works with gradients that don&#39;t require gradients&quot;</span>
             <span class="p">)</span>
 
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_require_backward_grad_sync</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">reshard_after_forward</span><span class="p">:</span>
-            <span class="c1"># Free full params. when in a ``no_sync`` context (as inversely indicated</span>
-            <span class="c1"># by ``self._require_backward_grad_sync``), the params will not get updated</span>
-            <span class="c1"># before the next forward. As a special case in a ``no_sync`` context, do</span>
-            <span class="c1"># not free full params, there is no need to call all_gather to sync params</span>
-            <span class="c1"># among ranks if users would like to use more GPU memory and save network</span>
-            <span class="c1"># overhead when users set sharding_strategy=SHARD_GRAD_OP</span>
-            <span class="c1"># (self.reshard_after_forward = False).</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_require_backward_grad_sync</span> <span class="ow">or</span> \
+                <span class="bp">self</span><span class="o">.</span><span class="n">sharding_strategy</span> <span class="o">==</span> <span class="n">ShardingStrategy</span><span class="o">.</span><span class="n">FULL_SHARD</span><span class="p">:</span>
+            <span class="c1"># We free full parameters unless we are in `no_sync()` (i.e. when</span>
+            <span class="c1"># `_require_backward_grad_sync=False`) and not using the</span>
+            <span class="c1"># `FULL_SHARD` strategy. If we are not using the `FULL_SHARD`</span>
+            <span class="c1"># strategy (e.g. instead using `SHARD_GRAD_OP`), then we keep the</span>
+            <span class="c1"># full parameters in memory and save network overhead.</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_free_full_params</span><span class="p">(</span><span class="n">cast</span><span class="p">(</span><span class="n">List</span><span class="p">[</span><span class="n">FlatParameter</span><span class="p">],</span> <span class="p">[</span><span class="n">param</span><span class="p">]))</span>
 
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">mixed_precision</span><span class="p">:</span>
@@ -3027,7 +3074,6 @@
             <span class="n">full_osd_param_groups</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">unflat_param_group</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">full_osd</span></div>
 
-
 <div class="viewcode-block" id="FullyShardedDataParallel.shard_full_optim_state_dict"><a class="viewcode-back" href="../../../../fsdp.html#torch.distributed.fsdp.FullyShardedDataParallel.shard_full_optim_state_dict">[docs]</a>    <span class="nd">@staticmethod</span>
     <span class="k">def</span> <span class="nf">shard_full_optim_state_dict</span><span class="p">(</span>
         <span class="n">full_optim_state_dict</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
@@ -3059,6 +3105,18 @@
 <span class="sd">            argument to the optimizer, then you should pass that same value to</span>
 <span class="sd">            this method as ``optim_input``.</span>
 
+<span class="sd">        .. note:: Both :meth:`shard_full_optim_state_dict` and</span>
+<span class="sd">            :meth:`scatter_full_optim_state_dict` may be used to get the</span>
+<span class="sd">            sharded optimizer state dict to load. Assuming that the full</span>
+<span class="sd">            optimizer state dict resides in CPU memory, the former requires</span>
+<span class="sd">            each rank to have the full dict in CPU memory, where each rank</span>
+<span class="sd">            individually shards the dict without any communication, while the</span>
+<span class="sd">            latter requires only rank 0 to have the full dict in CPU memory,</span>
+<span class="sd">            where rank 0 moves each shard to GPU memory (for NCCL) and</span>
+<span class="sd">            communicates it to ranks appropriately. Hence, the former has</span>
+<span class="sd">            higher aggregate CPU memory cost, while the latter has higher</span>
+<span class="sd">            communication cost.</span>
+
 <span class="sd">        Args:</span>
 <span class="sd">            full_optim_state_dict (Dict[str, Any]): Optimizer state dict</span>
 <span class="sd">                corresponding to the unflattened parameters and holding the</span>
@@ -3073,70 +3131,114 @@
 <span class="sd">                ``model.parameters()``. (Default: ``None``)</span>
 
 <span class="sd">        Returns:</span>
-<span class="sd">            Dict[str, Any]: The full optimizer state dict remapped to flattened</span>
-<span class="sd">            parameters instead of unflattened parameters and restricted to only</span>
-<span class="sd">            include this rank&#39;s part of the optimizer state.</span>
+<span class="sd">            Dict[str, Any]: The full optimizer state dict now remapped to</span>
+<span class="sd">            flattened parameters instead of unflattened parameters and</span>
+<span class="sd">            restricted to only include this rank&#39;s part of the optimizer state.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">full_osd</span> <span class="o">=</span> <span class="n">full_optim_state_dict</span>  <span class="c1"># alias</span>
-        <span class="k">if</span> <span class="s2">&quot;state&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">full_osd</span> <span class="ow">or</span> <span class="s2">&quot;param_groups&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">full_osd</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="s2">&quot;`full_optim_state_dict` must have the keys </span><span class="se">\&quot;</span><span class="s2">state</span><span class="se">\&quot;</span><span class="s2"> and &quot;</span>
-                <span class="s2">&quot;</span><span class="se">\&quot;</span><span class="s2">param_groups</span><span class="se">\&quot;</span><span class="s2"> to be a valid optimizer state dict&quot;</span>
+        <span class="k">return</span> <span class="n">_flatten_full_optim_state_dict</span><span class="p">(</span>
+            <span class="n">full_optim_state_dict</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="kc">True</span><span class="p">,</span> <span class="n">optim_input</span><span class="p">,</span>
+        <span class="p">)[</span><span class="mi">0</span><span class="p">]</span></div>
+
+<div class="viewcode-block" id="FullyShardedDataParallel.scatter_full_optim_state_dict"><a class="viewcode-back" href="../../../../fsdp.html#torch.distributed.fsdp.FullyShardedDataParallel.scatter_full_optim_state_dict">[docs]</a>    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">scatter_full_optim_state_dict</span><span class="p">(</span>
+        <span class="n">full_optim_state_dict</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]],</span>
+        <span class="n">model</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">,</span>
+        <span class="n">optim_input</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span>
+            <span class="n">List</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]],</span> <span class="n">Iterable</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Parameter</span><span class="p">],</span>
+        <span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">group</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Scatters the full optimizer state dict from rank 0 to all other ranks,</span>
+<span class="sd">        returning the sharded optimizer state dict on each rank. The return</span>
+<span class="sd">        value is the same as :meth:`shard_full_optim_state_dict`, and on rank</span>
+<span class="sd">        0, the first argument should be the return value of</span>
+<span class="sd">        :meth:`full_optim_state_dict`.</span>
+
+<span class="sd">        Example::</span>
+
+<span class="sd">            &gt;&gt;&gt; from torch.distributed.fsdp import FullyShardedDataParallel as FSDP</span>
+<span class="sd">            &gt;&gt;&gt; model, optim = ...</span>
+<span class="sd">            &gt;&gt;&gt; full_osd = FSDP.full_optim_state_dict(model, optim)  # only non-empty on rank 0</span>
+<span class="sd">            &gt;&gt;&gt; # Define new model with possibly different world size</span>
+<span class="sd">            &gt;&gt;&gt; new_model, new_optim, new_group = ...</span>
+<span class="sd">            &gt;&gt;&gt; sharded_osd = FSDP.scatter_full_optim_state_dict(full_osd, new_model, group=new_group)</span>
+<span class="sd">            &gt;&gt;&gt; new_optim.load_state_dict(sharded_osd)</span>
+
+<span class="sd">        .. note:: Both :meth:`shard_full_optim_state_dict` and</span>
+<span class="sd">            :meth:`scatter_full_optim_state_dict` may be used to get the</span>
+<span class="sd">            sharded optimizer state dict to load. Assuming that the full</span>
+<span class="sd">            optimizer state dict resides in CPU memory, the former requires</span>
+<span class="sd">            each rank to have the full dict in CPU memory, where each rank</span>
+<span class="sd">            individually shards the dict without any communication, while the</span>
+<span class="sd">            latter requires only rank 0 to have the full dict in CPU memory,</span>
+<span class="sd">            where rank 0 moves each shard to GPU memory (for NCCL) and</span>
+<span class="sd">            communicates it to ranks appropriately. Hence, the former has</span>
+<span class="sd">            higher aggregate CPU memory cost, while the latter has higher</span>
+<span class="sd">            communication cost.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            full_optim_state_dict (Optional[Dict[str, Any]]): Optimizer state</span>
+<span class="sd">                dict corresponding to the unflattened parameters and holding</span>
+<span class="sd">                the full non-sharded optimizer state if on rank 0; the argument</span>
+<span class="sd">                is ignored on nonzero ranks.</span>
+<span class="sd">            model (torch.nn.Module): Root module (which may or may not be a</span>
+<span class="sd">                :class:`FullyShardedDataParallel` instance) whose parameters</span>
+<span class="sd">                correspond to the optimizer state in ``full_optim_state_dict``.</span>
+<span class="sd">            optim_input (Optional[Union[List[Dict[str, Any]], Iterable[torch.nn.Parameter]]]):</span>
+<span class="sd">                Input passed into the optimizer representing either a</span>
+<span class="sd">                :class:`list` of parameter groups or an iterable of parameters;</span>
+<span class="sd">                if ``None``, then this method assumes the input was</span>
+<span class="sd">                ``model.parameters()``; the argument is ignored on nonzero</span>
+<span class="sd">                ranks. (Default: ``None``)</span>
+<span class="sd">            group (Optional[Any]): Model&#39;s process group or ``None`` if using</span>
+<span class="sd">                the default process group. (Default: ``None``)</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            Dict[str, Any]: The full optimizer state dict now remapped to</span>
+<span class="sd">            flattened parameters instead of unflattened parameters and</span>
+<span class="sd">            restricted to only include this rank&#39;s part of the optimizer state.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Try to use the passed-in process group, the model&#39;s process group,</span>
+        <span class="c1"># or the default process group (i.e. ``None``) in that priority order</span>
+        <span class="k">if</span> <span class="n">group</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="s2">&quot;process_group&quot;</span><span class="p">):</span>
+            <span class="n">group</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">process_group</span>
+        <span class="n">rank</span> <span class="o">=</span> <span class="n">dist</span><span class="o">.</span><span class="n">get_rank</span><span class="p">(</span><span class="n">group</span><span class="p">)</span>
+        <span class="n">world_size</span> <span class="o">=</span> <span class="n">dist</span><span class="o">.</span><span class="n">get_world_size</span><span class="p">(</span><span class="n">group</span><span class="p">)</span>
+        <span class="c1"># Check for a valid broadcast device, preferring GPU when available</span>
+        <span class="n">using_nccl</span> <span class="o">=</span> <span class="n">dist</span><span class="o">.</span><span class="n">distributed_c10d</span><span class="o">.</span><span class="n">_check_for_nccl_backend</span><span class="p">(</span><span class="n">group</span><span class="p">)</span>
+        <span class="n">broadcast_device</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s2">&quot;cuda&quot;</span><span class="p">)</span> <span class="k">if</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span><span class="p">()</span> \
+            <span class="k">else</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s2">&quot;cpu&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">using_nccl</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span><span class="p">():</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;NCCL requires a GPU for collectives&quot;</span><span class="p">)</span>
+        <span class="c1"># Flatten the optimizer state dict and construct a copy with the</span>
+        <span class="c1"># positive-dimension tensors&#39; shapes in place of the tensors themselves</span>
+        <span class="c1"># since those tensors will be broadcast separately to avoid copying</span>
+        <span class="k">if</span> <span class="n">rank</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">full_optim_state_dict</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Rank 0 must pass in the full optimizer state dict&quot;</span><span class="p">)</span>
+            <span class="n">flat_osd</span><span class="p">,</span> <span class="n">fsdp_flat_param_ids</span> <span class="o">=</span> <span class="n">_flatten_full_optim_state_dict</span><span class="p">(</span>
+                <span class="n">full_optim_state_dict</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="kc">False</span><span class="p">,</span> <span class="n">optim_input</span><span class="p">,</span>
             <span class="p">)</span>
-
-        <span class="n">flat_param_id_to_param</span> <span class="o">=</span> <span class="n">_get_param_id_to_param</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">optim_input</span><span class="p">)</span>
-        <span class="n">flat_param_to_fsdp_module</span> <span class="o">=</span> <span class="n">_get_flat_param_to_fsdp_module</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
-        <span class="n">param_to_unflat_param_names</span> <span class="o">=</span> <span class="n">_get_param_to_unflat_param_names</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
-
-        <span class="c1"># Handle the &quot;state&quot; part of the optimizer state dict</span>
-        <span class="n">sharded_osd_state</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
-        <span class="n">full_osd_state</span> <span class="o">=</span> <span class="n">full_osd</span><span class="p">[</span><span class="s2">&quot;state&quot;</span><span class="p">]</span>
-        <span class="n">unflat_param_names_to_flat_param_id</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
-        <span class="k">for</span> <span class="n">flat_param_id</span><span class="p">,</span> <span class="n">param</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">flat_param_id_to_param</span><span class="p">):</span>  <span class="c1"># type: ignore[assignment]</span>
-            <span class="k">assert</span> <span class="n">param</span> <span class="ow">in</span> <span class="n">param_to_unflat_param_names</span><span class="p">,</span> \
-                <span class="s2">&quot;Check the `param_to_unflat_params` construction</span><span class="se">\n</span><span class="s2">&quot;</span> \
-                <span class="sa">f</span><span class="s2">&quot;param: </span><span class="si">{</span><span class="n">param</span><span class="si">}</span><span class="s2">&quot;</span>
-            <span class="n">unflat_param_names</span> <span class="o">=</span> <span class="n">param_to_unflat_param_names</span><span class="p">[</span><span class="n">param</span><span class="p">]</span>
-            <span class="c1"># For FSDP parameters, we need to flatten</span>
-            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">param</span><span class="p">,</span> <span class="n">FlatParameter</span><span class="p">):</span>
-                <span class="k">assert</span> <span class="n">param</span> <span class="ow">in</span> <span class="n">flat_param_to_fsdp_module</span><span class="p">,</span> \
-                    <span class="s2">&quot;Check the `flat_param_to_fsdp_module` mapping &quot;</span> \
-                    <span class="sa">f</span><span class="s2">&quot;construction</span><span class="se">\n</span><span class="s2">param=</span><span class="si">{</span><span class="n">param</span><span class="si">}</span><span class="s2">&quot;</span>
-                <span class="n">unflat_param_names</span> <span class="o">=</span> <span class="n">param_to_unflat_param_names</span><span class="p">[</span><span class="n">param</span><span class="p">]</span>
-                <span class="n">fsdp_module</span> <span class="o">=</span> <span class="n">flat_param_to_fsdp_module</span><span class="p">[</span><span class="n">param</span><span class="p">]</span>
-                <span class="n">flat_state</span> <span class="o">=</span> <span class="n">_flatten_optim_state</span><span class="p">(</span>
-                    <span class="n">full_osd_state</span><span class="p">,</span> <span class="n">unflat_param_names</span><span class="p">,</span> <span class="n">fsdp_module</span><span class="p">,</span> <span class="n">param</span><span class="p">,</span>
-                <span class="p">)</span>
-                <span class="n">sharded_osd_state</span><span class="p">[</span><span class="n">flat_param_id</span><span class="p">]</span> <span class="o">=</span> <span class="n">flat_state</span>
-                <span class="k">for</span> <span class="n">unflat_param_name</span> <span class="ow">in</span> <span class="n">unflat_param_names</span><span class="p">:</span>
-                    <span class="n">unflat_param_names_to_flat_param_id</span><span class="p">[</span><span class="n">unflat_param_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">flat_param_id</span>
-            <span class="c1"># For parameters from non-FSDP modules, we do not need to flatten</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">unflat_param_names</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span>
-                <span class="n">unflat_param_name</span> <span class="o">=</span> <span class="n">unflat_param_names</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
-                <span class="c1"># Remap from unflattened to flattened parameter ID -- do not</span>
-                <span class="c1"># deepcopy to avoid unnecessarily duplicating tensor storage</span>
-                <span class="n">sharded_osd_state</span><span class="p">[</span><span class="n">flat_param_id</span><span class="p">]</span> <span class="o">=</span> \
-                    <span class="n">copy</span><span class="o">.</span><span class="n">copy</span><span class="p">(</span><span class="n">full_osd_state</span><span class="p">[</span><span class="n">unflat_param_name</span><span class="p">])</span>
-                <span class="n">unflat_param_names_to_flat_param_id</span><span class="p">[</span><span class="n">unflat_param_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">flat_param_id</span>
-
-        <span class="c1"># Handle the &quot;param_groups&quot; part of the optimizer state dict</span>
-        <span class="n">sharded_osd_param_groups</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[]</span>
-        <span class="k">for</span> <span class="n">unflat_param_group</span> <span class="ow">in</span> <span class="n">full_osd</span><span class="p">[</span><span class="s2">&quot;param_groups&quot;</span><span class="p">]:</span>
-            <span class="n">flat_param_group</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="n">unflat_param_group</span><span class="p">)</span>
-            <span class="c1"># Map from unflattened parameter names to flattened parameter IDs</span>
-            <span class="n">flat_param_ids</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span>
-                <span class="n">unflat_param_names_to_flat_param_id</span><span class="p">[</span><span class="n">unflat_param_name</span><span class="p">]</span>
-                <span class="k">for</span> <span class="n">unflat_param_name</span> <span class="ow">in</span> <span class="n">unflat_param_group</span><span class="p">[</span><span class="s2">&quot;params&quot;</span><span class="p">]</span>
-            <span class="p">))</span>
-            <span class="n">flat_param_group</span><span class="p">[</span><span class="s2">&quot;params&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">flat_param_ids</span>
-            <span class="n">sharded_osd_param_groups</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">flat_param_group</span><span class="p">)</span>
-
-        <span class="n">sharded_optim_state_dict</span> <span class="o">=</span> <span class="p">{</span>
-            <span class="s2">&quot;state&quot;</span><span class="p">:</span> <span class="n">sharded_osd_state</span><span class="p">,</span>
-            <span class="s2">&quot;param_groups&quot;</span><span class="p">:</span> <span class="n">sharded_osd_param_groups</span><span class="p">,</span>
-        <span class="p">}</span>
-        <span class="k">return</span> <span class="n">sharded_optim_state_dict</span></div>
+            <span class="n">processed_osd</span> <span class="o">=</span> <span class="n">_process_pos_dim_tensor_state</span><span class="p">(</span>
+                <span class="n">flat_osd</span><span class="p">,</span> <span class="n">fsdp_flat_param_ids</span><span class="p">,</span> <span class="n">world_size</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="c1"># Broadcast the optim state dict without positive-dimension tensor</span>
+        <span class="c1"># state and the FSDP parameter IDs from rank 0 to all ranks</span>
+        <span class="n">processed_osd</span><span class="p">,</span> <span class="n">fsdp_flat_param_ids</span> <span class="o">=</span> \
+            <span class="n">_broadcast_processed_optim_state_dict</span><span class="p">(</span>
+                <span class="n">processed_osd</span> <span class="k">if</span> <span class="n">rank</span> <span class="o">==</span> <span class="mi">0</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+                <span class="n">fsdp_flat_param_ids</span> <span class="k">if</span> <span class="n">rank</span> <span class="o">==</span> <span class="mi">0</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span> <span class="n">rank</span><span class="p">,</span> <span class="n">group</span><span class="p">,</span>
+                <span class="n">broadcast_device</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="c1"># Broadcast positive-dimension tensor state (both sharded tensors for</span>
+        <span class="c1"># FSDP parameters and unsharded tensors for non-FSDP parameters)</span>
+        <span class="n">sharded_osd</span> <span class="o">=</span> <span class="n">_broadcast_pos_dim_tensor_states</span><span class="p">(</span>
+            <span class="n">processed_osd</span><span class="p">,</span> <span class="n">fsdp_flat_param_ids</span><span class="p">,</span>
+            <span class="n">flat_osd</span> <span class="k">if</span> <span class="n">rank</span> <span class="o">==</span> <span class="mi">0</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span> <span class="n">rank</span><span class="p">,</span> <span class="n">world_size</span><span class="p">,</span> <span class="n">group</span><span class="p">,</span>
+            <span class="n">broadcast_device</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">sharded_osd</span></div>
 
 <div class="viewcode-block" id="FullyShardedDataParallel.rekey_optim_state_dict"><a class="viewcode-back" href="../../../../fsdp.html#torch.distributed.fsdp.FullyShardedDataParallel.rekey_optim_state_dict">[docs]</a>    <span class="nd">@staticmethod</span>
     <span class="k">def</span> <span class="nf">rekey_optim_state_dict</span><span class="p">(</span>
