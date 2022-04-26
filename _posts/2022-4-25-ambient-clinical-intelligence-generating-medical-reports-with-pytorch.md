@@ -26,11 +26,7 @@ This article will showcase how the Nuance Dragon Ambient eXperience (DAX), an AI
 Nuance DAX enhances the quality of care and patient experience, increases provider efficiency and satisfaction, and improves financial outcomes. It can be used in office and telehealth settings in all ambulatory specialties, including primary and urgent care.
 
 <p align="center">
-  <img src="/assets/images/nuance-dragon-ambient-experience.png" width="100%">
-</p>
-
-<p align = "center">
-Figure 1: The Dragon Ambient eXperience automatically documents care.
+  <img src="/assets/images/nuance-dragon-ambient-experience.png" width="60%">
 </p>
 
 ## Natural Language Processing
@@ -53,19 +49,11 @@ We will focus on this second component, Automatic Text Summarization, which is a
 * Standard summarization metrics might differ from human judgment of quality.
 
 <p align="center">
- <img src="/assets/images/nuance-dragon-ambient-experience.png" width="100%">
-</p>
-
-<p align = "center">
-Figure 2: Transcript of a patient-doctor conversation
+ <img src="/assets/images/nuance-dragon-ambient-experience.png" width="60%">
 </p>
 
 <p align="center">
- <img src="/assets/images/nuance-dragon-ambient-experience.png" width="100%">
-</p>
-
-<p align = "center">
-Figure 3: Excerpt of an AI-generated medical report. HPI stands for History of present illness.
+ <img src="/assets/images/nuance-dragon-ambient-experience.png" width="60%">
 </p>
 
 ## Text Summarization with PyTorch and Fairseq
@@ -223,7 +211,8 @@ Ms. <unk-2> is a 36-year-old female who presents to the clinic today for evaluat
 
 ### 6. Alternatively, we can use fairseq-interactive and a postprocessing tool to substitute positional unknown tokens by its words from the input:
 
-```pythonfairseq-interactive <data_dir> \
+```python
+fairseq-interactive <data_dir> \
               --batch-size <batch_size> \
               --task translation \
               --source-lang src \
