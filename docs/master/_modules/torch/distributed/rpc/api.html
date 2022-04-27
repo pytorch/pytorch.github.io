@@ -217,7 +217,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href='https://pytorch.org/docs/versions.html'>master (1.12.0a0+gitf9d07ae ) &#x25BC</a>
+      <a href='https://pytorch.org/docs/versions.html'>master (1.12.0a0+git48ea440 ) &#x25BC</a>
     </div>
     
 
@@ -425,7 +425,10 @@
              <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
               
   <h1>Source code for torch.distributed.rpc.api</h1><div class="highlight"><pre>
-<span></span><span class="kn">import</span> <span class="nn">collections</span>
+<span></span><span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;shutdown&quot;</span><span class="p">,</span> <span class="s2">&quot;get_worker_info&quot;</span><span class="p">,</span> <span class="s2">&quot;remote&quot;</span><span class="p">,</span> <span class="s2">&quot;rpc_sync&quot;</span><span class="p">,</span>
+           <span class="s2">&quot;rpc_async&quot;</span><span class="p">,</span> <span class="s2">&quot;RRef&quot;</span><span class="p">,</span> <span class="s2">&quot;AllGatherStates&quot;</span><span class="p">,</span> <span class="s2">&quot;method_factory&quot;</span><span class="p">,</span> <span class="s2">&quot;new_method&quot;</span><span class="p">]</span>
+
+<span class="kn">import</span> <span class="nn">collections</span>
 <span class="kn">import</span> <span class="nn">contextlib</span>
 <span class="kn">import</span> <span class="nn">functools</span>
 <span class="kn">import</span> <span class="nn">inspect</span>
@@ -440,6 +443,7 @@
     <span class="n">PyRRef</span><span class="p">,</span>
     <span class="n">RemoteProfilerManager</span><span class="p">,</span>
     <span class="n">WorkerInfo</span><span class="p">,</span>
+    <span class="n">TensorPipeAgent</span><span class="p">,</span>
     <span class="n">get_rpc_timeout</span><span class="p">,</span>
     <span class="n">_cleanup_python_rpc_handler</span><span class="p">,</span>
     <span class="n">_delete_all_user_and_unforked_owner_rrefs</span><span class="p">,</span>
@@ -464,6 +468,8 @@
 <span class="p">)</span>
 
 <span class="kn">from</span> <span class="nn">.constants</span> <span class="kn">import</span> <span class="n">DEFAULT_SHUTDOWN_TIMEOUT</span><span class="p">,</span> <span class="n">UNSET_RPC_TIMEOUT</span>
+
+<span class="kn">from</span> <span class="nn">._utils</span> <span class="kn">import</span> <span class="n">_group_membership_management</span><span class="p">,</span> <span class="n">_update_group_membership</span>
 
 <span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
 
@@ -760,9 +766,21 @@
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="k">if</span> <span class="n">graceful</span><span class="p">:</span>
         <span class="k">try</span><span class="p">:</span>
-            <span class="n">_wait_all_workers</span><span class="p">(</span><span class="n">timeout</span><span class="p">)</span>
-            <span class="n">_delete_all_user_and_unforked_owner_rrefs</span><span class="p">()</span>
-            <span class="n">_get_current_rpc_agent</span><span class="p">()</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">shutdown</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="n">agent</span> <span class="o">=</span> <span class="n">_get_current_rpc_agent</span><span class="p">()</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">agent</span><span class="p">,</span> <span class="n">TensorPipeAgent</span><span class="p">)</span> <span class="ow">or</span> <span class="n">agent</span><span class="o">.</span><span class="n">is_static_group</span><span class="p">:</span>
+                <span class="n">_wait_all_workers</span><span class="p">(</span><span class="n">timeout</span><span class="p">)</span>
+                <span class="n">_delete_all_user_and_unforked_owner_rrefs</span><span class="p">()</span>
+                <span class="n">agent</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">shutdown</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="c1"># This is a dynamic group so we need to grab the token for the operation</span>
+                <span class="n">my_worker_info</span> <span class="o">=</span> <span class="n">agent</span><span class="o">.</span><span class="n">get_worker_info</span><span class="p">()</span>
+                <span class="n">my_name</span> <span class="o">=</span> <span class="n">my_worker_info</span><span class="o">.</span><span class="n">name</span>
+                <span class="k">with</span> <span class="n">_group_membership_management</span><span class="p">(</span><span class="n">agent</span><span class="o">.</span><span class="n">store</span><span class="p">,</span> <span class="n">my_name</span><span class="p">,</span> <span class="kc">False</span><span class="p">):</span>
+                    <span class="n">all_worker_infos</span> <span class="o">=</span> <span class="n">agent</span><span class="o">.</span><span class="n">get_worker_infos</span><span class="p">()</span>
+                    <span class="k">for</span> <span class="n">worker</span> <span class="ow">in</span> <span class="n">all_worker_infos</span><span class="p">:</span>
+                        <span class="k">if</span> <span class="n">worker</span><span class="o">.</span><span class="n">name</span> <span class="o">!=</span> <span class="n">my_name</span><span class="p">:</span>
+                            <span class="n">rpc_sync</span><span class="p">(</span><span class="n">worker</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">_update_group_membership</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="p">(</span><span class="n">my_worker_info</span><span class="p">,</span> <span class="p">[],</span> <span class="p">{},</span> <span class="kc">False</span><span class="p">))</span>
+                    <span class="n">agent</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">shutdown</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
         <span class="k">finally</span><span class="p">:</span>
             <span class="c1"># In case of errors, continue to complete the local shutdown.</span>
             <span class="n">_finalize_shutdown</span><span class="p">()</span>
@@ -1013,7 +1031,7 @@
     <span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">_log_api_usage_once</span><span class="p">(</span><span class="s2">&quot;torch.distributed.rpc_remote&quot;</span><span class="p">)</span>
     <span class="n">qualified_name</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">jit</span><span class="o">.</span><span class="n">_builtins</span><span class="o">.</span><span class="n">_find_builtin</span><span class="p">(</span><span class="n">func</span><span class="p">)</span>
     <span class="n">dst_worker_info</span> <span class="o">=</span> <span class="n">_to_worker_info</span><span class="p">(</span><span class="n">to</span><span class="p">)</span>
-    <span class="n">should_profile</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">autograd</span><span class="o">.</span><span class="n">_profiler_enabled</span><span class="p">()</span>
+    <span class="n">should_profile</span> <span class="o">=</span> <span class="n">_get_should_profile</span><span class="p">()</span>
 
     <span class="n">ctx_manager</span> <span class="o">=</span> <span class="n">_enable_rpc_profiler</span><span class="p">(</span><span class="n">should_profile</span><span class="p">,</span> <span class="n">qualified_name</span><span class="p">,</span> <span class="n">func</span><span class="p">,</span> <span class="n">RPCExecMode</span><span class="o">.</span><span class="n">REMOTE</span><span class="p">,</span> <span class="n">dst_worker_info</span><span class="p">)</span>
 
@@ -1066,7 +1084,7 @@
     <span class="n">qualified_name</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">jit</span><span class="o">.</span><span class="n">_builtins</span><span class="o">.</span><span class="n">_find_builtin</span><span class="p">(</span><span class="n">func</span><span class="p">)</span>
     <span class="n">dst_worker_info</span> <span class="o">=</span> <span class="n">_to_worker_info</span><span class="p">(</span><span class="n">to</span><span class="p">)</span>
 
-    <span class="n">should_profile</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">autograd</span><span class="o">.</span><span class="n">_profiler_enabled</span><span class="p">()</span>
+    <span class="n">should_profile</span> <span class="o">=</span> <span class="n">_get_should_profile</span><span class="p">()</span>
 
     <span class="n">ctx_manager</span> <span class="o">=</span> <span class="n">_enable_rpc_profiler</span><span class="p">(</span><span class="n">should_profile</span><span class="p">,</span> <span class="n">qualified_name</span><span class="p">,</span> <span class="n">func</span><span class="p">,</span> <span class="n">rpc_type</span><span class="p">,</span> <span class="n">dst_worker_info</span><span class="p">)</span>
 
@@ -1288,6 +1306,14 @@
         <span class="n">_thread_local_var</span><span class="o">.</span><span class="n">future_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">fut</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">fut</span></div>
 
+<span class="k">def</span> <span class="nf">_get_should_profile</span><span class="p">():</span>
+    <span class="c1"># Legacy profiler should be enabled. RPC profiling is not supported with</span>
+    <span class="c1"># Kineto profiler.</span>
+    <span class="n">ActiveProfilerType</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">_autograd</span><span class="o">.</span><span class="n">ActiveProfilerType</span>
+    <span class="k">return</span> <span class="p">(</span>
+        <span class="n">torch</span><span class="o">.</span><span class="n">autograd</span><span class="o">.</span><span class="n">_profiler_enabled</span><span class="p">()</span> <span class="ow">and</span>
+        <span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">_autograd</span><span class="o">.</span><span class="n">_profiler_type</span><span class="p">()</span> <span class="o">==</span> <span class="n">ActiveProfilerType</span><span class="o">.</span><span class="n">LEGACY</span>  <span class="c1"># type: ignore[attr-defined]</span>
+    <span class="p">)</span>
 
 <span class="k">def</span> <span class="nf">_enable_rpc_profiler</span><span class="p">(</span><span class="n">should_profile</span><span class="p">,</span> <span class="n">qualified_name</span><span class="p">,</span> <span class="n">func</span><span class="p">,</span> <span class="n">rpc_type</span><span class="p">,</span> <span class="n">dst_worker_info</span><span class="p">):</span>
     <span class="n">ctx_manager</span> <span class="o">=</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">suppress</span><span class="p">()</span>
