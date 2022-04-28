@@ -95,7 +95,7 @@ cat train.src train.tgt |
 python3 -c "[print('<unk-{}> 0'.format(n)) for n in range($position_markers)]" >> dict.pg.txt
 ```
 
-This will create a file "dict.pg.txt" that contains the <vocab_size> most frequent words followed by 512 position markers named from `"<unk-0>"` to `"<unk-511>"`.
+This will create a file "dict.pg.txt" that contains the \<vocab_size> most frequent words followed by 512 position markers named from \"<unk-0>" to \"<unk-511>".
 
 In case we have an input like
 
@@ -109,7 +109,7 @@ it could happen that our model has been trained without the word "Dogtor" in its
 src = "Hello, I'm The <unk-3>"
 ```
 
-Now, `"<unk-3>"` is part of our vocabulary and could be predicted by the model (this is where the pointer-generator comes in). In such a case, we will only need to post-process the output to replace `"<unk-3>"` by the word at input position 3.
+Now, \"<unk-3>" is part of our vocabulary and could be predicted by the model (this is where the pointer-generator comes in). In such a case, we will only need to post-process the output to replace \"<unk-3>" by the word at input position 3.
 
 ### 2. Preprocess the text data to replace unknown words by its positional markers:
 
@@ -233,7 +233,7 @@ grep "^H-" generate.out | cut -f 3- > generate.hyp
 	--target-out generate.hyp.processed
 ```
 
-Now we have the final set of reports in "generate.hyp.processed", with "<unk-N>" replaced by the original word from the input sequence.
+Now we have the final set of reports in "generate.hyp.processed", with \"<unk-N>" replaced by the original word from the input sequence.
 
 ## Model Deployment
 
