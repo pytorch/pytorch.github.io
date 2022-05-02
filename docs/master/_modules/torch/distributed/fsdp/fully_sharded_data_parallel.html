@@ -217,7 +217,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href='https://pytorch.org/docs/versions.html'>master (1.12.0a0+gita3f10ec ) &#x25BC</a>
+      <a href='https://pytorch.org/docs/versions.html'>master (1.12.0a0+gitf6bbecf ) &#x25BC</a>
     </div>
     
 
@@ -570,22 +570,32 @@
 <span class="sd">        to their reduced precision) as expected. Note that this checkpoint</span>
 <span class="sd">        support is currently limited to ``StateDictType.FULL_STATE_DICT``.</span>
 
-<span class="sd">    .. note:: In ``_summon_full_params``, parameters are summoned in full</span>
+<span class="sd">    .. note:: In ``summon_full_params``, parameters are summoned in full</span>
 <span class="sd">        precision but buffers are not.</span>
 
 <span class="sd">    .. note:: Parameters and buffers are checkpointed in full precision. For</span>
 <span class="sd">        buffers, this is only guaranteed to work for ``StateDictType.FULL_STATE_DICT``.</span>
 
 <span class="sd">    .. note:: This API is experimental and subject to change.</span>
+
+<span class="sd">    .. note:: Specification of reduced precision types must be explicit, in that</span>
+<span class="sd">        if, for example, ``param_dtype`` is not specified, it will not be cast by</span>
+<span class="sd">        FSDP. Thus, a config such as ``MixedPrecision(reduce_dtype=torch.float16)``</span>
+<span class="sd">        will not cast buffers or parameters. Note that if a ``MixedPrecision``</span>
+<span class="sd">        config is specified without a ``reduce_dtype``, gradient communication</span>
+<span class="sd">        would occur in the `param_dtype` precision, if given, otherwise, in the</span>
+<span class="sd">        original parameter precision.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="c1"># maintain a tensor of this dtype that the fp32 param shard will be cast to.</span>
     <span class="c1"># Will control the precision of model params, inputs, and thus compute as</span>
     <span class="c1"># well.</span>
-    <span class="n">param_dtype</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">dtype</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">float16</span>
+    <span class="n">param_dtype</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">dtype</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="c1"># Gradient communication precision.</span>
-    <span class="n">reduce_dtype</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">dtype</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">float16</span>
+    <span class="n">reduce_dtype</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">dtype</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="c1"># Buffer precision.</span>
-    <span class="n">buffer_dtype</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">dtype</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">float16</span>
+    <span class="c1"># TODO: buffer + param are usually of the same type, if user specifies</span>
+    <span class="c1"># param but not buffer, should we automatically make buffer be the same?</span>
+    <span class="n">buffer_dtype</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">dtype</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
 
 
 <span class="nd">@dataclass</span>
@@ -1295,7 +1305,39 @@
         <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>
             <span class="n">p</span><span class="o">.</span><span class="n">data</span> <span class="o">=</span> <span class="n">p</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">cpu_device</span><span class="p">)</span>
 
-    <span class="k">def</span> <span class="nf">_cast_fp_inputs_to_precision</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dtype</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+    <span class="k">def</span> <span class="nf">_mixed_precision_enabled_for_params</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Whether user explicitly enabled mixed precision for</span>
+<span class="sd">        parameters or not.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">mixed_precision</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+            <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">mixed_precision</span><span class="o">.</span><span class="n">param_dtype</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_mixed_precision_enabled_for_buffers</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Whether user explicitly enabled mixed precision for</span>
+<span class="sd">        buffers or not.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">mixed_precision</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+            <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">mixed_precision</span><span class="o">.</span><span class="n">buffer_dtype</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_mixed_precision_enabled_for_reduce</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Whether user explicitly enabled mixed precision for</span>
+<span class="sd">        gradient reduction or not.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">mixed_precision</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+            <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">mixed_precision</span><span class="o">.</span><span class="n">reduce_dtype</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_cast_fp_inputs_to_precision</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">dtype</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Casts floating point tensors in args and kwargs to precision given by dtype.</span>
 <span class="sd">        requires_grad field is respected.</span>
@@ -1324,7 +1366,9 @@
 <span class="sd">        if we are CPU offloading, this also implicitly loads the parameter shard</span>
 <span class="sd">        back to GPU.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">mixed_precision</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;Expected to only be called when mixed precision is enabled.&quot;</span>
+        <span class="k">assert</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_mixed_precision_enabled_for_params</span><span class="p">()</span>
+        <span class="p">),</span> <span class="s2">&quot;Expected to only be called when mixed precision for parameters is enabled.&quot;</span>
         <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">stream</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_streams</span><span class="p">[</span><span class="s2">&quot;mixed_precision_params&quot;</span><span class="p">]):</span>
             <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">params</span><span class="p">:</span>
                 <span class="k">assert</span> <span class="n">p</span><span class="o">.</span><span class="n">_mp_shard</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
@@ -1345,7 +1389,9 @@
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Deallocate storage for parameter&#39;s mixed precision shard.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">mixed_precision</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+        <span class="k">assert</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_mixed_precision_enabled_for_params</span><span class="p">()</span>
+        <span class="p">),</span> <span class="s2">&quot;Expected to only be called when mixed precision for parameters is enabled.&quot;</span>
         <span class="n">current_stream</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">current_stream</span><span class="p">()</span>
         <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">params</span><span class="p">:</span>
             <span class="c1"># mp_shard should always be allocated.</span>
@@ -1412,7 +1458,7 @@
                         <span class="c1"># Note that we don&#39;t pass in self.mixed_precision.buffer_dtype</span>
                         <span class="c1"># recursively into _cast_buffers, as we want to respect</span>
                         <span class="c1"># mp config for child FSDP instances.</span>
-                        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">mixed_precision</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">_mixed_precision_enabled_for_buffers</span><span class="p">():</span>
                             <span class="n">buf</span> <span class="o">=</span> <span class="n">buf</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">mixed_precision</span><span class="o">.</span><span class="n">buffer_dtype</span><span class="p">)</span>
 
                     <span class="nb">setattr</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">buf</span><span class="p">)</span>
@@ -1658,7 +1704,9 @@
         <span class="c1"># fwd/bwd, it is freed and we only hold on to the full precision shard.</span>
         <span class="c1"># As a result, this reduced precision shard is not allocated if we are</span>
         <span class="c1"># not in the forward/backward pass.</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">mixed_precision</span><span class="p">:</span>
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_mixed_precision_enabled_for_params</span><span class="p">()</span>
+        <span class="p">):</span>
             <span class="n">p</span><span class="o">.</span><span class="n">_mp_shard</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span>
                 <span class="n">p</span><span class="o">.</span><span class="n">_local_shard</span><span class="p">,</span>
                 <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">compute_device</span><span class="p">,</span>
@@ -1677,7 +1725,7 @@
             <span class="c1"># into full_param_padded it can occur without issues and result in</span>
             <span class="c1"># full_param_padded having the expected param_dtype.</span>
             <span class="n">full_param_dtype</span> <span class="o">=</span> <span class="p">(</span>
-                <span class="n">p</span><span class="o">.</span><span class="n">dtype</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">mixed_precision</span> <span class="ow">is</span> <span class="kc">None</span>
+                <span class="n">p</span><span class="o">.</span><span class="n">dtype</span> <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_mixed_precision_enabled_for_params</span><span class="p">()</span>
                 <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">mixed_precision</span><span class="o">.</span><span class="n">param_dtype</span>
             <span class="p">)</span>
             <span class="n">p</span><span class="o">.</span><span class="n">_full_param_padded</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span>  <span class="c1"># type: ignore[attr-defined]</span>
@@ -1726,7 +1774,7 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">_streams</span><span class="p">[</span><span class="s2">&quot;post_backward&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">Stream</span><span class="p">()</span>
             <span class="c1"># Stream to move main params to self.mixed_precision.param_dtype</span>
             <span class="c1"># for forward pass.</span>
-            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">mixed_precision</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_mixed_precision_enabled_for_params</span><span class="p">():</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_streams</span><span class="p">[</span><span class="s2">&quot;mixed_precision_params&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">Stream</span><span class="p">()</span>
 
         <span class="c1"># We share streams with all children instances, which allows them to</span>
@@ -1749,7 +1797,7 @@
         <span class="k">if</span> <span class="ow">not</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span><span class="p">():</span>
             <span class="k">return</span>
 
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">mixed_precision</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_mixed_precision_enabled_for_params</span><span class="p">():</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_streams</span><span class="p">[</span><span class="s2">&quot;mixed_precision_params&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">wait_stream</span><span class="p">(</span>
                 <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">current_stream</span><span class="p">()</span>
             <span class="p">)</span>
@@ -1957,7 +2005,10 @@
         <span class="c1"># back to their mixed precision type. This is because buffers are cast</span>
         <span class="c1"># during lazy_init() and stay at their mixed precision type before/after</span>
         <span class="c1"># forward/backward. As a result state_dict() should maintain this.</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_root</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">mixed_precision</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_is_root</span>
+            <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_mixed_precision_enabled_for_buffers</span><span class="p">()</span>
+        <span class="p">):</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_cast_buffers</span><span class="p">(</span><span class="n">recurse</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">processed_state_dict</span>
 
@@ -2025,7 +2076,10 @@
                 <span class="c1"># buffers stay casted after forward/backward. We must have the</span>
                 <span class="c1"># call here instead of above because _summon_full_params itself</span>
                 <span class="c1"># calls _lazy_init() which would cast the buffers.</span>
-                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">mixed_precision</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_root</span><span class="p">:</span>
+                <span class="k">if</span> <span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_is_root</span>
+                    <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_mixed_precision_enabled_for_buffers</span><span class="p">()</span>
+                <span class="p">):</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">_cast_buffers</span><span class="p">(</span>
                         <span class="n">dtype</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_orig_buffer_dtypes</span><span class="p">,</span> <span class="n">recurse</span><span class="o">=</span><span class="kc">False</span>
                     <span class="p">)</span>
@@ -2198,7 +2252,10 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">training_state</span> <span class="o">=</span> <span class="n">TrainingState_</span><span class="o">.</span><span class="n">FORWARD</span>
 
         <span class="c1"># Cast inputs to their mixed precision type.</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_root</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">mixed_precision</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_is_root</span>
+            <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_mixed_precision_enabled_for_params</span><span class="p">()</span>
+        <span class="p">):</span>
             <span class="n">input_dtype</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">mixed_precision</span><span class="o">.</span><span class="n">param_dtype</span>
             <span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cast_fp_inputs_to_precision</span><span class="p">(</span>
                 <span class="n">input_dtype</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
@@ -2222,7 +2279,9 @@
 
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">reshard_after_forward</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_free_full_params</span><span class="p">()</span>
-            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">mixed_precision</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_mixed_precision_enabled_for_params</span><span class="p">()</span>
+            <span class="p">):</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_free_mp_shard</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">params</span><span class="p">)</span>
         <span class="c1"># Switch to original local shards of params. We maintain this invariant throughout</span>
         <span class="c1"># the code, i.e., ``p.data == p._local_shard`` after each function. This</span>
@@ -2664,7 +2723,7 @@
             <span class="c1"># full parameters in memory and save network overhead.</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_free_full_params</span><span class="p">(</span><span class="n">cast</span><span class="p">(</span><span class="n">List</span><span class="p">[</span><span class="n">FlatParameter</span><span class="p">],</span> <span class="p">[</span><span class="n">param</span><span class="p">]))</span>
 
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">mixed_precision</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_mixed_precision_enabled_for_params</span><span class="p">():</span>
             <span class="c1"># Noop if reshard_after_forward=True because we&#39;d free the param</span>
             <span class="c1"># shard when rebuilding the full params in the pre_beckward_hook.</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_free_mp_shard</span><span class="p">(</span><span class="n">cast</span><span class="p">(</span><span class="n">List</span><span class="p">[</span><span class="n">FlatParameter</span><span class="p">],</span> <span class="p">[</span><span class="n">param</span><span class="p">]))</span>
@@ -2699,12 +2758,12 @@
         <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">stream</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_streams</span><span class="p">[</span><span class="s2">&quot;post_backward&quot;</span><span class="p">]):</span>
             <span class="n">orig_grad_data</span> <span class="o">=</span> <span class="n">param</span><span class="o">.</span><span class="n">grad</span><span class="o">.</span><span class="n">data</span>
             <span class="k">if</span> <span class="p">(</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">mixed_precision</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">mixed_precision</span><span class="o">.</span><span class="n">param_dtype</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">mixed_precision</span><span class="o">.</span><span class="n">reduce_dtype</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_mixed_precision_enabled_for_reduce</span><span class="p">()</span>
             <span class="p">):</span>
                 <span class="c1"># Cast gradient to precision in which it should be communicated.</span>
                 <span class="c1"># TODO: Make this a communication hook when communication hooks</span>
-                <span class="c1"># are implemented for FSDP.</span>
+                <span class="c1"># are implemented for FSDP. Note that this is a noop if the</span>
+                <span class="c1"># reduce_dtype matches the param dtype.</span>
                 <span class="n">param</span><span class="o">.</span><span class="n">grad</span><span class="o">.</span><span class="n">data</span> <span class="o">=</span> <span class="n">param</span><span class="o">.</span><span class="n">grad</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">mixed_precision</span><span class="o">.</span><span class="n">reduce_dtype</span><span class="p">)</span>
 
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">gradient_predivide_factor</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
@@ -2738,7 +2797,14 @@
                     <span class="c1"># Average grad by world_size for consistency with PyTorch DDP.</span>
                     <span class="n">output</span><span class="o">.</span><span class="n">div_</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">gradient_postdivide_factor</span><span class="p">)</span>
 
-                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">mixed_precision</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="c1"># Note that we need to cast grads back to the full precision if</span>
+                <span class="c1"># 1) parameters were in reduced precision during fwd, as grads</span>
+                <span class="c1"># would thus be in this reduced precision, or</span>
+                <span class="c1"># 2) parameters did not have precision reduced, but grads</span>
+                <span class="c1"># had reduced precision for communication.</span>
+                <span class="k">if</span> <span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_mixed_precision_enabled_for_params</span><span class="p">()</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">_mixed_precision_enabled_for_reduce</span><span class="p">()</span>
+                <span class="p">):</span>
                     <span class="c1"># Cast gradients back to the full parameter precision so that</span>
                     <span class="c1"># optimizer.step() happens in full precision.</span>
                     <span class="n">orig_param_grad_data</span> <span class="o">=</span> <span class="n">output</span>
@@ -2778,7 +2844,14 @@
                     <span class="bp">self</span><span class="o">.</span><span class="n">world_size</span> <span class="o">==</span> <span class="mi">1</span>
                 <span class="p">),</span> <span class="s2">&quot;Currently the only way for _is_sharded to be False is </span><span class="se">\</span>
 <span class="s2">                    world_size == 1&quot;</span>
-                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">mixed_precision</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="c1"># Note that we need to cast grads back to the full precision if</span>
+                <span class="c1"># 1) parameters were in reduced precision during fwd, as grads</span>
+                <span class="c1"># would thus be in this reduced precision, or</span>
+                <span class="c1"># 2) parameters did not have precision reduced, but grads</span>
+                <span class="c1"># had reduced precision for communication.</span>
+                <span class="k">if</span> <span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_mixed_precision_enabled_for_params</span><span class="p">()</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">_mixed_precision_enabled_for_reduce</span><span class="p">()</span>
+                <span class="p">):</span>
                     <span class="c1"># Cast gradients back to the full parameter precision so that</span>
                     <span class="c1"># optimizer.step() happens in full precision.</span>
                     <span class="n">orig_param_grad_data</span> <span class="o">=</span> <span class="n">param</span><span class="o">.</span><span class="n">grad</span><span class="o">.</span><span class="n">data</span>
@@ -2950,7 +3023,8 @@
         <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">stream</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_streams</span><span class="p">[</span><span class="s2">&quot;all_gather&quot;</span><span class="p">]):</span>
             <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">params</span><span class="p">:</span>
                 <span class="n">mixed_precision_cast_ran</span> <span class="o">=</span> <span class="p">(</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">mixed_precision</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">force_full_precision</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_mixed_precision_enabled_for_params</span><span class="p">()</span>
+                    <span class="ow">and</span> <span class="ow">not</span> <span class="n">force_full_precision</span>
                 <span class="p">)</span>
                 <span class="k">if</span> <span class="n">mixed_precision_cast_ran</span><span class="p">:</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">_cast_param_shards_to_dtype</span><span class="p">()</span>
@@ -3011,7 +3085,10 @@
                     <span class="k">assert</span> <span class="p">(</span>
                         <span class="n">p</span><span class="o">.</span><span class="n">_full_param_padded</span><span class="o">.</span><span class="n">storage</span><span class="p">()</span><span class="o">.</span><span class="n">size</span><span class="p">()</span> <span class="o">==</span> <span class="mi">0</span>  <span class="c1"># type: ignore[attr-defined]</span>
                     <span class="p">),</span> <span class="s2">&quot;Full param&#39;s storage should have been freed before if all gather is needed.&quot;</span>  <span class="c1"># type: ignore[attr-defined]</span>
-                    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">mixed_precision</span> <span class="ow">and</span> <span class="n">force_full_precision</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="p">(</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">_mixed_precision_enabled_for_params</span><span class="p">()</span>
+                        <span class="ow">and</span> <span class="n">force_full_precision</span>
+                    <span class="p">):</span>
                         <span class="c1"># p._full_param_padded has the reduced precision type,</span>
                         <span class="c1"># but we need full precision rebuild as we&#39;re in</span>
                         <span class="c1"># _summon_full_params. Note that this is why</span>
@@ -3039,7 +3116,9 @@
                     <span class="bp">self</span><span class="o">.</span><span class="n">_update_p_data</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="n">output_tensor</span><span class="o">=</span><span class="n">output_tensor</span><span class="p">)</span>
                     <span class="c1"># We can free the reduced precision shard as we have the</span>
                     <span class="c1"># full precision parameter.</span>
-                    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">mixed_precision</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="p">(</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">_mixed_precision_enabled_for_params</span><span class="p">()</span>
+                    <span class="p">):</span>
                         <span class="bp">self</span><span class="o">.</span><span class="n">_free_mp_shard</span><span class="p">(</span><span class="n">cast</span><span class="p">(</span><span class="n">List</span><span class="p">[</span><span class="n">FlatParameter</span><span class="p">],</span> <span class="p">[</span><span class="n">p</span><span class="p">]))</span>
         <span class="k">return</span> <span class="n">output_tensors</span>
 
@@ -3175,7 +3254,9 @@
         <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">params</span><span class="p">:</span>
             <span class="c1"># e.g., world_size == 1</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="n">p</span><span class="o">.</span><span class="n">_is_sharded</span><span class="p">:</span>  <span class="c1"># type: ignore[attr-defined]</span>
-                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">mixed_precision</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">if</span> <span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_mixed_precision_enabled_for_params</span><span class="p">()</span>
+                <span class="p">):</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">_free_mp_shard</span><span class="p">(</span><span class="n">cast</span><span class="p">(</span><span class="n">List</span><span class="p">[</span><span class="n">FlatParameter</span><span class="p">],</span> <span class="p">[</span><span class="n">p</span><span class="p">]))</span>
                 <span class="k">continue</span>
             <span class="c1"># Don&#39;t let PyTorch reuse this memory until all work in the current</span>
