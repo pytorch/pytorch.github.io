@@ -10,7 +10,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>torch.distributed.algorithms.ddp_comm_hooks.powerSGD_hook &mdash; PyTorch 1.12 documentation</title>
+  <title>torch.distributed.algorithms.ddp_comm_hooks.powerSGD_hook &mdash; PyTorch master documentation</title>
   
 
   
@@ -39,6 +39,12 @@
   <link rel="stylesheet" href="../../../../../_static/css/jit.css" type="text/css" />
     <link rel="index" title="Index" href="../../../../../genindex.html" />
     <link rel="search" title="Search" href="../../../../../search.html" />
+
+<!--
+  Search engines should not index the master version of documentation.
+  Stable documentation are built without release == 'master'.
+-->
+<meta name="robots" content="noindex">
 
 
   <!-- Google Analytics -->
@@ -142,6 +148,10 @@
                   <span class="dropdown-title">TorchServe</span>
                   <p></p>
                 </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/torchx/">
+                  <span class="dropdown-title">TorchX</span>
+                  <p></p>
+                </a>
                 <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/xla">
                   <span class="dropdown-title">PyTorch on XLA Devices</span>
                   <p></p>
@@ -207,7 +217,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href='https://pytorch.org/docs/versions.html'>1.12 &#x25BC</a>
+      <a href='https://pytorch.org/docs/versions.html'>master (1.12.0a0+gitb34739f ) &#x25BC</a>
     </div>
     
 
@@ -226,6 +236,13 @@
           </div>
 
           
+
+<div>
+  <a style="color:#F05732" href="https://pytorch.org/docs/stable/_modules/torch/distributed/algorithms/ddp_comm_hooks/powerSGD_hook.html">
+    You are viewing unstable developer preview docs.
+    Click here to view docs for latest stable release.
+  </a>
+</div>
 
 
             
@@ -318,9 +335,11 @@
 <p class="caption"><span class="caption-text">Libraries</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference external" href="https://pytorch.org/audio/stable">torchaudio</a></li>
+<li class="toctree-l1"><a class="reference external" href="https://pytorch.org/data">TorchData</a></li>
+<li class="toctree-l1"><a class="reference external" href="https://pytorch.org/torchrec">TorchRec</a></li>
+<li class="toctree-l1"><a class="reference external" href="https://pytorch.org/serve">TorchServe</a></li>
 <li class="toctree-l1"><a class="reference external" href="https://pytorch.org/text/stable">torchtext</a></li>
 <li class="toctree-l1"><a class="reference external" href="https://pytorch.org/vision/stable">torchvision</a></li>
-<li class="toctree-l1"><a class="reference external" href="https://pytorch.org/serve">TorchServe</a></li>
 <li class="toctree-l1"><a class="reference external" href="http://pytorch.org/xla/">PyTorch on XLA Devices</a></li>
 </ul>
 <p class="caption"><span class="caption-text">Community</span></p>
@@ -404,8 +423,10 @@
              <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
               
   <h1>Source code for torch.distributed.algorithms.ddp_comm_hooks.powerSGD_hook</h1><div class="highlight"><pre>
-<span></span><span class="kn">import</span> <span class="nn">logging</span>
+<span></span><span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">defaultdict</span>
+<span class="kn">import</span> <span class="nn">logging</span>
 <span class="kn">import</span> <span class="nn">math</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Dict</span>
 
 <span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
 <span class="kn">import</span> <span class="nn">torch</span>
@@ -413,58 +434,64 @@
 
 <span class="kn">from</span> <span class="nn">.</span> <span class="kn">import</span> <span class="n">default_hooks</span> <span class="k">as</span> <span class="n">default</span>
 
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s2">&quot;PowerSGDState&quot;</span><span class="p">,</span> <span class="s2">&quot;powerSGD_hook&quot;</span><span class="p">,</span> <span class="s2">&quot;batched_powerSGD_hook&quot;</span>
+<span class="p">]</span>
+
 <span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
 
 
-<span class="k">def</span> <span class="nf">_orthogonalize</span><span class="p">(</span><span class="n">matrix</span><span class="p">,</span> <span class="n">epsilon</span><span class="o">=</span><span class="mi">0</span><span class="p">):</span>
+<span class="k">def</span> <span class="nf">_orthogonalize</span><span class="p">(</span><span class="n">matrices</span><span class="p">,</span> <span class="n">epsilon</span><span class="o">=</span><span class="mi">0</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Decide between Gram-Schmidt or QR factorization to orthogonalize the matrix.</span>
+<span class="sd">    Decide between Gram-Schmidt or QR factorization to orthogonalize a batch of matrices.</span>
 <span class="sd">    QR factorization doesn&#39;t work with half-precision, but it is usually faster with a rank &gt; 2.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">matrix</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">==</span> <span class="mi">2</span> <span class="ow">and</span> <span class="n">matrix</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">&lt;=</span> <span class="n">matrix</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">matrices</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">==</span> <span class="mi">3</span> <span class="ow">and</span> <span class="n">matrices</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">&lt;=</span> <span class="n">matrices</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
 
-    <span class="n">rank</span> <span class="o">=</span> <span class="n">matrix</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
-    <span class="n">dtype</span> <span class="o">=</span> <span class="n">matrix</span><span class="o">.</span><span class="n">dtype</span>
+    <span class="n">num_matrices</span> <span class="o">=</span> <span class="n">matrices</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="n">rank</span> <span class="o">=</span> <span class="n">matrices</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span>
+    <span class="n">dtype</span> <span class="o">=</span> <span class="n">matrices</span><span class="o">.</span><span class="n">dtype</span>
     <span class="k">if</span> <span class="n">rank</span> <span class="o">&lt;=</span> <span class="mi">2</span> <span class="ow">or</span> <span class="n">dtype</span> <span class="ow">in</span> <span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">float16</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">bfloat16</span><span class="p">]:</span>
-        <span class="n">_orthogonalize_gram_schmidt</span><span class="p">(</span><span class="n">matrix</span><span class="p">,</span> <span class="n">epsilon</span><span class="o">=</span><span class="n">epsilon</span><span class="p">)</span>
+        <span class="n">_orthogonalize_gram_schmidt</span><span class="p">(</span><span class="n">matrices</span><span class="p">,</span> <span class="n">epsilon</span><span class="o">=</span><span class="n">epsilon</span><span class="p">)</span>
     <span class="k">else</span><span class="p">:</span>
         <span class="n">torch</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">qr</span><span class="p">(</span>
-            <span class="n">matrix</span><span class="p">,</span>
+            <span class="n">matrices</span><span class="p">,</span>
             <span class="n">out</span><span class="o">=</span><span class="p">(</span>
-                <span class="n">matrix</span><span class="p">,</span>
-                <span class="n">torch</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">rank</span><span class="p">,</span> <span class="n">rank</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">matrix</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">)</span>
+                <span class="n">matrices</span><span class="p">,</span>
+                <span class="n">torch</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">num_matrices</span><span class="p">,</span> <span class="n">rank</span><span class="p">,</span> <span class="n">rank</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">matrices</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">)</span>
             <span class="p">)</span>
         <span class="p">)</span>
 
-<span class="k">def</span> <span class="nf">_orthogonalize_gram_schmidt</span><span class="p">(</span><span class="n">matrix</span><span class="p">,</span> <span class="n">epsilon</span><span class="o">=</span><span class="mi">0</span><span class="p">):</span>
+<span class="k">def</span> <span class="nf">_orthogonalize_gram_schmidt</span><span class="p">(</span><span class="n">matrices</span><span class="p">,</span> <span class="n">epsilon</span><span class="o">=</span><span class="mi">0</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Applies Gram-Schmidt procedure to orthogonalize a given 2D tensor.</span>
-<span class="sd">    If epsilon is 0, this is equivalent to `torch.qr(matrix, out=(matrix, _))`,</span>
+<span class="sd">    Applies Gram-Schmidt procedure to orthogonalize a batch of matrices.</span>
+<span class="sd">    If epsilon is 0, this is equivalent to `torch.qr(matrices, out=(matrices, _))`,</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">num_cols</span> <span class="o">=</span> <span class="n">matrix</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+    <span class="n">num_cols</span> <span class="o">=</span> <span class="n">matrices</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span>
     <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_cols</span><span class="p">):</span>
         <span class="c1"># Normalize the i&#39;th column.</span>
-        <span class="n">col</span> <span class="o">=</span> <span class="n">matrix</span><span class="p">[:,</span> <span class="n">i</span> <span class="p">:</span> <span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span>
+        <span class="n">col</span> <span class="o">=</span> <span class="n">matrices</span><span class="p">[:,</span> <span class="p">:,</span> <span class="n">i</span> <span class="p">:</span> <span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span>
         <span class="c1"># If no epsilon is added here, division by zero may be caused by vanishing gradients.</span>
-        <span class="c1"># This epsilon is not needed if the input matrix covers the gradients of at least one entire layer in the neural network.</span>
+        <span class="c1"># This epsilon is not needed if the input batch of matrices covers the gradients of at least one entire layer</span>
+        <span class="c1"># in the neural network.</span>
         <span class="k">if</span> <span class="n">epsilon</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
             <span class="c1"># Note that col ** 2 can underflow/overflow if we use FP16.</span>
             <span class="c1"># May need to consider multiplying a scaling factor and dividing it later, or using bfloat16 instead.</span>
             <span class="k">try</span><span class="p">:</span>
-                <span class="n">col</span> <span class="o">/=</span> <span class="n">torch</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">col</span><span class="p">)</span>
+                <span class="n">col</span> <span class="o">/=</span> <span class="n">torch</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">col</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
             <span class="k">except</span> <span class="ne">ZeroDivisionError</span><span class="p">:</span>
                 <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span>
-                    <span class="s2">&quot;The matrix to be orthogonalized has at least a column of all 0s. Please set a small value such as 1e-8 &quot;</span>
+                    <span class="s2">&quot;The matrices to be orthogonalized has at least a column of all 0s. Please set a small value such as 1e-8 &quot;</span>
                     <span class="s2">&quot;as `orthogonalization_epsilon` in PowerSGD state.&quot;</span>
                 <span class="p">)</span>
                 <span class="c1"># Recover the values from NaNs to 0s.</span>
                 <span class="n">col</span><span class="o">.</span><span class="n">fill_</span><span class="p">(</span><span class="mf">0.0</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="n">col</span> <span class="o">/=</span> <span class="n">torch</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">col</span><span class="p">)</span> <span class="o">+</span> <span class="n">epsilon</span>
+            <span class="n">col</span> <span class="o">/=</span> <span class="n">torch</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">col</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span> <span class="o">+</span> <span class="n">epsilon</span>
         <span class="c1"># Project it on the rest and remove it.</span>
         <span class="k">if</span> <span class="n">i</span> <span class="o">+</span> <span class="mi">1</span> <span class="o">&lt;</span> <span class="n">num_cols</span><span class="p">:</span>
-            <span class="n">rest</span> <span class="o">=</span> <span class="n">matrix</span><span class="p">[:,</span> <span class="n">i</span> <span class="o">+</span> <span class="mi">1</span> <span class="p">:]</span>
-            <span class="n">rest</span> <span class="o">-=</span> <span class="n">torch</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">col</span> <span class="o">*</span> <span class="n">rest</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span> <span class="o">*</span> <span class="n">col</span>
+            <span class="n">rest</span> <span class="o">=</span> <span class="n">matrices</span><span class="p">[:,</span> <span class="p">:,</span> <span class="n">i</span> <span class="o">+</span> <span class="mi">1</span> <span class="p">:]</span>
+            <span class="n">rest</span> <span class="o">-=</span> <span class="n">torch</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">col</span> <span class="o">*</span> <span class="n">rest</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span> <span class="o">*</span> <span class="n">col</span>
 
 
 <span class="k">def</span> <span class="nf">_should_compress</span><span class="p">(</span>
@@ -534,6 +561,8 @@
 
 <span class="sd">    4. ``orthogonalization_epsilon`` can be a very small value (e.g., 1e-8) added to every normalized matrix column in orthogonalization step, to prevent div-by-zero error if any column has all 0s. If this can already be prevented (e.g., by batch normalization), an epsilon of 0 is recommended for accuracy.</span>
 
+<span class="sd">    5. ``batch_tensors_with_same_shape`` controls whether to compress and decompress tensors with same shape in a batched operation to achieve higher parallelism. Note that you should also increase the bucket size (i.e., ``bucket_cap_mb`` arg in DDP constructor) to make more same-shaped tensors appear in the same bucket, however this may reduce the overlap between computation and communication, and increase the memory footprint due to stacking the tensors of the same shape. Set to ``True`` if the compression / decompression computation is a bottleneck.</span>
+
 <span class="sd">    .. warning ::</span>
 <span class="sd">        If error feedback or warm-up is enabled, the minimum value of ``start_powerSGD_iter`` allowed in DDP is 2.</span>
 <span class="sd">        This is because there is another internal optimization that rebuilds buckets at iteration 1 in DDP,</span>
@@ -551,6 +580,7 @@
         <span class="c1"># The fields below are the binary hyperparameters recommended to be turned on for performance and accuracy.</span>
         <span class="s2">&quot;use_error_feedback&quot;</span><span class="p">,</span>
         <span class="s2">&quot;warm_start&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;batch_tensors_with_same_shape&quot;</span><span class="p">,</span>
         <span class="c1"># The fields below are internal state.</span>
         <span class="s2">&quot;rng&quot;</span><span class="p">,</span>
         <span class="s2">&quot;error_dict&quot;</span><span class="p">,</span>
@@ -575,11 +605,12 @@
         <span class="n">orthogonalization_epsilon</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
         <span class="n">random_seed</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
         <span class="n">compression_stats_logging_frequency</span><span class="o">=</span><span class="mi">10_000</span><span class="p">,</span>
+        <span class="n">batch_tensors_with_same_shape</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
             <span class="s2">&quot;PowerSGD config: matrix_approximation_rank = </span><span class="si">{}</span><span class="s2">; start_powerSGD_iter = </span><span class="si">{}</span><span class="s2">; &quot;</span>
             <span class="s2">&quot;min_compression_rate = </span><span class="si">{}</span><span class="s2">; orthogonalization_epsilon = </span><span class="si">{}</span><span class="s2">; use_error_feedback = </span><span class="si">{}</span><span class="s2">; warm_start = </span><span class="si">{}</span><span class="s2">; &quot;</span>
-            <span class="s2">&quot;random_seed = </span><span class="si">{}</span><span class="s2">; compression_stats_logging_frequency = </span><span class="si">{}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+            <span class="s2">&quot;random_seed = </span><span class="si">{}</span><span class="s2">; compression_stats_logging_frequency = </span><span class="si">{}</span><span class="s2">; batch_tensors_with_same_shape = </span><span class="si">{}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
                 <span class="n">matrix_approximation_rank</span><span class="p">,</span>
                 <span class="n">start_powerSGD_iter</span><span class="p">,</span>
                 <span class="n">min_compression_rate</span><span class="p">,</span>
@@ -588,6 +619,7 @@
                 <span class="n">warm_start</span><span class="p">,</span>
                 <span class="n">random_seed</span><span class="p">,</span>
                 <span class="n">compression_stats_logging_frequency</span><span class="p">,</span>
+                <span class="n">batch_tensors_with_same_shape</span><span class="p">,</span>
             <span class="p">)</span>
         <span class="p">)</span>
 
@@ -636,9 +668,9 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">rng</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">RandomState</span><span class="p">(</span><span class="n">random_seed</span><span class="p">)</span>
         <span class="c1"># Since there is only a single state instance for all the input buckets,</span>
         <span class="c1"># need to maintain a dictionary that maps each bucket index to the local error.</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">error_dict</span> <span class="o">=</span> <span class="p">{}</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">p_memory_dict</span> <span class="o">=</span> <span class="p">{}</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">q_memory_dict</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">error_dict</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">p_memory_dict</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">q_memory_dict</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
         <span class="c1"># Iteration/step in the training loop.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">iter</span> <span class="o">=</span> <span class="mi">0</span>
         <span class="c1"># Compression stats accumulators</span>
@@ -650,6 +682,12 @@
             <span class="mi">1</span><span class="p">,</span> <span class="n">compression_stats_logging_frequency</span>
         <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">next_stats_report</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="c1"># Batching tensors with same shape can increase parallelism in compressiom / decompression computation.</span>
+        <span class="c1"># This requires a larger bucket size to make more same-shaped tensor to appear in one bucket, however</span>
+        <span class="c1"># this may reduce the overlap between computation and communication, and increase the memory footprint</span>
+        <span class="c1"># due to stacking tensors.</span>
+        <span class="c1"># Turn on if compression / decompression computation is a bottleneck.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">batch_tensors_with_same_shape</span> <span class="o">=</span> <span class="n">batch_tensors_with_same_shape</span>
 
     <span class="k">def</span> <span class="nf">maybe_increase_iter</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">bucket</span><span class="p">):</span>
         <span class="c1"># Since bucket 0 is the last bucket to allreduce in an iteration.</span>
@@ -837,26 +875,48 @@
             <span class="n">total_Qs_size</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span>
         <span class="p">)</span>
 
+    <span class="c1"># Batch tensors to compress by shape.</span>
+    <span class="n">shape_to_tensors</span> <span class="o">=</span> <span class="n">defaultdict</span><span class="p">(</span><span class="nb">list</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">tensor</span> <span class="ow">in</span> <span class="n">tensors_to_compress</span><span class="p">:</span>
+        <span class="n">shape_to_tensors</span><span class="p">[</span><span class="n">tensor</span><span class="o">.</span><span class="n">shape</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">tensor</span><span class="p">)</span>
+
+    <span class="c1"># This function decides whether to batch tensors with same shape or not according to the argument,</span>
+    <span class="c1"># so the following process could share the same code.</span>
+    <span class="k">def</span> <span class="nf">maybe_batched_tensors_to_compress</span><span class="p">():</span>
+        <span class="k">for</span> <span class="n">tensors</span> <span class="ow">in</span> <span class="n">shape_to_tensors</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">state</span><span class="o">.</span><span class="n">batch_tensors_with_same_shape</span><span class="p">:</span>
+                <span class="n">batch_size</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">tensors</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">batch_size</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+                    <span class="c1"># Use the original tensor to avoid copy.</span>
+                    <span class="k">yield</span> <span class="n">tensors</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="k">yield</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="n">tensors</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">for</span> <span class="n">tensor</span> <span class="ow">in</span> <span class="n">tensors</span><span class="p">:</span>
+                    <span class="k">yield</span> <span class="n">tensor</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+
     <span class="c1"># Create Ps and Qs that point to the allocated memory.</span>
+    <span class="n">tensors_to_compress</span> <span class="o">=</span> <span class="p">[]</span>
     <span class="n">ps</span> <span class="o">=</span> <span class="p">[]</span>
     <span class="n">qs</span> <span class="o">=</span> <span class="p">[]</span>
     <span class="n">p_idx</span> <span class="o">=</span> <span class="mi">0</span>
     <span class="n">q_idx</span> <span class="o">=</span> <span class="mi">0</span>
-    <span class="k">for</span> <span class="n">tensor</span> <span class="ow">in</span> <span class="n">tensors_to_compress</span><span class="p">:</span>
-        <span class="n">n</span><span class="p">,</span> <span class="n">m</span> <span class="o">=</span> <span class="n">tensor</span><span class="o">.</span><span class="n">shape</span>
+    <span class="k">for</span> <span class="n">tensor</span> <span class="ow">in</span> <span class="n">maybe_batched_tensors_to_compress</span><span class="p">():</span>
+        <span class="n">batch_size</span><span class="p">,</span> <span class="n">n</span><span class="p">,</span> <span class="n">m</span> <span class="o">=</span> <span class="n">tensor</span><span class="o">.</span><span class="n">shape</span>
         <span class="n">matrix_approximation_rank</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">m</span><span class="p">,</span> <span class="n">state</span><span class="o">.</span><span class="n">matrix_approximation_rank</span><span class="p">)</span>
+        <span class="n">tensors_to_compress</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">tensor</span><span class="p">)</span>
         <span class="n">ps</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
             <span class="n">state</span><span class="o">.</span><span class="n">p_memory_dict</span><span class="p">[</span><span class="n">bucket_index</span><span class="p">][</span>
-                <span class="n">p_idx</span> <span class="p">:</span> <span class="n">p_idx</span> <span class="o">+</span> <span class="n">n</span> <span class="o">*</span> <span class="n">matrix_approximation_rank</span>
-            <span class="p">]</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">matrix_approximation_rank</span><span class="p">)</span>
+                <span class="n">p_idx</span> <span class="p">:</span> <span class="n">p_idx</span> <span class="o">+</span> <span class="n">batch_size</span> <span class="o">*</span> <span class="n">n</span> <span class="o">*</span> <span class="n">matrix_approximation_rank</span>
+            <span class="p">]</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">n</span><span class="p">,</span> <span class="n">matrix_approximation_rank</span><span class="p">)</span>
         <span class="p">)</span>
         <span class="n">qs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
             <span class="n">state</span><span class="o">.</span><span class="n">q_memory_dict</span><span class="p">[</span><span class="n">bucket_index</span><span class="p">][</span>
-                <span class="n">q_idx</span> <span class="p">:</span> <span class="n">q_idx</span> <span class="o">+</span> <span class="n">m</span> <span class="o">*</span> <span class="n">matrix_approximation_rank</span>
-            <span class="p">]</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">m</span><span class="p">,</span> <span class="n">matrix_approximation_rank</span><span class="p">)</span>
+                <span class="n">q_idx</span> <span class="p">:</span> <span class="n">q_idx</span> <span class="o">+</span> <span class="n">batch_size</span> <span class="o">*</span> <span class="n">m</span> <span class="o">*</span> <span class="n">matrix_approximation_rank</span>
+            <span class="p">]</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">m</span><span class="p">,</span> <span class="n">matrix_approximation_rank</span><span class="p">)</span>
         <span class="p">)</span>
-        <span class="n">p_idx</span> <span class="o">+=</span> <span class="n">n</span> <span class="o">*</span> <span class="n">matrix_approximation_rank</span>
-        <span class="n">q_idx</span> <span class="o">+=</span> <span class="n">m</span> <span class="o">*</span> <span class="n">matrix_approximation_rank</span>
+        <span class="n">p_idx</span> <span class="o">+=</span> <span class="n">batch_size</span> <span class="o">*</span> <span class="n">n</span> <span class="o">*</span> <span class="n">matrix_approximation_rank</span>
+        <span class="n">q_idx</span> <span class="o">+=</span> <span class="n">batch_size</span> <span class="o">*</span> <span class="n">m</span> <span class="o">*</span> <span class="n">matrix_approximation_rank</span>
 
     <span class="c1"># If warm-start is enabled, reuse Qs from the previous iteration if possible and skip filling random values.</span>
     <span class="c1"># The exception is the first iteration when PowerSGD is applied.</span>
@@ -883,7 +943,7 @@
 
     <span class="c1"># Compute Ps.</span>
     <span class="k">for</span> <span class="n">tensor</span><span class="p">,</span> <span class="n">q</span><span class="p">,</span> <span class="n">p</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">tensors_to_compress</span><span class="p">,</span> <span class="n">qs</span><span class="p">,</span> <span class="n">ps</span><span class="p">):</span>
-        <span class="n">torch</span><span class="o">.</span><span class="n">matmul</span><span class="p">(</span><span class="n">tensor</span><span class="p">,</span> <span class="n">q</span><span class="p">,</span> <span class="n">out</span><span class="o">=</span><span class="n">p</span><span class="p">)</span>
+        <span class="n">torch</span><span class="o">.</span><span class="n">bmm</span><span class="p">(</span><span class="n">tensor</span><span class="p">,</span> <span class="n">q</span><span class="p">,</span> <span class="n">out</span><span class="o">=</span><span class="n">p</span><span class="p">)</span>
 
     <span class="c1"># This allreduce is only applied to uncompressed tensors,</span>
     <span class="c1"># so it should have been kicked off before the above computation on the compressed tensors to hide more communication costs.</span>
@@ -917,7 +977,7 @@
 
         <span class="c1"># Compute Qs.</span>
         <span class="k">for</span> <span class="n">tensor</span><span class="p">,</span> <span class="n">p</span><span class="p">,</span> <span class="n">q</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">tensors_to_compress</span><span class="p">,</span> <span class="n">ps</span><span class="p">,</span> <span class="n">qs</span><span class="p">):</span>
-            <span class="n">torch</span><span class="o">.</span><span class="n">matmul</span><span class="p">(</span><span class="n">tensor</span><span class="o">.</span><span class="n">t</span><span class="p">(),</span> <span class="n">p</span><span class="p">,</span> <span class="n">out</span><span class="o">=</span><span class="n">q</span><span class="p">)</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">bmm</span><span class="p">(</span><span class="n">tensor</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span> <span class="n">p</span><span class="p">,</span> <span class="n">out</span><span class="o">=</span><span class="n">q</span><span class="p">)</span>
 
         <span class="c1"># TODO: The above procedure does two matmul+allreduce steps per iteration --</span>
         <span class="c1"># one left multiplication and one right multiplication.</span>
@@ -936,7 +996,18 @@
         <span class="n">state</span><span class="o">.</span><span class="n">q_memory_dict</span><span class="p">[</span><span class="n">bucket_index</span><span class="p">]</span> <span class="o">=</span> <span class="n">fut</span><span class="o">.</span><span class="n">value</span><span class="p">()</span><span class="o">.</span><span class="n">div_</span><span class="p">(</span><span class="n">world_size</span><span class="p">)</span>
 
         <span class="k">for</span> <span class="n">p</span><span class="p">,</span> <span class="n">q</span><span class="p">,</span> <span class="n">tensor</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">ps</span><span class="p">,</span> <span class="n">qs</span><span class="p">,</span> <span class="n">tensors_to_compress</span><span class="p">):</span>
-            <span class="n">torch</span><span class="o">.</span><span class="n">matmul</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="n">q</span><span class="o">.</span><span class="n">t</span><span class="p">(),</span> <span class="n">out</span><span class="o">=</span><span class="n">tensor</span><span class="p">)</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">bmm</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="n">q</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span> <span class="n">out</span><span class="o">=</span><span class="n">tensor</span><span class="p">)</span>
+
+        <span class="c1"># Copy batched tensors back to original buffer.</span>
+        <span class="k">if</span> <span class="n">state</span><span class="o">.</span><span class="n">batch_tensors_with_same_shape</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">tensor</span> <span class="ow">in</span> <span class="n">tensors_to_compress</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">tensor</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+                    <span class="c1"># Skip tensor with batch_size == 1 since itself is the original tensor.</span>
+                    <span class="k">continue</span>
+                <span class="n">original_tensors</span> <span class="o">=</span> <span class="n">shape_to_tensors</span><span class="p">[</span><span class="n">tensor</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">:]]</span>
+                <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">original_tensor</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">original_tensors</span><span class="p">):</span>
+                    <span class="n">original_tensor</span><span class="o">.</span><span class="n">copy_</span><span class="p">(</span><span class="n">tensor</span><span class="p">[</span><span class="n">i</span><span class="p">])</span>
+
         <span class="k">if</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span><span class="p">():</span>
             <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">synchronize</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
 
@@ -1181,7 +1252,7 @@
 
   <div role="contentinfo">
     <p>
-        &copy; Copyright 2019, Torch Contributors.
+        &copy; Copyright 2022, PyTorch Contributors.
 
     </p>
   </div>
@@ -1380,11 +1451,11 @@
             </li>
 
             <li>
-              <a href="https://pytorch.org/elastic/">TorchElastic</a>
+              <a href="https://pytorch.org/serve/">TorchServe</a>
             </li>
 
             <li>
-              <a href="https://pytorch.org/serve/">TorchServe</a>
+              <a href="https://pytorch.org/torchx/">TorchX</a>
             </li>
 
             <li>
