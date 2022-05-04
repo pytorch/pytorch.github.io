@@ -52,8 +52,16 @@ We will focus on this second component, Automatic Text Summarization, which is a
  <img src="/assets/images/ambient_clinical_intel_fig2.png" width="60%">
 </p>
 
+<p align = "center">
+Figure 2: Transcript of a patient-doctor conversation
+</p>
+
 <p align="center">
  <img src="/assets/images/ambient_clinical_intel_fig3.png" width="60%">
+</p>
+
+<p align = "center">
+Figure 3: Excerpt of an AI-generated medical report. HPI stands for History of present illness.
 </p>
 
 ## Text Summarization with PyTorch and Fairseq
