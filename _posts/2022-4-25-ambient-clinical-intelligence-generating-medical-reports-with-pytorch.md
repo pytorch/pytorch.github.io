@@ -49,11 +49,11 @@ We will focus on this second component, Automatic Text Summarization, which is a
 * Standard summarization metrics might differ from human judgment of quality.
 
 <p align="center">
- <img src="/assets/images/nuance-dragon-ambient-experience.png" width="60%">
+ <img src="/assets/images/ambient_clinical_intel_fig2.png" width="60%">
 </p>
 
 <p align="center">
- <img src="/assets/images/nuance-dragon-ambient-experience.png" width="60%">
+ <img src="/assets/images/ambient_clinical_intel_fig3.png" width="60%">
 </p>
 
 ## Text Summarization with PyTorch and Fairseq
