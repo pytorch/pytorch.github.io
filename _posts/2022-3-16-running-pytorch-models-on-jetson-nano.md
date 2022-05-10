@@ -6,11 +6,11 @@ featured-img: 'assets/images/pytorch-logo.jpg'
 ---
 
 ### Overview
-Nvidia [Jetson Nano](https://developer.nvidia.com/embedded/jetson-nano-developer-kit), part of the [Jetson family of products](https://developer.nvidia.com/embedded/jetson-modules) or Jetson modules, is a small yet powerful Linux (Ubuntu) based embedded computer with 2/4GB GPU. With it, you can run many PyTorch models efficiently. This document summarizes our experience of running different deep learning models using 3 different mechanisms on Jetson Nano:
+NVIDIA [Jetson Nano](https://developer.nvidia.com/embedded/jetson-nano-developer-kit), part of the [Jetson family of products](https://developer.nvidia.com/embedded/jetson-modules) or Jetson modules, is a small yet powerful Linux (Ubuntu) based embedded computer with 2/4GB GPU. With it, you can run many PyTorch models efficiently. This document summarizes our experience of running different deep learning models using 3 different mechanisms on Jetson Nano:
 
-  1. Jetson Inference the higher-level Nvidia API that has built-in support for running most common computer vision models which can be transfer-learned with PyTorch on the Jetson platform.
+  1. Jetson Inference the higher-level NVIDIA API that has built-in support for running most common computer vision models which can be transfer-learned with PyTorch on the Jetson platform.
 
-  2. TensorRT a high-performance inference framework from Nvidia that requires the conversion of a PyTorch model to ONNX, and then to the TensorRT engine file that the TensorRT runtime can run.
+  2. TensorRT, an SDK for high-performance inference from NVIDIA that requires the conversion of a PyTorch model to ONNX, and then to the TensorRT engine file that the TensorRT runtime can run.
 
   3. PyTorch with the direct PyTorch API `torch.nn` for inference.
 
@@ -69,7 +69,7 @@ nvgstcapture-1.0 --orientation=2
 ```
 
 ### Using Jetson Inference
-Nvidia [Jetson Inference](https://github.com/dusty-nv/jetson-inference) API offers the easiest way to run image recognition, object detection, semantic segmentation, and pose estimation models on Jetson Nano. Jetson Inference has TensorRT built-in, so it’s very fast. 
+NVIDIA [Jetson Inference](https://github.com/dusty-nv/jetson-inference) API offers the easiest way to run image recognition, object detection, semantic segmentation, and pose estimation models on Jetson Nano. Jetson Inference has TensorRT built-in, so it’s very fast. 
 
 To test run Jetson Inference, first clone the repo and download the models:
 
@@ -128,7 +128,7 @@ torchvision (0.10.0a0+300a8a4)
 Although Jetson Inference includes models already converted to the TensorRT engine file format, you can fine-tune the models by following the steps in Transfer Learning with PyTorch (for Jetson Inference) [here](https://github.com/dusty-nv/jetson-inference/blob/master/docs/pytorch-transfer-learning.md).
 
 ### Using TensorRT
-[TensorRT](https://docs.nvidia.com/deeplearning/tensorrt/) is a high-performance inference framework from Nvidia. Jetson Nano supports TensorRT via the Jetpack SDK, included in the SD Card image used to set up Jetson Nano. To confirm that TensorRT is already installed in Nano, `run dpkg -l|grep -i tensorrt`:
+[TensorRT](https://docs.nvidia.com/deeplearning/tensorrt/) is an SDK for high-performance inference from NVIDIA. Jetson Nano supports TensorRT via the Jetpack SDK, included in the SD Card image used to set up Jetson Nano. To confirm that TensorRT is already installed in Nano, `run dpkg -l|grep -i tensorrt`:
 
 
 <div class="text-center">
@@ -250,7 +250,7 @@ Based on our experience of running different PyTorch models for potential demo a
 
 Building PyTorch demo apps on Jetson Nano can be similar to building PyTorch apps on Linux, but you can also choose to use TensorRT after converting the PyTorch models to the TensorRT engine file format.
 
-But if you just need to run some common computer vision models on Jetson Nano using Nvidia’s Jetson Inference which supports image recognition, object detection, semantic segmentation, and pose estimation models, then this is the easiest way.
+But if you just need to run some common computer vision models on Jetson Nano using NVIDIA’s Jetson Inference which supports image recognition, object detection, semantic segmentation, and pose estimation models, then this is the easiest way.
 
 
 ### References
@@ -260,7 +260,7 @@ Torch-TensorRT, a compiler for PyTorch via TensorRT:
 Jetson Inference docker image details:
 [https://github.com/dusty-nv/jetson-inference/blob/master/docs/aux-docker.md](https://github.com/dusty-nv/jetson-inference/blob/master/docs/aux-docker.md)
 
-A guide to using TensorRT on the Nvidia Jetson Nano:
+A guide to using TensorRT on the NVIDIA Jetson Nano:
 [https://docs.donkeycar.com/guide/robot_sbc/tensorrt_jetson_nano/](https://docs.donkeycar.com/guide/robot_sbc/tensorrt_jetson_nano/) 
 including:
 
@@ -269,6 +269,3 @@ including:
 
 2. A MaskEraser app using PyTorch and torchvision, installed directly with pip:
 [https://github.com/INTEC-ATI/MaskEraser#install-pytorch](https://github.com/INTEC-ATI/MaskEraser#install-pytorch)
-
-A PyTorch to TensorRT converter:
-[https://github.com/NVIDIA-AI-IOT/torch2trt](https://github.com/NVIDIA-AI-IOT/torch2trt) 
