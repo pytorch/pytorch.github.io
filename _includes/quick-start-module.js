@@ -136,7 +136,7 @@ function changeCUDAVersion(ptbuild) {
     return;
   }
   if (ptbuild == "preview") {
-    rocm_element.children[0].textContent = "ROCM 4.5.2 (beta)";
+    rocm_element.children[0].textContent = "ROCM 5.1.1 (beta)";
     cuda_element.children[0].textContent = "CUDA 11.3";
   } else if (ptbuild == "stable") {
     rocm_element.children[0].textContent = "ROCM 4.5.2 (beta)";
