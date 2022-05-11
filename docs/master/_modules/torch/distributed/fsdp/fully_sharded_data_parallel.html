@@ -217,7 +217,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href='https://pytorch.org/docs/versions.html'>master (1.12.0a0+git24372eb ) &#x25BC</a>
+      <a href='https://pytorch.org/docs/versions.html'>master (1.12.0a0+git3d561ee ) &#x25BC</a>
     </div>
     
 
@@ -861,6 +861,10 @@
 <span class="sd">        results since FSDP will use the newly-reduced gradient instead of</span>
 <span class="sd">        accumulating with any existing gradient.</span>
 
+<span class="sd">    .. warning::</span>
+<span class="sd">        Changing the original parameter variable names after construction will</span>
+<span class="sd">        lead to undefined behavior.</span>
+
 <span class="sd">    Args:</span>
 <span class="sd">        module (nn.Module):</span>
 <span class="sd">            module to be wrapped with FSDP.</span>
@@ -883,13 +887,17 @@
 <span class="sd">            Note that this policy currently will only apply to child modules of</span>
 <span class="sd">            the passed in module. The remainder modules are always wrapped in</span>
 <span class="sd">            the returned FSDP root instance.</span>
-<span class="sd">            ``default_auto_wrap_policy`` written in ``torch.distributed.fsdp.wrap`` is</span>
+<span class="sd">            ``size_based_auto_wrap_policy`` written in ``torch.distributed.fsdp.wrap`` is</span>
 <span class="sd">            an example of ``auto_wrap_policy`` callable, this policy wraps layers</span>
-<span class="sd">            with parameter sizes larger than 100M. Users can supply the customized</span>
+<span class="sd">            with the number of parameters larger than 100M. ``transformer_auto_wrap_policy``</span>
+<span class="sd">            written in ``torch.distributed.fsdp.wrap`` is an example of ``auto_wrap_policy``</span>
+<span class="sd">            callable for tranformer-like model architectures. Users can supply the customized</span>
 <span class="sd">            ``auto_wrap_policy`` callable that should accept following arguments:</span>
 <span class="sd">            ``module: nn.Module``, ``recurse: bool``, ``unwrapped_params: int``,</span>
 <span class="sd">            extra customized arguments could be added to the customized</span>
-<span class="sd">            ``auto_wrap_policy`` callable as well.</span>
+<span class="sd">            ``auto_wrap_policy`` callable as well. It is a good practice to print out</span>
+<span class="sd">            the sharded model and check whether the sharded model is what</span>
+<span class="sd">            the application wants and then adjust accordingly.</span>
 
 <span class="sd">            Example::</span>
 
@@ -948,12 +956,12 @@
 <span class="sd">                &gt;&gt;&gt; module = MyModule(device=&quot;meta&quot;)</span>
 <span class="sd">                &gt;&gt;&gt; def my_init_fn(module):</span>
 <span class="sd">                &gt;&gt;&gt;     # responsible for initializing a module, such as with reset_parameters</span>
-<span class="sd">                &gt;&gt;&gt; fsdp_model = FSDP(module, param_init_fn=my_init_fn, auto_wrap_policy=default_auto_wrap_policy)</span>
+<span class="sd">                &gt;&gt;&gt; fsdp_model = FSDP(module, param_init_fn=my_init_fn, auto_wrap_policy=size_based_auto_wrap_policy)</span>
 <span class="sd">                &gt;&gt;&gt; print(next(fsdp_model.parameters()).device) # current CUDA device</span>
 <span class="sd">                &gt;&gt;&gt; # With torchdistX</span>
 <span class="sd">                &gt;&gt;&gt; module = deferred_init.deferred_init(MyModule, device=&quot;cuda&quot;)</span>
 <span class="sd">                &gt;&gt;&gt; # Will initialize via deferred_init.materialize_module().</span>
-<span class="sd">                &gt;&gt;&gt; fsdp_model = FSDP(module, auto_wrap_policy=default_auto_wrap_policy)</span>
+<span class="sd">                &gt;&gt;&gt; fsdp_model = FSDP(module, auto_wrap_policy=size_based_auto_wrap_policy)</span>
 
 <span class="sd">    &quot;&quot;&quot;</span>
 
@@ -971,10 +979,23 @@
     <span class="p">):</span>
         <span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">_log_api_usage_once</span><span class="p">(</span><span class="s2">&quot;torch.distributed.fsdp&quot;</span><span class="p">)</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
-        <span class="c1"># Save the ignored modules and their parameters, including the</span>
-        <span class="c1"># parameter names, which are needed to filter the model state dict</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_ignored_modules</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_ignored_modules</span><span class="p">(</span><span class="n">ignored_modules</span><span class="p">)</span>
-        <span class="n">ignored_params</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_ignored_parameters</span><span class="p">()</span>
+        <span class="c1"># Validate the ignored modules and derive the ignored parameters/buffers</span>
+        <span class="n">ignored_modules</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_ignored_modules</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">ignored_modules</span><span class="p">)</span>
+        <span class="n">ignored_params</span><span class="p">,</span> <span class="n">ignored_param_names</span> <span class="o">=</span> \
+            <span class="bp">self</span><span class="o">.</span><span class="n">_get_ignored_params</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">ignored_modules</span><span class="p">)</span>
+        <span class="n">buffer_names</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_buffer_names</span><span class="p">(</span><span class="n">module</span><span class="p">)</span>
+        <span class="c1"># Compute the names to ignore for full state dict cloning (i.e. those</span>
+        <span class="c1"># of the ignored modules&#39; parameters and of all modules&#39; buffers)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_ignored_param_names</span> <span class="o">=</span> <span class="n">ignored_param_names</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_buffer_names</span> <span class="o">=</span> <span class="n">buffer_names</span>
+        <span class="c1"># NOTE: Since the names are computed at construction time, if the user</span>
+        <span class="c1"># changes them later, then FSDP will not properly ignore them. However,</span>
+        <span class="c1"># the `FlatParameter` implementation already relies on this assumption.</span>
+        <span class="c1"># We do this at construction time since we want the fully prefixed</span>
+        <span class="c1"># parameter names matching the keys in the model state dict (namely,</span>
+        <span class="c1"># including the wrapped module&#39;s name in the prefix), which may be done</span>
+        <span class="c1"># most non-intrusively here before flattening.</span>
+
         <span class="c1"># if auto_wrap_policy is specified, submodules should not be</span>
         <span class="c1"># already wrapped, otherwise we&#39;d attempt to double wrap them resulting</span>
         <span class="c1"># in errors.</span>
@@ -988,7 +1009,7 @@
                 <span class="n">module</span><span class="p">,</span>
                 <span class="n">auto_wrap_policy</span><span class="o">=</span><span class="n">auto_wrap_policy</span><span class="p">,</span>
                 <span class="n">wrapper_cls</span><span class="o">=</span><span class="n">FullyShardedDataParallel</span><span class="p">,</span>
-                <span class="n">ignored_modules</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_ignored_modules</span><span class="p">,</span>
+                <span class="n">ignored_modules</span><span class="o">=</span><span class="n">ignored_modules</span><span class="p">,</span>
                 <span class="n">ignored_params</span><span class="o">=</span><span class="n">ignored_params</span><span class="p">,</span>
                 <span class="c1"># Note that we have the recursive_wrap skip wrapping for</span>
                 <span class="c1"># the outermost (this) module otherwise it will result in a</span>
@@ -1153,18 +1174,20 @@
 
     <span class="k">def</span> <span class="nf">_get_ignored_modules</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
+        <span class="n">root_module</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">,</span>
         <span class="n">_ignored_modules</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Set</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">]:</span>
         <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Checks that ``_ignored_modules`` is an iterable of ``torch.nn.Module``</span>
-<span class="sd">        s without any :class:`FullyShardedDataParallel` instances and then</span>
-<span class="sd">        returns them and their children as a :class:`set`, excluding nested</span>
-<span class="sd">        :class:`FullyShardedDataParallel` instances.</span>
+<span class="sd">        Checks that ``_ignored_modules`` (1) is an iterable of</span>
+<span class="sd">        ``torch.nn.Module`` s without any :class:`FullyShardedDataParallel`</span>
+<span class="sd">        instances and does not contain the top-level ``module`` itself, and</span>
+<span class="sd">        then returns them and their children as a :class:`set`, excluding</span>
+<span class="sd">        nested :class:`FullyShardedDataParallel` instances.</span>
 
-<span class="sd">        We include the child modules to better match user intuition since</span>
-<span class="sd">        ignoring a module should ignore its child modules as well, and we</span>
-<span class="sd">        exclude :class:`FullyShardedDataParallel` instances since ``self`` may</span>
-<span class="sd">        be the intended root instance that manages them.</span>
+<span class="sd">        We include the child modules of modules in ``_ignored_modules`` to be</span>
+<span class="sd">        more intuitive since ignoring a module should ignore its child modules</span>
+<span class="sd">        as well, and we exclude :class:`FullyShardedDataParallel` instances</span>
+<span class="sd">        since ``self`` may be the intended root instance that manages them.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="n">_ignored_modules</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">return</span> <span class="nb">set</span><span class="p">()</span>
@@ -1190,67 +1213,65 @@
             <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">child</span><span class="p">,</span> <span class="n">FullyShardedDataParallel</span><span class="p">)</span> <span class="ow">and</span>
             <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">child</span><span class="p">,</span> <span class="n">FlattenParamsWrapper</span><span class="p">)</span>
         <span class="p">)</span>
+        <span class="k">if</span> <span class="n">root_module</span> <span class="ow">in</span> <span class="n">ignored_modules</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;Trying to ignore the top-level module passed into the FSDP &quot;</span>
+                <span class="s2">&quot;constructor itself will result in all parameters being &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;ignored and is not supported: </span><span class="si">{</span><span class="n">module</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
         <span class="k">return</span> <span class="n">ignored_modules</span>
 
-    <span class="k">def</span> <span class="nf">_get_ignored_parameters</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Set</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Parameter</span><span class="p">]:</span>
-        <span class="sd">&quot;&quot;&quot;Returns the parameters of the modules in ``ignored_modules`` as a</span>
-<span class="sd">        :class:`set`, excluding any :class:`FlatParameter` s.</span>
+    <span class="k">def</span> <span class="nf">_get_ignored_params</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">root_module</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">,</span>
+        <span class="n">ignored_modules</span><span class="p">:</span> <span class="n">Set</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">],</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">Set</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Parameter</span><span class="p">],</span> <span class="n">Set</span><span class="p">[</span><span class="nb">str</span><span class="p">]]:</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Returns the parameters of the modules in ``ignored_modules``,</span>
+<span class="sd">        excluding any :class:`FlatParameter` s and their fully prefixed names,</span>
+<span class="sd">        both as :class:`set` s.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            root_module (torch.nn.Module): Top-level module passed into the</span>
+<span class="sd">                FSDP constructor from which to derive the fully prefixed names.</span>
+<span class="sd">            ignored_modules (Set[torch.nn.Module]): Modules to ignore.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">assert</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_ignored_modules&quot;</span><span class="p">),</span> \
-            <span class="s2">&quot;Expects `self._ignored_modules` to be initialized&quot;</span>
-        <span class="k">return</span> <span class="nb">set</span><span class="p">(</span>
-            <span class="n">p</span> <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ignored_modules</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">m</span><span class="o">.</span><span class="n">parameters</span><span class="p">()</span>
+        <span class="n">ignored_params</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span>
+            <span class="n">p</span> <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="n">ignored_modules</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">m</span><span class="o">.</span><span class="n">parameters</span><span class="p">()</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="n">FlatParameter</span><span class="p">)</span>
         <span class="p">)</span>
+        <span class="n">param_to_unflat_param_names</span> <span class="o">=</span> <span class="n">_get_param_to_unflat_param_names</span><span class="p">(</span>
+            <span class="n">root_module</span><span class="p">,</span> <span class="n">dedup_shared_params</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">ignored_param_names</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">param</span> <span class="ow">in</span> <span class="n">ignored_params</span><span class="p">:</span>
+            <span class="n">unflat_param_names</span> <span class="o">=</span> <span class="n">param_to_unflat_param_names</span><span class="p">[</span><span class="n">param</span><span class="p">]</span>
+            <span class="n">ignored_param_names</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">unflat_param_names</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">ignored_params</span><span class="p">,</span> <span class="n">ignored_param_names</span>
 
-    <span class="k">def</span> <span class="nf">_get_ignored_named_tensors</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span>
-        <span class="n">ignored_modules</span><span class="p">:</span> <span class="n">Set</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">],</span>
-        <span class="n">named_tensor_fn</span><span class="p">:</span> <span class="n">Callable</span><span class="p">,</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Set</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]]:</span>
+    <span class="k">def</span> <span class="nf">_get_buffer_names</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">root_module</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Set</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
         <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        This performs a module walk to get the full parameter and buffer names</span>
-<span class="sd">        depending on ``named_tensor_fn``, which should either be</span>
-<span class="sd">        ``named_parameters()`` or ``named_buffers()`. We require a separate</span>
-<span class="sd">        :meth:`_get_ignored_parameters` that does not use this module walk</span>
-<span class="sd">        since that method needs to be called in the FSDP constructor before any</span>
-<span class="sd">        wrapping occurs, which means that we cannot start a module walk from</span>
-<span class="sd">        ``self`` as in this method.</span>
+<span class="sd">        Returns the fully prefixed names of all buffers in the module hierarchy</span>
+<span class="sd">        rooted at ``root_module`` as a class:`set`.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            root_module (torch.nn.Module): Top-level module passed into the</span>
+<span class="sd">                FSDP constructor from which to derive the fully prefixed names.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">def</span> <span class="nf">module_fn</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">prefix</span><span class="p">,</span> <span class="n">ignored_named_tensors</span><span class="p">,</span> <span class="n">ignored_modules</span><span class="p">):</span>
-            <span class="k">if</span> <span class="n">module</span> <span class="ow">in</span> <span class="n">ignored_modules</span><span class="p">:</span>
-                <span class="k">assert</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">FullyShardedDataParallel</span><span class="p">)</span> <span class="ow">and</span> \
-                    <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">FlattenParamsWrapper</span><span class="p">),</span> \
-                    <span class="s2">&quot;Ignoring FSDP modules is meaningless since their &quot;</span> \
-                    <span class="s2">&quot;parameters are not flattened into this FSDP module anyway&quot;</span>
-                <span class="k">for</span> <span class="n">param_name</span><span class="p">,</span> <span class="n">param</span> <span class="ow">in</span> <span class="n">named_tensor_fn</span><span class="p">(</span><span class="n">module</span><span class="p">):</span>
-                    <span class="n">prefixed_param_name</span> <span class="o">=</span> <span class="n">clean_param_name</span><span class="p">(</span><span class="n">prefix</span> <span class="o">+</span> <span class="n">param_name</span><span class="p">)</span>
-                    <span class="n">ignored_named_tensors</span><span class="o">.</span><span class="n">add</span><span class="p">((</span><span class="n">prefixed_param_name</span><span class="p">,</span> <span class="n">param</span><span class="p">))</span>
+        <span class="k">def</span> <span class="nf">module_fn</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">prefix</span><span class="p">,</span> <span class="n">buffer_names</span><span class="p">):</span>
+            <span class="c1"># For FSDP modules, only add the entry when considering the</span>
+            <span class="c1"># contained `FlattenParamsWrapper` to avoid duplication</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">FullyShardedDataParallel</span><span class="p">):</span>
+                <span class="k">for</span> <span class="n">buffer_name</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">module</span><span class="o">.</span><span class="n">named_buffers</span><span class="p">(</span><span class="n">recurse</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+                    <span class="n">prefixed_buffer_name</span> <span class="o">=</span> <span class="n">clean_tensor_name</span><span class="p">(</span><span class="n">prefix</span> <span class="o">+</span> <span class="n">buffer_name</span><span class="p">)</span>
+                    <span class="n">buffer_names</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">prefixed_buffer_name</span><span class="p">)</span>
 
-        <span class="k">def</span> <span class="nf">return_fn</span><span class="p">(</span><span class="n">ignored_named_tensors</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">):</span>
-            <span class="k">return</span> <span class="n">ignored_named_tensors</span>
+        <span class="k">def</span> <span class="nf">return_fn</span><span class="p">(</span><span class="n">buffer_names</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">buffer_names</span>
 
-        <span class="n">ignored_named_tensors</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+        <span class="n">buffer_names</span><span class="p">:</span> <span class="n">Set</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
         <span class="k">return</span> <span class="n">_apply_to_modules</span><span class="p">(</span>
-            <span class="bp">self</span><span class="p">,</span> <span class="n">module_fn</span><span class="p">,</span> <span class="n">return_fn</span><span class="p">,</span> <span class="n">ignored_named_tensors</span><span class="p">,</span> <span class="n">ignored_modules</span><span class="p">,</span>
-        <span class="p">)</span>
-
-    <span class="k">def</span> <span class="nf">_get_ignored_named_parameters</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Set</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]]:</span>
-        <span class="sd">&quot;&quot;&quot;Returns the named parameters of the modules in ``ignored_modules``,</span>
-<span class="sd">        excluding any :class:`FlatParameter` s.&quot;&quot;&quot;</span>
-        <span class="k">assert</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_ignored_modules&quot;</span><span class="p">),</span> \
-            <span class="s2">&quot;Expects `self._ignored_modules` to be initialized&quot;</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_ignored_named_tensors</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_ignored_modules</span><span class="p">,</span> <span class="k">lambda</span> <span class="n">m</span><span class="p">:</span> <span class="n">m</span><span class="o">.</span><span class="n">named_parameters</span><span class="p">(</span><span class="n">recurse</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
-        <span class="p">)</span>
-
-    <span class="k">def</span> <span class="nf">_get_ignored_named_buffers</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Set</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]]:</span>
-        <span class="sd">&quot;&quot;&quot;Returns the named buffers of the modules in ``ignored_modules``,</span>
-<span class="sd">        excluding any :class:`FlatParameter` s.&quot;&quot;&quot;</span>
-        <span class="k">assert</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_ignored_modules&quot;</span><span class="p">),</span> \
-            <span class="s2">&quot;Expects `self._ignored_modules` to be initialized&quot;</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_ignored_named_tensors</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_ignored_modules</span><span class="p">,</span> <span class="k">lambda</span> <span class="n">m</span><span class="p">:</span> <span class="n">m</span><span class="o">.</span><span class="n">named_buffers</span><span class="p">(</span><span class="n">recurse</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
+            <span class="n">root_module</span><span class="p">,</span> <span class="n">module_fn</span><span class="p">,</span> <span class="n">return_fn</span><span class="p">,</span> <span class="n">buffer_names</span><span class="p">,</span>
         <span class="p">)</span>
 
     <span class="nd">@classmethod</span>
@@ -1827,8 +1848,12 @@
                 <span class="n">m</span><span class="o">.</span><span class="n">_streams</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_streams</span>
                 <span class="n">m</span><span class="o">.</span><span class="n">_fsdp_graph_order</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fsdp_graph_order</span>
                 <span class="c1"># Give each non-root FSDP module an alias to the root&#39;s</span>
-                <span class="c1"># execution order data structure</span>
+                <span class="c1"># execution order data structure and the root&#39;s ignored</span>
+                <span class="c1"># parameters and all buffer names since only the root&#39;s names</span>
+                <span class="c1"># are fully prefixed like the state dict keys</span>
                 <span class="n">m</span><span class="o">.</span><span class="n">_exec_order_data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_exec_order_data</span>
+                <span class="n">m</span><span class="o">.</span><span class="n">_ignored_param_names</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ignored_param_names</span>
+                <span class="n">m</span><span class="o">.</span><span class="n">_buffer_names</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_buffer_names</span>
 
     <span class="k">def</span> <span class="nf">_wait_for_previous_optim_step</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="sd">&quot;&quot;&quot;</span>
@@ -1956,24 +1981,28 @@
 <span class="sd">        &quot;_fsdp_wrapped_module&quot; prefix.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_assert_state</span><span class="p">([</span><span class="n">TrainingState_</span><span class="o">.</span><span class="n">SUMMON_FULL_PARAMS</span><span class="p">])</span>
-        <span class="c1"># state_dict would be blank if rank0_only was enabled.</span>
+        <span class="c1"># state_dict is empty for nonzero ranks if `rank0_only` was enabled.</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">state_dict</span><span class="p">:</span>
             <span class="k">return</span> <span class="n">state_dict</span>
 
-        <span class="n">ignored_named_params</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_ignored_named_parameters</span><span class="p">()</span>
-        <span class="n">ignored_named_buffers</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_ignored_named_buffers</span><span class="p">()</span>
-        <span class="n">ignored_names</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">n</span> <span class="k">for</span> <span class="n">n</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">ignored_named_params</span><span class="p">)</span>
-        <span class="n">ignored_names</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">n</span> <span class="k">for</span> <span class="n">n</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">ignored_named_buffers</span><span class="p">)</span>
+        <span class="n">offload_to_cpu</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_state_dict_config</span><span class="o">.</span><span class="n">offload_to_cpu</span>
+        <span class="n">cpu_device</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s2">&quot;cpu&quot;</span><span class="p">)</span>
         <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">state_dict</span><span class="p">:</span>
-            <span class="c1"># Do not need to clone ignored parameters and buffers since they</span>
-            <span class="c1"># are not sharded</span>
-            <span class="k">if</span> <span class="n">clean_param_name</span><span class="p">(</span><span class="n">key</span><span class="p">)</span> <span class="ow">in</span> <span class="n">ignored_names</span><span class="p">:</span>
+            <span class="n">clean_key</span> <span class="o">=</span> <span class="n">clean_tensor_name</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+            <span class="c1"># Do not need to clone buffers since they are not sharded</span>
+            <span class="k">if</span> <span class="n">clean_key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_buffer_names</span><span class="p">:</span>
+                <span class="c1"># Offload the buffer to CPU if needed -- we do not do this in</span>
+                <span class="c1"># `_summon_full_params()` since without care, that would free</span>
+                <span class="c1"># the original buffer&#39;s GPU memory and require reallocating</span>
+                <span class="c1"># that memory later; this only affects the state dict&#39;s buffer</span>
+                <span class="c1"># variable and leaves the original buffer&#39;s GPU memory intact</span>
+                <span class="k">if</span> <span class="n">offload_to_cpu</span> <span class="ow">and</span> <span class="n">state_dict</span><span class="p">[</span><span class="n">key</span><span class="p">]</span><span class="o">.</span><span class="n">device</span> <span class="o">!=</span> <span class="n">cpu_device</span><span class="p">:</span>
+                    <span class="n">state_dict</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">state_dict</span><span class="p">[</span><span class="n">key</span><span class="p">]</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">cpu_device</span><span class="p">)</span>
                 <span class="k">continue</span>
-            <span class="c1"># Due to recursive call of summon_full_params, avoid unnecessary</span>
-            <span class="c1"># reclone of tensors in case they have already been cloned.</span>
-            <span class="k">if</span> <span class="p">(</span>
-                <span class="ow">not</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">state_dict</span><span class="p">[</span><span class="n">key</span><span class="p">],</span> <span class="s2">&quot;_has_been_cloned&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
-            <span class="p">):</span>
+            <span class="c1"># Clone non-ignored parameters before exiting the</span>
+            <span class="c1"># `_summon_full_params()` context</span>
+            <span class="k">if</span> <span class="n">clean_key</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ignored_param_names</span> <span class="ow">and</span> \
+                    <span class="ow">not</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">state_dict</span><span class="p">[</span><span class="n">key</span><span class="p">],</span> <span class="s2">&quot;_has_been_cloned&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">):</span>
                 <span class="k">try</span><span class="p">:</span>
                     <span class="n">state_dict</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">state_dict</span><span class="p">[</span><span class="n">key</span><span class="p">]</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span>
                     <span class="n">state_dict</span><span class="p">[</span><span class="n">key</span><span class="p">]</span><span class="o">.</span><span class="n">_has_been_cloned</span> <span class="o">=</span> <span class="kc">True</span>  <span class="c1"># type: ignore[attr-defined]</span>
@@ -2290,60 +2319,61 @@
             <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">load_state_dict</span><span class="p">(</span><span class="n">state_dict</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_lazy_init</span><span class="p">()</span>
+        <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">autograd</span><span class="o">.</span><span class="n">profiler</span><span class="o">.</span><span class="n">record_function</span><span class="p">(</span><span class="s2">&quot;FullyShardedDataParallel.forward&quot;</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_lazy_init</span><span class="p">()</span>
 
-        <span class="c1"># Start of a forward pass.</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">training_state</span> <span class="o">=</span> <span class="n">TrainingState_</span><span class="o">.</span><span class="n">FORWARD</span>
+            <span class="c1"># Start of a forward pass.</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">training_state</span> <span class="o">=</span> <span class="n">TrainingState_</span><span class="o">.</span><span class="n">FORWARD</span>
 
-        <span class="c1"># Cast inputs to their mixed precision type.</span>
-        <span class="k">if</span> <span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_is_root</span>
-            <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_mixed_precision_enabled_for_params</span><span class="p">()</span>
-        <span class="p">):</span>
-            <span class="n">input_dtype</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">mixed_precision</span><span class="o">.</span><span class="n">param_dtype</span>
-            <span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cast_fp_inputs_to_precision</span><span class="p">(</span>
-                <span class="n">input_dtype</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
-            <span class="p">)</span>
-
-        <span class="c1"># All-gather full parameters, moving them to compute_device if</span>
-        <span class="c1"># necessary.</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_rebuild_full_params</span><span class="p">()</span>
-        <span class="c1"># Wait for all_gather full parameters to finish before computation</span>
-        <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">current_stream</span><span class="p">()</span><span class="o">.</span><span class="n">wait_stream</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_streams</span><span class="p">[</span><span class="s2">&quot;all_gather&quot;</span><span class="p">])</span>
-
-        <span class="c1"># Register backward hooks to reshard params and reduce-scatter grads.</span>
-        <span class="c1"># These need to be re-registered every forward pass in some cases where grad_fn</span>
-        <span class="c1"># is mutated.</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_register_post_backward_hooks</span><span class="p">()</span>
-        <span class="n">outputs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
-
-        <span class="k">if</span> <span class="bp">self</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fsdp_graph_order</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_my_fsdp_idx_in_graph</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_fsdp_graph_order</span><span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_fsdp_graph_order</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
-
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">reshard_after_forward</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_free_full_params</span><span class="p">()</span>
+            <span class="c1"># Cast inputs to their mixed precision type.</span>
             <span class="k">if</span> <span class="p">(</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_mixed_precision_enabled_for_params</span><span class="p">()</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_is_root</span>
+                <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_mixed_precision_enabled_for_params</span><span class="p">()</span>
             <span class="p">):</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_free_mp_shard</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">params</span><span class="p">)</span>
-        <span class="c1"># Switch to original local shards of params. We maintain this invariant throughout</span>
-        <span class="c1"># the code, i.e., ``p.data == p._local_shard`` after each function. This</span>
-        <span class="c1"># also ensures that after the first forward, the optimizer state will be</span>
-        <span class="c1"># initialized with the correct dtype and (sharded) size, since optimizer</span>
-        <span class="c1"># state is typically initialized lazily in ``optim.step()``. Note that</span>
-        <span class="c1"># when CPU offload is enabled, _use_param_local_shard implicitly</span>
-        <span class="c1"># offloads the local shard to CPU by making p.data point to</span>
-        <span class="c1"># p._local_shard, which would reside on CPU.</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_use_param_local_shard</span><span class="p">()</span>
+                <span class="n">input_dtype</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">mixed_precision</span><span class="o">.</span><span class="n">param_dtype</span>
+                <span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cast_fp_inputs_to_precision</span><span class="p">(</span>
+                    <span class="n">input_dtype</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
+                <span class="p">)</span>
 
-        <span class="c1"># Register pre-backward hooks to all-gather the params for the backward</span>
-        <span class="c1"># pass (if output&#39;s grad was needed). This won&#39;t register anything if</span>
-        <span class="c1"># we are in eval mode.</span>
-        <span class="n">outputs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_register_pre_backward_hooks</span><span class="p">(</span><span class="n">outputs</span><span class="p">)</span>
+            <span class="c1"># All-gather full parameters, moving them to compute_device if</span>
+            <span class="c1"># necessary.</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_rebuild_full_params</span><span class="p">()</span>
+            <span class="c1"># Wait for all_gather full parameters to finish before computation</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">current_stream</span><span class="p">()</span><span class="o">.</span><span class="n">wait_stream</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_streams</span><span class="p">[</span><span class="s2">&quot;all_gather&quot;</span><span class="p">])</span>
 
-        <span class="c1"># Done with a forward pass.</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">training_state</span> <span class="o">=</span> <span class="n">TrainingState_</span><span class="o">.</span><span class="n">IDLE</span>
+            <span class="c1"># Register backward hooks to reshard params and reduce-scatter grads.</span>
+            <span class="c1"># These need to be re-registered every forward pass in some cases where grad_fn</span>
+            <span class="c1"># is mutated.</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_register_post_backward_hooks</span><span class="p">()</span>
+            <span class="n">outputs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+            <span class="k">if</span> <span class="bp">self</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fsdp_graph_order</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_my_fsdp_idx_in_graph</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_fsdp_graph_order</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_fsdp_graph_order</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
+
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">reshard_after_forward</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_free_full_params</span><span class="p">()</span>
+                <span class="k">if</span> <span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_mixed_precision_enabled_for_params</span><span class="p">()</span>
+                <span class="p">):</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_free_mp_shard</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">params</span><span class="p">)</span>
+            <span class="c1"># Switch to original local shards of params. We maintain this invariant throughout</span>
+            <span class="c1"># the code, i.e., ``p.data == p._local_shard`` after each function. This</span>
+            <span class="c1"># also ensures that after the first forward, the optimizer state will be</span>
+            <span class="c1"># initialized with the correct dtype and (sharded) size, since optimizer</span>
+            <span class="c1"># state is typically initialized lazily in ``optim.step()``. Note that</span>
+            <span class="c1"># when CPU offload is enabled, _use_param_local_shard implicitly</span>
+            <span class="c1"># offloads the local shard to CPU by making p.data point to</span>
+            <span class="c1"># p._local_shard, which would reside on CPU.</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_use_param_local_shard</span><span class="p">()</span>
+
+            <span class="c1"># Register pre-backward hooks to all-gather the params for the backward</span>
+            <span class="c1"># pass (if output&#39;s grad was needed). This won&#39;t register anything if</span>
+            <span class="c1"># we are in eval mode.</span>
+            <span class="n">outputs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_register_pre_backward_hooks</span><span class="p">(</span><span class="n">outputs</span><span class="p">)</span>
+
+            <span class="c1"># Done with a forward pass.</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">training_state</span> <span class="o">=</span> <span class="n">TrainingState_</span><span class="o">.</span><span class="n">IDLE</span>
 
         <span class="k">return</span> <span class="n">outputs</span>
 
@@ -3925,10 +3955,11 @@
 
 <span class="k">def</span> <span class="nf">_get_param_to_unflat_param_names</span><span class="p">(</span>
     <span class="n">model</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">,</span>
+    <span class="n">dedup_shared_params</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Parameter</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]:</span>
     <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Constructs a mapping from flattened parameters (including non-FSDP-module</span>
-<span class="sd">    parameters) to their unflattened parameter names. For non-FSDP-module</span>
+<span class="sd">    Constructs a mapping from flattened parameter (including non-FSDP-module</span>
+<span class="sd">    parameters) to its unflattened parameter names. For non-FSDP-module</span>
 <span class="sd">    parameters, these mapped-to lists always contain a single element. The</span>
 <span class="sd">    unflattened parameter names should match the keys of the model state dict.</span>
 
@@ -3938,16 +3969,22 @@
 <span class="sd">    Args:</span>
 <span class="sd">        model (torch.nn.Module): Root module (which may or may not be a</span>
 <span class="sd">            :class:`FullyShardedDataParallel` instance).</span>
+<span class="sd">        dedup_shared_params (bool): If ``True``, only includes the first</span>
+<span class="sd">            list of unflattened parameter names corresponding to a parameter</span>
+<span class="sd">            in the module walk order; if ``False``, then includes all of the</span>
+<span class="sd">            unflattened parameter names.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="k">def</span> <span class="nf">_clean_param_name</span><span class="p">(</span><span class="n">prefix</span><span class="p">,</span> <span class="n">param_info</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;This replicates the parameter name cleaning logic in model state</span>
 <span class="sd">        dict but avoids gathering any parameters.&quot;&quot;&quot;</span>
-        <span class="n">name</span> <span class="o">=</span> <span class="n">clean_param_name</span><span class="p">(</span>
+        <span class="n">name</span> <span class="o">=</span> <span class="n">clean_tensor_name</span><span class="p">(</span>
             <span class="n">prefix</span> <span class="o">+</span> <span class="n">param_info</span><span class="o">.</span><span class="n">module_name</span> <span class="o">+</span> <span class="s2">&quot;.&quot;</span> <span class="o">+</span> <span class="n">param_info</span><span class="o">.</span><span class="n">param_name</span>
         <span class="p">)</span>
         <span class="k">return</span> <span class="n">name</span>
 
     <span class="k">def</span> <span class="nf">module_fn</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">prefix</span><span class="p">,</span> <span class="n">param_to_unflat_param_names</span><span class="p">):</span>
+        <span class="c1"># For FSDP modules, only add the entry when considering the contained</span>
+        <span class="c1"># `FlattenParamsWrapper` to avoid duplication</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">FullyShardedDataParallel</span><span class="p">):</span>
             <span class="k">for</span> <span class="n">param_name</span><span class="p">,</span> <span class="n">param</span> <span class="ow">in</span> <span class="n">module</span><span class="o">.</span><span class="n">named_parameters</span><span class="p">(</span><span class="n">recurse</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
                 <span class="n">prefixed_param_names</span> <span class="o">=</span> <span class="p">[</span>
@@ -3959,6 +3996,8 @@
                 <span class="n">is_shared_param</span> <span class="o">=</span> <span class="n">param</span> <span class="ow">in</span> <span class="n">param_to_unflat_param_names</span>
                 <span class="k">if</span> <span class="ow">not</span> <span class="n">is_shared_param</span><span class="p">:</span>
                     <span class="n">param_to_unflat_param_names</span><span class="p">[</span><span class="n">param</span><span class="p">]</span> <span class="o">=</span> <span class="n">prefixed_param_names</span>
+                <span class="k">elif</span> <span class="ow">not</span> <span class="n">dedup_shared_params</span><span class="p">:</span>
+                    <span class="n">param_to_unflat_param_names</span><span class="p">[</span><span class="n">param</span><span class="p">]</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">prefixed_param_names</span><span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">return_fn</span><span class="p">(</span><span class="n">param_to_unflat_param_names</span><span class="p">):</span>
         <span class="k">return</span> <span class="n">param_to_unflat_param_names</span>
@@ -4008,13 +4047,14 @@
     <span class="k">return</span> <span class="nb">dict</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="n">param_to_param_name</span><span class="o">.</span><span class="n">values</span><span class="p">(),</span> <span class="n">param_to_param_name</span><span class="o">.</span><span class="n">keys</span><span class="p">()))</span>
 
 
-<span class="k">def</span> <span class="nf">clean_param_name</span><span class="p">(</span><span class="n">param_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-    <span class="sd">&quot;&quot;&quot;Cleans the parameter name by removing any FSDP-related prefixes.&quot;&quot;&quot;</span>
-    <span class="c1"># FSDP full parameter names may not have both (i.e. `FSDP_PREFIX`), so we</span>
+<span class="k">def</span> <span class="nf">clean_tensor_name</span><span class="p">(</span><span class="n">tensor_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;Cleans the parameter or buffer name by removing any FSDP-related</span>
+<span class="sd">    prefixes.&quot;&quot;&quot;</span>
+    <span class="c1"># FSDP full tensor names may not have both (i.e. `FSDP_PREFIX`), so we</span>
     <span class="c1"># call `replace()` twice separately</span>
-    <span class="n">param_name</span> <span class="o">=</span> <span class="n">param_name</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="n">FSDP_WRAPPED_MODULE</span> <span class="o">+</span> <span class="s2">&quot;.&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
-    <span class="n">param_name</span> <span class="o">=</span> <span class="n">param_name</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="n">FPW_MODULE</span> <span class="o">+</span> <span class="s2">&quot;.&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">param_name</span>
+    <span class="n">tensor_name</span> <span class="o">=</span> <span class="n">tensor_name</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="n">FSDP_WRAPPED_MODULE</span> <span class="o">+</span> <span class="s2">&quot;.&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
+    <span class="n">tensor_name</span> <span class="o">=</span> <span class="n">tensor_name</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="n">FPW_MODULE</span> <span class="o">+</span> <span class="s2">&quot;.&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">tensor_name</span>
 </pre></div>
 
              </article>
