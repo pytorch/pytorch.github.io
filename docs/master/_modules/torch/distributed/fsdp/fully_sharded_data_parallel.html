@@ -217,7 +217,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href='https://pytorch.org/docs/versions.html'>master (1.12.0a0+git3d561ee ) &#x25BC</a>
+      <a href='https://pytorch.org/docs/versions.html'>master (1.12.0a0+git2881e0e ) &#x25BC</a>
     </div>
     
 
@@ -475,14 +475,17 @@
     <span class="n">_process_pos_dim_tensor_state</span><span class="p">,</span>
     <span class="n">_unflatten_optim_state</span><span class="p">,</span>
 <span class="p">)</span>
-<span class="kn">from</span> <span class="nn">._utils</span> <span class="kn">import</span> <span class="n">_apply_to_modules</span><span class="p">,</span> <span class="n">_apply_to_tensors</span><span class="p">,</span> <span class="n">_replace_by_prefix</span>
+<span class="kn">from</span> <span class="nn">._utils</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">_apply_to_modules</span><span class="p">,</span> <span class="n">_apply_to_tensors</span><span class="p">,</span> <span class="n">_replace_by_prefix</span><span class="p">,</span>
+    <span class="n">_override_batchnorm_mixed_precision</span><span class="p">,</span> <span class="n">_contains_batchnorm</span>
+<span class="p">)</span>
 <span class="kn">from</span> <span class="nn">.flatten_params_wrapper</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">FLAT_PARAM</span><span class="p">,</span>
     <span class="n">FPW_MODULE</span><span class="p">,</span>
     <span class="n">FlatParameter</span><span class="p">,</span>
     <span class="n">FlattenParamsWrapper</span><span class="p">,</span>
 <span class="p">)</span>
-<span class="kn">from</span> <span class="nn">.wrap</span> <span class="kn">import</span> <span class="n">_recursive_wrap</span>
+<span class="kn">from</span> <span class="nn">.wrap</span> <span class="kn">import</span> <span class="n">_recursive_wrap</span><span class="p">,</span> <span class="n">_wrap_batchnorm_individually</span><span class="p">,</span> <span class="n">_or_policy</span>
 
 <span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
     <span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">OrderedDict</span>  <span class="c1"># noqa: F401</span>
@@ -746,9 +749,9 @@
 <span class="sd">        _all_flat_params (List[FlatParameter]): A :class:`list` of all</span>
 <span class="sd">            flattened parameters contained in the FSDP module hierarchy with</span>
 <span class="sd">            the list index implicitly giving a unique parameter index.</span>
-<span class="sd">        param_to_unflat_param_names (Dict[FlatParameter, List[str]]): A mapping</span>
-<span class="sd">            from flattened parameter to the comprising unflattened parameters&#39;</span>
-<span class="sd">            names.</span>
+<span class="sd">        _param_to_unflat_param_names (Dict[FlatParameter, List[str]]): A</span>
+<span class="sd">            mapping from flattened parameter to the comprising unflattened</span>
+<span class="sd">            parameters&#39; names.</span>
 <span class="sd">        is_first_iter (bool): Whether executing in the first iteration or not.</span>
 <span class="sd">        param_order (List[int]): Order that parameters participate in the</span>
 <span class="sd">            forward pass; constructed on the first iteration and validated</span>
@@ -813,9 +816,8 @@
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_param_to_unflat_param_names</span><span class="p">[</span><span class="n">param</span><span class="p">]</span>
 
     <span class="k">def</span> <span class="nf">reset</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;Called in :meth:`_wait_for_post_backward` or in</span>
-<span class="sd">        :meth:`_post_backward_hook` when inside ``no_sync()`` to reset data for</span>
-<span class="sd">        the next iteration.&quot;&quot;&quot;</span>
+        <span class="sd">&quot;&quot;&quot;Called in :meth:`_wait_for_post_backward` to reset data for the next</span>
+<span class="sd">        iteration.&quot;&quot;&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">is_first_iter</span> <span class="o">=</span> <span class="kc">False</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">index</span> <span class="o">=</span> <span class="mi">0</span>
         <span class="c1"># `reset()` marks the end of an iteration, so transition if needed</span>
@@ -921,6 +923,14 @@
 <span class="sd">            that only floating point data is cast to the reduced precision. This allows</span>
 <span class="sd">            users potential memory saving and training speedup while trading off</span>
 <span class="sd">            accuracy during model training. If ``None``, no mixed precision is applied.</span>
+<span class="sd">            Note that if ``mixed_precision`` is enabled for FSDP model that</span>
+<span class="sd">            contains ``BatchNorm`` with ``auto_wrap_policy``, FSDP will take</span>
+<span class="sd">            care to disable mixed precision for ``BatchNorm`` units by wrapping</span>
+<span class="sd">            them separately in their own FSDP unit with ``mixed_precision=None``.</span>
+<span class="sd">            This is done because several ``BatchNorm`` kernels do not implement</span>
+<span class="sd">            reduced type support at the moment. If individually wrapping the model,</span>
+<span class="sd">            users must take care to set ``mixed_precision=None`` for</span>
+<span class="sd">            ``BatchNorm`` units.</span>
 <span class="sd">            (Default: ``None``)</span>
 <span class="sd">        ignored_modules (Optional[Iterable[torch.nn.Module]]): Modules whose</span>
 <span class="sd">            own parameters and child modules&#39; parameters and buffers are</span>
@@ -1005,9 +1015,25 @@
                 <span class="n">check_fn</span><span class="o">=</span><span class="k">lambda</span> <span class="n">mod</span><span class="p">:</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">mod</span><span class="p">,</span> <span class="n">FullyShardedDataParallel</span><span class="p">),</span>
                 <span class="n">err_fn</span><span class="o">=</span><span class="k">lambda</span> <span class="n">mod</span><span class="p">:</span> <span class="sa">f</span><span class="s2">&quot;Expected </span><span class="si">{</span><span class="n">mod</span><span class="si">}</span><span class="s2"> to NOT be FullyShardedDataParallel if auto_wrap is enabled.&quot;</span><span class="p">,</span>
             <span class="p">)</span>
+            <span class="k">if</span> <span class="n">mixed_precision</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">_contains_batchnorm</span><span class="p">(</span><span class="n">module</span><span class="p">):</span>
+                <span class="n">_override_batchnorm_mixed_precision</span><span class="p">(</span><span class="n">module</span><span class="p">)</span>
+                <span class="n">policy_to_use</span> <span class="o">=</span> <span class="n">functools</span><span class="o">.</span><span class="n">partial</span><span class="p">(</span>
+                    <span class="n">_or_policy</span><span class="p">,</span>
+                    <span class="n">policies</span><span class="o">=</span><span class="p">[</span><span class="n">_wrap_batchnorm_individually</span><span class="p">,</span> <span class="n">auto_wrap_policy</span><span class="p">]</span>
+                <span class="p">)</span>
+                <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                    <span class="s2">&quot;Mixed precision was specified for FSDP module with&quot;</span>
+                    <span class="s2">&quot; batchnorm submodules wrapped via ``auto_wrap_policy``.&quot;</span>
+                    <span class="s2">&quot; BatchNorm units will be wrapped as a separate FSDP unit,&quot;</span>
+                    <span class="s2">&quot; with mixed_precision disabled (i.e. set to ``None``)&quot;</span>
+                    <span class="s2">&quot; as several BatchNorm kernels would raise errors when&quot;</span>
+                    <span class="s2">&quot; operating on reduced precision inputs.&quot;</span>
+                <span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">policy_to_use</span> <span class="o">=</span> <span class="n">auto_wrap_policy</span>
             <span class="n">_recursive_wrap</span><span class="p">(</span>
                 <span class="n">module</span><span class="p">,</span>
-                <span class="n">auto_wrap_policy</span><span class="o">=</span><span class="n">auto_wrap_policy</span><span class="p">,</span>
+                <span class="n">auto_wrap_policy</span><span class="o">=</span><span class="n">policy_to_use</span><span class="p">,</span>
                 <span class="n">wrapper_cls</span><span class="o">=</span><span class="n">FullyShardedDataParallel</span><span class="p">,</span>
                 <span class="n">ignored_modules</span><span class="o">=</span><span class="n">ignored_modules</span><span class="p">,</span>
                 <span class="n">ignored_params</span><span class="o">=</span><span class="n">ignored_params</span><span class="p">,</span>
@@ -1939,16 +1965,16 @@
         <span class="c1"># Use default config a state_dict config is not set.</span>
         <span class="k">if</span> <span class="n">state_dict_config</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">state_dict_config</span> <span class="o">=</span> <span class="n">_state_dict_type_to_config</span><span class="p">[</span><span class="n">state_dict_type</span><span class="p">]()</span>
-        <span class="k">for</span> <span class="n">module</span> <span class="ow">in</span> <span class="n">FullyShardedDataParallel</span><span class="o">.</span><span class="n">fsdp_modules</span><span class="p">(</span><span class="n">module</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">submodule</span> <span class="ow">in</span> <span class="n">FullyShardedDataParallel</span><span class="o">.</span><span class="n">fsdp_modules</span><span class="p">(</span><span class="n">module</span><span class="p">):</span>
             <span class="k">if</span> <span class="n">prev_state_dict_type</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="n">prev_state_dict_type</span> <span class="o">=</span> <span class="n">module</span><span class="o">.</span><span class="n">_state_dict_type</span>
+                <span class="n">prev_state_dict_type</span> <span class="o">=</span> <span class="n">submodule</span><span class="o">.</span><span class="n">_state_dict_type</span>
             <span class="k">if</span> <span class="n">prev_state_dict_config</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="n">prev_state_dict_config</span> <span class="o">=</span> <span class="n">module</span><span class="o">.</span><span class="n">_state_dict_config</span>
-            <span class="k">if</span> <span class="n">prev_state_dict_type</span> <span class="o">!=</span> <span class="n">module</span><span class="o">.</span><span class="n">_state_dict_type</span><span class="p">:</span>
+                <span class="n">prev_state_dict_config</span> <span class="o">=</span> <span class="n">submodule</span><span class="o">.</span><span class="n">_state_dict_config</span>
+            <span class="k">if</span> <span class="n">prev_state_dict_type</span> <span class="o">!=</span> <span class="n">submodule</span><span class="o">.</span><span class="n">_state_dict_type</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
                     <span class="s2">&quot;All FSDP module should the same state_dict_type.&quot;</span>
                 <span class="p">)</span>
-            <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="n">prev_state_dict_config</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">type</span><span class="p">(</span><span class="n">module</span><span class="o">.</span><span class="n">_state_dict_config</span><span class="p">):</span>
+            <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="n">prev_state_dict_config</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">type</span><span class="p">(</span><span class="n">submodule</span><span class="o">.</span><span class="n">_state_dict_config</span><span class="p">):</span>
                 <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
                     <span class="s2">&quot;All FSDP modules should have the same type of state_dict_config.&quot;</span>
                 <span class="p">)</span>
@@ -1958,16 +1984,16 @@
                 <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
                     <span class="sa">f</span><span class="s2">&quot;Expected state_dict_config of type </span><span class="si">{</span><span class="n">expected_state_dict_config_type</span><span class="si">}</span><span class="s2"> but got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">state_dict_config</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
                 <span class="p">)</span>
-            <span class="n">module</span><span class="o">.</span><span class="n">_state_dict_type</span> <span class="o">=</span> <span class="n">state_dict_type</span>
-            <span class="n">module</span><span class="o">.</span><span class="n">_state_dict_config</span> <span class="o">=</span> <span class="n">state_dict_config</span>
+            <span class="n">submodule</span><span class="o">.</span><span class="n">_state_dict_type</span> <span class="o">=</span> <span class="n">state_dict_type</span>
+            <span class="n">submodule</span><span class="o">.</span><span class="n">_state_dict_config</span> <span class="o">=</span> <span class="n">state_dict_config</span>
         <span class="k">try</span><span class="p">:</span>
             <span class="k">yield</span>
         <span class="k">finally</span><span class="p">:</span>
             <span class="k">assert</span> <span class="n">prev_state_dict_type</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>  <span class="c1"># Avoid mypy warning</span>
             <span class="k">assert</span> <span class="n">prev_state_dict_config</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>  <span class="c1"># Avoid mypy warning</span>
-            <span class="k">for</span> <span class="n">module</span> <span class="ow">in</span> <span class="n">FullyShardedDataParallel</span><span class="o">.</span><span class="n">fsdp_modules</span><span class="p">(</span><span class="n">module</span><span class="p">):</span>
-                <span class="n">module</span><span class="o">.</span><span class="n">_state_dict_type</span> <span class="o">=</span> <span class="n">prev_state_dict_type</span>
-                <span class="n">module</span><span class="o">.</span><span class="n">_state_dict_config</span> <span class="o">=</span> <span class="n">prev_state_dict_config</span></div>
+            <span class="k">for</span> <span class="n">submodule</span> <span class="ow">in</span> <span class="n">FullyShardedDataParallel</span><span class="o">.</span><span class="n">fsdp_modules</span><span class="p">(</span><span class="n">module</span><span class="p">):</span>
+                <span class="n">submodule</span><span class="o">.</span><span class="n">_state_dict_type</span> <span class="o">=</span> <span class="n">prev_state_dict_type</span>
+                <span class="n">submodule</span><span class="o">.</span><span class="n">_state_dict_config</span> <span class="o">=</span> <span class="n">prev_state_dict_config</span></div>
 
     <span class="k">def</span> <span class="nf">_full_post_state_dict_hook</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -2034,9 +2060,8 @@
         <span class="c1"># nn.Module.state_dict() will detach the parameter. Therefore, we need</span>
         <span class="c1"># to get flat_param from the FlattenParamsWrapper to get the metadata.</span>
         <span class="n">flat_param</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="p">,</span> <span class="n">FLAT_PARAM</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-        <span class="k">assert</span> <span class="p">(</span>
-            <span class="n">flat_param</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
-        <span class="p">),</span> <span class="s2">&quot;flat_param cannot be None when doing local_state_dict.&quot;</span>
+        <span class="k">if</span> <span class="n">flat_param</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">state_dict</span>
 
         <span class="c1"># Construct a ShardedTensor from the flat_param.</span>
         <span class="n">full_numel</span> <span class="o">=</span> <span class="n">flat_param</span><span class="o">.</span><span class="n">full_numel</span>
@@ -2165,8 +2190,12 @@
                 <span class="k">return</span> <span class="p">{}</span>
 
         <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">_state_dict_type</span> <span class="o">==</span> <span class="n">StateDictType</span><span class="o">.</span><span class="n">LOCAL_STATE_DICT</span><span class="p">:</span>
-            <span class="k">assert</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="p">,</span> <span class="n">FLAT_PARAM</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
-            <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="o">.</span><span class="n">flat_param</span><span class="p">,</span> <span class="n">FlatParameter</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="o">.</span><span class="n">flat_param</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="o">.</span><span class="n">flat_param</span><span class="o">.</span><span class="n">_is_sharded</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                        <span class="s2">&quot;local_state_dict/sharded_state_dict can only be called &quot;</span>
+                        <span class="s2">&quot;when parameters are flatten and sharded.&quot;</span>
+                    <span class="p">)</span>
             <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">state_dict</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
         <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">_state_dict_type</span> <span class="o">==</span> <span class="n">StateDictType</span><span class="o">.</span><span class="n">SHARDED_STATE_DICT</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="s2">&quot;Will be implemented as part of https://github.com/pytorch/pytorch/issues/73518.&quot;</span><span class="p">)</span>
@@ -2201,6 +2230,11 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">_replace_by_prefix</span><span class="p">(</span><span class="n">state_dict</span><span class="p">,</span> <span class="n">prefix</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">prefix</span><span class="si">}{</span><span class="n">FSDP_WRAPPED_MODULE</span><span class="si">}</span><span class="s2">.&quot;</span><span class="p">)</span>
         <span class="n">key</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">prefix</span><span class="si">}{</span><span class="n">FSDP_WRAPPED_MODULE</span><span class="si">}</span><span class="s2">.</span><span class="si">{</span><span class="n">FLAT_PARAM</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="k">if</span> <span class="n">key</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">state_dict</span><span class="p">:</span>
+            <span class="k">assert</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="p">,</span> <span class="n">FLAT_PARAM</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">,</span> <span class="p">(</span>
+                <span class="s2">&quot;No flat parameter in state_dict but self.module.flat_param is not None&quot;</span>
+            <span class="p">)</span>
+            <span class="k">return</span>
         <span class="n">load_tensor</span> <span class="o">=</span> <span class="n">state_dict</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
         <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span>
             <span class="n">load_tensor</span><span class="p">,</span> <span class="n">ShardedTensor</span>
@@ -2819,10 +2853,6 @@
             <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">current_stream</span><span class="p">()</span><span class="o">.</span><span class="n">wait_stream</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_streams</span><span class="p">[</span><span class="s2">&quot;all_gather&quot;</span><span class="p">])</span>
 
         <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_require_backward_grad_sync</span><span class="p">:</span>
-            <span class="c1"># Reset the execution order data structure here since the</span>
-            <span class="c1"># `_wait_for_post_backward()` callback is skipped</span>
-            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_root</span><span class="p">:</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_exec_order_data</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
             <span class="k">return</span>
 
         <span class="c1"># Wait for all work in the current stream to finish, then start the</span>
@@ -3114,6 +3144,10 @@
                     <span class="c1"># p._is_sharded = False. However when it is set, the</span>
                     <span class="c1"># device is always self.compute_device.</span>
                     <span class="n">p</span><span class="o">.</span><span class="n">data</span> <span class="o">=</span> <span class="n">p</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">compute_device</span><span class="p">,</span> <span class="n">non_blocking</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+                <span class="c1"># Check the validity of this `_rebuild_full_params()` call in</span>
+                <span class="c1"># terms of execution order (regardless of if FSDP actually</span>
+                <span class="c1"># needs to all-gather or not)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_check_rebuild_full_params</span><span class="p">(</span><span class="n">p</span><span class="p">)</span>
                 <span class="c1"># e.g., when world_size == 1</span>
                 <span class="k">if</span> <span class="ow">not</span> <span class="n">p</span><span class="o">.</span><span class="n">_is_sharded</span><span class="p">:</span>  <span class="c1"># type: ignore[attr-defined]</span>
                     <span class="k">if</span> <span class="n">mixed_precision_cast_ran</span><span class="p">:</span>
@@ -3174,7 +3208,6 @@
                         <span class="c1"># Allocate based on full size from all shards.</span>
                         <span class="n">_alloc_storage</span><span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">_full_param_padded</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="n">p_full_size</span><span class="p">)</span>  <span class="c1"># type: ignore[attr-defined]</span>
                         <span class="n">output_tensor</span> <span class="o">=</span> <span class="n">p</span><span class="o">.</span><span class="n">_full_param_padded</span>  <span class="c1"># type: ignore[attr-defined]</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">_check_all_gather</span><span class="p">(</span><span class="n">p</span><span class="p">)</span>
                     <span class="c1"># Fill output_tensor with (p.data for each shard in self.world_size)</span>
                     <span class="n">dist</span><span class="o">.</span><span class="n">_all_gather_base</span><span class="p">(</span>
                         <span class="n">output_tensor</span><span class="p">,</span> <span class="n">p_data</span><span class="p">,</span> <span class="n">group</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">process_group</span>
@@ -3195,34 +3228,37 @@
                         <span class="bp">self</span><span class="o">.</span><span class="n">_free_mp_shard</span><span class="p">(</span><span class="n">cast</span><span class="p">(</span><span class="n">List</span><span class="p">[</span><span class="n">FlatParameter</span><span class="p">],</span> <span class="p">[</span><span class="n">p</span><span class="p">]))</span>
         <span class="k">return</span> <span class="n">output_tensors</span>
 
-    <span class="k">def</span> <span class="nf">_check_all_gather</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">param</span><span class="p">:</span> <span class="n">FlatParameter</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_check_rebuild_full_params</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">param</span><span class="p">:</span> <span class="n">FlatParameter</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Checks the validity of an all-gather to rebuild the full parameter</span>
-<span class="sd">        ``param``. If on the first iteration, this uses an all-gather to check</span>
-<span class="sd">        that all ranks plan to all-gather the same parameter, erroring if not,</span>
-<span class="sd">        and on subsequent iterations, if the all-gather order differs from that</span>
-<span class="sd">        of the first iteration (meaning that we can no longer guarantee correct</span>
-<span class="sd">        execution), then we issue a warning to the user. This only issues</span>
+<span class="sd">        Checks the validity of a call to :meth:`_rebuild_full_params` in terms</span>
+<span class="sd">        of the execution order. If on the first iteration, this uses an</span>
+<span class="sd">        all-gather to check that all ranks are running ``forward()`` with the</span>
+<span class="sd">        same parameter, erroring if not, and on subsequent iterations, if the</span>
+<span class="sd">        forward order differs from that of the first iteration (meaning that we</span>
+<span class="sd">        can no longer guarantee correct execution since all-gathers may be</span>
+<span class="sd">        mismatched), then we issue a warning to the user. This only issues</span>
 <span class="sd">        warnings on the first deviating iteration and stops checking</span>
 <span class="sd">        thereafter.</span>
 
-<span class="sd">        For now, only the all-gathers to rebuild full parameters in the forward</span>
-<span class="sd">        pass are checked since (1) a correct forward order should imply a</span>
-<span class="sd">        correct pre-backward order for typical cases and (2) there may be some</span>
-<span class="sd">        issues with pre-fetching that need to be looked into:</span>
-<span class="sd">        https://github.com/pytorch/pytorch/issues/76553</span>
+<span class="sd">        Only the :meth:`_rebuild_full_params` calls in the forward pass are</span>
+<span class="sd">        checked since a correct forward order should imply a correct</span>
+<span class="sd">        pre-backward order for typical cases.</span>
 
 <span class="sd">        Executing in ``no_sync()`` does not affect this check for</span>
 <span class="sd">        ``FULL_SHARD`` and ``SHARD_GRAD_OP``: (1) Being in ``no_sync()`` in the</span>
-<span class="sd">        first iteration does not yield a different all-gather sequence, and (2)</span>
-<span class="sd">        being in ``no_sync()`` in a later iteration does not give false</span>
-<span class="sd">        positive warnings since the all-gather sequence still matches the first</span>
+<span class="sd">        first iteration does not yield a different forward</span>
+<span class="sd">        :meth:`_rebuild_full_params()` sequence, and (2) being in ``no_sync()``</span>
+<span class="sd">        in a later iteration does not give false positive warnings since the</span>
+<span class="sd">        forward :meth:`_rebuild_full_params()` sequence still matches the first</span>
 <span class="sd">        iteration sequence (for ``FULL_SHARD``) or the first iteration</span>
 <span class="sd">        sequence&#39;s prefix (for ``SHARD_GRAD_OP``).</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="c1"># Only check all-gathers when rebuilding the full parameters in the</span>
-        <span class="c1"># forward pass</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">training_state</span> <span class="o">!=</span> <span class="n">TrainingState_</span><span class="o">.</span><span class="n">FORWARD</span><span class="p">:</span>
+        <span class="c1"># Only check when rebuilding the full parameters in the forward pass,</span>
+        <span class="c1"># and skip the check (1) when in eval mode since then there is not a</span>
+        <span class="c1"># safe point at which to reset the execution order data and (2) if</span>
+        <span class="c1"># world size is 1 since then there is no chance of desynchronization</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">training_state</span> <span class="o">!=</span> <span class="n">TrainingState_</span><span class="o">.</span><span class="n">FORWARD</span> <span class="ow">or</span> \
+                <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">training</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">world_size</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
             <span class="k">return</span>
         <span class="n">eod</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_exec_order_data</span>
         <span class="n">param_index</span> <span class="o">=</span> <span class="n">eod</span><span class="o">.</span><span class="n">get_param_index</span><span class="p">(</span><span class="n">param</span><span class="p">)</span>
@@ -3233,40 +3269,52 @@
                 <span class="k">return</span>
             <span class="c1"># However, we may issue multiple warnings on the first deviating</span>
             <span class="c1"># iteration to help debugging, where either:</span>
-            <span class="c1"># 1. This iteration sees more all-gathers than the first iteration</span>
-            <span class="n">msg_prefix</span> <span class="o">=</span> <span class="n">all_gather_seq</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># non-`None` means we warn</span>
+            <span class="c1"># 1. This iteration sees an extra `_rebuild_full_params()` in</span>
+            <span class="c1"># `forward()` compared to the first iteration</span>
+            <span class="n">msg_prefix</span> <span class="o">=</span> <span class="n">curr_param_order</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># non-`None` means we warn</span>
             <span class="k">if</span> <span class="n">eod</span><span class="o">.</span><span class="n">index</span> <span class="o">&gt;=</span> <span class="nb">len</span><span class="p">(</span><span class="n">eod</span><span class="o">.</span><span class="n">param_order</span><span class="p">):</span>
-                <span class="n">msg_prefix</span> <span class="o">=</span> <span class="s2">&quot;Expected no more all-gathers but got an all-gather for &quot;</span>
-                <span class="n">all_gather_seq</span> <span class="o">=</span> <span class="n">eod</span><span class="o">.</span><span class="n">param_order</span> <span class="o">+</span> <span class="p">[</span><span class="n">param_index</span><span class="p">]</span>
+                <span class="n">msg_prefix</span> <span class="o">=</span> <span class="s2">&quot;Expected to not rebuild any more parameters &quot;</span> \
+                    <span class="s2">&quot;in `forward()` for this module but trying to rebuild &quot;</span> \
+                    <span class="s2">&quot;parameters for &quot;</span>
+                <span class="n">curr_param_order</span> <span class="o">=</span> <span class="n">eod</span><span class="o">.</span><span class="n">param_order</span> <span class="o">+</span> <span class="p">[</span><span class="n">param_index</span><span class="p">]</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="n">expected_param_index</span> <span class="o">=</span> <span class="n">eod</span><span class="o">.</span><span class="n">param_order</span><span class="p">[</span><span class="n">eod</span><span class="o">.</span><span class="n">index</span><span class="p">]</span>
-                <span class="c1"># 2. This iteration sees the same number of all-gathers (so</span>
-                <span class="c1"># far) but the current parameter to all-gather differs</span>
+                <span class="c1"># 2. This iteration sees the same number of</span>
+                <span class="c1"># `_rebuild_full_params()` (so far) but the current parameter</span>
+                <span class="c1"># differs</span>
                 <span class="k">if</span> <span class="n">param_index</span> <span class="o">!=</span> <span class="n">expected_param_index</span><span class="p">:</span>
                     <span class="n">expected_param_names</span> <span class="o">=</span> <span class="n">eod</span><span class="o">.</span><span class="n">get_unflat_param_names</span><span class="p">(</span><span class="n">expected_param_index</span><span class="p">)</span>
                     <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">expected_param_names</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">,</span> \
-                        <span class="s2">&quot;The expected parameter to all-gather should always be valid&quot;</span>
-                    <span class="n">msg_prefix</span> <span class="o">=</span> <span class="s2">&quot;Expected an all-gather for the FSDP module &quot;</span> \
-                        <span class="sa">f</span><span class="s2">&quot;wrapping </span><span class="si">{</span><span class="n">expected_param_names</span><span class="si">}</span><span class="s2"> but got an all-gather for &quot;</span>
-                    <span class="n">all_gather_seq</span> <span class="o">=</span> <span class="n">eod</span><span class="o">.</span><span class="n">param_order</span><span class="p">[:</span><span class="n">eod</span><span class="o">.</span><span class="n">index</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="p">[</span><span class="n">param_index</span><span class="p">]</span>
+                        <span class="s2">&quot;Expected parameter should always be valid&quot;</span>
+                    <span class="n">msg_prefix</span> <span class="o">=</span> <span class="s2">&quot;Expected to rebuild parameters in &quot;</span> \
+                        <span class="sa">f</span><span class="s2">&quot;`forward()` for </span><span class="si">{</span><span class="n">expected_param_names</span><span class="si">}</span><span class="s2"> but &quot;</span> \
+                        <span class="s2">&quot;instead trying to rebuild parameters for &quot;</span>
+                    <span class="n">curr_param_order</span> <span class="o">=</span> <span class="n">eod</span><span class="o">.</span><span class="n">param_order</span><span class="p">[:</span><span class="n">eod</span><span class="o">.</span><span class="n">index</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="p">[</span><span class="n">param_index</span><span class="p">]</span>
             <span class="n">to_issue_warning</span> <span class="o">=</span> <span class="n">msg_prefix</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
             <span class="k">if</span> <span class="n">to_issue_warning</span><span class="p">:</span>
-                <span class="k">assert</span> <span class="n">all_gather_seq</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+                <span class="k">assert</span> <span class="n">curr_param_order</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
                 <span class="n">param_names</span> <span class="o">=</span> <span class="n">eod</span><span class="o">.</span><span class="n">get_unflat_param_names</span><span class="p">(</span><span class="n">param_index</span><span class="p">)</span>
                 <span class="n">is_added_param</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">param_names</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span>
                 <span class="k">if</span> <span class="n">is_added_param</span><span class="p">:</span>
                     <span class="n">msg_suffix</span> <span class="o">=</span> <span class="s2">&quot;a newly-added parameter since construction time&quot;</span>
                 <span class="k">else</span><span class="p">:</span>
-                    <span class="n">msg_suffix</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;the FSDP module wrapping </span><span class="si">{</span><span class="n">param_names</span><span class="si">}</span><span class="s2">&quot;</span>
+                    <span class="n">msg_suffix</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">param_names</span><span class="si">}</span><span class="s2">&quot;</span>
                 <span class="n">sub_msg</span> <span class="o">=</span> <span class="n">msg_prefix</span> <span class="o">+</span> <span class="n">msg_suffix</span>
+                <span class="n">first_iter_param_names</span> <span class="o">=</span> <span class="p">[</span>
+                    <span class="n">eod</span><span class="o">.</span><span class="n">get_unflat_param_names</span><span class="p">(</span><span class="n">index</span><span class="p">)</span> <span class="k">for</span> <span class="n">index</span> <span class="ow">in</span> <span class="n">eod</span><span class="o">.</span><span class="n">param_order</span>
+                <span class="p">]</span>
+                <span class="n">curr_iter_param_names</span> <span class="o">=</span> <span class="p">[</span>
+                    <span class="n">eod</span><span class="o">.</span><span class="n">get_unflat_param_names</span><span class="p">(</span><span class="n">index</span><span class="p">)</span> <span class="k">for</span> <span class="n">index</span> <span class="ow">in</span> <span class="n">curr_param_order</span>
+                <span class="p">]</span>
+                <span class="nb">print</span><span class="p">(</span><span class="n">first_iter_param_names</span><span class="p">,</span> <span class="nb">type</span><span class="p">(</span><span class="n">first_iter_param_names</span><span class="p">))</span>
+                <span class="nb">print</span><span class="p">(</span><span class="n">curr_iter_param_names</span><span class="p">,</span> <span class="nb">type</span><span class="p">(</span><span class="n">curr_iter_param_names</span><span class="p">))</span>
                 <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
-                    <span class="s2">&quot;All-gather order differs from that of the first iteration &quot;</span>
+                    <span class="s2">&quot;Forward order differs from that of the first iteration &quot;</span>
                     <span class="sa">f</span><span class="s2">&quot;on rank </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">rank</span><span class="si">}</span><span class="s2"> -- collectives are unchecked and may &quot;</span>
                     <span class="s2">&quot;give incorrect results or hang</span><span class="se">\n</span><span class="s2">&quot;</span> <span class="o">+</span> <span class="n">sub_msg</span> <span class="o">+</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span> <span class="o">+</span>
-                    <span class="sa">f</span><span class="s2">&quot;First iteration&#39;s all-gather sequence: </span><span class="si">{</span><span class="n">eod</span><span class="o">.</span><span class="n">param_order</span><span class="si">}</span><span class="s2">&quot;</span>
-                    <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">This iteration&#39;s all-gather sequence (so far): &quot;</span>
-                    <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">all_gather_seq</span><span class="si">}</span><span class="se">\n</span><span class="s2">where indices follow the root FSDP &quot;</span>
-                    <span class="s2">&quot;module&#39;s `.parameters()` order&quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;First iteration&#39;s forward order: </span><span class="si">{</span><span class="n">first_iter_param_names</span><span class="si">}</span><span class="s2">&quot;</span>
+                    <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">This iteration&#39;s forward order (so far): &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">curr_iter_param_names</span><span class="si">}</span><span class="s2">&quot;</span>
                 <span class="p">)</span>
                 <span class="n">eod</span><span class="o">.</span><span class="n">warn_status</span> <span class="o">=</span> <span class="n">_ExecOrderWarnStatus</span><span class="o">.</span><span class="n">WARNING</span>
             <span class="n">eod</span><span class="o">.</span><span class="n">index</span> <span class="o">+=</span> <span class="mi">1</span>
@@ -3286,10 +3334,10 @@
                     <span class="n">r1_param_names</span> <span class="o">=</span> <span class="n">eod</span><span class="o">.</span><span class="n">get_unflat_param_names</span><span class="p">(</span><span class="n">i1</span><span class="p">)</span>
                     <span class="n">r2_param_names</span> <span class="o">=</span> <span class="n">eod</span><span class="o">.</span><span class="n">get_unflat_param_names</span><span class="p">(</span><span class="n">i2</span><span class="p">)</span>
                     <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
-                        <span class="sa">f</span><span class="s2">&quot;All-gather order differs across ranks: rank </span><span class="si">{</span><span class="n">r1</span><span class="si">}</span><span class="s2"> is &quot;</span>
-                        <span class="sa">f</span><span class="s2">&quot;all-gathering the flattened parameter wrapping &quot;</span>
-                        <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">r1_param_names</span><span class="si">}</span><span class="s2"> while rank </span><span class="si">{</span><span class="n">r2</span><span class="si">}</span><span class="s2"> is all-gathering &quot;</span>
-                        <span class="sa">f</span><span class="s2">&quot;the flattened parameter wrapping </span><span class="si">{</span><span class="n">r2_param_names</span><span class="si">}</span><span class="s2">&quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;Forward order differs across ranks: rank </span><span class="si">{</span><span class="n">r1</span><span class="si">}</span><span class="s2"> is &quot;</span>
+                        <span class="s2">&quot;rebuilding full parameters in `forward()` for &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">r1_param_names</span><span class="si">}</span><span class="s2"> while rank </span><span class="si">{</span><span class="n">r2</span><span class="si">}</span><span class="s2"> is rebuilding full &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;parameters in `forward()` for </span><span class="si">{</span><span class="n">r2_param_names</span><span class="si">}</span><span class="s2">&quot;</span>
                     <span class="p">)</span>
             <span class="n">eod</span><span class="o">.</span><span class="n">param_order</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">param_index</span><span class="p">)</span>
 
