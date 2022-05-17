@@ -2,7 +2,7 @@
 layout: blog_detail
 title: "Introducing Accelerated PyTorch Training on Mac "
 author: Team PyTorch (Ash Koul, Andrew Caples, Alban Desmaison)
-featured-img: "/assets/images/METAPT-002-BarGraph-02-static.png"
+image: "/assets/images/METAPT-002-BarGraph-02-static.png"
 ---
 
 <p align="center">
