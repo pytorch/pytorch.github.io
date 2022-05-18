@@ -25,10 +25,10 @@ In the graphs below, you can see the performance speedup from accelerated GPU tr
   <img src="/assets/images/METAPT-002-BarGraph-02.gif" width="100%">
 </p>
 
-Testing conducted by Apple in April 2022 using production Mac Studio systems with Apple M1 Ultra, 20-core CPU, 64-core GPU 128GB of RAM, and 2TB SSD. Tested with macOS Monterey 12.3, prerelease PyTorch 1.12, ResNet50 (batch size=128), HuggingFace BERT (batch size=64), and VGG16 (batch size=64). Performance tests are conducted using specific computer systems and reflect the approximate performance of Mac Studio.
-
 ## Getting Started
 
 To get started, just install the latest [Preview (Nightly) build](https://pytorch.org/get-started/locally/) on your Apple silicon Mac running macOS 12.3 or later with a native version (arm64) of Python.
  
-You can also learn more about Metal and MPS on [Apple’s Metal page](https://developer.apple.com/metal/). 
+You can also learn more about Metal and MPS on [Apple’s Metal page](https://developer.apple.com/metal/).
+
+\* _Testing conducted by Apple in April 2022 using production Mac Studio systems with Apple M1 Ultra, 20-core CPU, 64-core GPU 128GB of RAM, and 2TB SSD. Tested with macOS Monterey 12.3, prerelease PyTorch 1.12, ResNet50 (batch size=128), HuggingFace BERT (batch size=64), and VGG16 (batch size=64). Performance tests are conducted using specific computer systems and reflect the approximate performance of Mac Studio._
