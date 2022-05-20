@@ -25,6 +25,10 @@ In the graphs below, you can see the performance speedup from accelerated GPU tr
   <img src="/assets/images/METAPT-002-BarGraph-02.gif" width="100%">
 </p>
 
+<p align = "center">
+Accelerated GPU training and evaluation speedups over CPU-only (times faster)
+</p>
+
 ## Getting Started
 
 To get started, just install the latest [Preview (Nightly) build](https://pytorch.org/get-started/locally/) on your Apple silicon Mac running macOS 12.3 or later with a native version (arm64) of Python.
