@@ -29,6 +29,7 @@ In the graphs below, you can see the performance speedup from accelerated GPU tr
 Accelerated GPU training and evaluation speedups over CPU-only (times faster)
 </p>
 
+
 ## Getting Started
 
 To get started, just install the latest [Preview (Nightly) build](https://pytorch.org/get-started/locally/) on your Apple silicon Mac running macOS 12.3 or later with a native version (arm64) of Python.
