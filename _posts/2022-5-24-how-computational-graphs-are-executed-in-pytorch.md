@@ -889,7 +889,7 @@ In this case, we accumulate the output in the existing `input_buffer` instead of
 All this process is summarized in the animation in Figure 5. We see how a thread peeks at the tasks in the ready queue and decrements the next nodes' dependencies, unlocking them for execution.
 
 <p align="center">
-  <img src="/assets/images/computation-animation-fig-5.png" width="100%">
+  <img src="/assets/images/computation-animation-fig-5.gif" width="100%">
 </p>
 
 <p align = "center">
