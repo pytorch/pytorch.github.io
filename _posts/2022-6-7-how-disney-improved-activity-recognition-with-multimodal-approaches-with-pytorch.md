@@ -70,13 +70,13 @@ To process the video, we have tried both processing each frame separately with a
 To process the audio, we use the pretrained ResNet34, and we remove the final layers to be able to extract 2D embeddings from the audio spectrograms (for 224x224 images we end up with 7x7 embeddings)
 
 <p align="center">
-  <img src="/assets/images/audio-backbone-image-1.png" width="100%">
+  <img src="/assets/images/audio-backbone-image-1.png" width="60%">
 </p>
 
 For closed captioning, we are using a pre-trained BERT-large, with all layers frozen, except for the Embeddings & LayerNorms.
 
 <p align="center">
-  <img src="/assets/images/text-backbone-image-1.png" width="100%">
+  <img src="/assets/images/text-backbone-image-1.png" width="60%">
 </p>
 
 Once we have extracted the embedding from each modality, we concatenate them into a single sequence and we pass it through a set of MLPMixer blocks; next we use average pooling & a classification head to get predictions.
