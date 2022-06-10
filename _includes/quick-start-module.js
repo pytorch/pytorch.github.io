@@ -115,7 +115,7 @@ function disableUnsupportedPlatforms(os) {
   });
 }
 
-// Change compute versiosn depending on build type
+// Change compute versions depending on build type
 function changeCUDAVersion(ptbuild) {
   var cuda_element = document.getElementById("cuda11.x");
   var rocm_element = document.getElementById("rocm4.x");
@@ -136,7 +136,7 @@ function changeCUDAVersion(ptbuild) {
     return;
   }
   if (ptbuild == "preview") {
-    rocm_element.children[0].textContent = "ROCM 4.5.2 (beta)";
+    rocm_element.children[0].textContent = "ROCM 5.1.1 (beta)";
     cuda_element.children[0].textContent = "CUDA 11.3";
   } else if (ptbuild == "stable") {
     rocm_element.children[0].textContent = "ROCM 4.5.2 (beta)";
@@ -144,6 +144,20 @@ function changeCUDAVersion(ptbuild) {
   } else {
     rocm_element.children[0].textContent = "ROCM 4.5.2 (beta)";
     cuda_element.children[0].textContent = "CUDA 11.1";
+  }
+}
+
+// Change accnone name depending on OS type
+function changeAccNoneName(osname) {
+  var accnone_element = document.getElementById("accnone");
+  if (accnone_element == null) {
+    console.log("Failed to find accnone element");
+    return;
+  }
+  if (osname == "macos") {
+    accnone_element.children[0].textContent = "Default";
+  } else {
+    accnone_element.children[0].textContent = "CPU";
   }
 }
 
@@ -189,6 +203,7 @@ function selectedOption(option, selection, category) {
   commandMessage(buildMatcher());
   if (category === "os") {
     disableUnsupportedPlatforms(opts.os);
+    changeAccNoneName(opts.os);
     display(opts.os, 'installation', 'os');
   }
 }
