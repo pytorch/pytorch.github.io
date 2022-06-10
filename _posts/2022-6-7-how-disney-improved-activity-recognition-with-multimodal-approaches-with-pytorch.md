@@ -1,7 +1,7 @@
 ---
 layout: blog_detail
 title: "How Disney improved activity recognition with multimodal approaches with PyTorch"
-author: Monica Alfaro, Albert Aparicio, Miquel Àngel Farré, Francesc Guitart, Marc Junyent, Pablo Pernias, Marcel Porta
+author: Monica Alfaro, Albert Aparicio, Miquel Àngel Farré, Francesc Guitart, Marc Junyent, Pablo Pernias, and Marcel Porta
 featured-img: ""
 ---
 
