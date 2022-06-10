@@ -10,9 +10,11 @@ featured-img: ""
 Among the many things Disney Media & Entertainment Distribution (DMED) is responsible for, is the management and distribution of a huge array of media assets including news, sports, entertainment and features, episodic programs, marketing and advertising and more.
 
 
+
 <p align="center">
   <img src="/assets/images/disney_media_logo.jpg" width="80%">
 </p>
+
 
 
 Our team focuses on media annotation as part of DMED Technology’s content platforms group. In our day-to-day work, we automatically analyze a variety of content that constantly challenges the efficiency of our machine learning workflow and the accuracy of our models.
@@ -52,9 +54,11 @@ The core idea behind mixed variations consists of replacing the convolutions or 
 Those proposals perform great in solving image classification tasks by splitting the image in chunks, flattening those chunks into 1D vectors and passing them through a sequence of Mixer Layers.
 
 
+
 <p align="center">
   <img src="/assets/images/google_MLPMixer_architecture.png" width="100%">
 </p>
+
 
 
 Inspired by the advantages of Mixer based architectures, our team searched for parallelisms with the type of problems we try to solve in video classification: specifically, instead of a single image, we have a set of frames that need to be classified, along with audio and closed captioning in the shape of new modalities.
@@ -70,12 +74,15 @@ For example, when it comes to detecting laughs, sometimes the key information is
 We tried processing each frame separately with a ResNet34 and getting a sequence of embeddings and by using a video-specific model called R3D, both pre-trained on ImageNet and Kinetics400 respectively.
 
 
+
 <p align="center">
-  <img src="/assets/images/video-backbone-image-1.png" width="800%">
+  <img src="/assets/images/video-backbone-image-1.png" width="80%">
 </p>
 
 
+
 To process the audio, we use the pretrained ResNet34, and we remove the final layers to be able to extract 2D embeddings from the audio spectrograms (for 224x224 images we end up with 7x7 embeddings).
+
 
 
 <p align="center">
@@ -83,7 +90,9 @@ To process the audio, we use the pretrained ResNet34, and we remove the final la
 </p>
 
 
+
 For closed captioning, we are using a pre-trained BERT-large, with all layers frozen, except for the Embeddings & LayerNorms.
+
 
 
 <p align="center">
@@ -91,12 +100,15 @@ For closed captioning, we are using a pre-trained BERT-large, with all layers fr
 </p>
 
 
+
 Once we have extracted the embedding from each modality, we concatenate them into a single sequence and pass it through a set of MLPMixer blocks; next we use average pooling & a classification head to get predictions.
+
 
 
 <p align="center">
   <img src="/assets/images/full-architecture-image-1.png" width="100%">
 </p>
+
 
 
 Our experiments have been performed on a custom, manually labeled dataset for activity recognition with 15 classes, which we know from experiments are hard and cannot all be predicted accurately using a single modality.
@@ -116,9 +128,11 @@ An MLPMixer is a concatenation of MultiLayer Perceptrons. This can be, very roug
 Once we assume that approximation, we also assume that for an input consisting of NxM numbers, we could find a NxM matrix that (when multiplied elementwise) could approximate the predictions of the MLPMixer for a class.
 
 
+
 <p align="center">
   <img src="/assets/images/stencil-image-1.png" width="100%">
 </p>
+
 
 
 We will call this matrix a stencil, and if we have access to it, we can find what parts of the input embeddings are responsible for a specific prediction.
@@ -126,9 +140,11 @@ We will call this matrix a stencil, and if we have access to it, we can find wha
 You can think of it as a punch card with holes in specific positions. Only information in those positions will pass and contribute to a specific prediction. So we can measure the intensity of the input at those positions.
 
 
+
 <p align="center">
   <img src="/assets/images/stencil-image-2.png" width="100%">
 </p>
+
 
 
 Of course, this is an oversimplification, and there won't exist a unique stencil that perfectly represents all of the contributions of the input to a class (otherwise that would mean that the problem could be solved linearly). So this should be used for visualization purposes only, not as an accurate predictor.
@@ -138,9 +154,11 @@ Once we have a set of stencils for each class, we can effortlessly measure input
 To find a stencil, we can start from a "random noise" stencil and optimize it to maximize the activations for a specific class by just back-propagating through the MLPMixer.
 
 
+
 <p align="center">
   <img src="/assets/images/stencil-image-3.png" width="100%">
 </p>
+
 
 
 By doing this we can end up with many valid stencils, and we can reduce them to a few by using K-means to cluster them into similar stencils and averaging each cluster.
