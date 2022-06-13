@@ -1,7 +1,7 @@
 ---
 layout: blog_detail
 title: "Geospatial deep learning with TorchGeo"
-author: [Adam Stewart](https://github.com/adamjstewart) (University of Illinois at Urbana-Champaign), [Caleb Robinson](https://www.microsoft.com/en-us/research/people/davrob/) (Microsoft AI for Good Research Lab), [Isaac Corley](https://github.com/isaaccorley) (University of Texas at San Antonio)
+author: Adam Stewart (University of Illinois at Urbana-Champaign), Caleb Robinson (Microsoft AI for Good Research Lab), Isaac Corley (University of Texas at San Antonio)
 featured-img: ""
 ---
 
@@ -18,7 +18,7 @@ TorchGeo is a PyTorch domain library providing datasets, samplers, transforms, a
 For decades, Earth observation satellites, aircraft, and more recently UAV platforms have been collecting increasing amounts of imagery of the Earth’s surface. With information about seasonal and long-term trends, remotely sensed imagery can be invaluable for solving some of the greatest challenges to humanity, including climate change adaptation, natural disaster monitoring, water resource management, and food security for a growing global population. From a computer vision perspective, this includes applications like land cover mapping (semantic segmentation), deforestation and flood monitoring (change detection), glacial flow (pixel tracking), hurricane tracking and intensity estimation (regression), and building and road detection (object detection, instance segmentation). By leveraging recent advancements in deep learning architectures, cheaper and more powerful GPUs, and petabytes of freely available satellite imagery datasets, we can come closer to solving these important problems.
 
 <p align="center">
-  <img src="/assets/images/torchgeo-hurricane.png" width="100%">
+  <img src="/assets/images/torchgeo-hurricane.jpg" width="80%">
 </p>
 
 <p align = "center">
@@ -33,7 +33,7 @@ Remote sensing imagery is not so uniform. Instead of simple RGB images, satellit
 
 
 <p align="center">
-  <img src="/assets/images/torchgeo-geospatial-data.png" width="100%">
+  <img src="/assets/images/torchgeo-geospatial-data.png" width="80%">
 </p>
 
 
@@ -44,7 +44,7 @@ Geospatial data is associated with one of many different types of reference syst
 Although each image is 2D, the Earth itself is 3D. In order to stitch together images, they first need to be projected onto a 2D representation of the Earth, called a coordinate reference system (CRS). Most people are familiar with equal angle representations like Mercator that distort the size of regions (Greenland looks larger than Africa even though Africa is 15x larger), but there are many other CRSs that are commonly used. Each dataset may use a different CRS, and each image within a single dataset may also be in a unique CRS. In order to use data from multiple layers, they must all share a common CRS, otherwise the data won't be properly aligned. For those who aren't familiar with remote sensing data, this can be a daunting task.
 
 <p align="center">
-  <img src="/assets/images/techgeo-reproject.png" width="100%">
+  <img src="/assets/images/techgeo-reproject.png" width="80%">
 </p>
 
 <p align = "center">
@@ -69,7 +69,7 @@ TorchGeo is designed to have the same API as other PyTorch domain libraries like
 # Geospatial datasets and samplers
 
 <p align="center">
-  <img src="/assets/images/techgeo-sample.png" width="100%">
+  <img src="/assets/images/techgeo-sample.png" width="80%">
 </p>
 
 <p align = "center">
