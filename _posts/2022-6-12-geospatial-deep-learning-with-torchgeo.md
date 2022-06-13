@@ -127,7 +127,7 @@ These combinations require that all queries are present in at least one dataset,
 - Combine image and target labels and sample from both simultaneously (e.g., Landsat and CDL)
 - Combine datasets for multiple images sources for multimodal learning or data fusion (e.g., Landsat and Sentinel)
 
-These combinations require that all queries are present in both datasets, and can be created using an IntersectionDataset. TorchGeo automatically composes these datasets for you when you use the intersection (&) and union \(|) operators.
+These combinations require that all queries are present in both datasets, and can be created using an IntersectionDataset. TorchGeo automatically composes these datasets for you when you use the intersection (&) and union \(\|\) operators.
 
 # Multispectral and geospatial transforms
 
