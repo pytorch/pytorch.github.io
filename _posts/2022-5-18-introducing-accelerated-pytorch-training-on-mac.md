@@ -3,10 +3,7 @@ layout: blog_detail
 title: "Introducing Accelerated PyTorch Training on Mac"
 author: PyTorch
 featured-img: "/assets/images/METAPT-002-BarGraph-02-static.png"
-tag: tag1, tag2, tag3
-tags: tag4, tag5, tag6
-category: tag7, tag8, tag9
-categories: tag10, tag11, tag12
+categories: tag1, tag2, tag3
 ---
 
 In collaboration with the Metal engineering team at Apple, we are excited to announce support for GPU-accelerated PyTorch training on Mac. Until now, PyTorch training on Mac only leveraged the CPU, but with the upcoming PyTorch v1.12 release, developers and researchers can take advantage of Apple silicon GPUs for significantly faster model training. This unlocks the ability to perform machine learning workflows like prototyping and fine-tuning locally, right on Mac.
