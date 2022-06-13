@@ -3,7 +3,10 @@ layout: blog_detail
 title: "Ambient Clinical Intelligence: Generating Medical Reports with PyTorch"
 author: Miguel Del-Agua, Principal Research Scientist, Nuance and Jeremy Jancsary, Senior Principal Research Scientist, Nuance
 featured-img: ""
-tags: "tag 2", "tag3", "tag4"
+tags:
+  - tag 2
+  - tag3
+  - tag4
 ---
 
 ## Introduction
