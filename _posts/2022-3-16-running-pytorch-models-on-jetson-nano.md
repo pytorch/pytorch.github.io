@@ -3,10 +3,7 @@ layout: blog_detail
 title: "Running PyTorch Models on Jetson Nano"
 author: Jeff Tang, Hamid Shojanazeri, Geeta Chauhan
 featured-img: "assets/images/pytorch-logo.jpg"
-tags:
-  - tag5
-  - tag6
-  - tag7
+tags: "tag5", "tag6", "tag7"
 ---
 
 ### Overview
