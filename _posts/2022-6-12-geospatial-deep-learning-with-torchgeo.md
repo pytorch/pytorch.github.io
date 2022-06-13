@@ -12,7 +12,7 @@ TorchGeo is a PyTorch domain library providing datasets, samplers, transforms, a
 </p>
 
 <p align = "center">
-[https://github.com/microsoft/torchgeo](https://github.com/microsoft/torchgeo)
+  <a href="https://github.com/microsoft/torchgeo">https://github.com/microsoft/torchgeo</a>
 </p>
 
 For decades, Earth observation satellites, aircraft, and more recently UAV platforms have been collecting increasing amounts of imagery of the Earth’s surface. With information about seasonal and long-term trends, remotely sensed imagery can be invaluable for solving some of the greatest challenges to humanity, including climate change adaptation, natural disaster monitoring, water resource management, and food security for a growing global population. From a computer vision perspective, this includes applications like land cover mapping (semantic segmentation), deforestation and flood monitoring (change detection), glacial flow (pixel tracking), hurricane tracking and intensity estimation (regression), and building and road detection (object detection, instance segmentation). By leveraging recent advancements in deep learning architectures, cheaper and more powerful GPUs, and petabytes of freely available satellite imagery datasets, we can come closer to solving these important problems.
@@ -22,7 +22,7 @@ For decades, Earth observation satellites, aircraft, and more recently UAV platf
 </p>
 
 <p align = "center">
-National Oceanic and Atmospheric Administration satellite image of Hurricane Katrina, taken on August 28, 2005 ([source](https://www.whoi.edu/know-your-ocean/ocean-topics/hazards/hurricanes/)). Geospatial machine learning libraries like TorchGeo can be used to detect, track, and predict future trajectories of hurricanes and other natural disasters.
+National Oceanic and Atmospheric Administration satellite image of Hurricane Katrina, taken on August 28, 2005 (<a href="https://www.whoi.edu/know-your-ocean/ocean-topics/hazards/hurricanes/">source</a>). Geospatial machine learning libraries like TorchGeo can be used to detect, track, and predict future trajectories of hurricanes and other natural disasters.
 </p>
 
 # The challenges
@@ -38,7 +38,7 @@ Remote sensing imagery is not so uniform. Instead of simple RGB images, satellit
 
 
 <p align = "center">
-Geospatial data is associated with one of many different types of reference systems that project the 3D Earth onto a 2D representation ([source](https://scitools.org.uk/cartopy/docs/latest/reference/projections.html)). Combining data from different sources often involves re-projecting to a common reference system in order to ensure that all layers are aligned.
+Geospatial data is associated with one of many different types of reference systems that project the 3D Earth onto a 2D representation (<a href="https://scitools.org.uk/cartopy/docs/latest/reference/projections.html">source</a>). Combining data from different sources often involves re-projecting to a common reference system in order to ensure that all layers are aligned.
 </p>
 
 Although each image is 2D, the Earth itself is 3D. In order to stitch together images, they first need to be projected onto a 2D representation of the Earth, called a coordinate reference system (CRS). Most people are familiar with equal angle representations like Mercator that distort the size of regions (Greenland looks larger than Africa even though Africa is 15x larger), but there are many other CRSs that are commonly used. Each dataset may use a different CRS, and each image within a single dataset may also be in a unique CRS. In order to use data from multiple layers, they must all share a common CRS, otherwise the data won't be properly aligned. For those who aren't familiar with remote sensing data, this can be a daunting task.
@@ -73,7 +73,7 @@ TorchGeo is designed to have the same API as other PyTorch domain libraries like
 </p>
 
 <p align = "center">
-Example application in which we combine A) a scene from [Landsat 8](https://www.usgs.gov/landsat-missions) and B) [Cropland Data Layer](https://data.nal.usda.gov/dataset/cropscape-cropland-data-layer) labels, even though these files are in different EPSG projections. We want to sample patches C) and D) from these datasets using a geospatial bounding box as an index.
+Example application in which we combine A) a scene from <a href="https://www.usgs.gov/landsat-missions">Landsat 8</a> and B) <a href="https://data.nal.usda.gov/dataset/cropscape-cropland-data-layer">Cropland Data Layer</a> labels, even though these files are in different EPSG projections. We want to sample patches C) and D) from these datasets using a geospatial bounding box as an index.
 </p>
 
 Many remote sensing applications involve working with [*geospatial datasets*](https://torchgeo.readthedocs.io/en/latest/api/datasets.html#geospatial-datasets) —datasets with geographic metadata. In TorchGeo, we define a GeoDataset class to represent these kinds of datasets. Instead of being indexed by an integer, each GeoDataset is indexed by a spatiotemporal bounding box, meaning that two or more datasets covering a different geographic extent can be intelligently combined.
@@ -165,7 +165,7 @@ plt.show()
 </p>
 
 <p align = "center">
-True color (left) and NDVI (right) of the Texas Hill Region, taken on November 16, 2018 by the [Sentinel-2](https://sentinel.esa.int/web/sentinel/missions/sentinel-2) satellite. In the NDVI image, red indicates water bodies, yellow indicates barren soil, light green indicates unhealthy vegetation, and dark green indicates healthy vegetation.
+True color (left) and NDVI (right) of the Texas Hill Region, taken on November 16, 2018 by the <a href="https://sentinel.esa.int/web/sentinel/missions/sentinel-2">Sentinel-2</a> satellite. In the NDVI image, red indicates water bodies, yellow indicates barren soil, light green indicates unhealthy vegetation, and dark green indicates healthy vegetation.
 </p>
 
 # Benchmark datasets
@@ -197,7 +197,7 @@ All TorchGeo datasets are compatible with PyTorch DataLoaders, making them easy 
 </p>
 
 <p align = "center">
-Example predictions from a Mask R-CNN model trained on the [NWPU VHR-10](https://github.com/chaozhong2010/VHR-10_dataset_coco) dataset. The model predicts sharp bounding boxes and masks for all objects with high confidence scores.
+Example predictions from a Mask R-CNN model trained on the <a href="https://github.com/chaozhong2010/VHR-10_dataset_coco">NWPU VHR-10</a> dataset. The model predicts sharp bounding boxes and masks for all objects with high confidence scores.
 </p>
 
 # Reproducibility with PyTorch Lightning
@@ -227,7 +227,7 @@ trainer.fit(model=task, datamodule=datamodule)
 </p>
 
 <p align = "center">
-Building segmentations produced by a model trained on the [Inria Aerial Image Labeling dataset](https://project.inria.fr/aerialimagelabeling/). Reproducing these results is as simple as a few imports and four lines of code, making comparison of different models and training techniques simple and easy.
+Building segmentations produced by a model trained on the <a href="https://project.inria.fr/aerialimagelabeling/">Inria Aerial Image Labeling dataset</a>. Reproducing these results is as simple as a few imports and four lines of code, making comparison of different models and training techniques simple and easy.
 </p>
 
 In our [preprint](https://arxiv.org/abs/2111.08872) we show a set of results that use the aforementioned datamodules and trainers to benchmark simple modeling approaches for several of the datasets in TorchGeo. For example, we find that a simple ResNet-50 can achieve state-of-the-art performance on the [So2Sat dataset](https://ieeexplore.ieee.org/document/9014553). These types of baseline results are important for evaluating the contribution of different modeling choices when tackling problems with remotely sensed data.
