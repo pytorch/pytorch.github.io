@@ -35,7 +35,7 @@ MMF tackles this complexity with modular management of all the elements of the p
 
 In our scenario, MMF was a great entry point to experiment with multimodality. It allowed us to iterate quickly by combining audio, video and closed captioning and experiment at different levels of scale with certain multimodal models, shifting from a single GPU to TPU Pods.
 
-## Multimodal Transformers
+# Multimodal Transformers
 
 With a workbench based on MMF, our initial model was based on a concatenation of features from each modality evolving to a pipeline that included a Transformer-based fusion module to combine the different input modes.
 
