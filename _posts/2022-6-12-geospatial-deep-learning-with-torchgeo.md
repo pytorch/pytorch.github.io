@@ -108,9 +108,8 @@ dataloader = DataLoader(
 
 This data loader can now be used in your normal training/evaluation pipeline.
 
-for batch in dataloader:
-
 ```c++
+for batch in dataloader:
 image = batch["image"]
     mask = batch["mask"]
 
