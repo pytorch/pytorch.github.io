@@ -5,7 +5,7 @@ author: Adam Stewart (University of Illinois at Urbana-Champaign), Caleb Robinso
 featured-img: ""
 ---
 
-TorchGeo is a PyTorch domain library providing datasets, samplers, transforms, and pre-trained models specific to geospatial data
+TorchGeo is a PyTorch domain library providing datasets, samplers, transforms, and pre-trained models specific to geospatial data.
 
 <p align="center">
   <img src="/assets/images/torchgeo-logo.png" width="100%">
@@ -29,16 +29,16 @@ National Oceanic and Atmospheric Administration satellite image of Hurricane Kat
 
 In traditional computer vision datasets, such as ImageNet, the image files themselves tend to be rather simple and easy to work with. Most images have 3 spectral bands (RGB), are stored in common file formats like PNG or JPEG, and can be easily loaded with popular software libraries like [PIL](https://pillow.readthedocs.io/en/stable/) or [OpenCV](https://opencv.org/). Each image in these datasets is usually small enough to pass directly into a neural network. Furthermore, most of these datasets contain a finite number of well-curated images that are assumed to be independent and identically distributed, making train-val-test splits straightforward. As a result of this relative homogeneity, the same pre-trained models (e.g., CNNs pretrained on ImageNet) have shown to be effective across a wide range of vision tasks using transfer learning methods. Existing libraries, such as [torchvision](https://github.com/pytorch/vision), handle these simple cases well, and have been used to make large advances in vision tasks over the past decade.
 
-Remote sensing imagery is not so uniform. Instead of simple RGB images, satellites tend to capture images that are multispectral (Landsat 8 has 11 spectral bands) or even hyperspectral (Hyperion has 242 spectral bands). These images capture information at a wider range of wavelengths (400 nm–15 µm), far outside of the visible spectrum. Different satellites also have very different spatial resolutions—GOES has a resolution of 4 km/px, Maxar imagery is 30 cm/px, and drone imagery resolution can be as high as 7 mm/px. These datasets almost always have a temporal component, with satellite revisists that are daily, weekly, or biweekly. Images often have overlap with other images in the dataset, and need to be stitched together based on geographic metadata. These images tend to be very large (e.g., 10K x 10K pixels), so it isn't possible to pass an entire image through a neural network. This data is distributed in hundreds of different raster and vector file formats like GeoTIFF and ESRI Shapefile, requiring specialty libraries like [GDAL](https://gdal.org/) to load.
+Remote sensing imagery is not so uniform. Instead of simple RGB images, satellites tend to capture images that are multispectral ([Landsat 8](https://www.usgs.gov/landsat-missions) has 11 spectral bands) or even hyperspectral ([Hyperion](https://www.usgs.gov/centers/eros/science/usgs-eros-archive-earth-observing-one-eo-1-hyperion) has 242 spectral bands). These images capture information at a wider range of wavelengths (400 nm–15 µm), far outside of the visible spectrum. Different satellites also have very different spatial resolutions—[GOES](https://www.goes.noaa.gov/) has a resolution of 4 km/px, [Maxar](https://www.maxar.com/products/satellite-imagery) imagery is 30 cm/px, and drone imagery resolution can be as high as 7 mm/px. These datasets almost always have a temporal component, with satellite revisists that are daily, weekly, or biweekly. Images often have overlap with other images in the dataset, and need to be stitched together based on geographic metadata. These images tend to be very large (e.g., 10K x 10K pixels), so it isn't possible to pass an entire image through a neural network. This data is distributed in hundreds of different raster and vector file formats like GeoTIFF and ESRI Shapefile, requiring specialty libraries like [GDAL](https://gdal.org/) to load.
 
 
 <p align="center">
-  <img src="/assets/images/torchgeo-geospatial-data.png" width="80%">
+  <img src="/assets/images/torchgeo-map.png" width="80%">
 </p>
 
 
 <p align = "center">
-Geospatial data is associated with one of many different types of reference systems that project the 3D Earth onto a 2D representation (<a href="https://scitools.org.uk/cartopy/docs/latest/reference/projections.html">source</a>). Combining data from different sources often involves re-projecting to a common reference system in order to ensure that all layers are aligned.
+  From left to right: Mercator, Albers Equal Area, and Interrupted Goode Homolosine projections (source). Geospatial data is associated with one of many different types of reference systems that project the 3D Earth onto a 2D representation (<a href="https://scitools.org.uk/cartopy/docs/latest/reference/projections.html">source</a>). Combining data from different sources often involves re-projecting to a common reference system in order to ensure that all layers are aligned.
 </p>
 
 Although each image is 2D, the Earth itself is 3D. In order to stitch together images, they first need to be projected onto a 2D representation of the Earth, called a coordinate reference system (CRS). Most people are familiar with equal angle representations like Mercator that distort the size of regions (Greenland looks larger than Africa even though Africa is 15x larger), but there are many other CRSs that are commonly used. Each dataset may use a different CRS, and each image within a single dataset may also be in a unique CRS. In order to use data from multiple layers, they must all share a common CRS, otherwise the data won't be properly aligned. For those who aren't familiar with remote sensing data, this can be a daunting task.
@@ -60,7 +60,7 @@ At the moment, it can be quite challenging to work with both deep learning model
 
 TorchGeo is not just a research project, but a production-quality library that uses continuous integration to test every commit with a range of Python versions on a range of platforms (Linux, macOS, Windows). It can be easily installed with any of your favorite package managers, including pip, conda, and [spack](https://spack.io):
 
-```c++
+```Python
 $ pip install torchgeo
 ```
 
@@ -101,9 +101,7 @@ This dataset can now be used with a PyTorch data loader. Unlike benchmark datase
 
 ```c++
 sampler = RandomGeoSampler(dataset, size=256, length=10000)
-dataloader = DataLoader(
-    dataset, batch_size=128, sampler=sampler, collate_fn=stack_samples
-)
+dataloader = DataLoader(dataset, batch_size=128, sampler=sampler, collate_fn=stack_samples)
 ```
 
 This data loader can now be used in your normal training/evaluation pipeline.
@@ -121,12 +119,12 @@ Many applications involve intelligently composing datasets based on geospatial m
 - Combine datasets for multiple image sources and treat them as equivalent (e.g., Landsat 7 and 8)
 - Combine datasets for disparate geospatial locations (e.g., Chesapeake NY and PA)
 
-These combinations require that all queries are present in at least one dataset, and can be created using a UnionDataset. Similarly, users may want to:
+These combinations require that all queries are present in *at least one* dataset, and can be created using a UnionDataset. Similarly, users may want to:
 
 - Combine image and target labels and sample from both simultaneously (e.g., Landsat and CDL)
-- Combine datasets for multiple images sources for multimodal learning or data fusion (e.g., Landsat and Sentinel)
+- Combine datasets for multiple image sources for multimodal learning or data fusion (e.g., Landsat and Sentinel)
 
-These combinations require that all queries are present in both datasets, and can be created using an IntersectionDataset. TorchGeo automatically composes these datasets for you when you use the intersection (&) and union \(\|\) operators.
+These combinations require that all queries are present in *both* datasets, and can be created using an IntersectionDataset. TorchGeo automatically composes these datasets for you when you use the intersection (&) and union \(\|\) operators.
 
 # Multispectral and geospatial transforms
 
@@ -189,7 +187,7 @@ for batch in dataloader:
     # train a model, or make predictions using a pre-trained model
 ```
 
-All TorchGeo datasets are compatible with PyTorch DataLoaders, making them easy to integrate into existing training workflows. The only difference between a benchmark dataset in TorchGeo and a similar dataset in torchvision is that each dataset returns a dictionary with keys for each PyTorch Tensor.
+All TorchGeo datasets are compatible with PyTorch data loaders, making them easy to integrate into existing training workflows. The only difference between a benchmark dataset in TorchGeo and a similar dataset in torchvision is that each dataset returns a dictionary with keys for each PyTorch Tensor.
 
 <p align="center">
   <img src="/assets/images/techge-nwpu.png" width="100%">
@@ -210,12 +208,8 @@ from pytorch_lightning import Trainer
 from torchgeo.datamodules import InriaAerialImageLabelingDataModule
 from torchgeo.trainers import SemanticSegmentationTask
 
-datamodule = InriaAerialImageLabelingDataModule(
-root_dir="...", batch_size=64, num_workers=6
-)
-task = SemanticSegmentationTask(
-model="resnet18", pretrained=True, learning_rate=0.1
-)
+datamodule = InriaAerialImageLabelingDataModule(root_dir="...", batch_size=64, num_workers=6)
+task = SemanticSegmentationTask(model="resnet18", pretrained=True, learning_rate=0.1)
 trainer = Trainer(gpus=1, default_root_dir="...")
 
 trainer.fit(model=task, datamodule=datamodule)
@@ -226,10 +220,10 @@ trainer.fit(model=task, datamodule=datamodule)
 </p>
 
 <p align = "center">
-Building segmentations produced by a model trained on the <a href="https://project.inria.fr/aerialimagelabeling/">Inria Aerial Image Labeling dataset</a>. Reproducing these results is as simple as a few imports and four lines of code, making comparison of different models and training techniques simple and easy.
+Building segmentations produced by a U-Net model trained on the <a href="https://project.inria.fr/aerialimagelabeling/">Inria Aerial Image Labeling</a> dataset. Reproducing these results is as simple as a few imports and four lines of code, making comparison of different models and training techniques simple and easy.
 </p>
 
-In our [preprint](https://arxiv.org/abs/2111.08872) we show a set of results that use the aforementioned datamodules and trainers to benchmark simple modeling approaches for several of the datasets in TorchGeo. For example, we find that a simple ResNet-50 can achieve state-of-the-art performance on the [So2Sat dataset](https://ieeexplore.ieee.org/document/9014553). These types of baseline results are important for evaluating the contribution of different modeling choices when tackling problems with remotely sensed data.
+In our [preprint](https://arxiv.org/abs/2111.08872) we show a set of results that use the aforementioned datamodules and trainers to benchmark simple modeling approaches for several of the datasets in TorchGeo. For example, we find that a simple ResNet-50 can achieve state-of-the-art performance on the [So2Sat](https://ieeexplore.ieee.org/document/9014553) dataset. These types of baseline results are important for evaluating the contribution of different modeling choices when tackling problems with remotely sensed data.
 
 # Future work and contributing
 
