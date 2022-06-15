@@ -60,7 +60,7 @@ At the moment, it can be quite challenging to work with both deep learning model
 
 TorchGeo is not just a research project, but a production-quality library that uses continuous integration to test every commit with a range of Python versions on a range of platforms (Linux, macOS, Windows). It can be easily installed with any of your favorite package managers, including pip, conda, and [spack](https://spack.io):
 
-```python
+```
 $ pip install torchgeo
 ```
 
@@ -124,7 +124,7 @@ These combinations require that all queries are present in *at least one* datase
 - Combine image and target labels and sample from both simultaneously (e.g., Landsat and CDL)
 - Combine datasets for multiple image sources for multimodal learning or data fusion (e.g., Landsat and Sentinel)
 
-These combinations require that all queries are present in *both* datasets, and can be created using an ``IntersectionDataset``. ``TorchGeo`` automatically composes these datasets for you when you use the intersection (``&``) and union \(``|``\) operators.
+These combinations require that all queries are present in *both* datasets, and can be created using an ``IntersectionDataset``. TorchGeo automatically composes these datasets for you when you use the intersection (``&``) and union \(``|``\) operators.
 
 # Multispectral and geospatial transforms
 
