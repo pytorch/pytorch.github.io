@@ -1,5 +1,5 @@
 ---
-title: PyTorch Governance
+title: Governance
 summary-home: 'Learn about the PyTorch governance hierarchy.'
 summary: 'Learn about the PyTorch governance hierarchy.'
 class: pytorch-resource
