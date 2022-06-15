@@ -60,9 +60,7 @@ At the moment, it can be quite challenging to work with both deep learning model
 
 TorchGeo is not just a research project, but a production-quality library that uses continuous integration to test every commit with a range of Python versions on a range of platforms (Linux, macOS, Windows). It can be easily installed with any of your favorite package managers, including pip, conda, and [spack](https://spack.io):
 
-```Python
 $ pip install torchgeo
-```
 
 TorchGeo is designed to have the same API as other PyTorch domain libraries like torchvision, torchtext, and torchaudio. If you already use torchvision in your workflow for computer vision datasets, you can switch to TorchGeo by changing only a few lines of code. All TorchGeo datasets and samplers are compatible with the PyTorch DataLoader class, meaning that you can take advantage of wrapper libraries like [PyTorch Lightning](https://www.pytorchlightning.ai/) for distributed training. In the following sections, we'll explore possible use cases for TorchGeo to show how simple it is to use.
 
