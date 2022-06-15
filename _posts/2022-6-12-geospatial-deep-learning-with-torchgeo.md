@@ -38,7 +38,7 @@ Remote sensing imagery is not so uniform. Instead of simple RGB images, satellit
 
 
 <p align = "center">
-  From left to right: Mercator, Albers Equal Area, and Interrupted Goode Homolosine projections (source). Geospatial data is associated with one of many different types of reference systems that project the 3D Earth onto a 2D representation (<a href="https://scitools.org.uk/cartopy/docs/latest/reference/projections.html">source</a>). Combining data from different sources often involves re-projecting to a common reference system in order to ensure that all layers are aligned.
+From left to right: Mercator, Albers Equal Area, and Interrupted Goode Homolosine projections (<a href="https://scitools.org.uk/cartopy/docs/latest/reference/projections.html">source</a>). Geospatial data is associated with one of many different types of reference systems that project the 3D Earth onto a 2D representation. Combining data from different sources often involves re-projecting to a common reference system in order to ensure that all layers are aligned.
 </p>
 
 Although each image is 2D, the Earth itself is 3D. In order to stitch together images, they first need to be projected onto a 2D representation of the Earth, called a coordinate reference system (CRS). Most people are familiar with equal angle representations like Mercator that distort the size of regions (Greenland looks larger than Africa even though Africa is 15x larger), but there are many other CRSs that are commonly used. Each dataset may use a different CRS, and each image within a single dataset may also be in a unique CRS. In order to use data from multiple layers, they must all share a common CRS, otherwise the data won't be properly aligned. For those who aren't familiar with remote sensing data, this can be a daunting task.
@@ -60,9 +60,11 @@ At the moment, it can be quite challenging to work with both deep learning model
 
 TorchGeo is not just a research project, but a production-quality library that uses continuous integration to test every commit with a range of Python versions on a range of platforms (Linux, macOS, Windows). It can be easily installed with any of your favorite package managers, including pip, conda, and [spack](https://spack.io):
 
+```python
 $ pip install torchgeo
+```
 
-TorchGeo is designed to have the same API as other PyTorch domain libraries like torchvision, torchtext, and torchaudio. If you already use torchvision in your workflow for computer vision datasets, you can switch to TorchGeo by changing only a few lines of code. All TorchGeo datasets and samplers are compatible with the PyTorch DataLoader class, meaning that you can take advantage of wrapper libraries like [PyTorch Lightning](https://www.pytorchlightning.ai/) for distributed training. In the following sections, we'll explore possible use cases for TorchGeo to show how simple it is to use.
+TorchGeo is designed to have the same API as other PyTorch domain libraries like torchvision, torchtext, and torchaudio. If you already use torchvision in your workflow for computer vision datasets, you can switch to TorchGeo by changing only a few lines of code. All TorchGeo datasets and samplers are compatible with the PyTorch ``DataLoader`` class, meaning that you can take advantage of wrapper libraries like [PyTorch Lightning](https://www.pytorchlightning.ai/) for distributed training. In the following sections, we'll explore possible use cases for TorchGeo to show how simple it is to use.
 
 # Geospatial datasets and samplers
 
@@ -74,7 +76,7 @@ TorchGeo is designed to have the same API as other PyTorch domain libraries like
 Example application in which we combine A) a scene from <a href="https://www.usgs.gov/landsat-missions">Landsat 8</a> and B) <a href="https://data.nal.usda.gov/dataset/cropscape-cropland-data-layer">Cropland Data Layer</a> labels, even though these files are in different EPSG projections. We want to sample patches C) and D) from these datasets using a geospatial bounding box as an index.
 </p>
 
-Many remote sensing applications involve working with [*geospatial datasets*](https://torchgeo.readthedocs.io/en/latest/api/datasets.html#geospatial-datasets) —datasets with geographic metadata. In TorchGeo, we define a GeoDataset class to represent these kinds of datasets. Instead of being indexed by an integer, each GeoDataset is indexed by a spatiotemporal bounding box, meaning that two or more datasets covering a different geographic extent can be intelligently combined.
+Many remote sensing applications involve working with [*geospatial datasets*](https://torchgeo.readthedocs.io/en/latest/api/datasets.html#geospatial-datasets) —datasets with geographic metadata. In TorchGeo, we define a ``GeoDataset`` class to represent these kinds of datasets. Instead of being indexed by an integer, each ``GeoDataset`` is indexed by a spatiotemporal bounding box, meaning that two or more datasets covering a different geographic extent can be intelligently combined.
 
 In this example, we show how easy it is to work with geospatial data and to sample small image patches from a combination of Landsat and Cropland Data Layer (CDL) data using TorchGeo. First, we assume that the user has Landsat 7 and 8 imagery downloaded. Since Landsat 8 has more spectral bands than Landsat 7, we'll only use the bands that both satellites have in common. We'll create a single dataset including all images from both Landsat 7 and 8 data by taking the union between these two datasets.
 
@@ -106,7 +108,7 @@ This data loader can now be used in your normal training/evaluation pipeline.
 
 ```c++
 for batch in dataloader:
-image = batch["image"]
+    image = batch["image"]
     mask = batch["mask"]
 
     # train a model, or make predictions using a pre-trained model
@@ -122,7 +124,7 @@ These combinations require that all queries are present in *at least one* datase
 - Combine image and target labels and sample from both simultaneously (e.g., Landsat and CDL)
 - Combine datasets for multiple image sources for multimodal learning or data fusion (e.g., Landsat and Sentinel)
 
-These combinations require that all queries are present in *both* datasets, and can be created using an IntersectionDataset. TorchGeo automatically composes these datasets for you when you use the intersection (&) and union \(\|\) operators.
+These combinations require that all queries are present in *both* datasets, and can be created using an ``IntersectionDataset``. ``TorchGeo`` automatically composes these datasets for you when you use the intersection (``&``) and union \(``|``\) operators.
 
 # Multispectral and geospatial transforms
 
@@ -185,7 +187,7 @@ for batch in dataloader:
     # train a model, or make predictions using a pre-trained model
 ```
 
-All TorchGeo datasets are compatible with PyTorch data loaders, making them easy to integrate into existing training workflows. The only difference between a benchmark dataset in TorchGeo and a similar dataset in torchvision is that each dataset returns a dictionary with keys for each PyTorch Tensor.
+All TorchGeo datasets are compatible with PyTorch data loaders, making them easy to integrate into existing training workflows. The only difference between a benchmark dataset in TorchGeo and a similar dataset in torchvision is that each dataset returns a dictionary with keys for each PyTorch ``Tensor``.
 
 <p align="center">
   <img src="/assets/images/techge-nwpu.png" width="100%">
