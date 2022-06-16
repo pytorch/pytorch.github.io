@@ -119,7 +119,7 @@ Many applications involve intelligently composing datasets based on geospatial m
 - Combine datasets for multiple image sources and treat them as equivalent (e.g., Landsat 7 and 8)
 - Combine datasets for disparate geospatial locations (e.g., Chesapeake NY and PA)
 
-These combinations require that all queries are present in *at least one* dataset, and can be created using a UnionDataset. Similarly, users may want to:
+These combinations require that all queries are present in *at least one* dataset, and can be created using a ``UnionDataset``. Similarly, users may want to:
 
 - Combine image and target labels and sample from both simultaneously (e.g., Landsat and CDL)
 - Combine datasets for multiple image sources for multimodal learning or data fusion (e.g., Landsat and Sentinel)
