@@ -2,7 +2,7 @@
 layout: blog_detail
 title: "Geospatial deep learning with TorchGeo"
 author: Adam Stewart (University of Illinois at Urbana-Champaign), Caleb Robinson (Microsoft AI for Good Research Lab), Isaac Corley (University of Texas at San Antonio)
-featured-img: ""
+featured-img: 'assets/images/torchgeo-hurricane.jpg'
 ---
 
 TorchGeo is a PyTorch domain library providing datasets, samplers, transforms, and pre-trained models specific to geospatial data.
