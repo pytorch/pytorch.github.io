@@ -1,6 +1,6 @@
 ---
 layout: blog_detail
-title: "Introducing <TorchX, FBGemm>  and other domain library updates in PyTorch 1.12"
+title: "Introducing \<TorchX, FBGemm\>  and other domain library updates in PyTorch 1.12"
 author: Team PyTorch
 featured-img: ''
 ---
