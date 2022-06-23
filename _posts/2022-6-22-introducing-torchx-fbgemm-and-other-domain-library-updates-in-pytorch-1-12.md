@@ -2,7 +2,7 @@
 layout: blog_detail
 title: "Introducing <TorchX, FBGemm>  and other domain library updates in PyTorch 1.12"
 author: Team PyTorch
-featured-img: 'assets/images/???'
+featured-img: ''
 ---
 
 We are introducing the beta release of TorchRec and a number of improvements to the current PyTorch domain libraries, alongside the PyTorch 1.12 release. These updates demonstrate our focus on developing common and extensible APIs across all domains to make it easier for our community to build ecosystem projects on PyTorch. 
