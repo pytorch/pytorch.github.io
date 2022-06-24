@@ -247,9 +247,10 @@ Previously TorchRec’s abstractions (EmbeddingBagCollection/EmbeddingCollection
 
 ### (BETA) Streaming API
 
-<p align="center">
-  <img src="/assets/images/????" width="80%">
+<p align="middle" float="left">
+  <img src="/assets/images/streamingapi.jpeg" width="40%"/> <img src="/assets/images/torchaudio-0-12-streaming-ASR-2.gif" width="50%"/>
 </p>
+
 
 StreamReader is TorchAudio’s new I/O API. It is backed by FFmpeg†, and provides the following features.
 - Decode various audio and video formats, including MP4 and AAC.
@@ -369,7 +370,7 @@ The [table batched embedding bag](https://github.com/pytorch/FBGEMM/blob/main/fb
 We added optimized kernels to speed up [TorchRec JaggedTensor](https://pytorch.org/torchrec/torchrec.sparse.html). The purpose of JaggedTensor is to handle the case where one dimension of the input data is “jagged”, meaning that each consecutive row in a given dimension may be a different length, which is often the case with sparse feature inputs in recommendation systems. The internal representation is shown below:
 
 <p align="center">
-  <img src="/assets/images/??????" width="80%">
+  <img src="/assets/images/Jagged-Tensor-Figure-from-FBGEMM-section.png" width="80%">
 </p>
 
 We added ops for [converting jagged tensors from sparse to dense formats](https://github.com/pytorch/FBGEMM/blob/main/fbgemm_gpu/src/jagged_tensor_ops_cpu.cpp#L982) [and back](https://github.com/pytorch/FBGEMM/blob/main/fbgemm_gpu/src/jagged_tensor_ops_cpu.cpp#L968), performing [matrix multiplications with jagged tensors](https://github.com/pytorch/FBGEMM/blob/main/fbgemm_gpu/src/jagged_tensor_ops_cpu.cpp#L996), and [elementwise ops](https://github.com/pytorch/FBGEMM/blob/main/fbgemm_gpu/src/jagged_tensor_ops_cpu.cpp#L995).
