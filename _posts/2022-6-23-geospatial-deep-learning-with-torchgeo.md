@@ -44,7 +44,7 @@ From left to right: Mercator, Albers Equal Area, and Interrupted Goode Homolosin
 Although each image is 2D, the Earth itself is 3D. In order to stitch together images, they first need to be projected onto a 2D representation of the Earth, called a coordinate reference system (CRS). Most people are familiar with equal angle representations like Mercator that distort the size of regions (Greenland looks larger than Africa even though Africa is 15x larger), but there are many other CRSs that are commonly used. Each dataset may use a different CRS, and each image within a single dataset may also be in a unique CRS. In order to use data from multiple layers, they must all share a common CRS, otherwise the data won't be properly aligned. For those who aren't familiar with remote sensing data, this can be a daunting task.
 
 <p align="center">
-  <img src="/assets/images/techgeo-reproject.png" width="80%">
+  <img src="/assets/images/torchgeo-reproject.png" width="80%">
 </p>
 
 <p align = "center">
@@ -69,7 +69,7 @@ TorchGeo is designed to have the same API as other PyTorch domain libraries like
 # Geospatial datasets and samplers
 
 <p align="center">
-  <img src="/assets/images/techgeo-sample.png" width="80%">
+  <img src="/assets/images/torchgeo-sample.png" width="80%">
 </p>
 
 <p align = "center">
@@ -158,7 +158,7 @@ plt.show()
 ```
 
 <p align="center">
-  <img src="/assets/images/techgeo-true-ndvi.png" width="100%">
+  <img src="/assets/images/torchgeo-true-ndvi.png" width="100%">
 </p>
 
 <p align = "center">
@@ -190,7 +190,7 @@ for batch in dataloader:
 All TorchGeo datasets are compatible with PyTorch data loaders, making them easy to integrate into existing training workflows. The only difference between a benchmark dataset in TorchGeo and a similar dataset in torchvision is that each dataset returns a dictionary with keys for each PyTorch ``Tensor``.
 
 <p align="center">
-  <img src="/assets/images/techge-nwpu.png" width="100%">
+  <img src="/assets/images/torchgeo-nwpu.png" width="100%">
 </p>
 
 <p align = "center">
@@ -201,7 +201,7 @@ Example predictions from a Mask R-CNN model trained on the <a href="https://gith
 
 Another key goal of TorchGeo is reproducibility. For many of these benchmark datasets, there is no predefined train-val-test split, or the predefined split has issues with class imbalance or geographic distribution. As a result, the performance metrics reported in the literature either can't be reproduced, or aren't indicative of how well a pre-trained model would work in a different geographic location. 
 
-In order to facilitate direct comparisons between results published in the literature and further reduce the boilerplate code needed to run experiments with datasets in TorchGeo, we have created PyTorch Lightning [*datamodules*](https://torchgeo.readthedocs.io/en/latest/api/datamodules.html) with well-defined train-val-test splits and [*trainers*](https://torchgeo.readthedocs.io/en/latest/api/trainers.html) for various tasks like classification, regression, and semantic segmentation. These datamodules show how to incorporate augmentations from the kornia library, include preprocessing transforms (with pre-calculated channel statistics), and let users easily experiment with hyperparameters related to the data itself (as opposed to the modeling process). Training a regression model on the Inria Aerial Image Labeling dataset is as easy as a few imports and four lines of code.
+In order to facilitate direct comparisons between results published in the literature and further reduce the boilerplate code needed to run experiments with datasets in TorchGeo, we have created PyTorch Lightning [*datamodules*](https://torchgeo.readthedocs.io/en/latest/api/datamodules.html) with well-defined train-val-test splits and [*trainers*](https://torchgeo.readthedocs.io/en/latest/api/trainers.html) for various tasks like classification, regression, and semantic segmentation. These datamodules show how to incorporate augmentations from the kornia library, include preprocessing transforms (with pre-calculated channel statistics), and let users easily experiment with hyperparameters related to the data itself (as opposed to the modeling process). Training a semantic segmentation model on the Inria Aerial Image Labeling dataset is as easy as a few imports and four lines of code.
 
 ```c++
 from pytorch_lightning import Trainer
@@ -209,14 +209,14 @@ from torchgeo.datamodules import InriaAerialImageLabelingDataModule
 from torchgeo.trainers import SemanticSegmentationTask
 
 datamodule = InriaAerialImageLabelingDataModule(root_dir="...", batch_size=64, num_workers=6)
-task = SemanticSegmentationTask(model="resnet18", pretrained=True, learning_rate=0.1)
+task = SemanticSegmentationTask(segmentation_model="unet", encoder_weights="imagenet", learning_rate=0.1)
 trainer = Trainer(gpus=1, default_root_dir="...")
 
 trainer.fit(model=task, datamodule=datamodule)
 ```
 
 <p align="center">
-  <img src="/assets/images/techgeo-inria.png" width="100%">
+  <img src="/assets/images/torchgeo-inria.png" width="100%">
 </p>
 
 <p align = "center">
