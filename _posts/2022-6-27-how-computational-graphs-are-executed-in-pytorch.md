@@ -2,7 +2,7 @@
 layout: blog_detail
 title: "How Computational Graphs are Executed in PyTorch"
 author: Preferred Networks
-featured-img: ""
+featured-img: 'assets/images/social-computational-graphs.png'
 ---
 
 Welcome to the last entry into understanding the autograd engine of PyTorch series!
