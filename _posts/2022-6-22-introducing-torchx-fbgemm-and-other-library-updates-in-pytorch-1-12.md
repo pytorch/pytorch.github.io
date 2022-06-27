@@ -1,6 +1,6 @@
 ---
 layout: blog_detail
-title: "Introducing TorchX, FBGemm and other domain library updates in PyTorch 1.12"
+title: "Introducing TorchX, FBGemm and other library updates in PyTorch 1.12"
 author: Team PyTorch
 featured-img: ''
 ---
@@ -9,9 +9,9 @@ We are introducing the beta release of TorchRec and a number of improvements to 
 
 Summary:
 - **TorchVision** - Added 4 new model families and 14 new classification datasets such as CLEVR, GTSRB, FER2013. See the release notes [here](https://github.com/pytorch/vision/releases).
-- **TorchRec** a PyTorch domain library for Recommendation Systems, is available in beta. [View it on GitHub](https://github.com/pytorch/torchrec).
 - **TorchAudio** - Added Enformer- and RNN-T-based models and recipes to support the full development lifecycle of a streaming ASR model. See the release notes [here](https://github.com/pytorch/audio/releases).
 - **TorchText** - Added beta support for RoBERTa and XLM-R models, byte-level BPE tokenizer, and text datasets backed by TorchData. See the release notes [here](https://github.com/pytorch/text/releases).
+- **TorchRec** a PyTorch domain library for Recommendation Systems, is available in beta. [View it on GitHub](https://github.com/pytorch/torchrec).
 - **TorchX** - Launch PyTorch trainers developed on local workspaces onto five different types of schedulers. See the release notes [here](https://github.com/pytorch/torchx/blob/main/CHANGELOG.md?plain=1#L3).
 - **FBGemm** - Added and improved kernels for Recommendation Systems inference workloads, including table batched embedding bag, jagged tensor operations, and other special-case optimizations.
 
@@ -202,47 +202,6 @@ This release brings a bunch of new primitives which can be used to produce SOTA 
 
 We completely revamped our models documentation to make them easier to browse, and added various key information such as supported image sizes, or image pre-processing steps of pre-trained weights. We now have a [main model page](https://pytorch.org/vision/main/models.html) with various [summary tables](https://pytorch.org/vision/main/models.html#table-of-all-available-classification-weights) of available weights, and each model has a [dedicated page](https://pytorch.org/vision/main/models/resnet.html). Each model builder is also documented in their [own page](https://pytorch.org/vision/main/models/generated/torchvision.models.resnet50.html#torchvision.models.resnet50), with more details about the available weights, including accuracy, minimal image size, link to training recipes, and other valuable info. For comparison, our previous models docs are [here](https://pytorch.org/vision/0.12/models.html). To provide feedback on the new documentation, please use the dedicated [Github issue](https://github.com/pytorch/vision/issues/5511).
 
-## TorchRec v0.1.2
-
-### EmbeddingModule + DLRM benchmarks
-
-A set of [benchmarking tests](https://github.com/pytorch/torchrec/tree/main/benchmarks), showing performance characteristics of TorchRec’s base modules  and research models built out of TorchRec.
-
-### TwoTower Retrieval Example, with FAISS
-
-We provide an [example](https://github.com/pytorch/torchrec/tree/main/examples/retrieval) demonstrating training a distributed TwoTower (i.e. User-Item) Retrieval model that is sharded using TorchRec. The projected item embeddings are added to an IVFPQ FAISS index for candidate generation. The retrieval model and KNN lookup are bundled in a Pytorch model for efficient end-to-end retrieval.
-
-### Integrations
-
-We demonstrate that TorchRec works out of the box with many components commonly used alongside PyTorch models in production like systems, such as 
-- [Training](https://github.com/pytorch/torchrec/tree/main/examples/ray) a TorchRec model on Ray Clusters utilizing the Torchx Ray scheduler
-- [Preprocessing](https://github.com/pytorch/torchrec/tree/main/torchrec/datasets/scripts/nvt) and DataLoading with NVTabular on DLRM
-- [Training](https://github.com/pytorch/torchrec/tree/main/examples/torcharrow) a TorchRec model with on-the-fly preprocessing with TorchArrow showcasing RecSys domain UDFs.
-
-### Sequential Embeddings Example: Bert4Rec
-
-We provide an [example](https://github.com/pytorch/torchrec/tree/main/examples/bert4rec), using TorchRec, that reimplements the [BERT4REC](https://arxiv.org/abs/1904.06690) paper, showcasing EmbeddingCollection for non-pooled embeddings. Using DistributedModelParallel we see a 35% QPS gain over conventional data parallelism.
-
-### (Beta) Planner
-
-The TorchRec library includes a built-in [planner](https://pytorch.org/torchrec/torchrec.distributed.planner.html) that selects near optimal sharding plan for a given model.  The planner attempts to identify the best sharding plan by evaluating a series of proposals which are statically analyzed and fed into an integer partitioner.  The planner is able to automatically adjust plans for a wide range of hardware setups, allowing users to scale performance seamlessly from local development environment to large scale production hardware. See this [notebook](https://github.com/pytorch/torchrec/blob/main/torchrec/distributed/planner/Planner_Introduction.ipynb) for a more detailed tutorial.
-
-### (Beta) Inference
-
-[TorchRec Inference](https://github.com/pytorch/torchrec/tree/main/torchrec/inference) is a C++ library that supports multi-gpu inference. The TorchRec library is used to shard models written and packaged in Python via torch.package (an alternative to TorchScript). The torch.deploy library is used to serve inference from C++ by launching multiple Python interpreters carrying the packaged model, thus subverting the GIL. Two models are provided as examples: [DLRM multi-GPU](https://github.com/pytorch/torchrec/blob/main/examples/inference/dlrm_predict.py) (sharded via TorchRec) and [DLRM single-GPU](https://github.com/pytorch/torchrec/blob/main/examples/inference/dlrm_predict_single_gpu.py).
-
-### (Beta) RecMetrics
-
-RecMetrics is a [metrics](https://github.com/pytorch/torchrec/tree/main/torchrec/metrics) library that collects common utilities and optimizations for Recommendation models.  It extends [torchmetrics](https://torchmetrics.readthedocs.io/en/stable/).
-- A centralized metrics module that allows users to add new metrics
-- Commonly used metrics, including AUC, Calibration, CTR, MSE/RMSE, NE & Throughput
-- Optimization for metrics related operations to reduce the overhead of metric computation
-- Checkpointing
-
-### (Prototype) Single process Batched + Fused Embeddings
-
-Previously TorchRec’s abstractions (EmbeddingBagCollection/EmbeddingCollection) over FBGEMM kernels, which provide benefits such as table batching, optimizer fusion, and UVM placement, could only be used in conjunction with DistributedModelParallel. We’ve decoupled these notions from sharding, and introduced the [FusedEmbeddingBagCollection](https://github.com/pytorch/torchrec/blob/eb1247d8a2d16edc4952e5c2617e69acfe5477a5/torchrec/modules/fused_embedding_modules.py#L271), which can be used as a standalone module, with all of the above features, and can also be sharded.
-
 ## TorchAudio v0.12
 
 ### (BETA) Streaming API
@@ -259,7 +218,7 @@ StreamReader is TorchAudio’s new I/O API. It is backed by FFmpeg†, and provi
 - Apply various audio and video filters, such as low-pass filter and image scaling.
 - Decode video with NVidia's hardware-based decoder (NVDEC).
 
-For the detail of the usage, please checkout the [documentation](https://pytorch.org/audio/0.12.0/io.html#streamreader) and the tutorials
+For the detail of the usage, please checkout the [documentation](https://pytorch.org/audio/0.12.0/io.html#streamreader) and the tutorials:
 - [Media Stream API - Pt.1](https://pytorch.org/audio/0.12.0/tutorials/streaming_api_tutorial.html)
 - [Media Stream API - Pt.2](https://pytorch.org/audio/0.12.0/tutorials/streaming_api2_tutorial.html)
 - [Online ASR with Emformer RNN-T](https://pytorch.org/audio/0.12.0/tutorials/online_asr_tutorial.html)
@@ -279,8 +238,8 @@ For details of usage, please check out the [documentation](https://pytorch.org/a
 ### (BETA) New Beamforming Modules and Methods
 
 TorchAudio adds two new beamforming modules under torchaudio.transforms: [SoudenMVDR](https://pytorch.org/audio/0.12.0/transforms.html#soudenmvdr) and [RTFMVDR](https://pytorch.org/audio/0.12.0/transforms.html#rtfmvdr), to increase the flexibility of module usage. The main differences from the [torchaudio.transforms.MVDR](https://pytorch.org/audio/0.11.0/transforms.html#mvdr) module are:
-- Use power spectral density (PSD) matrices or the relative transfer function (RTF) matrix as inputs instead of time-frequency masks. The module can be integrated with neural networks that directly predict complex-valued STFT coefficients of speech and noise.
-- Add reference_channel to the input arguments in the forward method, to let users select the reference microphone during model training.
+- Use power spectral density (PSD) matrices or the relative transfer function (RTF) matrix as inputs instead of time-frequency masks. The module can be integrated with neural networks that directly predict complex-valued STFT coefficients of speech and noise
+- Add reference_channel to the input arguments in the forward method, to let users select the reference microphone during model training
 
 Besides the two modules, new function-level beamforming methods are added under torchaudio.functional. These include:
 - [psd](https://pytorch.org/audio/0.12.0/functional.html#psd)
@@ -316,6 +275,47 @@ TorchScriptabilty support would allow users to embed the BERT text-preprocessing
 
 For usage details, please refer to the corresponding [documentation](https://pytorch.org/text/main/transforms.html#torchtext.transforms.BERTTokenizer).
 
+## TorchRec v0.2.0
+
+### EmbeddingModule + DLRM benchmarks
+
+A set of [benchmarking tests](https://github.com/pytorch/torchrec/tree/main/benchmarks), showing performance characteristics of TorchRec’s base modules  and research models built out of TorchRec.
+
+### TwoTower Retrieval Example, with FAISS
+
+We provide an [example](https://github.com/pytorch/torchrec/tree/main/examples/retrieval) demonstrating training a distributed TwoTower (i.e. User-Item) Retrieval model that is sharded using TorchRec. The projected item embeddings are added to an IVFPQ FAISS index for candidate generation. The retrieval model and KNN lookup are bundled in a Pytorch model for efficient end-to-end retrieval.
+
+### Integrations
+
+We demonstrate that TorchRec works out of the box with many components commonly used alongside PyTorch models in production like systems, such as 
+- [Training](https://github.com/pytorch/torchrec/tree/main/examples/ray) a TorchRec model on Ray Clusters utilizing the Torchx Ray scheduler
+- [Preprocessing](https://github.com/pytorch/torchrec/tree/main/torchrec/datasets/scripts/nvt) and DataLoading with NVTabular on DLRM
+- [Training](https://github.com/pytorch/torchrec/tree/main/examples/torcharrow) a TorchRec model with on-the-fly preprocessing with TorchArrow showcasing RecSys domain UDFs
+
+### Sequential Embeddings Example: Bert4Rec
+
+We provide an [example](https://github.com/pytorch/torchrec/tree/main/examples/bert4rec), using TorchRec, that reimplements the [BERT4REC](https://arxiv.org/abs/1904.06690) paper, showcasing EmbeddingCollection for non-pooled embeddings. Using DistributedModelParallel we see a 35% QPS gain over conventional data parallelism.
+
+### (Beta) Planner
+
+The TorchRec library includes a built-in [planner](https://pytorch.org/torchrec/torchrec.distributed.planner.html) that selects near optimal sharding plan for a given model.  The planner attempts to identify the best sharding plan by evaluating a series of proposals which are statically analyzed and fed into an integer partitioner.  The planner is able to automatically adjust plans for a wide range of hardware setups, allowing users to scale performance seamlessly from local development environment to large scale production hardware. See this [notebook](https://github.com/pytorch/torchrec/blob/main/torchrec/distributed/planner/Planner_Introduction.ipynb) for a more detailed tutorial.
+
+### (Beta) Inference
+
+[TorchRec Inference](https://github.com/pytorch/torchrec/tree/main/torchrec/inference) is a C++ library that supports multi-gpu inference. The TorchRec library is used to shard models written and packaged in Python via torch.package (an alternative to TorchScript). The torch.deploy library is used to serve inference from C++ by launching multiple Python interpreters carrying the packaged model, thus subverting the GIL. Two models are provided as examples: [DLRM multi-GPU](https://github.com/pytorch/torchrec/blob/main/examples/inference/dlrm_predict.py) (sharded via TorchRec) and [DLRM single-GPU](https://github.com/pytorch/torchrec/blob/main/examples/inference/dlrm_predict_single_gpu.py).
+
+### (Beta) RecMetrics
+
+RecMetrics is a [metrics](https://github.com/pytorch/torchrec/tree/main/torchrec/metrics) library that collects common utilities and optimizations for Recommendation models.  It extends [torchmetrics](https://torchmetrics.readthedocs.io/en/stable/).
+- A centralized metrics module that allows users to add new metrics
+- Commonly used metrics, including AUC, Calibration, CTR, MSE/RMSE, NE & Throughput
+- Optimization for metrics related operations to reduce the overhead of metric computation
+- Checkpointing
+
+### (Prototype) Single process Batched + Fused Embeddings
+
+Previously TorchRec’s abstractions (EmbeddingBagCollection/EmbeddingCollection) over FBGEMM kernels, which provide benefits such as table batching, optimizer fusion, and UVM placement, could only be used in conjunction with DistributedModelParallel. We’ve decoupled these notions from sharding, and introduced the [FusedEmbeddingBagCollection](https://github.com/pytorch/torchrec/blob/eb1247d8a2d16edc4952e5c2617e69acfe5477a5/torchrec/modules/fused_embedding_modules.py#L271), which can be used as a standalone module, with all of the above features, and can also be sharded.
+
 ## TorchX v0.2.0
 
 TorchX is a job launcher that makes it easier to run PyTorch in distributed training clusters with many scheduler integrations including Kubernetes and Slurm. We're excited to release TorchX 0.2.0 with a number of improvements. TorchX is currently being used in production in both on-premise and cloud environments.
@@ -346,7 +346,7 @@ TorchX [integrates with Ax](https://ax.dev/versions/latest/api/runners.html#modu
 
 TorchX now supports [remote filesystem mounts and custom devices](https://pytorch.org/torchx/main/specs.html#mounts). This enables your PyTorch jobs to efficiently access cloud storage such as NFS or Lustre. The device mounts enables usage of network accelerators like Infiniband and custom inference/training accelerators.
 
-## FBGemm v0.1.2
+## FBGemm v0.2.0
 
 The FBGEMM library contains optimized kernels meant to improve the performance of PyTorch workloads. We’ve added a number of new features and optimizations over the last few months that we are excited to report.
 
