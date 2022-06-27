@@ -5,10 +5,10 @@ author: Team PyTorch
 featured-img: ''
 ---
 
-We are excited to announce the release of PyTorch 1.12 (release note)! This release is composed of over 3124 commits, 433 contributors. Along with 1.12, we are releasing beta versions of AWS S3 Integration, PyTorch Vision Models on Channels Last on CPU, Empowering PyTorch on Intel® Xeon® Scalable processors with Bfloat16 and FSDP AmiPI. We want to sincerely thank our dedicated community for your contributions.
+We are excited to announce the release of PyTorch 1.12 (release note)! This release is composed of over 3124 commits, 433 contributors. Along with 1.12, we are releasing beta versions of AWS S3 Integration, PyTorch Vision Models on Channels Last on CPU, Empowering PyTorch on Intel® Xeon® Scalable processors with Bfloat16 and FSDP API. We want to sincerely thank our dedicated community for your contributions.
 
 Summary:
-- Functional APIs to functionally apply module computation with a given set of parameters. 
+- Functional APIs to functionally apply module computation with a given set of parameters
 - DataPipes from TorchData fully backward compatible with DataLoader 
 - Functorch with improved coverage for APIs
 - nvFuser a deep learning compiler for PyTorch
@@ -72,7 +72,7 @@ output = functional_call(m, params_and_buffers, inp)
 
 ### (Beta) Complex32 and Complex Convolutions in PyTorch
 
-PyTorch today natively supports complex numbers, complex autograd, complex modules, and numerous complex operations, including linear algebra and Fast Fourier Transform (FFT) operators. Many libraries, including torchaudio and ESPNet, already make use of complex numbers in PyTorch, and PyTorch 1.12 further extends complex functionality with complex convolutions and the experimental complex32 (“complex half”) data type that enables half precision FFT operations. 
+PyTorch today natively supports complex numbers, complex autograd, complex modules, and numerous complex operations, including linear algebra and Fast Fourier Transform (FFT) operators. Many libraries, including torchaudio and ESPNet, already make use of complex numbers in PyTorch, and PyTorch 1.12 further extends complex functionality with complex convolutions and the experimental complex32 (“complex half”) data type that enables half precision FFT operations. Due to the bugs in CUDA 11.3 package, we recommend using CUDA 11.6 package from wheels if you are using complex numbers.
 
 ### TorchData 
 
@@ -82,7 +82,7 @@ PyTorch today natively supports complex numbers, complex autograd, complex modul
 
 #### (Beta) AWS S3 Integration
 
-DataPipes based on [AWSSDK](https://github.com/aws/aws-sdk-cpp) provides the following features backed by native AWSSDK:
+DataPipes based on [AWSSDK](https://github.com/aws/aws-sdk-cpp) have been integrated into TorchData. It provides the following features backed by native AWSSDK:
 - Retrieve list of urls from each S3 bucket based on prefix
 	- Support timeout to prevent hanging indefinitely
 	- Support to specify S3 bucket region
@@ -141,16 +141,16 @@ Using mixed precision techniques is essential for training many modern deep lear
 ### (Beta) Accelerating PyTorch Vision Models with Channels Last on CPU
 
 Memory formats have a significant impact on performance when running vision models, generally Channels Last is more favorable from a performance perspective due to better data locality. 1.12 includes fundamental concepts of memory formats and demonstrates performance benefits using Channels Last on popular PyTorch vision models on Intel® Xeon® Scalable processors.
-- Enables Channels Last memory format support for the commonly used operators in CV domain on CPU, applicable for both inference and training.
-- Provides native level optimization on Channels Last kernels from ATen, applicable for both AVX2 and AVX512.
+- Enables Channels Last memory format support for the commonly used operators in CV domain on CPU, applicable for both inference and training
+- Provides native level optimization on Channels Last kernels from ATen, applicable for both AVX2 and AVX512
 - Delivers 1.3x to 1.8x inference performance gain over Channels First for TorchVision models on Intel® Xeon® Ice Lake (or newer) CPUs
 
 ### (Beta) Empowering PyTorch on Intel® Xeon® Scalable processors with Bfloat16
 
 Reduced precision numeric formats like bfloat16 improves PyTorch performance across multiple deep learning training workloads. PyTorch 1.12 includes the latest software enhancements on bfloat16 which applies to a broader scope of user scenarios and showcases even higher performance gains. The main improvements include:
-- 2x hardware compute throughput vs. float32 with the new bfloat16 native instruction VDPBF16PS, introduced on Intel® Xeon® Cooper Lake CPUs.
-- 1/2 memory footprint of float32, faster speed for memory bandwidth intensive operators.
-- 1.4x to 2.2x inference performance gain over float32 for TorchVision models on Intel® Xeon® Cooper Lake CPUs.
+- 2x hardware compute throughput vs. float32 with the new bfloat16 native instruction VDPBF16PS, introduced on Intel® Xeon® Cooper Lake CPUs
+- 1/2 memory footprint of float32, faster speed for memory bandwidth intensive operators
+- 1.4x to 2.2x inference performance gain over float32 for TorchVision models on Intel® Xeon® Cooper Lake (or newer) CPUs
 
 ### (Prototype) Introducing Accelerated PyTorch Training on Mac
 
@@ -158,6 +158,10 @@ With the PyTorch 1.12 release, developers and researchers can now take advantage
 
 <p align="center">
   <img src="/assets/images/apple_m1_eval.png" width="80%">
+</p>
+
+<p align="center">
+ Accelerated GPU training and evaluation speedups over CPU-only (times faster)
 </p>
 
 Alongside the new MPS device support, the M1 binaries for Core and Domain libraries that have been available for the last few releases are now an official prototype feature. These binaries can be used to run PyTorch natively on Apple Silicon.
@@ -183,11 +187,11 @@ PyTorch now supports CPU and GPU fastpath implementations (“BetterTransformer�
 [FSDP API](https://pytorch.org/blog/introducing-pytorch-fully-sharded-data-parallel-api/) helps easily scale large model training by sharding a model’s parameters, gradients and optimizer states across data parallel workers while maintaining the simplicity of data parallelism. The prototype version was released in PyTorch 1.11 with a minimum set of features that helped [scaling tests of models with up to 1T parameters](https://medium.com/pytorch/training-a-1-trillion-parameter-model-with-pytorch-fully-sharded-data-parallel-on-aws-3ac13aa96cff). 
 
 In this beta release, FSDP API added the following features to support various production workloads. Highlights of the the newly added features in this beta release include: 
-1. Universal sharding strategy API - Users can easily change between sharding strategies with a single line change, and thus compare and use DDP (only data sharding), FSDP (full model and data sharding), or Zero2 (only sharding of optimizer and gradients) to optimize memory and performance for their specific training needs.
-2. Fine grained mixed precision policies - Users can specify a mix of half and full data types (bfloat16, fp16 or fp32) for model parameters, gradient communication, and buffers via mixed precision policies.  Models are automatically saved in fp32 to allow for maximum portability. 
-3. Transformer auto wrapping policy - allows for optimal wrapping of Transformer based models by registering the models layer class, and thus accelerated training performance.
-4. Faster model initialization using device_id init - initialization is performed in a streaming fashion to avoid OOM issues and optimize init performance vs CPU init. 
-5. Rank0 streaming for full model saving of larger models - Fully sharded models can be saved by all GPU’s streaming their shards to the rank 0 GPU, and the model is built in full state on the rank 0 CPU for saving.
+1. Universal sharding strategy API - Users can easily change between sharding strategies with a single line change, and thus compare and use DDP (only data sharding), FSDP (full model and data sharding), or Zero2 (only sharding of optimizer and gradients) to optimize memory and performance for their specific training needs
+2. Fine grained mixed precision policies - Users can specify a mix of half and full data types (bfloat16, fp16 or fp32) for model parameters, gradient communication, and buffers via mixed precision policies.  Models are automatically saved in fp32 to allow for maximum portability
+3. Transformer auto wrapping policy - allows for optimal wrapping of Transformer based models by registering the models layer class, and thus accelerated training performance
+4. Faster model initialization using device_id init - initialization is performed in a streaming fashion to avoid OOM issues and optimize init performance vs CPU init 
+5. Rank0 streaming for full model saving of larger models - Fully sharded models can be saved by all GPU’s streaming their shards to the rank 0 GPU, and the model is built in full state on the rank 0 CPU for saving
 
 For more details and example code, please checkout the [documentation](https://pytorch.org/docs/1.11/fsdp.html?highlight=fsdp#module-torch.distributed.fsdp) and the [tutorial](https://pytorch.org/tutorials/intermediate/FSDP_tutorial.html). 
 
