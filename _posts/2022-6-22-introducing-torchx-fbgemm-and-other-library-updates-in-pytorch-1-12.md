@@ -211,21 +211,21 @@ We completely revamped our models documentation to make them easier to browse, a
 </p>
 
 
-StreamReader is TorchAudio’s new I/O API. It is backed by FFmpeg†, and provides the following features.
-- Decode various audio and video formats, including MP4 and AAC.
-- Handle various input forms, such as local files, network protocols, microphones, webcams, screen captures and file-like objects.
-- Iterate media and decode chunk-by-chunk, while changing the sample rate or frame rate.
-- Apply various audio and video filters, such as low-pass filter and image scaling.
-- Decode video with NVidia's hardware-based decoder (NVDEC).
+StreamReader is TorchAudio’s new I/O API. It is backed by FFmpeg†, and allows users to:
+- Decode various audio and video formats, including MP4 and AAC
+- Handle various input forms, such as local files, network protocols, microphones, webcams, screen captures and file-like objects
+- Iterate over and decode chunk-by-chunk, while changing the sample rate or frame rate
+- Apply various audio and video filters, such as low-pass filter and image scaling
+- Decode video with NVidia's hardware-based decoder (NVDEC)
 
-For the detail of the usage, please checkout the [documentation](https://pytorch.org/audio/0.12.0/io.html#streamreader) and the tutorials:
+For usage details, please check out the [documentation](https://pytorch.org/audio/0.12.0/io.html#streamreader) and tutorials:
 - [Media Stream API - Pt.1](https://pytorch.org/audio/0.12.0/tutorials/streaming_api_tutorial.html)
 - [Media Stream API - Pt.2](https://pytorch.org/audio/0.12.0/tutorials/streaming_api2_tutorial.html)
 - [Online ASR with Emformer RNN-T](https://pytorch.org/audio/0.12.0/tutorials/online_asr_tutorial.html)
 - [Device ASR with Emformer RNN-T](https://pytorch.org/audio/0.12.0/tutorials/device_asr.html)
 - [Accelerated Video Decoding with NVDEC](https://pytorch.org/audio/0.12.0/hw_acceleration_tutorial.html)
 
-† To use StreamReader, FFmpeg libraries are required. The coverage of codecs depends on how these libraries are configured. TorchAudio official binaries are compiled to work with FFmpeg 4 libraries; FFmpeg 5 can be used if TorchAudio is built from source.
+† To use StreamReader, FFmpeg libraries are required. Please install FFmpeg. The coverage of codecs depends on how these libraries are configured. TorchAudio official binaries are compiled to work with FFmpeg 4 libraries; FFmpeg 5 can be used if TorchAudio is built from source.
 
 ### (BETA) CTC Beam Search Decoder
 
