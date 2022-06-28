@@ -31,14 +31,14 @@ Lorem ipsum dolor sit amet, consectetur adipiscing elit. Praesent fringilla aliq
   <img src="/assets/images/applause.gif" width="100%">
 </p>
 
-<p align = "center">
+<p align="center">
 Figure 1: Correspondence of `backward`/`grad` arguments in the graphs.
 </p>
 
-<p align = “center”>
+<p align="center">
 The Encoder Structure of the Transformer <br/> Architecture
 </p>
-<p align = “center”>
+<p align="center">
 Taken from “<a href=“https://arxiv.org/abs/1706.03762” target=“_blank”>Attention Is All You Need</a>“.
 </p>
 
