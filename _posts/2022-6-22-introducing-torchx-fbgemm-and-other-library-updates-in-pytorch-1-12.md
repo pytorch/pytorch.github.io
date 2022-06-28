@@ -1,17 +1,17 @@
 ---
 layout: blog_detail
-title: "Introducing TorchX, FBGemm and other library updates in PyTorch 1.12"
+title: "New library updates in PyTorch 1.12"
 author: Team PyTorch
 featured-img: ''
 ---
 
-We are introducing the beta release of TorchRec and a number of improvements to the current PyTorch domain libraries, alongside the PyTorch 1.12 release. These updates demonstrate our focus on developing common and extensible APIs across all domains to make it easier for our community to build ecosystem projects on PyTorch. 
+We are bringing a number of improvements to the current PyTorch domain libraries, alongside the PyTorch 1.12 release. These updates demonstrate our focus on developing common and extensible APIs across all domains to make it easier for our community to build ecosystem projects on PyTorch. 
 
 Summary:
-- **TorchVision** - Added 4 new model families and 14 new classification datasets such as CLEVR, GTSRB, FER2013. See the release notes [here](https://github.com/pytorch/vision/releases).
-- **TorchAudio** - Added Enformer- and RNN-T-based models and recipes to support the full development lifecycle of a streaming ASR model. See the release notes [here](https://github.com/pytorch/audio/releases).
-- **TorchText** - Added beta support for RoBERTa and XLM-R models, byte-level BPE tokenizer, and text datasets backed by TorchData. See the release notes [here](https://github.com/pytorch/text/releases).
-- **TorchRec** a PyTorch domain library for Recommendation Systems, is available in beta. [View it on GitHub](https://github.com/pytorch/torchrec).
+- **TorchVision** - Added multi-weight support API, new architectures, model variants, and pretrained weight. See the release notes [here](https://github.com/pytorch/vision/releases).
+- **TorchAudio** - Introduced beta features including a streaming API, a CTC beam search decoder, and new beamforming modules and methods. See the release notes [here](https://github.com/pytorch/audio/releases).
+- **TorchText** - Extended support for scriptable BERT tokenizer and added datasets for GLUE benchmark. See the release notes [here](https://github.com/pytorch/text/releases).
+- **TorchRec** EmbeddingModule benchmarks, examples for TwoTower Retrieval model and sequential embedding, and demonstrated integration with production components. See the release notes [here](https://github.com/pytorch/torchrec/releases).
 - **TorchX** - Launch PyTorch trainers developed on local workspaces onto five different types of schedulers. See the release notes [here](https://github.com/pytorch/torchx/blob/main/CHANGELOG.md?plain=1#L3).
 - **FBGemm** - Added and improved kernels for Recommendation Systems inference workloads, including table batched embedding bag, jagged tensor operations, and other special-case optimizations.
 
@@ -212,10 +212,10 @@ We completely revamped our models documentation to make them easier to browse, a
 
 
 StreamReader is TorchAudio’s new I/O API. It is backed by FFmpeg†, and allows users to:
-- Decode various audio and video formats, including MP4 and AAC
-- Handle various input forms, such as local files, network protocols, microphones, webcams, screen captures and file-like objects
+- Decode audio and video formats, including MP4 and AAC
+- Handle input forms, such as local files, network protocols, microphones, webcams, screen captures and file-like objects
 - Iterate over and decode chunk-by-chunk, while changing the sample rate or frame rate
-- Apply various audio and video filters, such as low-pass filter and image scaling
+- Apply audio and video filters, such as low-pass filter and image scaling
 - Decode video with NVidia's hardware-based decoder (NVDEC)
 
 For usage details, please check out the [documentation](https://pytorch.org/audio/0.12.0/io.html#streamreader) and tutorials:
@@ -233,13 +233,13 @@ TorchAudio integrates the wav2letter CTC beam search decoder from [Flashlight](h
 
 Customizable lexicon and lexicon-free decoders are supported, and both are compatible with KenLM n-gram language models or without using a language model. TorchAudio additionally supports downloading token, lexicon, and pretrained KenLM files for the LibriSpeech dataset.
 
-For details of usage, please check out the [documentation](https://pytorch.org/audio/0.12.0/models.decoder.html#ctcdecoder) and [ASR inference tutorial](https://pytorch.org/audio/0.12.0/tutorials/asr_inference_with_ctc_decoder_tutorial.html).
+For usage details, please check out the [documentation](https://pytorch.org/audio/0.12.0/models.decoder.html#ctcdecoder) and [ASR inference tutorial](https://pytorch.org/audio/0.12.0/tutorials/asr_inference_with_ctc_decoder_tutorial.html).
 
 ### (BETA) New Beamforming Modules and Methods
 
-TorchAudio adds two new beamforming modules under torchaudio.transforms: [SoudenMVDR](https://pytorch.org/audio/0.12.0/transforms.html#soudenmvdr) and [RTFMVDR](https://pytorch.org/audio/0.12.0/transforms.html#rtfmvdr), to increase the flexibility of module usage. The main differences from the [torchaudio.transforms.MVDR](https://pytorch.org/audio/0.11.0/transforms.html#mvdr) module are:
-- Use power spectral density (PSD) matrices or the relative transfer function (RTF) matrix as inputs instead of time-frequency masks. The module can be integrated with neural networks that directly predict complex-valued STFT coefficients of speech and noise
-- Add reference_channel to the input arguments in the forward method, to let users select the reference microphone during model training
+LiveTo improve flexibility in usage, the release adds two new beamforming modules under torchaudio.transforms: [SoudenMVDR](https://pytorch.org/audio/0.12.0/transforms.html#soudenmvdr) and [RTFMVDR](https://pytorch.org/audio/0.12.0/transforms.html#rtfmvdr). The main differences from the [torchaudio.transforms.MVDR](https://pytorch.org/audio/0.11.0/transforms.html#mvdr) module are:
+- Use power spectral density (PSD) and relative transfer function (RTF) matrices as inputs instead of time-frequency masks. The module can be integrated with neural networks that directly predict complex-valued STFT coefficients of speech and noise
+- Add 'reference_channel' as an input argument in the forward method, to allow users to select the reference channel in model training or dynamically change the reference channel in inference
 
 Besides the two modules, new function-level beamforming methods are added under torchaudio.functional. These include:
 - [psd](https://pytorch.org/audio/0.12.0/functional.html#psd)
@@ -249,8 +249,7 @@ Besides the two modules, new function-level beamforming methods are added under 
 - [rtf_power](https://pytorch.org/audio/0.12.0/functional.html#rtf-power)
 - [apply_beamforming](https://pytorch.org/audio/0.12.0/functional.html#apply-beamforming)
 
-
-For the details of the usage, please check out the [documentation](https://pytorch.org/audio/0.12.0/transforms.html#multi-channel) and the [Speech Enhancement with MVDR Beamforming tutorial](https://pytorch.org/audio/0.12.0/tutorials/mvdr_tutorial.html).
+For usage details, please check out the documentation at [torchaudio.transforms](https://pytorch.org/audio/0.12.0/transforms.html#multi-channel) and [torchaudio.functional](https://pytorch.org/audio/0.12.0/functional.html#multi-channel) and the [Speech Enhancement with MVDR Beamforming tutorial](https://pytorch.org/audio/0.12.0/tutorials/mvdr_tutorial.html).
 
 ## TorchText v0.13
 
