@@ -5,10 +5,11 @@ author: Team PyTorch
 featured-img: ''
 ---
 
-We are excited to announce the release of PyTorch 1.12 (release note)! This release is composed of over 3124 commits, 433 contributors. Along with 1.12, we are releasing beta versions of AWS S3 Integration, PyTorch Vision Models on Channels Last on CPU, Empowering PyTorch on Intel® Xeon® Scalable processors with Bfloat16 and FSDP API. We want to sincerely thank our dedicated community for your contributions.
+We are excited to announce the release of PyTorch 1.12 ([release note](https://github.com/pytorch/pytorch/releases/tag/v1.12.0))! This release is composed of over 3124 commits, 433 contributors. Along with 1.12, we are releasing beta versions of AWS S3 Integration, PyTorch Vision Models on Channels Last on CPU, Empowering PyTorch on Intel® Xeon® Scalable processors with Bfloat16 and FSDP API. We want to sincerely thank our dedicated community for your contributions.
 
 Summary:
 - Functional APIs to functionally apply module computation with a given set of parameters
+- Complex32 and Complex Convolutions in PyTorch
 - DataPipes from TorchData fully backward compatible with DataLoader 
 - Functorch with improved coverage for APIs
 - nvFuser a deep learning compiler for PyTorch
@@ -74,6 +75,10 @@ output = functional_call(m, params_and_buffers, inp)
 
 PyTorch today natively supports complex numbers, complex autograd, complex modules, and numerous complex operations, including linear algebra and Fast Fourier Transform (FFT) operators. Many libraries, including torchaudio and ESPNet, already make use of complex numbers in PyTorch, and PyTorch 1.12 further extends complex functionality with complex convolutions and the experimental complex32 (“complex half”) data type that enables half precision FFT operations. Due to the bugs in CUDA 11.3 package, we recommend using CUDA 11.6 package from wheels if you are using complex numbers.
 
+### (Beta) Forward-mode Automatic Differentiation
+
+Forward-mode AD allows the computation of directional derivatives (or equivalently, Jacobian-vector products) eagerly in the forward pass. PyTorch 1.12 significantly improves the operator coverage for forward-mode AD. See our [tutorial](https://pytorch.org/tutorials/search.html?q=forward-mode+automatic+differentiation+%28beta%29&check_keywords=yes&area=default#) for more information.
+
 ### TorchData 
 
 #### BC DataLoader + DataPipe
@@ -122,7 +127,7 @@ For more details, please see our [installation instructions](https://pytorch.org
 
 ### Introducing nvFuser, a deep learning compiler for PyTorch
 
-In PyTorch 1.12, Torchscript is updating its default fuser  (for Volta and later CUDA accelerators) to nvFuser, which supports a wider range of operations and is faster than NNC, the previous fuser for CUDA devices. A soon to be published blog post will elaborate on nvFuser and show how it speeds up training on Hugging Face and TIMM networks. 
+In PyTorch 1.12, Torchscript is updating its default fuser  (for Volta and later CUDA accelerators) to nvFuser, which supports a wider range of operations and is faster than NNC, the previous fuser for CUDA devices. A soon to be published blog post will elaborate on nvFuser and show how it speeds up training on a variety of networks. 
 
 See [the nvFuser documentation](https://github.com/pytorch/pytorch/blob/release/1.12/torch/csrc/jit/codegen/cuda/README.md) for more details on usage and debugging.
 
