@@ -36,10 +36,8 @@ Figure 1: Correspondence of `backward`/`grad` arguments in the graphs.
 </p>
 
 <p align="center">
-The Encoder Structure of the Transformer <br/> Architecture
-</p>
-<p align="center">
-Taken from "<a href="https://arxiv.org/abs/1706.03762" target="_blank">Attention Is All You Need</a>".
+The Encoder Structure of the Transformer <br> 
+Architecture Taken from "<a href="https://arxiv.org/abs/1706.03762" target="_blank">Attention Is All You Need</a>".
 </p>
 
 \-**Lorem ipsum**\- dolor sit amet, consectetur adipiscing elit. Praesent fringilla aliquet gravida. Curabitur mattis tempus odio sit amet maximus. Pellentesque aliquam leo at diam gravida porttitor. Nunc eu nibh ut elit vestibulum sodales. Nullam imperdiet vestibulum felis a commodo. Fusce sit amet dapibus lectus, quis tristique sem. Duis vel egestas nulla. Duis at vehicula libero.
