@@ -5,13 +5,13 @@ author: Team PyTorch
 featured-img: ''
 ---
 
-We are bringing a number of improvements to the current PyTorch domain libraries, alongside the PyTorch 1.12 release. These updates demonstrate our focus on developing common and extensible APIs across all domains to make it easier for our community to build ecosystem projects on PyTorch. 
+We are bringing a number of improvements to the current PyTorch libraries, alongside the [PyTorch 1.12 release](https://github.com/pytorch/pytorch/releases/tag/v1.12.0). These updates demonstrate our focus on developing common and extensible APIs across all domains to make it easier for our community to build ecosystem projects on PyTorch. 
 
 Summary:
 - **TorchVision** - Added multi-weight support API, new architectures, model variants, and pretrained weight. See the release notes [here](https://github.com/pytorch/vision/releases).
 - **TorchAudio** - Introduced beta features including a streaming API, a CTC beam search decoder, and new beamforming modules and methods. See the release notes [here](https://github.com/pytorch/audio/releases).
 - **TorchText** - Extended support for scriptable BERT tokenizer and added datasets for GLUE benchmark. See the release notes [here](https://github.com/pytorch/text/releases).
-- **TorchRec** EmbeddingModule benchmarks, examples for TwoTower Retrieval model and sequential embedding, and demonstrated integration with production components. See the release notes [here](https://github.com/pytorch/torchrec/releases).
+- **TorchRec** - Added EmbeddingModule benchmarks, examples for TwoTower Retrieval, inference and sequential embeddings, metrics, improved planner and demonstrated integration with production components. See the release notes [here](https://github.com/pytorch/torchrec/releases).
 - **TorchX** - Launch PyTorch trainers developed on local workspaces onto five different types of schedulers. See the release notes [here](https://github.com/pytorch/torchx/blob/main/CHANGELOG.md?plain=1#L3).
 - **FBGemm** - Added and improved kernels for Recommendation Systems inference workloads, including table batched embedding bag, jagged tensor operations, and other special-case optimizations.
 
@@ -216,7 +216,7 @@ StreamReader is TorchAudio’s new I/O API. It is backed by FFmpeg†, and allow
 - Handle input forms, such as local files, network protocols, microphones, webcams, screen captures and file-like objects
 - Iterate over and decode chunk-by-chunk, while changing the sample rate or frame rate
 - Apply audio and video filters, such as low-pass filter and image scaling
-- Decode video with NVidia's hardware-based decoder (NVDEC)
+- Decode video with Nvidia's hardware-based decoder (NVDEC)
 
 For usage details, please check out the [documentation](https://pytorch.org/audio/0.12.0/io.html#streamreader) and tutorials:
 - [Media Stream API - Pt.1](https://pytorch.org/audio/0.12.0/tutorials/streaming_api_tutorial.html)
@@ -237,9 +237,9 @@ For usage details, please check out the [documentation](https://pytorch.org/audi
 
 ### (BETA) New Beamforming Modules and Methods
 
-LiveTo improve flexibility in usage, the release adds two new beamforming modules under torchaudio.transforms: [SoudenMVDR](https://pytorch.org/audio/0.12.0/transforms.html#soudenmvdr) and [RTFMVDR](https://pytorch.org/audio/0.12.0/transforms.html#rtfmvdr). The main differences from the [torchaudio.transforms.MVDR](https://pytorch.org/audio/0.11.0/transforms.html#mvdr) module are:
+To improve flexibility in usage, the release adds two new beamforming modules under torchaudio.transforms: [SoudenMVDR](https://pytorch.org/audio/0.12.0/transforms.html#soudenmvdr) and [RTFMVDR](https://pytorch.org/audio/0.12.0/transforms.html#rtfmvdr). The main differences from [MVDR](https://pytorch.org/audio/0.11.0/transforms.html#mvdr) are:
 - Use power spectral density (PSD) and relative transfer function (RTF) matrices as inputs instead of time-frequency masks. The module can be integrated with neural networks that directly predict complex-valued STFT coefficients of speech and noise
-- Add 'reference_channel' as an input argument in the forward method, to allow users to select the reference channel in model training or dynamically change the reference channel in inference
+- Add \'reference_channel\' as an input argument in the forward method, to allow users to select the reference channel in model training or dynamically change the reference channel in inference
 
 Besides the two modules, new function-level beamforming methods are added under torchaudio.functional. These include:
 - [psd](https://pytorch.org/audio/0.12.0/functional.html#psd)
@@ -268,7 +268,7 @@ We increased the number of datasets in TorchText from 22 to 30 by adding the rem
 
 ### Scriptable BERT Tokenizer
 
-TorchText has extended the support for scriptable tokenizes by adding wordpiece tokenizer used in BERT. It is one of the commonly used algorithms for splitting input text into sub-words units and was introduced in [Japanese and Korean Voice Search (Schuster et al., 2012)](https://static.googleusercontent.com/media/research.google.com/ja//pubs/archive/37842.pdf).  
+TorchText has extended support for scriptable tokenizer by adding the WordPiece tokenizer used in BERT. It is one of the commonly used algorithms for splitting input text into sub-words units and was introduced in [Japanese and Korean Voice Search (Schuster et al., 2012)](https://static.googleusercontent.com/media/research.google.com/ja//pubs/archive/37842.pdf).  
 
 TorchScriptabilty support would allow users to embed the BERT text-preprocessing natively in C++ without needing the support of python runtime. As TorchText now supports the CMAKE build system to natively link torchtext binaries with application code, users can easily integrate BERT tokenizers for deployment needs.
 
