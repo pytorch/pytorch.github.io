@@ -11,7 +11,7 @@ Summary:
 - Functional APIs to functionally apply module computation with a given set of parameters
 - Complex32 and Complex Convolutions in PyTorch
 - DataPipes from TorchData fully backward compatible with DataLoader 
-- Functorch with improved coverage for APIs
+- functorch with improved coverage for APIs
 - nvFuser a deep learning compiler for PyTorch
 - Changes to float32 matrix multiplication precision on Ampere and later CUDA hardware
 - TorchArrow, a new beta library for machine learning preprocessing over batch data
