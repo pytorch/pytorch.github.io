@@ -21,7 +21,7 @@ Summary:
 
 TorchVision v0.13 offers a new [Multi-weight support API](https://pytorch.org/blog/introducing-torchvision-new-multi-weight-support-api/) for loading different weights to the existing model builder methods:
 
-```console
+```python
 from torchvision.models import *
 
 # Old weights with accuracy 76.130%
@@ -43,7 +43,7 @@ resnet50(weights=None)
 
 The new API bundles along with the weights important details such as the preprocessing transforms and meta-data such as labels. Here is how to make the most out of it:
 
-```console
+```python
 from torchvision.io import read_image
 from torchvision.models import resnet50, ResNet50_Weights
 
@@ -76,7 +76,7 @@ You can read more about the new API in the [docs](https://pytorch.org/vision/0.1
 
 The [Swin Transformer](https://arxiv.org/abs/2103.14030) and [EfficienetNetV2](https://arxiv.org/abs/2104.00298) are two popular classification models which are often used for downstream vision tasks. This release includes 6 pre-trained weights for their classification variants. Here is how to use the new models:
 
-```console
+```python
 import torch
 from torchvision.models import *
 
@@ -114,7 +114,7 @@ We would like to thank Hu Ye for contributing to TorchVision the Swin Transforme
 
 We have introduced 3 new model variants for RetinaNet, FasterRCNN and MaskRCNN that include several [post-paper architectural optimizations](https://github.com/pytorch/vision/pull/5444) and improved training recipes. All models can be used similarly:
 
-```console
+```python
 import torch
 from torchvision.models.detection import *
 
@@ -376,7 +376,7 @@ We added ops for [converting jagged tensors from sparse to dense formats](https:
   
 ### Optimized permute102-baddbmm-permute102
 
-It is difficult to fuse various matrix multiplications where the batch size is not the batch size of the model, switching the batch dimension is a quick solution. We created the permute102_baddbmm_permute102 operation that switches the first and the second dimension, performs the batched matrix multiplication and then switches back. Currently we only support forward pass with FP16 data type and will support FP32 type and backward pass in the future.
+It is difficult to fuse various matrix multiplications where the batch size is not the batch size of the model, switching the batch dimension is a quick solution. We created the [permute102_baddbmm_permute102](https://github.com/pytorch/FBGEMM/blob/main/fbgemm_gpu/src/sparse_ops_cpu.cpp#L2401) operation that switches the first and the second dimension, performs the batched matrix multiplication and then switches back. Currently we only support forward pass with FP16 data type and will support FP32 type and backward pass in the future.
 
 ### Optimized index_select for dim 0 index selection
 
