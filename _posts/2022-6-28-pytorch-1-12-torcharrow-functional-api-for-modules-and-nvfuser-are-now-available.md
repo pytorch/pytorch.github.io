@@ -18,7 +18,7 @@ Summary:
 
 ## Frontend APIs
 
-Introducing TorchArrow
+### Introducing TorchArrow
 
 We’ve got a new Beta release ready for you to try and use: TorchArrow. This is a library for machine learning preprocessing over batch data. It features a performant and Pandas-style, easy-to-use API in order to speed up your preprocessing workflows and development.
 
@@ -39,7 +39,7 @@ The new ``torch.nn.utils.stateless.functional_call()`` API allows for:
 - Any parameter or buffer present in the module can be swapped with an externally-defined value for use in the call. Naming for referencing parameters / buffers follows the fully-qualified form in the module’s ``state_dict()``
 
 Example:
-```Console
+```Python
 import torch
 from torch import nn
 from torch.nn.utils.stateless import functional_call
