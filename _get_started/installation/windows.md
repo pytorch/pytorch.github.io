@@ -43,7 +43,7 @@ To install the PyTorch binaries, you will need to use at least one of two suppor
 
 #### Anaconda
 
-To install Anaconda, you will use the [64-bit graphical installer](https://www.anaconda.com/download/#windows) for PyTorch 3.x. Click on the installer link and select `Run`. Anaconda will download and the installer prompt will be presented to you. The default options are generally sane.
+To install Anaconda, you will use the [64-bit graphical installer](https://www.anaconda.com/download/#windows) for PyTorch 3.x. Click on the installer link and select `Run`. Anaconda will download and the installer prompt will be presented to you. The default options are generally the same.
 
 #### pip
 
