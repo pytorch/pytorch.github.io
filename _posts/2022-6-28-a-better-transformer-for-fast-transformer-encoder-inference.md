@@ -11,9 +11,8 @@ featured-img: ""
   <img src="/assets/images/2022-6-28-a-better-transformer-for-fast-transformer-encoder-inference-1.png" width="100%">
 </p>
 
-
 <p align="center">
-Diagram of the Transformer Encoder Architecture (from "<a href="https://arxiv.org/abs/1706.03762" target="_blank">Attention Is All You Need</a>").</br>
+Diagram of the Transformer Encoder Architecture (from "<a href="https://arxiv.org/abs/1706.03762" target="_blank">Attention Is All You Need</a>").<br>
 During Inference, the entire module will execute as a single PyTorch-native function.
 </p>
 
