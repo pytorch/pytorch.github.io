@@ -2,7 +2,7 @@
 layout: blog_detail
 title: "A Better Transformer for Fast Transformer Inference"
 author: Michael Gschwind, Eric Han, Scott Wolchok, Rui Zhu, Christian Puhrsch
-featured-img: ""
+featured-img: "/assets/images/2022-6-28-a-better-transformer-for-fast-transformer-encoder-inference-3.png"
 ---
 
 **tl;dr** Transformers achieve state-of-the-art performance for NLP, and are becoming popular for a myriad of other tasks. They are computationally expensive which has been a blocker to their widespread productionisation. Launching with PyTorch 1.12, Better Transformer implements a backwards-compatible fast path of `torch.nn.TransformerEncoder` for Transformer Encoder Inference and does not require model authors to modify their models. Better Transformer improvements can exceed 2x in speedup and throughput for many common execution scenarios. To use BetterTransformer, install PyTorch 1.12 and start using high-quality, high-performance Transformer models with the PyTorch API today.
@@ -59,7 +59,8 @@ The following graphs show the performance achieved for the [BERT](https://arxiv.
 </p>
 
 <p align="center">
-<b>Figure 2: PyTorch 1.12 Improvements with Better Transformer fastpath execution with sparsity optimization enabled by enable_nested_tensor=True</b>
+<b>Figure 2: PyTorch 1.12 Improvements with Better Transformer fastpath execution<br>
+with sparsity optimization enabled by enable_nested_tensor=True</b>
 </p>
 
 
