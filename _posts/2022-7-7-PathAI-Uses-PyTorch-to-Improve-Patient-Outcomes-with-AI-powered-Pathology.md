@@ -1,7 +1,7 @@
 ---
 layout: blog_detail
 title: "Case Study: PathAI Uses PyTorch to Improve Patient Outcomes with AI-powered Pathology"
-author: by Logan Kilpatrick - Sr. Technology Advocate, Harshith Padigela - ML Engineer, Ashar Javed - ML Technical Lead, Robert Egger- Biomedical Data Scientist
+author: Logan Kilpatrick - Sr. Technology Advocate, Harshith Padigela - ML Engineer, Ashar Javed - ML Technical Lead, Robert Egger- Biomedical Data Scientist
 featured-img: "/assets/images/2022-7-7-PathAI-Uses-PyTorch-to-Improve-Patient-Outcomes-with-AI-powered-Pathology-1.png"
 ---
 
