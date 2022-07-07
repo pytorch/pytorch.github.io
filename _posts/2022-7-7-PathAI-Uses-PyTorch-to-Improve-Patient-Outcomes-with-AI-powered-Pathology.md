@@ -39,7 +39,7 @@ At PathAI, we use custom MIL models based on deep nets to predict image-level la
 
 1. Select patches from a slide using different sampling approaches.
 2. Construct a bag of patches based on random sampling or heuristic rules.
-3. Generate patch representations for each instance based on pre-trained models or large scale representation learning models.
+3. Generate patch representations for each instance based on pre-trained models or large-scale representation learning models.
 4. Apply permutation invariant pooling functions to get the final slide-level score.
 
 Now that we have walked through some of the high-level details around MIL in PyTorch, let’s look at some code to see how simple it is to go from ideation to code in production with PyTorch. We begin by defining a sampler, transformations, and our MIL dataset:
