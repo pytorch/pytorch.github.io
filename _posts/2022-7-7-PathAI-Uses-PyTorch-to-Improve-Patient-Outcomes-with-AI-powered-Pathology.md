@@ -1,7 +1,7 @@
 ---
 layout: blog_detail
 title: "Case Study: PathAI Uses PyTorch to Improve Patient Outcomes with AI-powered Pathology"
-author: Logan Kilpatrick - Sr. Technology Advocate, Harshith Padigela - ML Engineer, Ashar Javed - ML Technical Lead, Robert Egger- Biomedical Data Scientist
+author: Logan Kilpatrick - Sr. Technology Advocate, Harshith Padigela - ML Engineer, Syed Ashar Javed - ML Technical Lead, Robert Egger- Biomedical Data Scientist
 featured-img: "/assets/images/2022-7-7-PathAI-Uses-PyTorch-to-Improve-Patient-Outcomes-with-AI-powered-Pathology-1.png"
 ---
 
@@ -29,7 +29,7 @@ PathAI develops machine learning models which provide insights for drug developm
 
 One of the uniquely challenging aspects of applying ML to pathology is the immense size of the images. These digital slides can often be 100,000 x 100,000 pixels or more in resolution and gigabytes in size. Loading the full image in GPU memory and applying traditional computer vision algorithms on them is an almost impossible task. It also takes both a considerable amount of time and resources to have a full slide image (100k x 100k) annotated, especially when annotators need to be domain experts (board-certified pathologists). We often build models to predict image-level labels, like the presence of cancer, on a patient slide which covers a few thousand pixels in the whole image. The cancerous area is sometimes a tiny fraction of the entire slide, which makes the ML problem similar to finding a needle in a haystack. On the other hand, some problems like the prediction of certain histological biomarkers require an aggregation of information from the whole slide which is again hard due to the size of the images. All these factors add significant algorithmic, computational, and logistical complexity when applying ML techniques to pathology problems.
 
-Breaking down the image into smaller patches, learning patch representations, and then pooling those representations to predict an image-level label is one way to solve this problem as is depicted in the image above. One popular method for doing this is called [Multiple Instance Learning (MIL)](https://paperswithcode.com/task/multiple-instance-learning). Each patch is considered an ‘instance’ and a set of patches forms a ‘bag’. The individual patch representations are pooled together to predict a final bag-level label. Algorithmically, the individual patch instances in the bag do not require labels and hence allow us to learn bag-level labels in a weakly-supervised way. They also use permutation invariant pooling functions which make the prediction independent of the order of patches and allows for an efficient aggregation of information. Typically attention based pooling functions are used which not only allow for efficient aggregation but also provide attention values for each patch in the bag. These values indicate the importance of the corresponding patch in the prediction and can be visualized to better understand the model predictions. This element of interpretability can be very important to drive adoption of these models in the real world. Computationally, MIL models circumvent the problem of applying neural networks to large image sizes since patch representations are obtained independently of the size of the image.
+Breaking down the image into smaller patches, learning patch representations, and then pooling those representations to predict an image-level label is one way to solve this problem as is depicted in the image below. One popular method for doing this is called [Multiple Instance Learning (MIL)](https://paperswithcode.com/task/multiple-instance-learning). Each patch is considered an ‘instance’ and a set of patches forms a ‘bag’. The individual patch representations are pooled together to predict a final bag-level label. Algorithmically, the individual patch instances in the bag do not require labels and hence allow us to learn bag-level labels in a weakly-supervised way. They also use permutation invariant pooling functions which make the prediction independent of the order of patches and allows for an efficient aggregation of information. Typically, attention based pooling functions are used which not only allow for efficient aggregation but also provide attention values for each patch in the bag. These values indicate the importance of the corresponding patch in the prediction and can be visualized to better understand the model predictions. This element of interpretability can be very important to drive adoption of these models in the real world and we use variations like Additive MIL models [7] to enable such spatial explainability. Computationally, MIL models circumvent the problem of applying neural networks to large image sizes since patch representations are obtained independently of the size of the image.
 
 <p align="center">
   <img src="/assets/images/2022-7-7-PathAI-Uses-PyTorch-to-Improve-Patient-Outcomes-with-AI-powered-Pathology-2.png" width="100%">
@@ -53,9 +53,9 @@ crop_transform = FlipRotateCenterCrop(use_flips=True)
 
 # Create the dataset which loads patches for each bag
 train_dataset = MILDataset(
-    bag_sampler=bag_sampler,
-    samples_loader=sample_loader, 
-    transform=crop_transform,
+  bag_sampler=bag_sampler,
+  samples_loader=sample_loader,
+  transform=crop_transform,
 )
 ```
 
@@ -65,9 +65,9 @@ After we have defined our sampler and dataset, we need to define the model we wi
 classifier = DefaultPooledClassifier(hidden_dims=[256, 256], input_dims=1024, output_dims=1)
 
 pooling = DefaultAttentionModule(
-    input_dims=1024, 
-    hidden_dims=[256, 256],
-    output_activation=StableSoftmax()
+  input_dims=1024,
+  hidden_dims=[256, 256],
+  output_activation=StableSoftmax()
 )
 
 # Define the model which is a composition of the featurizer, pooling module and a classifier
@@ -79,7 +79,7 @@ Since these models are trained end-to-end, they offer a powerful way to go direc
 1. Configurable control over each part of the pipeline including the data loaders, the modular parts of the model, and their interaction with each other.
 2. Ability to rapidly iterate through the ideate-implement-experiment-productionize loop.
 
-PyTorch has various advantages when it comes to MIL modeling. It offers an intuitive way to create dynamic computational graphs with flexible control flow which is great for rapid research experimentation. The map-style datasets, configurable sampler, and batch-samplers allow us to customize how we construct bags of patches and patches of bags, enabling faster experimentation. Since MIL models are IO heavy, data parallelism and pythonic data loaders make the task very efficient and user friendly. Lastly, the object-oriented nature of PyTorch enables building of reusable modules which aid in the rapid experimentation, maintainable implementation and ease of building compositional components of the pipeline.
+PyTorch has various advantages when it comes to MIL modeling. It offers an intuitive way to create dynamic computational graphs with flexible control flow which is great for rapid research experimentation. The map-style datasets, configurable sampler, and batch-samplers allow us to customize how we construct bags of patches, enabling faster experimentation. Since MIL models are IO heavy, data parallelism and pythonic data loaders make the task very efficient and user friendly. Lastly, the object-oriented nature of PyTorch enables building of reusable modules which aid in the rapid experimentation, maintainable implementation and ease of building compositional components of the pipeline.
 
 ## Exploring spatial tissue organization with GNNs in PyTorch
 
@@ -91,26 +91,24 @@ In both healthy and diseased tissue, the spatial arrangement and structure of ce
 
 In late 2020, when PathAI started using GNNs on tissue samples, PyTorch had the best and most mature support for GNN functionality via the [PyG package](https://pytorch-geometric.readthedocs.io/en/latest/). This made PyTorch the natural choice for our team given that GNN models were something that we knew would be an important ML concept we wanted to explore. 
 
-One of the main value-adds of GNN’s in the context of tissue samples is that the graph itself can uncover spatial relationships that would otherwise be very difficult to find by visual inspection alone. In our recent AACR publication [3], we showed that by using GNNs, we can better understand the way the presence of immune cell aggregates (specifically tertiary lymphoid structures, or TLS) in the tumor microenvironment can influence patient prognosis. In this case, the GNN approach was used to predict expression of genes associated with the presence of TLS, and identify histological features beyond the TLS region itself that are relevant to TLS. Such insights into gene expression are difficult to identify from tissue sample images when unassisted by ML models. 
+One of the main value-adds of GNN’s in the context of tissue samples is that the graph itself can uncover spatial relationships that would otherwise be very difficult to find by visual inspection alone. In our recent AACR publication [4], we showed that by using GNNs, we can better understand the way the presence of immune cell aggregates (specifically tertiary lymphoid structures, or TLS) in the tumor microenvironment can influence patient prognosis. In this case, the GNN approach was used to predict expression of genes associated with the presence of TLS, and identify histological features beyond the TLS region itself that are relevant to TLS. Such insights into gene expression are difficult to identify from tissue sample images when unassisted by ML models. 
 
 One of the most promising GNN variations we have had success with is [self attention graph pooling](https://arxiv.org/pdf/1904.08082.pdf). Let’s take a look at how we define our Self Attention Graph Pooling (SAGPool) model using PyTorch and PyG:
 
 ```python
 class SAGPool(torch.nn.Module):
-    def __init__(self, …):
-        super().__init__()
-        self.conv1 = GraphConv(in_features, hidden_features, aggr='mean')
-        self.convs = torch.nn.ModuleList()
-        self.pools = torch.nn.ModuleList()
-        self.convs.extend([GraphConv(hidden_features, hidden_features, aggr='mean') for i in range(num_layers - 1)])
-        self.pools.extend(
-            [SAGPooling(hidden_features, ratio, GNN=GraphConv, min_score=min_score) for i in range((num_layers) // 2)]
-        )
-        self.jump = JumpingKnowledge(mode='cat')
-        self.lin1 = Linear(num_layers * hidden_features, hidden_features)
-        self.lin2 = Linear(hidden_features, out_features)
-        self.out_activation = out_activation
-        self.dropout = dropout
+  def __init__(self, …):
+    super().__init__()
+    self.conv1 = GraphConv(in_features, hidden_features, aggr='mean')
+    self.convs = torch.nn.ModuleList()
+    self.pools = torch.nn.ModuleList()
+    self.convs.extend([GraphConv(hidden_features, hidden_features, aggr='mean') for i in range(num_layers - 1)])
+    self.pools.extend([SAGPooling(hidden_features, ratio, GNN=GraphConv, min_score=min_score) for i in range((num_layers) // 2)])
+    self.jump = JumpingKnowledge(mode='cat')
+    self.lin1 = Linear(num_layers * hidden_features, hidden_features)
+    self.lin2 = Linear(hidden_features, out_features)
+    self.out_activation = out_activation
+    self.dropout = dropout
 ```
 
 In the above code, we begin by defining a single convolutional graph layer and then add two [module list layers](https://pytorch.org/docs/stable/generated/torch.nn.ModuleList.html) which allow us to pass in a variable number of layers. We then take our [empty module list and append](https://pytorch.org/docs/stable/generated/torch.nn.ModuleList.html?highlight=extend#torch.nn.ModuleList.extend) a variable number of `GraphConv` layers followed by a variable number of `SAGPooling` layers. We finish up our `SAGPool` definition by adding a [JumpingKnowledge Layer](https://pytorch-geometric.readthedocs.io/en/latest/modules/nn.html#torch_geometric.nn.models.JumpingKnowledge), two linear layers, our activation function, and our dropout value. PyTorch’s intuitive syntax allows us to abstract away the complexity of working with state of the art methods like SAG Poolings while also maintaining the common approach to model development we are familiar with.
@@ -126,10 +124,12 @@ In order to achieve our mission of improving patient outcomes with AI-powered pa
 
 [2] Pathologists’ diagnosis of invasive melanoma and melanocytic proliferations: observer accuracy and reproducibility study, [https://www.bmj.com/content/357/bmj.j2813.full](https://www.bmj.com/content/357/bmj.j2813.full)
 
-[3] [https://drive.google.com/file/d/13-bY72Tp8loa3Z4k-YSHS5YnLKp35Vhe/view](https://drive.google.com/file/d/13-bY72Tp8loa3Z4k-YSHS5YnLKp35Vhe/view)
+[3] [https://openaccess.thecvf.com/content/CVPR2022W/CVMI/papers/Dwivedi_Multi_Stain_Graph_Fusion_for_Multimodal_Integration_in_Pathology_CVPRW_2022_paper.pdf](https://openaccess.thecvf.com/content/CVPR2022W/CVMI/papers/Dwivedi_Multi_Stain_Graph_Fusion_for_Multimodal_Integration_in_Pathology_CVPRW_2022_paper.pdf)
 
 [4] Ciyue Shen, Collin Schlager, Deepta Rajan, Maryam Pouryahya, Mary Lin, Victoria Mountain, Ilan Wapinski, Amaro Taylor-Weiner, Benjamin Glass, Robert Egger, Andrew Beck. Application of an interpretable graph neural network to predict gene expression signatures associated with tertiary lymphoid structures in histopathological images [abstract]. In: Proceedings of the Annual Meeting of the American Association for Cancer Research; 2022 Apr 8–13; New Orleans, LA. Philadelphia (PA): AACR; 2022. Abstract nr 1922.
 
 [5] [https://proceedings.mlr.press/v156/jaume21a/jaume21a.pdf](https://proceedings.mlr.press/v156/jaume21a/jaume21a.pdf)
 
 [6] [https://openaccess.thecvf.com/content_CVPRW_2020/papers/w16/Lu_Capturing_Cellular_Topology_in_Multi-Gigapixel_Pathology_Images_CVPRW_2020_paper.pdf](https://openaccess.thecvf.com/content_CVPRW_2020/papers/w16/Lu_Capturing_Cellular_Topology_in_Multi-Gigapixel_Pathology_Images_CVPRW_2020_paper.pdf)
+
+[7] Javed, S. A., Juyal, D., Padigela, H., Taylor-Weiner, A., Yu, L., & Prakash, A. (2022). Additive MIL: Intrinsic Interpretability for Pathology. arXiv preprint arXiv:2206.01794.
