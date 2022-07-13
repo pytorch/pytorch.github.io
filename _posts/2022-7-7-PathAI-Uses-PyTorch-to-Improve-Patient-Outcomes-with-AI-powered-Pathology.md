@@ -97,7 +97,7 @@ One of the most promising GNN variations we have had success with is [self atten
 
 ```python
 class SAGPool(torch.nn.Module):
-  def __init__(self, …):
+  def __init__(self, ...):
     super().__init__()
     self.conv1 = GraphConv(in_features, hidden_features, aggr='mean')
     self.convs = torch.nn.ModuleList()
