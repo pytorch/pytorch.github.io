@@ -124,7 +124,7 @@ In order to achieve our mission of improving patient outcomes with AI-powered pa
 
 [2] Pathologists’ diagnosis of invasive melanoma and melanocytic proliferations: observer accuracy and reproducibility study, [https://www.bmj.com/content/357/bmj.j2813.full](https://www.bmj.com/content/357/bmj.j2813.full)
 
-[3] [https://openaccess.thecvf.com/content/CVPR2022W/CVMI/papers/Dwivedi_Multi_Stain_Graph_Fusion_for_Multimodal_Integration_in_Pathology_CVPRW_2022_paper.pdf](https://openaccess.thecvf.com/content/CVPR2022W/CVMI/papers/Dwivedi_Multi_Stain_Graph_Fusion_for_Multimodal_Integration_in_Pathology_CVPRW_2022_paper.pdf)
+[3] [https://openaccess.thecvf.com/content/CVPR2022W/CVMI/papers/Dwivedi_Multi_Stain_Graph_Fusion_for_ Multimodal_Integration_in_Pathology_CVPRW_2022_paper.pdf](https://openaccess.thecvf.com/content/CVPR2022W/CVMI/papers/Dwivedi_Multi_Stain_Graph_Fusion_for_Multimodal_Integration_in_Pathology_CVPRW_2022_paper.pdf)
 
 [4] Ciyue Shen, Collin Schlager, Deepta Rajan, Maryam Pouryahya, Mary Lin, Victoria Mountain, Ilan Wapinski, Amaro Taylor-Weiner, Benjamin Glass, Robert Egger, Andrew Beck. Application of an interpretable graph neural network to predict gene expression signatures associated with tertiary lymphoid structures in histopathological images [abstract]. In: Proceedings of the Annual Meeting of the American Association for Cancer Research; 2022 Apr 8–13; New Orleans, LA. Philadelphia (PA): AACR; 2022. Abstract nr 1922.
 
