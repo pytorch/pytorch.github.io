@@ -2,13 +2,13 @@
 layout: blog_detail
 title: "Case Study: PathAI Uses PyTorch to Improve Patient Outcomes with AI-powered Pathology"
 author: Logan Kilpatrick - Sr. Technology Advocate, Harshith Padigela - ML Engineer, Syed Ashar Javed - ML Technical Lead, Robert Egger - Biomedical Data Scientist
-featured-img: "/assets/images/2022-7-7-PathAI-Uses-PyTorch-to-Improve-Patient-Outcomes-with-AI-powered-Pathology-1.png"
+featured-img: "/assets/images/2022-7-15-PathAI-Uses-PyTorch-to-Improve-Patient-Outcomes-with-AI-powered-Pathology-1.png"
 ---
 
 ​[​PathAI](https://pathai.com) is the leading provider of AI-powered technology tools and services for pathology (the study of disease). Our platform was built to enable substantial improvements to the accuracy of diagnosis and the measurement of therapeutic efficacy for complex diseases, leveraging modern approaches in machine learning like image segmentation, graph neural networks, and multiple instance learning.
 
 <p align="center">
-  <img src="/assets/images/2022-7-7-PathAI-Uses-PyTorch-to-Improve-Patient-Outcomes-with-AI-powered-Pathology-1.png" width="100%">
+  <img src="/assets/images/2022-7-15-PathAI-Uses-PyTorch-to-Improve-Patient-Outcomes-with-AI-powered-Pathology-1.png" width="100%">
 </p>
 
 Traditional manual pathology is prone to [subjectivity and observer variability](https://www.journal-of-hepatology.eu/article/S0168-8278(20)30399-8/fulltext) that can negatively affect diagnoses and drug development trials. Before we dive into how we use PyTorch to improve our diagnosis workflow, let us first lay out the traditional analog Pathology workflow without machine learning.
@@ -32,7 +32,7 @@ One of the uniquely challenging aspects of applying ML to pathology is the immen
 Breaking down the image into smaller patches, learning patch representations, and then pooling those representations to predict an image-level label is one way to solve this problem as is depicted in the image below. One popular method for doing this is called [Multiple Instance Learning (MIL)](https://paperswithcode.com/task/multiple-instance-learning). Each patch is considered an ‘instance’ and a set of patches forms a ‘bag’. The individual patch representations are pooled together to predict a final bag-level label. Algorithmically, the individual patch instances in the bag do not require labels and hence allow us to learn bag-level labels in a weakly-supervised way. They also use permutation invariant pooling functions which make the prediction independent of the order of patches and allows for an efficient aggregation of information. Typically, attention based pooling functions are used which not only allow for efficient aggregation but also provide attention values for each patch in the bag. These values indicate the importance of the corresponding patch in the prediction and can be visualized to better understand the model predictions. This element of interpretability can be very important to drive adoption of these models in the real world and we use variations like [Additive MIL models](https://arxiv.org/pdf/2206.01794.pdf) to enable such spatial explainability. Computationally, MIL models circumvent the problem of applying neural networks to large image sizes since patch representations are obtained independently of the size of the image.
 
 <p align="center">
-  <img src="/assets/images/2022-7-7-PathAI-Uses-PyTorch-to-Improve-Patient-Outcomes-with-AI-powered-Pathology-2.png" width="100%">
+  <img src="/assets/images/2022-7-15-PathAI-Uses-PyTorch-to-Improve-Patient-Outcomes-with-AI-powered-Pathology-2.png" width="100%">
 </p>
 
 At PathAI, we use custom MIL models based on deep nets to predict image-level labels. The overview of this process is as follows:
@@ -84,7 +84,7 @@ PyTorch has various advantages when it comes to MIL modeling. It offers an intui
 ## Exploring spatial tissue organization with GNNs in PyTorch
 
 <p align="center">
-  <img src="/assets/images/2022-7-7-PathAI-Uses-PyTorch-to-Improve-Patient-Outcomes-with-AI-powered-Pathology-3.png" width="100%">
+  <img src="/assets/images/2022-7-15-PathAI-Uses-PyTorch-to-Improve-Patient-Outcomes-with-AI-powered-Pathology-3.png" width="100%">
 </p>
 
 In both healthy and diseased tissue, the spatial arrangement and structure of cells can oftentimes be as important as the cells themselves. For example, when assessing lung cancers, pathologists try to look at the overall grouping and structure of tumor cells (do they form solid sheets? Or do they occur in smaller, localized clusters?) to determine if the cancer belongs to specific subtypes which can have vastly [different prognosis](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3369269/). Such spatial relationships between cells and other tissue structures can be modeled using graphs to capture tissue topology and cellular composition at the same time. [Graph Neural Networks](https://openaccess.thecvf.com/content_CVPRW_2020/papers/w16/Lu_Capturing_Cellular_Topology_in_Multi-Gigapixel_Pathology_Images_CVPRW_2020_paper.pdf) (GNNs) allow learning spatial patterns within these graphs that relate to other clinical variables, for example overexpression of genes in certain cancers.
