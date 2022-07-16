@@ -219,7 +219,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href='https://pytorch.org/docs/versions.html'>master (1.13.0a0+git845792d ) &#x25BC</a>
+      <a href='https://pytorch.org/docs/versions.html'>master (1.13.0a0+gita46ac94 ) &#x25BC</a>
     </div>
     
 
@@ -459,6 +459,7 @@
 
 <span class="kn">import</span> <span class="nn">torch</span>
 <span class="kn">import</span> <span class="nn">torch.distributed</span> <span class="k">as</span> <span class="nn">dist</span>
+<span class="kn">import</span> <span class="nn">torch.distributed.algorithms._checkpoint.checkpoint_wrapper</span> <span class="k">as</span> <span class="nn">checkpoint_wrapper</span>
 <span class="kn">import</span> <span class="nn">torch.nn</span> <span class="k">as</span> <span class="nn">nn</span>
 <span class="kn">import</span> <span class="nn">torch.nn.functional</span> <span class="k">as</span> <span class="nn">F</span>
 <span class="kn">from</span> <span class="nn">torch.autograd</span> <span class="kn">import</span> <span class="n">Variable</span>
@@ -501,6 +502,7 @@
     <span class="n">FPW_MODULE</span><span class="p">,</span>
     <span class="n">FlatParameter</span><span class="p">,</span>
     <span class="n">FlattenParamsWrapper</span><span class="p">,</span>
+    <span class="n">ParamInfo</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span> <span class="nn">.wrap</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">_or_policy</span><span class="p">,</span>
@@ -2361,48 +2363,90 @@
 <span class="sd">        back to sharded version after _summon_full_params ends, and also remove</span>
 <span class="sd">        &quot;_fsdp_wrapped_module&quot; prefix.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">_replace_by_prefix</span><span class="p">(</span><span class="n">state_dict</span><span class="p">,</span> <span class="n">prefix</span> <span class="o">+</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">FSDP_WRAPPED_MODULE</span><span class="si">}</span><span class="s2">.&quot;</span><span class="p">,</span> <span class="n">prefix</span><span class="p">)</span>
+
         <span class="bp">self</span><span class="o">.</span><span class="n">_assert_state</span><span class="p">([</span><span class="n">TrainingState_</span><span class="o">.</span><span class="n">SUMMON_FULL_PARAMS</span><span class="p">])</span>
         <span class="c1"># state_dict is empty for nonzero ranks if `rank0_only` was enabled.</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">state_dict</span><span class="p">:</span>
             <span class="k">return</span> <span class="n">state_dict</span>
 
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fsdp_wrapped_module</span><span class="o">.</span><span class="n">no_params</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">state_dict</span>
+
+        <span class="c1"># This can happen when rank0_only is enabled and self.rank != 0.</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fsdp_wrapped_module</span><span class="o">.</span><span class="n">orig_flat_param</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fsdp_wrapped_module</span><span class="o">.</span><span class="n">flat_param</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">,</span> <span class="p">(</span>
+                <span class="s2">&quot;When no_params is False, one of flat_param and orig_flat_param &quot;</span>
+                <span class="s2">&quot;should have value.&quot;</span>
+            <span class="p">)</span>
+            <span class="k">return</span> <span class="n">state_dict</span>
+
         <span class="n">offload_to_cpu</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_state_dict_config</span><span class="o">.</span><span class="n">offload_to_cpu</span>
         <span class="n">cpu_device</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s2">&quot;cpu&quot;</span><span class="p">)</span>
-        <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">state_dict</span><span class="p">:</span>
-            <span class="n">clean_key</span> <span class="o">=</span> <span class="n">clean_tensor_name</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+
+        <span class="c1"># Loop only the parameters saved in self._fsdp_wrapped_module to avoid</span>
+        <span class="c1"># processing buffers.</span>
+        <span class="n">sharded_param_info</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="n">ParamInfo</span><span class="p">(</span><span class="n">info</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">info</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="n">info</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span>
+            <span class="k">for</span> <span class="n">info</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fsdp_wrapped_module</span><span class="o">.</span><span class="n">orig_flat_param</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">_shared_param_infos</span>
+        <span class="p">]</span>
+        <span class="k">for</span> <span class="n">module_name</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">param_name</span> <span class="ow">in</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_fsdp_wrapped_module</span><span class="o">.</span><span class="n">orig_flat_param</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">param_info</span> <span class="o">+</span> <span class="n">sharded_param_info</span>
+        <span class="p">):</span>
+            <span class="n">module_name</span> <span class="o">=</span> <span class="n">module_name</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">FPW_MODULE</span><span class="si">}</span><span class="s2">.&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
+            <span class="n">module_name</span> <span class="o">=</span> <span class="n">module_name</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">FPW_MODULE</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">module_name</span><span class="p">:</span>
+                <span class="n">module_name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">module_name</span><span class="si">}</span><span class="s2">.&quot;</span>
+            <span class="c1"># Activation checkpoint adds a prefix that has to be</span>
+            <span class="c1"># removed as well.</span>
+            <span class="n">module_name</span> <span class="o">=</span> <span class="n">module_name</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">checkpoint_wrapper</span><span class="o">.</span><span class="n">_CHECKPOINT_PREFIX</span><span class="si">}</span><span class="s2">.&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span>
+            <span class="p">)</span>
+            <span class="n">fqn</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">prefix</span><span class="si">}{</span><span class="n">module_name</span><span class="si">}{</span><span class="n">param_name</span><span class="si">}</span><span class="s2">&quot;</span>
+
+            <span class="n">clean_key</span> <span class="o">=</span> <span class="n">fqn</span>
             <span class="n">clean_prefix</span> <span class="o">=</span> <span class="n">clean_tensor_name</span><span class="p">(</span><span class="n">prefix</span><span class="p">)</span>
             <span class="c1"># Strip prefix out of key if needed as buffer names and param names</span>
             <span class="c1"># do not have prefix considered as they are not computed in `state_dict`</span>
             <span class="c1"># call.</span>
             <span class="k">if</span> <span class="n">clean_key</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="n">clean_prefix</span><span class="p">):</span>
                 <span class="n">clean_key</span> <span class="o">=</span> <span class="n">clean_key</span><span class="p">[</span><span class="nb">len</span><span class="p">(</span><span class="n">clean_prefix</span><span class="p">):]</span>
-            <span class="c1"># Do not need to clone buffers since they are not sharded</span>
-            <span class="k">if</span> <span class="n">clean_key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_buffer_names</span><span class="p">:</span>
-                <span class="c1"># Offload the buffer to CPU if needed -- we do not do this in</span>
-                <span class="c1"># `_summon_full_params()` since without care, that would free</span>
-                <span class="c1"># the original buffer&#39;s GPU memory and require reallocating</span>
-                <span class="c1"># that memory later; this only affects the state dict&#39;s buffer</span>
-                <span class="c1"># variable and leaves the original buffer&#39;s GPU memory intact</span>
-                <span class="k">if</span> <span class="n">offload_to_cpu</span> <span class="ow">and</span> <span class="n">state_dict</span><span class="p">[</span><span class="n">key</span><span class="p">]</span><span class="o">.</span><span class="n">device</span> <span class="o">!=</span> <span class="n">cpu_device</span><span class="p">:</span>
-                    <span class="n">state_dict</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">state_dict</span><span class="p">[</span><span class="n">key</span><span class="p">]</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">cpu_device</span><span class="p">)</span>
-                <span class="k">continue</span>
+
             <span class="c1"># Clone non-ignored parameters before exiting the</span>
             <span class="c1"># `_summon_full_params()` context</span>
+            <span class="k">assert</span> <span class="n">fqn</span> <span class="ow">in</span> <span class="n">state_dict</span><span class="p">,</span> <span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;FSDP assumes </span><span class="si">{</span><span class="n">fqn</span><span class="si">}</span><span class="s2"> is in the state_dict but the state_dict &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;only has </span><span class="si">{</span><span class="n">state_dict</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span><span class="si">}</span><span class="s2">. prefix=</span><span class="si">{</span><span class="n">prefix</span><span class="si">}</span><span class="s2">, &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;module_name=</span><span class="si">{</span><span class="n">module_name</span><span class="si">}</span><span class="s2"> param_name=</span><span class="si">{</span><span class="n">param_name</span><span class="si">}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span>
             <span class="k">if</span> <span class="n">clean_key</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ignored_param_names</span> <span class="ow">and</span> \
-                    <span class="ow">not</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">state_dict</span><span class="p">[</span><span class="n">key</span><span class="p">],</span> <span class="s2">&quot;_has_been_cloned&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">):</span>
+                    <span class="ow">not</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">state_dict</span><span class="p">[</span><span class="n">fqn</span><span class="p">],</span> <span class="s2">&quot;_has_been_cloned&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">):</span>
                 <span class="k">try</span><span class="p">:</span>
-                    <span class="n">state_dict</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">state_dict</span><span class="p">[</span><span class="n">key</span><span class="p">]</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span>
-                    <span class="n">state_dict</span><span class="p">[</span><span class="n">key</span><span class="p">]</span><span class="o">.</span><span class="n">_has_been_cloned</span> <span class="o">=</span> <span class="kc">True</span>  <span class="c1"># type: ignore[attr-defined]</span>
+                    <span class="n">state_dict</span><span class="p">[</span><span class="n">fqn</span><span class="p">]</span> <span class="o">=</span> <span class="n">state_dict</span><span class="p">[</span><span class="n">fqn</span><span class="p">]</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span>
+                    <span class="n">state_dict</span><span class="p">[</span><span class="n">fqn</span><span class="p">]</span><span class="o">.</span><span class="n">_has_been_cloned</span> <span class="o">=</span> <span class="kc">True</span>  <span class="c1"># type: ignore[attr-defined]</span>
                 <span class="k">except</span> <span class="ne">BaseException</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
                     <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
-                        <span class="sa">f</span><span class="s2">&quot;Failed to clone() tensor with name </span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">. This may mean &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;Failed to clone() tensor with name </span><span class="si">{</span><span class="n">fqn</span><span class="si">}</span><span class="s2">. This may mean &quot;</span>
                         <span class="s2">&quot;that this state_dict entry could point to invalid memory &quot;</span>
                         <span class="s2">&quot;regions after returning from state_dict() call if this &quot;</span>
                         <span class="s2">&quot;parameter is managed by FSDP. Please check clone &quot;</span>
-                        <span class="sa">f</span><span class="s2">&quot;implementation of </span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">. Error: </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;implementation of </span><span class="si">{</span><span class="n">fqn</span><span class="si">}</span><span class="s2">. Error: </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
                     <span class="p">)</span>
 
-        <span class="n">_replace_by_prefix</span><span class="p">(</span><span class="n">state_dict</span><span class="p">,</span> <span class="n">prefix</span> <span class="o">+</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">FSDP_WRAPPED_MODULE</span><span class="si">}</span><span class="s2">.&quot;</span><span class="p">,</span> <span class="n">prefix</span><span class="p">)</span>
+        <span class="c1"># Offload the buffer to CPU if needed -- we do not do this in</span>
+        <span class="c1"># `_summon_full_params()` since without care, that would free</span>
+        <span class="c1"># the original buffer&#39;s GPU memory and require reallocating</span>
+        <span class="c1"># that memory later; this only affects the state dict&#39;s buffer</span>
+        <span class="c1"># variable and leaves the original buffer&#39;s GPU memory intact</span>
+        <span class="k">if</span> <span class="n">offload_to_cpu</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">clean_key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_buffer_names</span><span class="p">:</span>
+                <span class="c1"># This is a hack to support activation checkpoint.</span>
+                <span class="n">clean_key</span> <span class="o">=</span> <span class="n">clean_key</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">checkpoint_wrapper</span><span class="o">.</span><span class="n">_CHECKPOINT_PREFIX</span><span class="si">}</span><span class="s2">.&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span>
+                <span class="p">)</span>
+                <span class="n">fqn</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">prefix</span><span class="si">}{</span><span class="n">clean_key</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="k">if</span> <span class="n">state_dict</span><span class="p">[</span><span class="n">fqn</span><span class="p">]</span><span class="o">.</span><span class="n">device</span> <span class="o">!=</span> <span class="n">cpu_device</span><span class="p">:</span>
+                    <span class="n">state_dict</span><span class="p">[</span><span class="n">fqn</span><span class="p">]</span> <span class="o">=</span> <span class="n">state_dict</span><span class="p">[</span><span class="n">fqn</span><span class="p">]</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">cpu_device</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">state_dict</span>
 
     <span class="k">def</span> <span class="nf">_local_post_state_dict_hook</span><span class="p">(</span>
