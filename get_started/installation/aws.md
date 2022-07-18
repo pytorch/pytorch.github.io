@@ -99,7 +99,7 @@ Once you decided upon your instance type, you will need to create, optionally co
 
 With [SageMaker](https://aws.amazon.com/sagemaker) service AWS provides a fully-managed service that allows developers and data scientists to build, train, and deploy machine learning models.
 
-See AWS documentation to learn [how to configure Amazon SageMaker with PyTorch]((https://docs.aws.amazon.com/sagemaker/latest/dg/pytorch.html)).
+See AWS documentation to learn [how to configure Amazon SageMaker with PyTorch](https://docs.aws.amazon.com/sagemaker/latest/dg/pytorch.html).
 
 ## Pre-Built AMIs
 {: #aws-amis}
