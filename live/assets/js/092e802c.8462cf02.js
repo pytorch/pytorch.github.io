@@ -1,0 +1,1 @@
+"use strict";(self.webpackChunkwebsite=self.webpackChunkwebsite||[]).push([[7047],{75028:e=>{e.exports=JSON.parse('{"name":"plugin-dynamic-routes","id":"default"}')}}]);
