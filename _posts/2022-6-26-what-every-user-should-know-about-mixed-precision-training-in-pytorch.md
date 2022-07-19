@@ -7,9 +7,9 @@ featured-img: ''
 
 Efficient training of modern neural networks often relies on using lower precision data types. Peak float16 matrix multiplication and convolution performance is 16x faster than peak float32 performance on A100 GPUs. And since the float16 and bfloat16 data types are only half the size of float32 they can double the performance of bandwidth-bound kernels and reduce the memory required to train a network, allowing for larger models, larger batches, or larger inputs. Using a module like [torch.amp](https://pytorch.org/docs/master/amp.html) (short for “Automated Mixed Precision”) makes it easy to get the speed and memory usage benefits of lower precision data types while preserving convergence behavior.
 
-Going faster and using less memory is always advantageous – deep learning practitioners can test more model architectures and hyperparameters, and larger, more powerful models can be trained. Training very large models like those described in Narayanan et al. and Brown et al. (which take thousands of GPUs months to train even with expert handwritten optimizations) is infeasible without using mixed precision.
+Going faster and using less memory is always advantageous – deep learning practitioners can test more model architectures and hyperparameters, and larger, more powerful models can be trained. Training very large models like those described in [Narayanan et al.](https://arxiv.org/pdf/2104.04473.pdf) and [Brown et al.](https://arxiv.org/pdf/2005.14165.pdf) (which take thousands of GPUs months to train even with expert handwritten optimizations) is infeasible without using mixed precision.
 
-We’ve talked about mixed precision techniques before (here, here, and here), and this blog post is a summary of those techniques and an introduction if you’re new to mixed precision.
+We’ve talked about mixed precision techniques before ([here](https://pytorch.org/blog/accelerating-training-on-nvidia-gpus-with-pytorch-automatic-mixed-precision/), [here](https://docs.nvidia.com/deeplearning/performance/mixed-precision-training/index.html), and [here](https://developer.nvidia.com/automatic-mixed-precision)), and this blog post is a summary of those techniques and an introduction if you’re new to mixed precision.
 
 ## Mixed Precision Training in Practice
 
