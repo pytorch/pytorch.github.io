@@ -219,7 +219,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href='https://pytorch.org/docs/versions.html'>master (1.13.0a0+git86b8620 ) &#x25BC</a>
+      <a href='https://pytorch.org/docs/versions.html'>master (1.13.0a0+gitaf33c24 ) &#x25BC</a>
     </div>
     
 
@@ -470,7 +470,10 @@
     <span class="n">ShardedTensor</span><span class="p">,</span>
     <span class="n">init_from_local_shards</span><span class="p">,</span>
 <span class="p">)</span>
-<span class="kn">from</span> <span class="nn">torch.distributed.algorithms._comm_hooks</span> <span class="kn">import</span> <span class="n">allreduce_hook</span>
+<span class="kn">from</span> <span class="nn">torch.distributed.algorithms._comm_hooks</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">LOW_PRECISION_HOOKS</span><span class="p">,</span>
+    <span class="n">default_hooks</span>
+<span class="p">)</span>
 <span class="kn">from</span> <span class="nn">torch.distributed.distributed_c10d</span> <span class="kn">import</span> <span class="n">_get_default_group</span>
 <span class="kn">from</span> <span class="nn">torch.distributed.utils</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">_replace_by_prefix</span><span class="p">,</span>
@@ -1760,6 +1763,15 @@
         <span class="k">return</span> <span class="p">(</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">mixed_precision</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
             <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">mixed_precision</span><span class="o">.</span><span class="n">reduce_dtype</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_low_precision_hook_enabled</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Wether a low precision hook is registered or not.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">communication_hook</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+            <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">communication_hook</span> <span class="ow">in</span> <span class="n">LOW_PRECISION_HOOKS</span>
         <span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">_cast_fp_inputs_to_precision</span><span class="p">(</span>
@@ -3440,9 +3452,12 @@
             <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">stream</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_streams</span><span class="p">[</span><span class="s2">&quot;post_backward&quot;</span><span class="p">]):</span>
                 <span class="n">orig_grad_data</span> <span class="o">=</span> <span class="n">param</span><span class="o">.</span><span class="n">grad</span><span class="o">.</span><span class="n">data</span>
                 <span class="k">if</span> <span class="p">(</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">_mixed_precision_enabled_for_reduce</span><span class="p">()</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_mixed_precision_enabled_for_reduce</span><span class="p">()</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_low_precision_hook_enabled</span><span class="p">()</span>
                 <span class="p">):</span>
                     <span class="c1"># Cast gradient to precision in which it should be communicated.</span>
+                    <span class="c1"># If a low precision hook is registered and reduce_dtype is specified</span>
+                    <span class="c1"># in `MixedPrecision`, communication hook will take care of</span>
+                    <span class="c1"># casting to lower precision and back.</span>
                     <span class="c1"># TODO: Make this a communication hook when communication hooks</span>
                     <span class="c1"># are implemented for FSDP. Note that this is a noop if the</span>
                     <span class="c1"># reduce_dtype matches the param dtype.</span>
@@ -3538,8 +3553,13 @@
                     <span class="c1"># would thus be in this reduced precision, or</span>
                     <span class="c1"># 2) parameters did not have precision reduced, but grads</span>
                     <span class="c1"># had reduced precision for communication.</span>
+                    <span class="c1"># If a lower precision hook is registered, gradients are casted</span>
+                    <span class="c1"># back by the hook.</span>
+                    <span class="c1"># However, if a low precision hook is attached to the model.</span>
+                    <span class="c1"># casting happens inside the hook.</span>
                     <span class="k">if</span> <span class="p">(</span>
-                        <span class="bp">self</span><span class="o">.</span><span class="n">_mixed_precision_enabled_for_params</span><span class="p">()</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">_mixed_precision_enabled_for_reduce</span><span class="p">()</span>
+                        <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_low_precision_hook_enabled</span><span class="p">()</span> <span class="ow">and</span>
+                        <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_mixed_precision_enabled_for_params</span><span class="p">()</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">_mixed_precision_enabled_for_reduce</span><span class="p">())</span>
                     <span class="p">):</span>
                         <span class="c1"># Cast gradients back to the full parameter precision so that</span>
                         <span class="c1"># optimizer.step() happens in full precision.</span>
@@ -4602,7 +4622,7 @@
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">sharding_strategy</span> <span class="o">!=</span> <span class="n">ShardingStrategy</span><span class="o">.</span><span class="n">NO_SHARD</span><span class="p">:</span>
             <span class="k">return</span> <span class="kc">None</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">allreduce_hook</span><span class="o">.</span><span class="n">allreduce_hook</span>
+            <span class="k">return</span> <span class="n">default_hooks</span><span class="o">.</span><span class="n">allreduce_hook</span>
 
     <span class="k">def</span> <span class="nf">_get_default_comm_hook_state</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
         <span class="sa">r</span><span class="sd">&quot;&quot;&quot;</span>
@@ -4611,7 +4631,7 @@
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">sharding_strategy</span> <span class="o">!=</span> <span class="n">ShardingStrategy</span><span class="o">.</span><span class="n">NO_SHARD</span><span class="p">:</span>
             <span class="k">return</span> <span class="kc">None</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">allreduce_hook</span><span class="o">.</span><span class="n">AllReduceState</span><span class="p">(</span><span class="n">process_group</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">process_group</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">default_hooks</span><span class="o">.</span><span class="n">DefaultState</span><span class="p">(</span><span class="n">process_group</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">process_group</span><span class="p">)</span>
 
 <div class="viewcode-block" id="FullyShardedDataParallel.register_comm_hook"><a class="viewcode-back" href="../../../../fsdp.html#torch.distributed.fsdp.FullyShardedDataParallel.register_comm_hook">[docs]</a>    <span class="k">def</span> <span class="nf">register_comm_hook</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="nb">object</span><span class="p">,</span> <span class="n">hook</span><span class="p">:</span> <span class="n">callable</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
