@@ -6,7 +6,9 @@ featured-img: ""
 ---
 
 <p align="center">
-  <img src="" width="100%">
+  <video width="100%" controls>
+    <source src="/assets/videos/PlayTorch-video.mp4" type="video/mp4">
+  </video>
 </p>
 
 In December, we announced PyTorch Live, a toolkit for building AI-powered mobile prototypes in minutes. The initial release included a command-line interface to set up a development environment and an SDK for building AI-powered experiences in React Native. Today, we're excited to share that PyTorch Live will now be known as PlayTorch. This new release provides an improved and simplified developer experience. PlayTorch development is independent from the PyTorch project and the PlayTorch code repository is moving into the Meta Research GitHub organization.
@@ -47,10 +49,9 @@ When you have something you want to share, let us know on [Discord](https://disc
 
 ## SDK Overhaul
 
-We learned a lot from the community after our initial launch in December and have been hard at work over the past several months to make the PlayTorch SDK (formerly known as PyTorch Live) simple, performant, and robust. In our initial version, the SDK relied on config files to define how a model ingested and output data. 
+We learned a lot from the community after our initial launch in December and have been hard at work over the past several months to make the PlayTorch SDK (formerly known as PyTorch Live) simple, performant, and robust. In our initial version, the SDK relied on config files to define how a model ingested and output data.
 
-
-Today, we are happy to announce the next version of our SDK can handle data processing in JavaScript for your prototypes with the new PlayTorch API that leverages the JavaScript Interface (JSI) to directly call C++ code. Not only have we completely redone the way you can interact with models, but we have also greatly expanded the variety of supported model architectures. 
+Today, we are happy to announce the next version of our SDK can handle data processing in JavaScript for your prototypes with the new PlayTorch API that leverages the JavaScript Interface (JSI) to directly call C++ code. Not only have we completely redone the way you can interact with models, but we have also greatly expanded the variety of supported model architectures.
 
 ## A New Data Processing API for Prototyping
 
@@ -89,6 +90,7 @@ Use DeepLab V3 to segment images!
 ## Start Playing
 
 If you want to start creating AI experiences yourself, head over to [playtorch.dev](https://playtorch.dev) and try out our [tutorials](https://playtorch.dev/tutorials/). Each tutorial will guide you through building a simple AI powered experience that you can instantly run on your phone and share with others.
+
 ## How to Get Support
 
 Join us on [Discord](https://discord.gg/sQkXTqEt33), collaborate with us on [GitHub](https://github.com/facebookresearch/playtorch), or follow us on [Twitter](https://twitter.com/playtorch). Got questions or feedback? We’d love to hear from you!
