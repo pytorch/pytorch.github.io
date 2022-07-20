@@ -15,7 +15,7 @@ In December, we announced PyTorch Live, a toolkit for building AI-powered mobile
 
 The PlayTorch team is excited to announce that we have partnered with [Expo](https://expo.dev) to change the way AI powered mobile experiences are built. Our new release simplifies the process of building mobile AI experiences by eliminating the need for a complicated development environment. You will now be able to build cross platform AI powered prototypes from the very browser you are using to read this blog.
 
-In order to make this happen, we are releasing the [PlayTorch app](...) which is able to run AI-powered experiences built in the [Expo Snack](https://snack.expo.dev/@playtorch/playtorch-starter?supportedPlatforms=my-device) web based code editor.
+In order to make this happen, we are releasing the [PlayTorch app](https://playtorch.dev/) which is able to run AI-powered experiences built in the [Expo Snack](https://snack.expo.dev/@playtorch/playtorch-starter?supportedPlatforms=my-device) web based code editor.
 
 <p align="center">
   <img src="/assets/images/2022-7-15-introducing-the-playtorch-app-1.gif" width="100%">
@@ -62,7 +62,7 @@ With this JSI API, we now allow users direct access to tensors (data format for 
 
 No more switching back and forth between code and config. You will now be able to write everything in JavaScript and have access to all of the type annotations and autocomplete features available to you in those languages.
 
-Check out our [tutorials](https://playtorch.dev/tutorials) to see the new Data Processing API in action, take a deeper dive in the [API docs](https://playtorch.dev/docs/api/core/), or inspect the code yourself on [GitHub](...).
+Check out our [tutorials](https://playtorch.dev/tutorials) to see the new Data Processing API in action, take a deeper dive in the [API docs](https://playtorch.dev/docs/api/core/), or inspect the code yourself on [GitHub](https://github.com/facebookresearch/playtorch).
 
 ### Expanded Use Cases
 
