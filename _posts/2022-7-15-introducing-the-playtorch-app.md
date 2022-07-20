@@ -43,7 +43,7 @@ Any PlayTorch Snack that you run in the PlayTorch app can be shared with others 
   <img src="/assets/images/2022-7-15-introducing-the-playtorch-app-3.jpg" width="100%">
 </p>
 
-When you have something you want to share, let us know on [Discord](https://discord.gg/sQkXTqEt33) or [Twitter](https://twitter.com/pytorchlive) or embed the PlayTorch Snack on your own webpage.
+When you have something you want to share, let us know on [Discord](https://discord.gg/sQkXTqEt33) or [Twitter](https://twitter.com/PlayTorch) or embed the PlayTorch Snack on your own webpage.
 
 ## SDK Overhaul
 
@@ -91,4 +91,4 @@ Use DeepLab V3 to segment images!
 If you want to start creating AI experiences yourself, head over to [playtorch.dev](https://playtorch.dev) and try out our [tutorials](https://playtorch.dev/tutorials/). Each tutorial will guide you through building a simple AI powered experience that you can instantly run on your phone and share with others.
 ## How to Get Support
 
-Join us on [Discord](https://discord.gg/sQkXTqEt33), collaborate with us on [GitHub](...), or follow us on [Twitter](https://twitter.com/playtorch). Got questions or feedback? We’d love to hear from you!
+Join us on [Discord](https://discord.gg/sQkXTqEt33), collaborate with us on [GitHub](https://github.com/facebookresearch/playtorch), or follow us on [Twitter](https://twitter.com/playtorch). Got questions or feedback? We’d love to hear from you!
