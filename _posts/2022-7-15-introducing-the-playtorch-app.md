@@ -21,7 +21,7 @@ In order to make this happen, we are releasing the [PlayTorch app](...) which is
   <img src="/assets/images/2022-7-15-introducing-the-playtorch-app-1.gif" width="100%">
 </p>
 
-The PlayTorch app can be downloaded from the Apple App Store and Google Play Store. With the app installed, you can head over to [playtorch.dev/snack](https://playtorch.dev/snack) and write the code for your AI-powered PlayTorch snack. When you want to try what you’ve built, you can use the PlayTorch app’s QR code scanner to scan the QR code on the Snack page and load the code to your device.
+The PlayTorch app can be downloaded from the Apple App Store and Google Play Store. With the app installed, you can head over to [playtorch.dev/snack](https://playtorch.dev/snack) and write the code for your AI-powered PlayTorch Snack. When you want to try what you’ve built, you can use the PlayTorch app’s QR code scanner to scan the QR code on the Snack page and load the code to your device.
 
 NOTE: PlayTorch Snacks will not work in the Expo Go app.
 
