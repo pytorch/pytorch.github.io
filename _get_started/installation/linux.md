@@ -1,7 +1,7 @@
 # Installing on Linux
 {:.no_toc}
 
-PyTorch can be installed and used on various Linux distributions. Depending on your system and compute requirements, your experience with PyTorch on Linux may vary in terms of processing time. It is recommended, but not required, that your Linux system has an NVIDIA GPU in order to harness the full power of PyTorch's [CUDA](https://developer.nvidia.com/cuda-zone) [support](https://pytorch.org/tutorials/beginner/blitz/tensor_tutorial.html?highlight=cuda#cuda-tensors)..
+PyTorch can be installed and used on various Linux distributions. Depending on your system and compute requirements, your experience with PyTorch on Linux may vary in terms of processing time. It is recommended, but not required, that your Linux system has an NVIDIA GPU in order to harness the full power of PyTorch's [CUDA](https://developer.nvidia.com/cuda-zone) [support](https://pytorch.org/tutorials/beginner/blitz/tensor_tutorial.html?highlight=cuda#cuda-tensors).
 
 ## Prerequisites
 {: #linux-prerequisites}
@@ -54,13 +54,13 @@ To install the PyTorch binaries, you will need to use one of two supported packa
 To install Anaconda, you will use the [command-line installer](https://www.anaconda.com/download/#linux). Right-click on the 64-bit installer link, select `Copy Link Location`, and then use the following commands:
 
 ```bash
-# The version of Anaconda may be different depending on when you are installing`
+# The version of Anaconda may be different depending on when you are installing
 curl -O https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
 sh Miniconda3-latest-Linux-x86_64.sh
-# and follow the prompts. The defaults are generally good.`
+# and follow the prompts. The defaults are generally good.
 ```
 
-> You may have to open a new terminal or re-source your `~/.bashrc `to get access to the `conda` command.
+> You may have to open a new terminal or re-source your `~/.bashrc` to get access to the `conda` command.
 
 #### pip
 
