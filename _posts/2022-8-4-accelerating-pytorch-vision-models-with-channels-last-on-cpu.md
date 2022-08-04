@@ -21,7 +21,7 @@ Memory format refers to data representation that describes how a multidimensiona
 Fig-1 is the physical memory layout of a tensor with shape of [1, 3, 4, 4] on both Channels First and Channels Last memory format (channels denoted as R, G, B respectively):
 
 <p align="center">
-  <img src="\assets\images\accelerating-pytorch-vision-models-with-channels-last-on-cpu-1.png" width="90%">
+  <img src="\assets\images\accelerating-pytorch-vision-models-with-channels-last-on-cpu-1.png" width="70%">
 </p>
 
 <p align="center">
@@ -37,7 +37,7 @@ For Convolution layers, PyTorch uses oneDNN (oneAPI Deep Neural Network Library)
 On the other hand, oneDNN is optimized for Channels Last memory format to use it for optimal performance directly and PyTorch will simply pass a memory view to oneDNN. Which means the conversion of input and output tensor is saved. Fig-2 indicates memory format propagation behavior of convolution on PyTorch CPU (the solid arrow indicates a memory format conversion, and the dashed arrow indicates a memory view):
 
 <p align="center">
-  <img src="\assets\images\accelerating-pytorch-vision-models-with-channels-last-on-cpu-2.png" width="90">
+  <img src="\assets\images\accelerating-pytorch-vision-models-with-channels-last-on-cpu-2.png" width="70%">
 </p>
 
 <p align="center">
