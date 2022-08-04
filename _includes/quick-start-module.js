@@ -8,7 +8,8 @@ var supportedOperatingSystems = new Map([
 var supportedComputePlatforms = new Map([
   ['cuda10.2', new Set(['linux', 'windows'])],
   ['cuda11.x', new Set(['linux', 'windows'])],
-  ['rocm4.x', new Set(['linux'])],
+  ['cuda11.6', new Set(['linux', 'windows'])],
+  ['rocm5.x', new Set(['linux'])],
   ['accnone', new Set(['linux', 'macos', 'windows'])],
 ]);
 
@@ -118,7 +119,7 @@ function disableUnsupportedPlatforms(os) {
 // Change compute versions depending on build type
 function changeCUDAVersion(ptbuild) {
   var cuda_element = document.getElementById("cuda11.x");
-  var rocm_element = document.getElementById("rocm4.x");
+  var rocm_element = document.getElementById("rocm5.x");
   if (cuda_element == null) {
     console.log("Failed to find cuda11.x element");
     return;
@@ -128,21 +129,21 @@ function changeCUDAVersion(ptbuild) {
     return;
   }
   if (rocm_element == null) {
-    console.log("Failed to find rocm4.x element");
+    console.log("Failed to find rocm5.x element");
     return;
   }
   if (rocm_element.childElementCount != 1) {
-    console.log("Unexpected number of children for rocm4.x element");
+    console.log("Unexpected number of children for rocm5.x element");
     return;
   }
   if (ptbuild == "preview") {
-    rocm_element.children[0].textContent = "ROCM 5.1.1 (beta)";
+    rocm_element.children[0].textContent = "ROCm 5.1.1";
     cuda_element.children[0].textContent = "CUDA 11.3";
   } else if (ptbuild == "stable") {
-    rocm_element.children[0].textContent = "ROCM 4.5.2 (beta)";
+    rocm_element.children[0].textContent = "ROCm 5.1.1";
     cuda_element.children[0].textContent = "CUDA 11.3";
   } else {
-    rocm_element.children[0].textContent = "ROCM 4.5.2 (beta)";
+    rocm_element.children[0].textContent = "ROCm 5.1.1";
     cuda_element.children[0].textContent = "CUDA 11.1";
   }
 }
