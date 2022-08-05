@@ -67,7 +67,7 @@ While contributing to Channels Last kernels, we tried our best to optimize Chann
 
 ## Run Vision Models on Channels Last
 
-The Channels Last related APIs are documented at [PyTorch memory format tutorial]. Typically, we can convert a 4D tensor from Channels First to Channels Last by:
+The Channels Last related APIs are documented at [PyTorch memory format tutorial](https://pytorch.org/tutorials/intermediate/memory_format_tutorial.html). Typically, we can convert a 4D tensor from Channels First to Channels Last by:
 
 ```console
 # convert x to channels last
