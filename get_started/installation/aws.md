@@ -94,8 +94,8 @@ Once you decided upon your instance type, you will need to create, optionally co
 * [Windows](https://docs.aws.amazon.com/AWSEC2/latest/WindowsGuide/EC2_GetStarted.html){:target="_blank"}
 * [Command-line](https://docs.aws.amazon.com/cli/latest/userguide/cli-using-ec2.html){:target="_blank"}
 
-## AWS SageMaker
-{: #aws-sagemaker}
+## Amazon SageMaker
+{: #amazon-sagemaker}
 
 With [SageMaker](https://aws.amazon.com/sagemaker) service AWS provides a fully-managed service that allows developers and data scientists to build, train, and deploy machine learning models.
 
