@@ -219,7 +219,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href='https://pytorch.org/docs/versions.html'>master (1.13.0a0+git3d5e49e ) &#x25BC</a>
+      <a href='https://pytorch.org/docs/versions.html'>master (1.13.0a0+git51bbf63 ) &#x25BC</a>
     </div>
     
 
@@ -429,7 +429,8 @@
   <h1>Source code for torch.utils.checkpoint</h1><div class="highlight"><pre>
 <span></span><span class="kn">import</span> <span class="nn">torch</span>
 <span class="kn">import</span> <span class="nn">warnings</span>
-<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">Iterable</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Tuple</span>
+<span class="kn">import</span> <span class="nn">weakref</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Iterable</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Tuple</span>
 
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
     <span class="s2">&quot;checkpoint&quot;</span><span class="p">,</span> <span class="s2">&quot;checkpoint_sequential&quot;</span><span class="p">,</span> <span class="s2">&quot;CheckpointFunction&quot;</span><span class="p">,</span>
@@ -779,25 +780,39 @@
             <span class="n">had_cuda_in_fwd</span> <span class="o">=</span> <span class="kc">True</span>
             <span class="n">fwd_gpu_devices</span><span class="p">,</span> <span class="n">fwd_gpu_states</span> <span class="o">=</span> <span class="n">get_device_states</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">)</span>
 
-    <span class="n">storage</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">Optional</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{}</span>
-    <span class="n">counter</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="c1"># Custom class to be able to take weak references</span>
+    <span class="k">class</span> <span class="nc">Holder</span><span class="p">():</span>
+        <span class="k">pass</span>
+    <span class="c1"># The Holder object for each of the saved object is saved directly on the</span>
+    <span class="c1"># SavedVariable and is cleared when reset_data() is called on it. We MUST make</span>
+    <span class="c1"># sure that this is the only object having an owning reference to ensure that</span>
+    <span class="c1"># the Tensor stored in storage is deleted as soon as the corresponding SavedVariable</span>
+    <span class="c1"># data is cleared.</span>
+    <span class="n">storage</span><span class="p">:</span> <span class="n">weakref</span><span class="o">.</span><span class="n">WeakKeyDictionary</span> <span class="o">=</span> <span class="n">weakref</span><span class="o">.</span><span class="n">WeakKeyDictionary</span><span class="p">()</span>
+    <span class="n">weak_holder_list</span> <span class="o">=</span> <span class="p">[]</span>
 
     <span class="k">def</span> <span class="nf">pack</span><span class="p">(</span><span class="n">x</span><span class="p">):</span>
-        <span class="k">nonlocal</span> <span class="n">counter</span>
-        <span class="n">counter</span> <span class="o">+=</span> <span class="mi">1</span>
-        <span class="c1"># TODO(varal7): Instead of returning indices, we can return things metadata (such as</span>
+        <span class="c1"># TODO(varal7): Instead of returning abstract object, we can return things metadata (such as</span>
         <span class="c1"># size, device, ...) to catch certain cases of undeterministic behavior of the forward</span>
-        <span class="k">return</span> <span class="n">counter</span> <span class="o">-</span> <span class="mi">1</span>
+        <span class="n">res</span> <span class="o">=</span> <span class="n">Holder</span><span class="p">()</span>
+        <span class="n">weak_holder_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">weakref</span><span class="o">.</span><span class="n">ref</span><span class="p">(</span><span class="n">res</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">res</span>
+
 
     <span class="k">def</span> <span class="nf">unpack</span><span class="p">(</span><span class="n">x</span><span class="p">):</span>
         <span class="n">unpack_counter</span> <span class="o">=</span> <span class="mi">0</span>
         <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">storage</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
-
             <span class="k">def</span> <span class="nf">inner_pack</span><span class="p">(</span><span class="n">inner</span><span class="p">):</span>
                 <span class="k">nonlocal</span> <span class="n">unpack_counter</span>
-                <span class="n">storage</span><span class="p">[</span><span class="n">unpack_counter</span><span class="p">]</span> <span class="o">=</span> <span class="n">inner</span>
                 <span class="n">unpack_counter</span> <span class="o">+=</span> <span class="mi">1</span>
-                <span class="k">return</span> <span class="kc">None</span>
+                <span class="c1"># If the holder went out of scope, the SavedVariable is dead and so</span>
+                <span class="c1"># the value will never be read from the storage. Skip filling it.</span>
+                <span class="k">if</span> <span class="n">weak_holder_list</span><span class="p">[</span><span class="n">unpack_counter</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]()</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="k">return</span>
+                <span class="c1"># Use detach here to ensure we don&#39;t keep the temporary autograd</span>
+                <span class="c1"># graph created during the second forward</span>
+                <span class="n">storage</span><span class="p">[</span><span class="n">weak_holder_list</span><span class="p">[</span><span class="n">unpack_counter</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]()]</span> <span class="o">=</span> <span class="n">inner</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span>
+                <span class="k">return</span>
 
             <span class="k">def</span> <span class="nf">inner_unpack</span><span class="p">(</span><span class="n">packed</span><span class="p">):</span>
                 <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;You are calling backwards on a tensor that is never exposed. Please open an issue.&quot;</span><span class="p">)</span>
@@ -827,7 +842,7 @@
                 <span class="s2">&quot; open an issue with details on your use case so that we can prioritize adding this.&quot;</span>
             <span class="p">)</span>
 
-        <span class="k">return</span> <span class="n">storage</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">storage</span><span class="p">[</span><span class="n">x</span><span class="p">]</span>
 
     <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">autograd</span><span class="o">.</span><span class="n">graph</span><span class="o">.</span><span class="n">saved_tensors_hooks</span><span class="p">(</span><span class="n">pack</span><span class="p">,</span> <span class="n">unpack</span><span class="p">):</span>
         <span class="n">output</span> <span class="o">=</span> <span class="n">function</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
