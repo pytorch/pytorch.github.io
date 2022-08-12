@@ -219,7 +219,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href='https://pytorch.org/docs/versions.html'>master (1.13.0a0+git45e7d02 ) &#x25BC</a>
+      <a href='https://pytorch.org/docs/versions.html'>master (1.13.0a0+gitdfc97df ) &#x25BC</a>
     </div>
     
 
@@ -726,6 +726,9 @@
 <span class="sd">              .set_module_name(&quot;module2&quot;, qconfig2) \</span>
 <span class="sd">              .set_module_name_object_type_order(&quot;module3&quot;, torch.nn.functional.linear, 0, qconfig3)</span>
 
+
+<span class="sd">          The precedence of different settings:</span>
+<span class="sd">          set_global &lt; set_object_type &lt; set_module_name_regex &lt; set_module_name &lt; set_module_name_object_type_order</span>
 <span class="sd">      * `example_inputs`: (required) Example inputs for forward function of the model</span>
 
 <span class="sd">      * `prepare_custom_config`: customization configuration for quantization tool.</span>
@@ -759,19 +762,105 @@
 <span class="sd">    Example::</span>
 
 <span class="sd">        import torch</span>
-<span class="sd">        from torch.ao.quantization import get_default_qconfig</span>
+<span class="sd">        from torch.ao.quantization import get_default_qconfig_mapping</span>
 <span class="sd">        from torch.ao.quantization import prepare_fx</span>
 
-<span class="sd">        float_model.eval()</span>
-<span class="sd">        qconfig = get_default_qconfig(&#39;fbgemm&#39;)</span>
+<span class="sd">        class Submodule(torch.nn.Module):</span>
+<span class="sd">            def __init__(self):</span>
+<span class="sd">                super().__init__()</span>
+<span class="sd">                self.linear = torch.nn.Linear(5, 5)</span>
+<span class="sd">            def forward(self, x):</span>
+<span class="sd">                x = self.linear(x)</span>
+<span class="sd">                return x</span>
+
+<span class="sd">        class M(torch.nn.Module):</span>
+<span class="sd">            def __init__(self):</span>
+<span class="sd">                super().__init__()</span>
+<span class="sd">                self.linear = torch.nn.Linear(5, 5)</span>
+<span class="sd">                self.sub = Submodule()</span>
+
+<span class="sd">            def forward(self, x):</span>
+<span class="sd">                x = self.linear(x)</span>
+<span class="sd">                x = self.sub(x) + x</span>
+<span class="sd">                return x</span>
+
+<span class="sd">        # initialize a floating point model</span>
+<span class="sd">        float_model = M().eval()</span>
+
+<span class="sd">        # define calibration function</span>
 <span class="sd">        def calibrate(model, data_loader):</span>
 <span class="sd">            model.eval()</span>
 <span class="sd">            with torch.no_grad():</span>
 <span class="sd">                for image, target in data_loader:</span>
 <span class="sd">                    model(image)</span>
 
-<span class="sd">        qconfig_mapping = QConfigMapping().set_global(qconfig)</span>
+<span class="sd">        # qconfig is the configuration for how we insert observers for a particular</span>
+<span class="sd">        # operator</span>
+<span class="sd">        # qconfig = get_default_qconfig(&quot;fbgemm&quot;)</span>
+<span class="sd">        # Example of customizing qconfig:</span>
+<span class="sd">        # qconfig = torch.ao.quantization.QConfig(</span>
+<span class="sd">        #    activation=MinMaxObserver.with_args(dtype=torch.qint8),</span>
+<span class="sd">        #    weight=MinMaxObserver.with_args(dtype=torch.qint8))</span>
+<span class="sd">        # `activation` and `weight` are constructors of observer module</span>
+
+<span class="sd">        # qconfig_mapping is a collection of quantization configurations, user can</span>
+<span class="sd">        # set the qconfig for each operator (torch op calls, functional calls, module calls)</span>
+<span class="sd">        # in the model through qconfig_mapping</span>
+<span class="sd">        # the following call will get the qconfig_mapping that works best for models</span>
+<span class="sd">        # that target &quot;fbgemm&quot; backend</span>
+<span class="sd">        qconfig_mapping = get_default_qconfig_mapping(&quot;fbgemm&quot;)</span>
+
+<span class="sd">        # We can customize qconfig_mapping in different ways.</span>
+<span class="sd">        # e.g. set the global qconfig, which means we will use the same qconfig for</span>
+<span class="sd">        # all operators in the model, this can be overwritten by other settings</span>
+<span class="sd">        # qconfig_mapping = QConfigMapping().set_global(qconfig)</span>
+<span class="sd">        # e.g. quantize the linear submodule with a specific qconfig</span>
+<span class="sd">        # qconfig_mapping = QConfigMapping().set_module_name(&quot;linear&quot;, qconfig)</span>
+<span class="sd">        # e.g. quantize all nn.Linear modules with a specific qconfig</span>
+<span class="sd">        # qconfig_mapping = QConfigMapping().set_object_type(torch.nn.Linear, qconfig)</span>
+<span class="sd">        # for a more complete list, please see the docstring for :class:`torch.ao.quantization.QConfigMapping`</span>
+<span class="sd">        # argument</span>
+
+<span class="sd">        # example_inputs is a tuple of inputs, that is used to infer the type of the</span>
+<span class="sd">        # outputs in the model</span>
+<span class="sd">        # currently it&#39;s not used, but please make sure model(*example_inputs) runs</span>
 <span class="sd">        example_inputs = (torch.randn(1, 3, 224, 224),)</span>
+
+<span class="sd">        # TODO: add backend_config after we split the backend_config for fbgemm and qnnpack</span>
+<span class="sd">        # e.g. backend_config = get_default_backend_config(&quot;fbgemm&quot;)</span>
+<span class="sd">        # `prepare_fx` inserts observers in the model based on qconfig_mapping and</span>
+<span class="sd">        # backend_config. If the configuration for an operator in qconfig_mapping</span>
+<span class="sd">        # is supported in the backend_config (meaning it&#39;s supported by the target</span>
+<span class="sd">        # hardware), we&#39;ll insert observer modules according to the qconfig_mapping</span>
+<span class="sd">        # otherwise the configuration in qconfig_mapping will be ignored</span>
+<span class="sd">        #</span>
+<span class="sd">        # Example:</span>
+<span class="sd">        # in qconfig_mapping, user sets linear module to be quantized with quint8 for</span>
+<span class="sd">        # activation and qint8 for weight:</span>
+<span class="sd">        # qconfig = torch.ao.quantization.QConfig(</span>
+<span class="sd">        #     observer=MinMaxObserver.with_args(dtype=torch.quint8),</span>
+<span class="sd">        #     weight=MinMaxObserver.with-args(dtype=torch.qint8))</span>
+<span class="sd">        # Note: current qconfig api does not support setting output observer, but</span>
+<span class="sd">        # we may extend this to support these more fine grained control in the</span>
+<span class="sd">        # future</span>
+<span class="sd">        #</span>
+<span class="sd">        # qconfig_mapping = QConfigMapping().set_object_type(torch.nn.Linear, qconfig)</span>
+<span class="sd">        # in backend config, linear module also supports in this configuration:</span>
+<span class="sd">        # weighted_int8_dtype_config = DTypeConfig(</span>
+<span class="sd">        #   input_dtype=torch.quint8,</span>
+<span class="sd">        #   output_dtype=torch.quint8,</span>
+<span class="sd">        #   weight_dtype=torch.qint8,</span>
+<span class="sd">        #   bias_type=torch.float)</span>
+
+<span class="sd">        # linear_pattern_config = BackendPatternConfig(torch.nn.Linear) \</span>
+<span class="sd">        #    .set_observation_type(ObservationType.OUTPUT_USE_DIFFERENT_OBSERVER_AS_INPUT) \</span>
+<span class="sd">        #    .add_dtype_config(weighted_int8_dtype_config) \</span>
+<span class="sd">        #    ...</span>
+
+<span class="sd">        # backend_config = BackendConfig().set_backend_pattern_config(linear_pattern_config)</span>
+<span class="sd">        # `prepare_fx` will check that the setting requested by suer in qconfig_mapping</span>
+<span class="sd">        # is supported by the backend_config and insert observers and fake quant modules</span>
+<span class="sd">        # in the model</span>
 <span class="sd">        prepared_model = prepare_fx(float_model, qconfig_mapping, example_inputs)</span>
 <span class="sd">        # Run calibration</span>
 <span class="sd">        calibrate(prepared_model, sample_inference_data)</span>
@@ -811,19 +900,75 @@
 <span class="sd">    Example::</span>
 
 <span class="sd">        import torch</span>
-<span class="sd">        from torch.ao.quantization import get_default_qat_qconfig</span>
+<span class="sd">        from torch.ao.quantization import get_default_qat_qconfig_mapping</span>
 <span class="sd">        from torch.ao.quantization import prepare_fx</span>
 
-<span class="sd">        qconfig = get_default_qat_qconfig(&#39;fbgemm&#39;)</span>
+<span class="sd">        class Submodule(torch.nn.Module):</span>
+<span class="sd">            def __init__(self):</span>
+<span class="sd">                super().__init__()</span>
+<span class="sd">                self.linear = torch.nn.Linear(5, 5)</span>
+<span class="sd">            def forward(self, x):</span>
+<span class="sd">                x = self.linear(x)</span>
+<span class="sd">                return x</span>
+
+<span class="sd">        class M(torch.nn.Module):</span>
+<span class="sd">            def __init__(self):</span>
+<span class="sd">                super().__init__()</span>
+<span class="sd">                self.linear = torch.nn.Linear(5, 5)</span>
+<span class="sd">                self.sub = Submodule()</span>
+
+<span class="sd">            def forward(self, x):</span>
+<span class="sd">                x = self.linear(x)</span>
+<span class="sd">                x = self.sub(x) + x</span>
+<span class="sd">                return x</span>
+
+<span class="sd">        # initialize a floating point model</span>
+<span class="sd">        float_model = M().train()</span>
+<span class="sd">        # (optional, but preferred) load the weights from pretrained model</span>
+<span class="sd">        # float_model.load_weights(...)</span>
+
+<span class="sd">        # define the training loop for quantization aware training</span>
 <span class="sd">        def train_loop(model, train_data):</span>
 <span class="sd">            model.train()</span>
 <span class="sd">            for image, target in data_loader:</span>
 <span class="sd">                ...</span>
 
-<span class="sd">        float_model.train()</span>
-<span class="sd">        qconfig_mapping = QConfigMapping().set_global(qconfig)</span>
-<span class="sd">        prepared_model = prepare_fx(float_model, qconfig_mapping)</span>
-<span class="sd">        # Run calibration</span>
+<span class="sd">        # qconfig is the configuration for how we insert observers for a particular</span>
+<span class="sd">        # operator</span>
+<span class="sd">        # qconfig = get_default_qconfig(&quot;fbgemm&quot;)</span>
+<span class="sd">        # Example of customizing qconfig:</span>
+<span class="sd">        # qconfig = torch.ao.quantization.QConfig(</span>
+<span class="sd">        #    activation=FakeQuantize.with_args(observer=MinMaxObserver.with_args(dtype=torch.qint8)),</span>
+<span class="sd">        #    weight=FakeQuantize.with_args(observer=MinMaxObserver.with_args(dtype=torch.qint8)))</span>
+<span class="sd">        # `activation` and `weight` are constructors of observer module</span>
+
+<span class="sd">        # qconfig_mapping is a collection of quantization configurations, user can</span>
+<span class="sd">        # set the qconfig for each operator (torch op calls, functional calls, module calls)</span>
+<span class="sd">        # in the model through qconfig_mapping</span>
+<span class="sd">        # the following call will get the qconfig_mapping that works best for models</span>
+<span class="sd">        # that target &quot;fbgemm&quot; backend</span>
+<span class="sd">        qconfig_mapping = get_default_qat_qconfig(&quot;fbgemm&quot;)</span>
+
+<span class="sd">        # We can customize qconfig_mapping in different ways, please take a look at</span>
+<span class="sd">        # the doctring for :func:`~torch.ao.quantization.prepare_fx` for different ways</span>
+<span class="sd">        # to configure this</span>
+
+<span class="sd">        # example_inputs is a tuple of inputs, that is used to infer the type of the</span>
+<span class="sd">        # outputs in the model</span>
+<span class="sd">        # currently it&#39;s not used, but please make sure model(*example_inputs) runs</span>
+<span class="sd">        example_inputs = (torch.randn(1, 3, 224, 224),)</span>
+
+<span class="sd">        # TODO: add backend_config after we split the backend_config for fbgemm and qnnpack</span>
+<span class="sd">        # e.g. backend_config = get_default_backend_config(&quot;fbgemm&quot;)</span>
+<span class="sd">        # `prepare_qat_fx` inserts observers in the model based on qconfig_mapping and</span>
+<span class="sd">        # backend_config, if the configuration for an operator in qconfig_mapping</span>
+<span class="sd">        # is supported in the backend_config (meaning it&#39;s supported by the target</span>
+<span class="sd">        # hardware), we&#39;ll insert fake_quantize modules according to the qconfig_mapping</span>
+<span class="sd">        # otherwise the configuration in qconfig_mapping will be ignored</span>
+<span class="sd">        # see :func:`~torch.ao.quantization.prepare_fx` for a detailed explanation of</span>
+<span class="sd">        # how qconfig_mapping interacts with backend_config</span>
+<span class="sd">        prepared_model = prepare_qat_fx(float_model, qconfig_mapping, example_inputs)</span>
+<span class="sd">        # Run training</span>
 <span class="sd">        train_loop(prepared_model, train_loop)</span>
 
 <span class="sd">    &quot;&quot;&quot;</span>
@@ -927,6 +1072,17 @@
 <span class="sd">    Example::</span>
 
 <span class="sd">        # prepared_model: the model after prepare_fx/prepare_qat_fx and calibration/training</span>
+<span class="sd">        # convert_fx converts a calibrated/trained model to a quantized model for the</span>
+<span class="sd">        # target hardware, this includes converting the model first to a reference</span>
+<span class="sd">        # quantized model, and then lower the reference quantized model to a backend</span>
+<span class="sd">        # Currently, the supported backends are fbgemm (onednn), qnnpack (xnnpack) and</span>
+<span class="sd">        # they share the same set of quantized operators, so we are using the same</span>
+<span class="sd">        # lowering procedure</span>
+<span class="sd">        #</span>
+<span class="sd">        # backend_config defines the corresponding reference quantized module for</span>
+<span class="sd">        # the weighted modules in the model, e.g. nn.Linear</span>
+<span class="sd">        # TODO: add backend_config after we split the backend_config for fbgemm and qnnpack</span>
+<span class="sd">        # e.g. backend_config = get_default_backend_config(&quot;fbgemm&quot;)</span>
 <span class="sd">        quantized_model = convert_fx(prepared_model)</span>
 
 <span class="sd">    &quot;&quot;&quot;</span>
@@ -948,9 +1104,11 @@
     <span class="n">qconfig_mapping</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">QConfigMapping</span><span class="p">,</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="kc">None</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">backend_config</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">BackendConfig</span><span class="p">,</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="kc">None</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">:</span>
-    <span class="sa">r</span><span class="sd">&quot;&quot;&quot; Convert a calibrated or trained model to a reference quantized model, a common interface</span>
-<span class="sd">    between PyTorch quantization with other backends like accelerators. Callers should additionally</span>
-<span class="sd">    lower the returned reference model to the target backend before using the model for inference.</span>
+    <span class="sa">r</span><span class="sd">&quot;&quot;&quot; Convert a calibrated or trained model to a reference quantized model,</span>
+<span class="sd">    see https://github.com/pytorch/rfcs/blob/master/RFC-0019-Extending-PyTorch-Quantization-to-Custom-Backends.md for more details,</span>
+<span class="sd">    reference quantzied model is a standard representation of a quantized model provided</span>
+<span class="sd">    by FX Graph Mode Quantization, it can be further lowered to run on the target</span>
+<span class="sd">    hardware, like accelerators</span>
 
 <span class="sd">    Args:</span>
 <span class="sd">        * `graph_module`: A prepared and calibrated/trained model (GraphModule)</span>
@@ -973,7 +1131,9 @@
 <span class="sd">    Example::</span>
 
 <span class="sd">        # prepared_model: the model after prepare_fx/prepare_qat_fx and calibration/training</span>
-<span class="sd">        reference_model = convert_to_reference_fx(prepared_model)</span>
+<span class="sd">        # TODO: add backend_config after we split the backend_config for fbgemm and qnnpack</span>
+<span class="sd">        # e.g. backend_config = get_default_backend_config(&quot;fbgemm&quot;)</span>
+<span class="sd">        reference_quantized_model = convert_to_reference_fx(prepared_model)</span>
 
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">_log_api_usage_once</span><span class="p">(</span><span class="s2">&quot;quantization_api.quantize_fx.convert_to_reference_fx&quot;</span><span class="p">)</span>
