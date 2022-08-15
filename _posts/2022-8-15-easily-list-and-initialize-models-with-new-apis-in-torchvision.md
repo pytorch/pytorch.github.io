@@ -1,14 +1,14 @@
 ---
 layout: blog_detail
-title: "Introducing a new Model Registration API in TorchVision"
+title: "Easily list and initialize models with new APIs in TorchVision"
 author: Vasilis Vryniotis and Laurence Rouesnel
-featured-img: ""
+featured-img: "\assets\images\easily-list-and-initialize-models-with-new-apis-in-torchvision.gif"
 ---
 
 TorchVision now supports listing and initializing all available built-in models and weights by name. This new API builds upon the recently introduced [Multi-weight support API](https://pytorch.org/blog/introducing-torchvision-new-multi-weight-support-api/), is currently in Beta, and it addresses a long-standing [request](https://github.com/pytorch/vision/issues/1143) from the community.
 
 <p align="center">
-  <img src="/assets\images\introducing-a-new-model-registration-api-in-torchvision.gif" width="100%">
+  <img src="\assets\images\easily-list-and-initialize-models-with-new-apis-in-torchvision.gif" width="100%">
 </p>
 
 You can try out the new API in the [latest nightly](https://pytorch.org/get-started/locally/) release of TorchVision. We’re looking to collect feedback ahead of finalizing the feature in TorchVision v0.14. We have created a dedicated [Github Issue](https://github.com/pytorch/vision/issues/6365) where you can post your comments, questions and suggestions!
@@ -28,7 +28,7 @@ available_models = [
 ]
 ```
 
-The above approach does not always produce the expected results and is hard to discover. For example, since the [``get_weight()``](https://pytorch.org/vision/main/models.html#using-models-from-hub) method is exposed publicly under the same module, it will be included in the list despite not being a model. In general, reducing the verbosity (less imports, shorter names etc) and being able to initialize models and weights directly from their names (better support of configs, TorchHub, etc) was [feedback](https://github.com/pytorch/vision/issues/5088) provided previously by the community. To solve this problem, we have developed a model registration API.
+The above approach does not always produce the expected results and is hard to discover. For example, since the [``get_weight()``](https://pytorch.org/vision/main/models.html#using-models-from-hub) method is exposed publicly under the same module, it will be included in the list despite not being a model. In general, reducing the verbosity (less imports, shorter names etc) and being able to initialize models and weights directly from their names (better support of configs, TorchHub etc) was [feedback](https://github.com/pytorch/vision/issues/5088) provided previously by the community. To solve this problem, we have developed a model registration API.
 
 ## A new approach
 
@@ -132,4 +132,4 @@ print(sum(x.numel() for x in model.state_dict().values()))
 # 2239188
 ```
 
-For more technical details please see the original RFC. Please spare a few minutes to provide your feedback on the new API, as this is crucial for graduating it from beta and including it in the next release. You can do this on the dedicated Github Issue. We are looking forward to reading your comments!
+For more technical details please see the original [RFC](https://github.com/pytorch/vision/pull/6330). Please spare a few minutes to provide your feedback on the new API, as this is crucial for graduating it from beta and including it in the next release. You can do this on the dedicated [Github Issue](https://github.com/pytorch/vision/issues/6365). We are looking forward to reading your comments!
