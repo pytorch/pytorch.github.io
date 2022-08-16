@@ -17,7 +17,7 @@ You can try out the new API in the [latest nightly](https://pytorch.org/get-star
 
 Before the new model registration API, developers had to query the ``__dict__`` attribute of the modules in order to list all available models or to fetch a specific model builder method by its name:
 
-```console
+```python
 # Initialize a model by its name:
 model = torchvision.models.__dict__[model_name]()
 
@@ -34,7 +34,7 @@ The above approach does not always produce the expected results and is hard to d
 
 We’ve added 4 new methods under the torchvision.models module:
 
-```console
+```python
 from torchvision.models import get_model, get_model_weights, get_weight, list_models
 ```
 
@@ -44,14 +44,14 @@ The styles and naming conventions align closely with a prototype mechanism propo
 
 Listing all available models in TorchVision can be done with a single function call:
 
-```console
+```python
 >>> list_models()
 ['alexnet', 'mobilenet_v3_large', 'mobilenet_v3_small', 'quantized_mobilenet_v3_large', ...]
 ```
 
 To list the available models of specific submodules:
 
-```console
+```python
 >>> list_models(module=torchvision.models)
 ['alexnet', 'mobilenet_v3_large', 'mobilenet_v3_small', ...]
 >>> list_models(module=torchvision.models.quantization)
@@ -62,7 +62,7 @@ To list the available models of specific submodules:
 
 Now that you know which models are available, you can easily initialize a model with pre-trained weights:
 
-```console
+```python
 >>> get_model("quantized_mobilenet_v3_large", weights="DEFAULT")
 QuantizableMobileNetV3(
   (features): Sequential(
@@ -74,21 +74,21 @@ QuantizableMobileNetV3(
 ### Get weights
 Sometimes, while working with config files or using TorchHub, you might have the name of a specific weight entry and wish to get its instance. This can be easily done with the following method:
 
-```console
+```python
 >>> get_weight("ResNet50_Weights.IMAGENET1K_V2")
 ResNet50_Weights.IMAGENET1K_V2
 ```
 
 To get the enum class with all available weights of a specific model you can use either its name:
 
-```console
+```python
 >>> get_model_weights("quantized_mobilenet_v3_large")
 <enum 'MobileNet_V3_Large_QuantizedWeights'>
 ```
 
 Or its model builder method:
 
-```console
+```python
 >>> get_model_weights(torchvision.models.quantization.mobilenet_v3_large)
 <enum 'MobileNet_V3_Large_QuantizedWeights'>
 ```
@@ -96,7 +96,7 @@ Or its model builder method:
 ### TorchHub support
 The new methods are also available via TorchHub:
 
-```console
+```python
 import torch
 
 # Fetching a specific weight entry by its name:
@@ -111,7 +111,7 @@ print([weight for weight in weight_enum])
 
 For example, if you wanted to  to retrieve all the small-sized models with pre-trained weights and initialize one of them, it’s a matter of using the above APIs:
 
-```console
+```python
 import torchvision
 from torchvision.models import get_model, get_model_weights, list_models
 
