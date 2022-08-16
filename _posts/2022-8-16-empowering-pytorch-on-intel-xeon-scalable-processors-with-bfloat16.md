@@ -1,6 +1,6 @@
 ---
 layout: blog_detail
-title: "Empowering PyTorch on Intel® Xeon® Scalable processors with Bfloat16"
+title: "Empowering PyTorch on Intel<sup>®</sup> Xeon<sup>®</sup> Scalable processors with Bfloat16"
 author: Mingfei Ma (Intel), Vitaly Fedyunin (Meta), Wei Wei (Meta)
 featured-img: '\assets\images\empowering-pytorch-on-intel-xeon-scalable-processors-with-bfloat16.png'
 ---
@@ -9,7 +9,7 @@ featured-img: '\assets\images\empowering-pytorch-on-intel-xeon-scalable-processo
 
 Recent years, the growing complexity of AI models have been posing requirements on hardware for more and more compute capability. Reduced precision numeric format has been proposed to address this problem. Bfloat16 is a custom 16-bit floating point format for AI which consists of one sign bit, eight exponent bits, and seven mantissa bits. With the same dynamic range as float32, bfloat16 doesn’t require a special handling such as loss scaling. Therefore, bfloat16 is a drop-in replacement for float32 when running deep neural networks for both inference and training.
 
-The 3rd Gen Intel® Xeon® Scalable processor (codenamed Cooper Lake), is the first general purpose x86 CPU with native bfloat16 support. Three new bfloat16 instructions were introduced in Intel® Advanced Vector Extensions-512 (Intel® AVX-512): VCVTNE2PS2BF16, VCVTNEPS2BF16, and VDPBF16PS. The first two instructions perform conversion from float32 to bfloat16, and the last one performs a dot product of bfloat16 pairs. Bfloat16 theoretical compute throughput is doubled over float32 on Cooper Lake. On the next generation of Intel® Xeon® Scalable Processors, bfloat16 compute throughput will be further enhanced through Advanced Matrix Extensions (Intel® AMX) instruction set extension.
+The 3rd Gen Intel<sup>®</sup> Xeon<sup>®</sup> Scalable processor (codenamed Cooper Lake), is the first general purpose x86 CPU with native bfloat16 support. Three new bfloat16 instructions were introduced in Intel<sup>®</sup> Advanced Vector Extensions-512 (Intel<sup>®</sup> AVX-512): VCVTNE2PS2BF16, VCVTNEPS2BF16, and VDPBF16PS. The first two instructions perform conversion from float32 to bfloat16, and the last one performs a dot product of bfloat16 pairs. Bfloat16 theoretical compute throughput is doubled over float32 on Cooper Lake. On the next generation of Intel<sup>®</sup> Xeon<sup>®</sup> Scalable Processors, bfloat16 compute throughput will be further enhanced through Advanced Matrix Extensions (Intel<sup>®</sup> AMX) instruction set extension.
 
 Intel and Meta previously collaborated to enable bfloat16 on PyTorch, and the related work was published in an earlier [blog](https://community.intel.com/t5/Blogs/Tech-Innovation/Artificial-Intelligence-AI/Intel-and-Facebook-Accelerate-PyTorch-Performance-with-3rd-Gen/post/1335659) during launch of Cooper Lake. In that blog, we introduced the hardware advancement for native bfloat16 support and showcased a performance boost of 1.4x to 1.6x of bfloat16 over float32 from DLRM, ResNet-50 and ResNext-101-32x4d.
 
@@ -63,7 +63,7 @@ We benchmarked inference performance of TorchVision models on Intel® Xeon® Pla
 
 ## Conclusion & Future Work
 
-In this blog, we introduced recent software optimizations on bfloat16 introduced in PyTorch 1.12. Results on the 3rd Gen Intel® Xeon® Scalable processor show that bfloat16 has 1.4x to 2.2x performance gain over float32 on the TorchVision models. Further improvement is expected on the next generation of Intel® Xeon® Scalable Processors with AMX instruction support. Though the performance number for this blog is collected with TorchVision models, the benefit is broad across all topologies. And we will continue to extend the bfloat16 optimization effort to a broader scope in the future!
+In this blog, we introduced recent software optimizations on bfloat16 introduced in PyTorch 1.12. Results on the 3rd Gen Intel<sup>®</sup> Xeon<sup>®</sup> Scalable processor show that bfloat16 has 1.4x to 2.2x performance gain over float32 on the TorchVision models. Further improvement is expected on the next generation of Intel<sup>®</sup> Xeon<sup>®</sup> Scalable Processors with AMX instruction support. Though the performance number for this blog is collected with TorchVision models, the benefit is broad across all topologies. And we will continue to extend the bfloat16 optimization effort to a broader scope in the future!
 
 ## Acknowledgement
 
@@ -73,4 +73,4 @@ The results presented in this blog is a joint effort of Meta and Intel PyTorch t
 
 - [The bfloat16 numerical format](https://cloud.google.com/tpu/docs/bfloat16?hl=en)
 - [https://pytorch.org/docs/master/amp.html#torch.autocast](https://pytorch.org/docs/master/amp.html#torch.autocast)
-- [Intel and Facebook Accelerate PyTorch Performance with 3rd Gen Intel® Xeon® Processors and Intel® Deep Learning Boost’s new BFloat16 capability](https://community.intel.com/t5/Blogs/Tech-Innovation/Artificial-Intelligence-AI/Intel-and-Facebook-Accelerate-PyTorch-Performance-with-3rd-Gen/post/1335659)
+- [Intel and Facebook Accelerate PyTorch Performance with 3rd Gen Intel® Xeon® Processors and Intel<sup>®</sup> Deep Learning Boost’s new BFloat16 capability](https://community.intel.com/t5/Blogs/Tech-Innovation/Artificial-Intelligence-AI/Intel-and-Facebook-Accelerate-PyTorch-Performance-with-3rd-Gen/post/1335659)
