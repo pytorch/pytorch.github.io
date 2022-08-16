@@ -1,6 +1,6 @@
 ---
 layout: blog_detail
-title: "Empowering PyTorch on Intel<sup>®</sup> Xeon<sup>®</sup> Scalable processors with Bfloat16"
+title: "Empowering PyTorch on Intel® Xeon® Scalable processors with Bfloat16"
 author: Mingfei Ma (Intel), Vitaly Fedyunin (Meta), Wei Wei (Meta)
 featured-img: '\assets\images\empowering-pytorch-on-intel-xeon-scalable-processors-with-bfloat16.png'
 ---
@@ -73,4 +73,4 @@ The results presented in this blog is a joint effort of Meta and Intel PyTorch t
 
 - [The bfloat16 numerical format](https://cloud.google.com/tpu/docs/bfloat16?hl=en)
 - [https://pytorch.org/docs/master/amp.html#torch.autocast](https://pytorch.org/docs/master/amp.html#torch.autocast)
-- [Intel and Facebook Accelerate PyTorch Performance with 3rd Gen Intel® Xeon® Processors and Intel<sup>®</sup> Deep Learning Boost’s new BFloat16 capability](https://community.intel.com/t5/Blogs/Tech-Innovation/Artificial-Intelligence-AI/Intel-and-Facebook-Accelerate-PyTorch-Performance-with-3rd-Gen/post/1335659)
+- [Intel and Facebook Accelerate PyTorch Performance with 3rd Gen Intel® Xeon® Processors and Intel® Deep Learning Boost’s new BFloat16 capability](https://community.intel.com/t5/Blogs/Tech-Innovation/Artificial-Intelligence-AI/Intel-and-Facebook-Accelerate-PyTorch-Performance-with-3rd-Gen/post/1335659)
