@@ -14,21 +14,21 @@ In speech and language settings, *beam search* is an efficient, greedy algorithm
 In the example that follows, we'll consider — a token set of {ϵ, a, b}, where ϵ is a special token that we can imagine denotes a space between words or a pause in speech. Graphics here and below are taken from Awni Hannun's excellent [distill.pub writeup](https://distill.pub/2017/ctc/) on CTC and beam search.
 
 <p align="center">
-  <img src="/assets/images/2022-7-15-introducing-the-playtorch-app-1.gif" width="100%">
+  <img src="\assets\images\fast-beam-search-decoding-in-pytorch-with-torchaudio-and-flashlight-text-1.jpeg" width="100%">
 </p>
 
 With a greedy-like approach, beam search considers the next viable token given an existing sequence of tokens — in the example above, a, b, b is a valid sequence, but a, b, a is not. We *rank* each possible next token at each step of the beam search according to a scoring function. Scoring functions (s) typically looks something like:
 
 <p align="center">
-  <img src="/assets/images/2022-7-15-introducing-the-playtorch-app-1.gif" width="100%">
+  <img src="\assets\images\fast-beam-search-decoding-in-pytorch-with-torchaudio-and-flashlight-text-2.jpeg" width="100%">
 </p>
 
-Where **ŷ** is a potential path/sequence of tokens, **x** is the input ***(P(ŷ|x)*** represents the model's predictions over time), and 𝛼 is a weight on the language model probability ***(P(y)*** the probability of the sequence under the language model). Some scoring functions add ***𝜷*** which adjusts a score based on the length of the predicted sequence **|ŷ|**. This particular scoring function is used in [FAIR's prior work](https://arxiv.org/pdf/1911.08460.pdf) on end-to-end ASR, and there are many variations on scoring functions which can vary across application areas.
+Where **ŷ** is a potential path/sequence of tokens, **x** is the input *<strong>(P(ŷ|x)</strong>* represents the model's predictions over time), and 𝛼 is a weight on the language model probability *<strong>(P(y)</strong>* the probability of the sequence under the language model). Some scoring functions add *<strong>𝜷</strong>* which adjusts a score based on the length of the predicted sequence **|ŷ|**. This particular scoring function is used in [FAIR's prior work](https://arxiv.org/pdf/1911.08460.pdf) on end-to-end ASR, and there are many variations on scoring functions which can vary across application areas.
 
-Given a particular sequence, to assess the next viable token in that sequence (perhaps constrained by a set of allowed words or sequences, such as a lexicon of words), the beam search algorithm scores the sequence with each candidate token added, and sorts token candidates based on those scores. For efficiency and since the number of paths is exponential in the token set size, the ***top-k*** highest-scoring candidates are kept — ***k*** represents the ***beam size***.
+Given a particular sequence, to assess the next viable token in that sequence (perhaps constrained by a set of allowed words or sequences, such as a lexicon of words), the beam search algorithm scores the sequence with each candidate token added, and sorts token candidates based on those scores. For efficiency and since the number of paths is exponential in the token set size, the *<strong>top-k</strong>* highest-scoring candidates are kept — *<strong>k</strong>* represents the *<strong>beam size</strong>*.
 
 <p align="center">
-  <img src="/assets/images/2022-7-15-introducing-the-playtorch-app-1.gif" width="100%">
+  <img src="\assets\images\fast-beam-search-decoding-in-pytorch-with-torchaudio-and-flashlight-text-3.jpeg" width="100%">
 </p>
 <p align="center">There are many other nuances with how beam search can progress: similar hypothesis sequences can be “merged”, for instance.
 </p>
@@ -52,7 +52,7 @@ Today's most commonly-used beam search decoding libraries today that support ext
 When benchmarking, we measure the *time-to-WER (word error rate)* — because of subtle differences in the implementation of decoding algorithms and the complex relationships between parameters and decoding speed, some hyperparameters differed across runs. To fairly assess performance, we first sweep for parameters that achieve a baseline WER, minimizing beam size if possible.
 
 <p align="center">
-  <img src="/assets/images/2022-7-15-introducing-the-playtorch-app-1.gif" width="100%">
+  <img src="\assets\images\fast-beam-search-decoding-in-pytorch-with-torchaudio-and-flashlight-text-4.jpeg" width="100%">
 </p>
 
 ## TorchAudio API and Usage
@@ -67,15 +67,31 @@ TorchAudio provides a Python API for CTC beam search decoding, with support for 
 
 To set up the decoder, use the factory function torchaudio.models.decoder.ctc_decoder
 
-<p align="center">
-  <img src="/assets/images/2022-7-15-introducing-the-playtorch-app-1.gif" width="100%">
-</p>
+```python
+from torchaudio.models.decoder import ctc_decoder, download_pretrained_files
+files = download_pretrained_files("librispeech-4-gram")
+decoder = ctc_decoder(
+   lexicon=files.lexicon,
+   tokens=files.tokens,
+   lm=files.lm,
+   nbest=1,
+   ... additional optional customizable args ...
+)
+```
 
 Given emissions of shape *(batch, time, num_tokens)*, the decoder will compute and return a List of batch Lists, each consisting of the nbest hypotheses corresponding to the emissions. Each hypothesis can be further broken down into tokens, words (if a lexicon is provided), score, and timesteps components.
 
-<p align="center">
-  <img src="/assets/images/2022-7-15-introducing-the-playtorch-app-1.gif" width="100%">
-</p>
+```python
+emissions = acoustic_model(waveforms)  # (B, T, N)
+batch_hypotheses = decoder(emissions)  # List[List[CTCHypothesis]]
+
+# transcript for a lexicon decoder
+transcripts = [" ".join(hypo[0].words) for hypo in batch_hypotheses]
+
+# transcript for a lexicon free decoder, splitting by sil token
+batch_tokens = [decoder.idxs_to_tokens(hypo[0].tokens) for hypo in batch_hypotheses]
+transcripts = ["".join(tokens) for tokens in batch_tokens]
+```
 
 Please refer to the [documentation](https://pytorch.org/audio/stable/models.decoder.html#ctcdecoder) for more API details, and the tutorial ([ASR Inference Decoding](https://pytorch.org/audio/main/tutorials/asr_inference_with_ctc_decoder_tutorial.html)) or sample [inference script](https://github.com/pytorch/audio/tree/main/examples/asr/librispeech_ctc_decoder) for more usage examples.
 
