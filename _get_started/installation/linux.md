@@ -82,7 +82,7 @@ sudo apt install python3-pip
 
 #### No CUDA/ROCm
 
-To install PyTorch via Anaconda, and do not have a [CUDA-capable](https://developer.nvidia.com/cuda-zone) or [ROCm-capable](https://docs.amd.com) system or do not require CUDA/ROCm (ie. GPU support), in the above selector, choose OS: Linux, Package: Conda, Language: Python and Compute Platform: CPU.
+To install PyTorch via Anaconda, and do not have a [CUDA-capable](https://developer.nvidia.com/cuda-zone) or [ROCm-capable](https://docs.amd.com) system or do not require CUDA/ROCm (i.e. GPU support), in the above selector, choose OS: Linux, Package: Conda, Language: Python and Compute Platform: CPU.
 Then, run the command that is presented to you.
 
 #### With CUDA
