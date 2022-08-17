@@ -14,16 +14,16 @@ In speech and language settings, *beam search* is an efficient, greedy algorithm
 In the example that follows, we'll consider — a token set of {ϵ, a, b}, where ϵ is a special token that we can imagine denotes a space between words or a pause in speech. Graphics here and below are taken from Awni Hannun's excellent [distill.pub writeup](https://distill.pub/2017/ctc/) on CTC and beam search.
 
 <p align="center">
-  <img src="\assets\images\fast-beam-search-decoding-in-pytorch-with-torchaudio-and-flashlight-text-1.jpeg" width="100%">
+  <img src="\assets\images\fast-beam-search-decoding-in-pytorch-with-torchaudio-and-flashlight-text-1.jpeg" width="70%">
 </p>
 
 With a greedy-like approach, beam search considers the next viable token given an existing sequence of tokens — in the example above, a, b, b is a valid sequence, but a, b, a is not. We *rank* each possible next token at each step of the beam search according to a scoring function. Scoring functions (s) typically looks something like:
 
 <p align="center">
-  <img src="\assets\images\fast-beam-search-decoding-in-pytorch-with-torchaudio-and-flashlight-text-2.jpeg" width="100%">
+  <img src="\assets\images\fast-beam-search-decoding-in-pytorch-with-torchaudio-and-flashlight-text-2.jpeg" width="80%">
 </p>
 
-Where **ŷ** is a potential path/sequence of tokens, **x** is the input *<strong>(P(ŷ|x)</strong>* represents the model's predictions over time), and 𝛼 is a weight on the language model probability *<strong>(P(y)</strong>* the probability of the sequence under the language model). Some scoring functions add *<strong>𝜷</strong>* which adjusts a score based on the length of the predicted sequence **|ŷ|**. This particular scoring function is used in [FAIR's prior work](https://arxiv.org/pdf/1911.08460.pdf) on end-to-end ASR, and there are many variations on scoring functions which can vary across application areas.
+Where **ŷ** is a potential path/sequence of tokens, **x** is the input *<strong>(P(ŷ&#124;x)</strong>* represents the model's predictions over time), and 𝛼 is a weight on the language model probability *<strong>(P(y)</strong>* the probability of the sequence under the language model). Some scoring functions add *<strong>𝜷</strong>* which adjusts a score based on the length of the predicted sequence **&#124;ŷ&#124;**. This particular scoring function is used in [FAIR's prior work](https://arxiv.org/pdf/1911.08460.pdf) on end-to-end ASR, and there are many variations on scoring functions which can vary across application areas.
 
 Given a particular sequence, to assess the next viable token in that sequence (perhaps constrained by a set of allowed words or sequences, such as a lexicon of words), the beam search algorithm scores the sequence with each candidate token added, and sorts token candidates based on those scores. For efficiency and since the number of paths is exponential in the token set size, the *<strong>top-k</strong>* highest-scoring candidates are kept — *<strong>k</strong>* represents the *<strong>beam size</strong>*.
 
@@ -52,7 +52,7 @@ Today's most commonly-used beam search decoding libraries today that support ext
 When benchmarking, we measure the *time-to-WER (word error rate)* — because of subtle differences in the implementation of decoding algorithms and the complex relationships between parameters and decoding speed, some hyperparameters differed across runs. To fairly assess performance, we first sweep for parameters that achieve a baseline WER, minimizing beam size if possible.
 
 <p align="center">
-  <img src="\assets\images\fast-beam-search-decoding-in-pytorch-with-torchaudio-and-flashlight-text-4.jpeg" width="100%">
+  <img src="\assets\images\fast-beam-search-decoding-in-pytorch-with-torchaudio-and-flashlight-text-4.jpeg" width="70%">
 </p>
 
 ## TorchAudio API and Usage
