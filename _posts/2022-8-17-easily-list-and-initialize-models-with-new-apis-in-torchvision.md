@@ -2,7 +2,7 @@
 layout: blog_detail
 title: "Easily list and initialize models with new APIs in TorchVision"
 author: Vasilis Vryniotis and Laurence Rouesnel
-featured-img: "\assets\images\easily-list-and-initialize-models-with-new-apis-in-torchvision-1.png"
+featured-img: "/assets/images/easily-list-and-initialize-models-with-new-apis-in-torchvision-1.png"
 ---
 
 TorchVision now supports listing and initializing all available built-in models and weights by name. This new API builds upon the recently introduced [Multi-weight support API](https://pytorch.org/blog/introducing-torchvision-new-multi-weight-support-api/), is currently in Beta, and it addresses a long-standing [request](https://github.com/pytorch/vision/issues/1143) from the community.
