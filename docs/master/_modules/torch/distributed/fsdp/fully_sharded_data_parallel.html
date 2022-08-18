@@ -219,7 +219,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href='https://pytorch.org/docs/versions.html'>master (1.13.0a0+git1ee9eb5 ) &#x25BC</a>
+      <a href='https://pytorch.org/docs/versions.html'>master (1.13.0a0+git451c629 ) &#x25BC</a>
     </div>
     
 
@@ -484,7 +484,6 @@
     <span class="n">_to_kwargs</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span> <span class="nn">torch.nn.parameter</span> <span class="kn">import</span> <span class="n">Parameter</span>
-
 <span class="kn">from</span> <span class="nn">._optim_utils</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">_broadcast_pos_dim_tensor_states</span><span class="p">,</span>
     <span class="n">_broadcast_processed_optim_state_dict</span><span class="p">,</span>
@@ -496,6 +495,9 @@
     <span class="n">_process_pos_dim_tensor_state</span><span class="p">,</span>
     <span class="n">_rekey_sharded_optim_state_dict</span><span class="p">,</span>
     <span class="n">_unflatten_optim_state</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span> <span class="nn">._shard_utils</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">_create_chunk_sharded_tensor</span>
 <span class="p">)</span>
 <span class="kn">from</span> <span class="nn">._utils</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">_apply_to_modules</span><span class="p">,</span>
@@ -2396,6 +2398,7 @@
         <span class="c1"># nn.Module.state_dict() will detach the parameter. Therefore, we need</span>
         <span class="c1"># to get flat_param from the FlattenParamsWrapper to get the metadata.</span>
         <span class="n">flat_param</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_fsdp_wrapped_module</span><span class="p">,</span> <span class="n">FLAT_PARAM</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="n">flat_param</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
         <span class="c1"># Construct a ShardedTensor from the flat_param.</span>
         <span class="n">full_numel</span> <span class="o">=</span> <span class="n">flat_param</span><span class="o">.</span><span class="n">_unsharded_size</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span>
         <span class="n">shard_offset</span> <span class="o">=</span> <span class="n">flat_param</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">rank</span>
@@ -2433,16 +2436,13 @@
             <span class="k">for</span> <span class="n">fqn</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_param_fqns</span><span class="p">:</span>
                 <span class="c1"># Create a ShardedTensor for the unflattened, non-sharded parameter.</span>
                 <span class="n">param</span> <span class="o">=</span> <span class="n">functools</span><span class="o">.</span><span class="n">reduce</span><span class="p">(</span><span class="nb">getattr</span><span class="p">,</span> <span class="n">fqn</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;.&quot;</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="p">)</span>
-                <span class="n">local_shard</span> <span class="o">=</span> <span class="n">param</span><span class="o">.</span><span class="n">chunk</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">world_size</span><span class="p">)[</span><span class="bp">self</span><span class="o">.</span><span class="n">rank</span><span class="p">]</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
-                <span class="n">offsets</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">param</span><span class="o">.</span><span class="n">size</span><span class="p">()]</span>
-                <span class="n">offsets</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">math</span><span class="o">.</span><span class="n">ceil</span><span class="p">(</span><span class="n">param</span><span class="o">.</span><span class="n">size</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">world_size</span><span class="p">)</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">rank</span>
-                <span class="n">local_shards</span> <span class="o">=</span> <span class="p">[</span>
-                    <span class="n">Shard</span><span class="o">.</span><span class="n">from_tensor_and_offsets</span><span class="p">(</span><span class="n">local_shard</span><span class="p">,</span> <span class="n">offsets</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">rank</span><span class="p">)</span>
-                <span class="p">]</span>
-                <span class="n">fqn</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">prefix</span><span class="si">}{</span><span class="n">fqn</span><span class="si">}</span><span class="s2">&quot;</span>
-                <span class="n">state_dict</span><span class="p">[</span><span class="n">fqn</span><span class="p">]</span> <span class="o">=</span> <span class="n">init_from_local_shards</span><span class="p">(</span>
-                    <span class="n">local_shards</span><span class="p">,</span> <span class="n">param</span><span class="o">.</span><span class="n">size</span><span class="p">(),</span> <span class="n">process_group</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">process_group</span>
-                <span class="p">)</span>  <span class="c1"># type: ignore[assignment]</span>
+                <span class="n">state_dict</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">prefix</span><span class="si">}{</span><span class="n">fqn</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">_create_chunk_sharded_tensor</span><span class="p">(</span>
+                    <span class="n">tensor</span><span class="o">=</span><span class="n">param</span><span class="p">,</span>
+                    <span class="n">rank</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">rank</span><span class="p">,</span>
+                    <span class="n">world_size</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">world_size</span><span class="p">,</span>
+                    <span class="n">device_per_node</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">device_count</span><span class="p">(),</span>
+                    <span class="n">pg</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">process_group</span>
+                <span class="p">)</span>
         <span class="n">state_dict</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">prefix</span><span class="si">}{</span><span class="n">FLAT_PARAM</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">state_dict</span>
 
