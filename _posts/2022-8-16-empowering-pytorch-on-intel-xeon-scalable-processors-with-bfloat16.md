@@ -2,7 +2,7 @@
 layout: blog_detail
 title: "Empowering PyTorch on Intel® Xeon® Scalable processors with Bfloat16"
 author: Mingfei Ma (Intel), Vitaly Fedyunin (Meta), Wei Wei (Meta)
-featured-img: '\assets\images\empowering-pytorch-on-intel-xeon-scalable-processors-with-bfloat16.png'
+featured-img: '/assets/images/empowering-pytorch-on-intel-xeon-scalable-processors-with-bfloat16.png'
 ---
 
 ## Overview
@@ -52,7 +52,7 @@ Generally, the explicit conversion approach and AMP approach have similar perfor
 We benchmarked inference performance of TorchVision models on Intel® Xeon® Platinum 8380H CPU @ 2.90GHz (codenamed Cooper Lake), single instance per socket (batch size = 2 x number of physical cores). Results show that bfloat16 has 1.4x to 2.2x performance gain over float32.
 
 <p align="center">
-  <img src="\assets\images\empowering-pytorch-on-intel-xeon-scalable-processors-with-bfloat16.png" width="100%">
+  <img src="/assets/images/empowering-pytorch-on-intel-xeon-scalable-processors-with-bfloat16.png" width="100%">
 </p>
 
 ## The performance boost of bfloat16 over float32 primarily comes from 3 aspects:
