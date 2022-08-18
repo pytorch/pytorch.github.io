@@ -2,7 +2,7 @@
 layout: blog_detail
 title: "Accelerating PyTorch Vision Models with Channels Last on CPU"
 author: Mingfei Ma (Intel), Vitaly Fedyunin (Meta), Wei Wei (Meta)
-featured-img: '\assets\images\accelerating-pytorch-vision-models-with-channels-last-on-cpu-2.png'
+featured-img: '/assets/images/accelerating-pytorch-vision-models-with-channels-last-on-cpu-2.png'
 ---
 
 ## Overview
@@ -21,7 +21,7 @@ Memory format refers to data representation that describes how a multidimensiona
 Fig-1 is the physical memory layout of a tensor with shape of [1, 3, 4, 4] on both Channels First and Channels Last memory format (channels denoted as R, G, B respectively):
 
 <p align="center">
-  <img src="\assets\images\accelerating-pytorch-vision-models-with-channels-last-on-cpu-1.png" width="70%">
+  <img src="/assets/images/accelerating-pytorch-vision-models-with-channels-last-on-cpu-1.png" width="70%">
 </p>
 
 <p align="center">
@@ -37,7 +37,7 @@ For Convolution layers, PyTorch uses oneDNN (oneAPI Deep Neural Network Library)
 On the other hand, oneDNN is optimized for Channels Last memory format to use it for optimal performance directly and PyTorch will simply pass a memory view to oneDNN. Which means the conversion of input and output tensor is saved. Fig-2 indicates memory format propagation behavior of convolution on PyTorch CPU (the solid arrow indicates a memory format conversion, and the dashed arrow indicates a memory view):
 
 <p align="center">
-  <img src="\assets\images\accelerating-pytorch-vision-models-with-channels-last-on-cpu-2.png" width="70%">
+  <img src="/assets/images/accelerating-pytorch-vision-models-with-channels-last-on-cpu-2.png" width="70%">
 </p>
 
 <p align="center">
@@ -69,7 +69,7 @@ While contributing to Channels Last kernels, we tried our best to optimize Chann
 
 The Channels Last related APIs are documented at [PyTorch memory format tutorial](https://pytorch.org/tutorials/intermediate/memory_format_tutorial.html). Typically, we can convert a 4D tensor from Channels First to Channels Last by:
 
-```console
+```python
 # convert x to channels last
 # suppose x’s shape is (N, C, H, W)
 # then x’s stride will be (HWC, 1, WC, C)
@@ -78,7 +78,7 @@ x = x.to(memory_format=torch.channels_last)
 
 To run models on Channels Last memory format, simply need to convert input and model to Channels Last and then you are ready to go. The following is a minimal example showing how to run ResNet50 with TorchVision on Channels Last memory format:
 
-```console
+```python
 import torch
 from torchvision.models import resnet50
 
@@ -100,7 +100,7 @@ The Channels Last optimization is implemented at native kernel level, which mean
 We benchmarked inference performance of TorchVision models on Intel® Xeon® Platinum 8380 CPU @ 2.3 GHz, single instance per socket (batch size = 2 x number of physical cores). Results show that Channels Last has 1.3x to 1.8x performance gain over Channels First.
 
 <p align="center">
-  <img src="\assets\images\accelerating-pytorch-vision-models-with-channels-last-on-cpu-3.png" width="100%">
+  <img src="/assets/images/accelerating-pytorch-vision-models-with-channels-last-on-cpu-3.png" width="100%">
 </p>
 
 The performance gain primarily comes from two aspects:
