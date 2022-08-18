@@ -109,7 +109,7 @@ print([weight for weight in weight_enum])
 
 ## Putting it all together
 
-For example, if you wanted to  to retrieve all the small-sized models with pre-trained weights and initialize one of them, it’s a matter of using the above APIs:
+For example, if you wanted to retrieve all the small-sized models with pre-trained weights and initialize one of them, it’s a matter of using the above APIs:
 
 ```python
 import torchvision
