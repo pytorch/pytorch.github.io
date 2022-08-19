@@ -219,7 +219,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href='https://pytorch.org/docs/versions.html'>master (1.13.0a0+git451c629 ) &#x25BC</a>
+      <a href='https://pytorch.org/docs/versions.html'>master (1.13.0a0+gitf094113 ) &#x25BC</a>
     </div>
     
 
@@ -430,8 +430,7 @@
              <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
               
   <h1>Source code for torch.distributed.fsdp.fully_sharded_data_parallel</h1><div class="highlight"><pre>
-<span></span><span class="kn">import</span> <span class="nn">collections</span>
-<span class="kn">import</span> <span class="nn">contextlib</span>
+<span></span><span class="kn">import</span> <span class="nn">contextlib</span>
 <span class="kn">import</span> <span class="nn">copy</span>
 <span class="kn">import</span> <span class="nn">functools</span>
 <span class="kn">import</span> <span class="nn">itertools</span>
@@ -487,18 +486,14 @@
 <span class="kn">from</span> <span class="nn">._optim_utils</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">_broadcast_pos_dim_tensor_states</span><span class="p">,</span>
     <span class="n">_broadcast_processed_optim_state_dict</span><span class="p">,</span>
-    <span class="n">_flatten_full_optim_state_dict</span><span class="p">,</span>
-    <span class="n">_get_flat_param_to_fsdp_module</span><span class="p">,</span>
+    <span class="n">_flatten_optim_state_dict</span><span class="p">,</span>
     <span class="n">_get_param_id_to_param</span><span class="p">,</span>
     <span class="n">_get_param_to_param_id</span><span class="p">,</span>
-    <span class="n">_OptimStateKey</span><span class="p">,</span>
+    <span class="n">_optim_state_dict</span><span class="p">,</span>
     <span class="n">_process_pos_dim_tensor_state</span><span class="p">,</span>
     <span class="n">_rekey_sharded_optim_state_dict</span><span class="p">,</span>
-    <span class="n">_unflatten_optim_state</span><span class="p">,</span>
 <span class="p">)</span>
-<span class="kn">from</span> <span class="nn">._shard_utils</span> <span class="kn">import</span> <span class="p">(</span>
-    <span class="n">_create_chunk_sharded_tensor</span>
-<span class="p">)</span>
+<span class="kn">from</span> <span class="nn">._shard_utils</span> <span class="kn">import</span> <span class="n">_create_chunk_sharded_tensor</span>
 <span class="kn">from</span> <span class="nn">._utils</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">_apply_to_modules</span><span class="p">,</span>
     <span class="n">_apply_to_tensors</span><span class="p">,</span>
@@ -1267,15 +1262,6 @@
 
         <span class="c1"># Enum to indicate if we&#39;re in the forward/backward pass, idle, etc.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">training_state</span> <span class="o">=</span> <span class="n">TrainingState_</span><span class="o">.</span><span class="n">IDLE</span>
-
-        <span class="c1"># setting two factors to avoid underflow and overflow</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">gradient_predivide_factor</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_gradient_predivide_factor</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">world_size</span>
-        <span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">gradient_postdivide_factor</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">world_size</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">gradient_predivide_factor</span>
-        <span class="p">)</span>
-
         <span class="bp">self</span><span class="o">.</span><span class="n">cpu_offload</span> <span class="o">=</span> <span class="n">cpu_offload</span> <span class="ow">or</span> <span class="n">CPUOffload</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">backward_prefetch</span> <span class="o">=</span> <span class="n">backward_prefetch</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">forward_prefetch</span> <span class="o">=</span> <span class="n">forward_prefetch</span>
@@ -1389,9 +1375,11 @@
         <span class="c1"># For validating execution order across ranks</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_exec_order_data</span> <span class="o">=</span> <span class="n">_ExecOrderData</span><span class="p">()</span>
 
-        <span class="c1"># setting communication hook to a default</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">communication_hook</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_default_comm_hook</span><span class="p">()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">communication_hook_state</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_default_comm_hook_state</span><span class="p">()</span>
+        <span class="c1"># Setting communication hook to a default:</span>
+        <span class="c1"># ``reduce_scatter`` for shareded strategies and</span>
+        <span class="c1"># ``all_reduce`` for ``NO_SHARD``</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_communication_hook</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_default_comm_hook</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_communication_hook_state</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_default_comm_hook_state</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_hook_registered</span> <span class="o">=</span> <span class="kc">False</span>
 
     <span class="k">def</span> <span class="nf">_init_param_exec_order_wrap_policy</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
@@ -1745,14 +1733,6 @@
 
         <span class="k">return</span> <span class="n">ret</span></div>
 
-    <span class="c1"># setting two factors &#39;self.gradient_predivide_factor&#39;</span>
-    <span class="c1"># and &#39;self.gradient_postdivide_factor&#39; to avoid underflow and overflow</span>
-    <span class="k">def</span> <span class="nf">_get_gradient_predivide_factor</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">world_size</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
-        <span class="n">factor</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span>
-        <span class="k">while</span> <span class="n">world_size</span> <span class="o">%</span> <span class="n">factor</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">and</span> <span class="n">world_size</span> <span class="o">/</span> <span class="n">factor</span> <span class="o">&gt;</span> <span class="n">factor</span><span class="p">:</span>
-            <span class="n">factor</span> <span class="o">*=</span> <span class="mi">2</span>
-        <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="n">factor</span><span class="p">)</span>
-
     <span class="k">def</span> <span class="nf">_offload_to_cpu</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">p</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Offloads parameter to CPU from self.compute_device. If the parameter is</span>
@@ -1799,8 +1779,8 @@
 <span class="sd">        Wether a low precision hook is registered or not.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">communication_hook</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
-            <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">communication_hook</span> <span class="ow">in</span> <span class="n">LOW_PRECISION_HOOKS</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_communication_hook</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+            <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_communication_hook</span> <span class="ow">in</span> <span class="n">LOW_PRECISION_HOOKS</span>
         <span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">_cast_fp_inputs_to_precision</span><span class="p">(</span>
@@ -2442,7 +2422,7 @@
                     <span class="n">world_size</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">world_size</span><span class="p">,</span>
                     <span class="n">device_per_node</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">device_count</span><span class="p">(),</span>
                     <span class="n">pg</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">process_group</span>
-                <span class="p">)</span>
+                <span class="p">)</span>  <span class="c1"># type: ignore[assignment]</span>
         <span class="n">state_dict</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">prefix</span><span class="si">}{</span><span class="n">FLAT_PARAM</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">state_dict</span>
 
@@ -3377,12 +3357,19 @@
                     <span class="c1"># reduce_dtype matches the param dtype.</span>
                     <span class="n">param</span><span class="o">.</span><span class="n">grad</span><span class="o">.</span><span class="n">data</span> <span class="o">=</span> <span class="n">param</span><span class="o">.</span><span class="n">grad</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">mixed_precision</span><span class="o">.</span><span class="n">reduce_dtype</span><span class="p">)</span>
 
-                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">gradient_predivide_factor</span> <span class="o">&gt;</span> <span class="mi">1</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">communication_hook</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                    <span class="c1"># Average grad by pre-division factor. Together pre- and post-division factors</span>
-                    <span class="c1"># lead to an overall averaging by world_size, required for consistency with PyTorch DDP.</span>
-                    <span class="c1"># This is a two-step process to avoid potential underflow and overflow.</span>
-                    <span class="n">param</span><span class="o">.</span><span class="n">grad</span><span class="o">.</span><span class="n">div_</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">gradient_predivide_factor</span><span class="p">)</span>
-
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_exec_order_data</span><span class="o">.</span><span class="n">is_first_iter</span><span class="p">:</span>
+                    <span class="c1"># For all sharding strategies communication is performed through `_communication_hook`:</span>
+                    <span class="c1"># default comm hooks are: `reduce_scatter` for sharded strategies and</span>
+                    <span class="c1"># `all_reduce` for non-sharded strategies. This checks asserts that `_communication_hook`</span>
+                    <span class="c1"># and `_communication_hook_state`, required for communication not `None`.`</span>
+                    <span class="n">p_assert</span><span class="p">(</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">_communication_hook</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">,</span>
+                        <span class="s2">&quot;Communication hook should not be None&quot;</span>
+                    <span class="p">)</span>
+                    <span class="n">p_assert</span><span class="p">(</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">_communication_hook_state</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">,</span>
+                        <span class="s2">&quot;Communication hook state should not be None&quot;</span>
+                    <span class="p">)</span>
                 <span class="n">grad</span> <span class="o">=</span> <span class="n">param</span><span class="o">.</span><span class="n">grad</span><span class="o">.</span><span class="n">data</span>
                 <span class="k">if</span> <span class="n">param</span><span class="o">.</span><span class="n">_is_sharded</span><span class="p">:</span>  <span class="c1"># type: ignore[attr-defined]</span>
                     <span class="c1"># We clear `param.grad` to permit repeated gradient</span>
@@ -3403,14 +3390,7 @@
                     <span class="n">num_pad</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">world_size</span> <span class="o">*</span> <span class="n">chunks</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span> <span class="o">-</span> <span class="n">grad</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span>
                     <span class="n">input_flattened</span> <span class="o">=</span> <span class="n">F</span><span class="o">.</span><span class="n">pad</span><span class="p">(</span><span class="n">grad_flatten</span><span class="p">,</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="n">num_pad</span><span class="p">])</span>
                     <span class="n">output</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">chunks</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
-                    <span class="n">dist</span><span class="o">.</span><span class="n">_reduce_scatter_base</span><span class="p">(</span>
-                        <span class="n">output</span><span class="p">,</span> <span class="n">input_flattened</span><span class="p">,</span> <span class="n">group</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">process_group</span>
-                    <span class="p">)</span>
-                    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">gradient_postdivide_factor</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
-                        <span class="c1"># Average grad by pre-division factor. Together pre- and post-division factors</span>
-                        <span class="c1"># lead to an overall averaging by world_size, required for consistency with PyTorch DDP.</span>
-                        <span class="c1"># This is a two-step process to avoid potential underflow and overflow.</span>
-                        <span class="n">output</span><span class="o">.</span><span class="n">div_</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">gradient_postdivide_factor</span><span class="p">)</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_communication_hook</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_communication_hook_state</span><span class="p">,</span> <span class="n">input_flattened</span><span class="p">,</span> <span class="n">output</span><span class="p">)</span>
 
                     <span class="bp">self</span><span class="o">.</span><span class="n">_cast_grad_to_param_dtype</span><span class="p">(</span><span class="n">output</span><span class="p">,</span> <span class="n">param</span><span class="p">)</span>
 
@@ -3445,9 +3425,7 @@
                     <span class="p">),</span> <span class="s2">&quot;Currently the way for _is_sharded to be False is </span><span class="se">\</span>
 <span class="s2">                        world_size == 1 or sharding_stratagy is set to be NO_SHARD&quot;</span>
                     <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">sharding_strategy</span> <span class="o">==</span> <span class="n">ShardingStrategy</span><span class="o">.</span><span class="n">NO_SHARD</span><span class="p">:</span>
-                        <span class="c1"># if a communication hook was not registered,</span>
-                        <span class="c1"># then a default hook (`all_reduce`) will be used</span>
-                        <span class="bp">self</span><span class="o">.</span><span class="n">communication_hook</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">communication_hook_state</span><span class="p">,</span> <span class="n">param</span><span class="o">.</span><span class="n">grad</span><span class="p">)</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">_communication_hook</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_communication_hook_state</span><span class="p">,</span> <span class="n">param</span><span class="o">.</span><span class="n">grad</span><span class="p">)</span>
 
                     <span class="bp">self</span><span class="o">.</span><span class="n">_cast_grad_to_param_dtype</span><span class="p">(</span><span class="n">param</span><span class="o">.</span><span class="n">grad</span><span class="p">,</span> <span class="n">param</span><span class="p">)</span>
 
@@ -4104,7 +4082,7 @@
             <span class="n">List</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]],</span> <span class="n">Iterable</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Parameter</span><span class="p">],</span>
         <span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">rank0_only</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
-        <span class="n">group</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">group</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">dist</span><span class="o">.</span><span class="n">ProcessGroup</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Consolidates the full optimizer state on rank 0 and returns it</span>
@@ -4155,115 +4133,54 @@
 <span class="sd">            :meth:`torch.optim.Optimizer.state_dict`. If ``rank0_only=True``,</span>
 <span class="sd">            then nonzero ranks return an empty :class:`dict`.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">osd</span> <span class="o">=</span> <span class="n">optim</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()</span>
-        <span class="n">osd_state</span><span class="p">,</span> <span class="n">osd_param_groups</span> <span class="o">=</span> <span class="n">osd</span><span class="p">[</span><span class="s2">&quot;state&quot;</span><span class="p">],</span> <span class="n">osd</span><span class="p">[</span><span class="s2">&quot;param_groups&quot;</span><span class="p">]</span>
-        <span class="n">rank</span> <span class="o">=</span> <span class="n">dist</span><span class="o">.</span><span class="n">get_rank</span><span class="p">(</span><span class="n">group</span><span class="p">)</span>
-        <span class="n">to_save</span> <span class="o">=</span> <span class="ow">not</span> <span class="n">rank0_only</span> <span class="ow">or</span> <span class="n">rank</span> <span class="o">==</span> <span class="mi">0</span>
-        <span class="n">full_osd</span><span class="p">:</span> <span class="n">Dict</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;state&quot;</span><span class="p">:</span> <span class="p">{},</span> <span class="s2">&quot;param_groups&quot;</span><span class="p">:</span> <span class="p">[]}</span> <span class="k">if</span> <span class="n">to_save</span> <span class="k">else</span> <span class="p">{}</span>
-        <span class="n">full_osd_state</span> <span class="o">=</span> <span class="n">full_osd</span><span class="p">[</span><span class="s2">&quot;state&quot;</span><span class="p">]</span> <span class="k">if</span> <span class="n">to_save</span> <span class="k">else</span> <span class="kc">None</span>
+        <span class="k">return</span> <span class="n">_optim_state_dict</span><span class="p">(</span>
+            <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span>
+            <span class="n">optim</span><span class="o">=</span><span class="n">optim</span><span class="p">,</span>
+            <span class="n">optim_input</span><span class="o">=</span><span class="n">optim_input</span><span class="p">,</span>
+            <span class="n">rank0_only</span><span class="o">=</span><span class="n">rank0_only</span><span class="p">,</span>
+            <span class="n">shard_state</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+            <span class="n">group</span><span class="o">=</span><span class="n">group</span><span class="p">,</span>
+        <span class="p">)</span></div>
 
-        <span class="c1"># Construct the local mapping between unflattened parameter names</span>
-        <span class="c1"># (`_OptimStateKey`s) and parameter IDs and broadcast rank 0&#39;s mapping</span>
-        <span class="n">param_to_unflat_param_names</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Parameter</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> \
-            <span class="n">_get_param_to_unflat_param_names</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
-        <span class="n">flat_param_id_to_param</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Parameter</span><span class="p">]</span> <span class="o">=</span> \
-            <span class="n">_get_param_id_to_param</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">optim_input</span><span class="p">)</span>
-        <span class="n">optim_state_key_to_flat_param_id</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="n">_OptimStateKey</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>  <span class="c1"># local</span>
-        <span class="n">r0_flat_param_id_to_optim_state_key</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">_OptimStateKey</span><span class="p">]</span> <span class="o">=</span> <span class="n">collections</span><span class="o">.</span><span class="n">OrderedDict</span><span class="p">()</span>  <span class="c1"># rank 0</span>
-        <span class="k">for</span> <span class="n">flat_param_id</span><span class="p">,</span> <span class="n">param</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">flat_param_id_to_param</span><span class="p">):</span>
-            <span class="c1"># Do not include parameters without state to avoid empty mappings</span>
-            <span class="c1"># just like in normal `torch.optim.Optimizer.state_dict()`</span>
-            <span class="k">if</span> <span class="n">flat_param_id</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">osd_state</span><span class="p">:</span>
-                <span class="k">continue</span>
-            <span class="n">optim_state_key</span> <span class="o">=</span> <span class="n">_OptimStateKey</span><span class="p">(</span>
-                <span class="n">unflat_param_names</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="n">param_to_unflat_param_names</span><span class="p">[</span><span class="n">param</span><span class="p">]),</span>
-                <span class="n">is_flat_param</span><span class="o">=</span><span class="nb">isinstance</span><span class="p">(</span><span class="n">param</span><span class="p">,</span> <span class="n">FlatParameter</span><span class="p">),</span>
-            <span class="p">)</span>
-            <span class="k">if</span> <span class="n">rank</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
-                <span class="n">r0_flat_param_id_to_optim_state_key</span><span class="p">[</span><span class="n">flat_param_id</span><span class="p">]</span> <span class="o">=</span> <span class="n">optim_state_key</span>
-            <span class="n">optim_state_key_to_flat_param_id</span><span class="p">[</span><span class="n">optim_state_key</span><span class="p">]</span> <span class="o">=</span> <span class="n">flat_param_id</span>
-        <span class="n">obj_list</span> <span class="o">=</span> <span class="p">[</span><span class="n">r0_flat_param_id_to_optim_state_key</span><span class="p">]</span> <span class="k">if</span> <span class="n">rank</span> <span class="o">==</span> <span class="mi">0</span> <span class="k">else</span> <span class="p">[</span><span class="kc">None</span><span class="p">]</span>
-        <span class="n">dist</span><span class="o">.</span><span class="n">broadcast_object_list</span><span class="p">(</span><span class="n">obj_list</span><span class="p">,</span> <span class="n">src</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">group</span><span class="o">=</span><span class="n">group</span><span class="p">)</span>
-        <span class="n">r0_flat_param_id_to_optim_state_key</span> <span class="o">=</span> <span class="n">obj_list</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
-
-        <span class="c1"># Ensure that all ranks have at least the optimizer states needed by</span>
-        <span class="c1"># rank 0&#39;s optimizer</span>
-        <span class="n">missing_keys</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">_OptimStateKey</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
-        <span class="k">for</span> <span class="n">r0_optim_state_key</span> <span class="ow">in</span> <span class="n">r0_flat_param_id_to_optim_state_key</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
-            <span class="k">if</span> <span class="n">r0_optim_state_key</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">optim_state_key_to_flat_param_id</span><span class="p">:</span>
-                <span class="c1"># A parameter from rank 0&#39;s optimizer does not exist for this</span>
-                <span class="c1"># rank&#39;s optimizer</span>
-                <span class="n">missing_keys</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">r0_optim_state_key</span><span class="p">)</span>
-                <span class="k">continue</span>
-            <span class="n">flat_param_id</span> <span class="o">=</span> <span class="n">optim_state_key_to_flat_param_id</span><span class="p">[</span><span class="n">r0_optim_state_key</span><span class="p">]</span>
-            <span class="k">assert</span> <span class="n">flat_param_id</span> <span class="o">&gt;=</span> <span class="mi">0</span> <span class="ow">and</span> <span class="n">flat_param_id</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">flat_param_id_to_param</span><span class="p">),</span> \
-                <span class="s2">&quot;Check the `flat_param_id_to_param` construction&quot;</span>
-        <span class="n">device</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s2">&quot;cuda&quot;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">current_device</span><span class="p">())</span>
-        <span class="n">num_missing</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="nb">len</span><span class="p">(</span><span class="n">missing_keys</span><span class="p">)],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int32</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
-        <span class="n">dist</span><span class="o">.</span><span class="n">all_reduce</span><span class="p">(</span><span class="n">num_missing</span><span class="p">,</span> <span class="n">group</span><span class="o">=</span><span class="n">group</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">num_missing</span><span class="o">.</span><span class="n">item</span><span class="p">()</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
-            <span class="n">obj_list</span> <span class="o">=</span> <span class="p">[</span><span class="kc">None</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">dist</span><span class="o">.</span><span class="n">get_world_size</span><span class="p">(</span><span class="n">group</span><span class="p">))]</span>
-            <span class="n">dist</span><span class="o">.</span><span class="n">all_gather_object</span><span class="p">(</span><span class="n">obj_list</span><span class="p">,</span> <span class="n">missing_keys</span><span class="p">,</span> <span class="n">group</span><span class="o">=</span><span class="n">group</span><span class="p">)</span>
-            <span class="n">error_msg</span> <span class="o">=</span> <span class="p">(</span>
-                <span class="s2">&quot;FSDP currently requires each rank to have at least the &quot;</span>
-                <span class="s2">&quot;optimizer states needed by rank 0&#39;s optimizer but some ranks &quot;</span>
-                <span class="s2">&quot;are missing some of those states&quot;</span>
-            <span class="p">)</span>
-            <span class="k">for</span> <span class="n">rank</span><span class="p">,</span> <span class="n">keys</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">obj_list</span><span class="p">):</span>
-                <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">keys</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
-                    <span class="n">error_msg</span> <span class="o">+=</span> <span class="p">(</span>
-                        <span class="sa">f</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">Rank </span><span class="si">{</span><span class="n">rank</span><span class="si">}</span><span class="s2"> is missing states for the parameters: &quot;</span>
-                        <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="p">[</span><span class="n">key</span><span class="o">.</span><span class="n">unflat_param_names</span> <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">keys</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span>
-                    <span class="p">)</span>
-            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="n">error_msg</span><span class="p">)</span>
-
-        <span class="c1"># Iterate in rank 0&#39;s flattened parameter ID order to ensure aligned</span>
-        <span class="c1"># all-gathers across ranks</span>
-        <span class="n">flat_param_to_fsdp_module</span> <span class="o">=</span> <span class="n">_get_flat_param_to_fsdp_module</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
-        <span class="k">for</span> <span class="n">r0_optim_state_key</span> <span class="ow">in</span> <span class="n">r0_flat_param_id_to_optim_state_key</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
-            <span class="n">flat_param_id</span> <span class="o">=</span> <span class="n">optim_state_key_to_flat_param_id</span><span class="p">[</span><span class="n">r0_optim_state_key</span><span class="p">]</span>
-            <span class="n">param</span> <span class="o">=</span> <span class="n">flat_param_id_to_param</span><span class="p">[</span><span class="n">flat_param_id</span><span class="p">]</span>
-            <span class="k">if</span> <span class="n">r0_optim_state_key</span><span class="o">.</span><span class="n">is_flat_param</span><span class="p">:</span>
-                <span class="n">fsdp_module</span> <span class="o">=</span> <span class="n">flat_param_to_fsdp_module</span><span class="p">[</span><span class="n">param</span><span class="p">]</span>
-                <span class="n">unflat_state</span> <span class="o">=</span> <span class="n">_unflatten_optim_state</span><span class="p">(</span>
-                    <span class="n">param</span><span class="p">,</span> <span class="n">osd_state</span><span class="p">[</span><span class="n">flat_param_id</span><span class="p">],</span> <span class="n">fsdp_module</span><span class="p">,</span> <span class="n">to_save</span><span class="p">,</span>
-                <span class="p">)</span>
-                <span class="k">if</span> <span class="n">to_save</span><span class="p">:</span>
-                    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">unflat_state</span><span class="p">)</span> <span class="o">==</span> <span class="nb">len</span><span class="p">(</span><span class="n">r0_optim_state_key</span><span class="o">.</span><span class="n">unflat_param_names</span><span class="p">)</span>
-                    <span class="k">for</span> <span class="n">unflat_param_name</span><span class="p">,</span> <span class="n">unflat_param_state</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span>
-                        <span class="n">r0_optim_state_key</span><span class="o">.</span><span class="n">unflat_param_names</span><span class="p">,</span> <span class="n">unflat_state</span><span class="p">,</span>
-                    <span class="p">):</span>
-                        <span class="n">full_osd_state</span><span class="p">[</span><span class="n">unflat_param_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">unflat_param_state</span>
-            <span class="k">elif</span> <span class="n">to_save</span><span class="p">:</span>
-                <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">r0_optim_state_key</span><span class="o">.</span><span class="n">unflat_param_names</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span>
-                <span class="n">unflat_param_name</span> <span class="o">=</span> <span class="n">r0_optim_state_key</span><span class="o">.</span><span class="n">unflat_param_names</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
-                <span class="n">full_osd_state</span><span class="p">[</span><span class="n">unflat_param_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">copy</span><span class="p">(</span><span class="n">osd_state</span><span class="p">[</span><span class="n">flat_param_id</span><span class="p">])</span>
-                <span class="k">for</span> <span class="n">state_name</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">full_osd_state</span><span class="p">[</span><span class="n">unflat_param_name</span><span class="p">]</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-                    <span class="k">if</span> <span class="n">torch</span><span class="o">.</span><span class="n">is_tensor</span><span class="p">(</span><span class="n">value</span><span class="p">):</span>
-                        <span class="n">full_osd_state</span><span class="p">[</span><span class="n">unflat_param_name</span><span class="p">][</span><span class="n">state_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span>
-
-        <span class="k">if</span> <span class="ow">not</span> <span class="n">to_save</span><span class="p">:</span>
-            <span class="k">return</span> <span class="p">{}</span>
-
-        <span class="c1"># Handle the &quot;param_groups&quot; part of the optimizer state dict</span>
-        <span class="n">full_osd_param_groups</span> <span class="o">=</span> <span class="n">full_osd</span><span class="p">[</span><span class="s2">&quot;param_groups&quot;</span><span class="p">]</span>  <span class="c1"># alias</span>
-        <span class="k">for</span> <span class="n">flat_param_group</span> <span class="ow">in</span> <span class="n">osd_param_groups</span><span class="p">:</span>
-            <span class="n">unflat_param_group</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="n">flat_param_group</span><span class="p">)</span>
-            <span class="n">param_group_params</span> <span class="o">=</span> <span class="p">[</span>
-                <span class="n">flat_param_id_to_param</span><span class="p">[</span><span class="n">flat_param_id</span><span class="p">]</span>
-                <span class="k">for</span> <span class="n">flat_param_id</span> <span class="ow">in</span> <span class="n">flat_param_group</span><span class="p">[</span><span class="s2">&quot;params&quot;</span><span class="p">]</span>
+<div class="viewcode-block" id="FullyShardedDataParallel.sharded_optim_state_dict"><a class="viewcode-back" href="../../../../fsdp.html#torch.distributed.fsdp.FullyShardedDataParallel.sharded_optim_state_dict">[docs]</a>    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">sharded_optim_state_dict</span><span class="p">(</span>
+        <span class="n">model</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">,</span>
+        <span class="n">optim</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">optim</span><span class="o">.</span><span class="n">Optimizer</span><span class="p">,</span>
+        <span class="n">optim_input</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span>
+            <span class="n">Union</span><span class="p">[</span>
+                <span class="n">List</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]],</span> <span class="n">Iterable</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Parameter</span><span class="p">],</span>
             <span class="p">]</span>
-            <span class="n">nested_unflat_param_names</span> <span class="o">=</span> <span class="p">[</span>
-                <span class="n">param_to_unflat_param_names</span><span class="p">[</span><span class="n">param</span><span class="p">]</span>
-                <span class="k">for</span> <span class="n">param</span> <span class="ow">in</span> <span class="n">param_group_params</span>
-            <span class="p">]</span>
-            <span class="n">unflat_param_group</span><span class="p">[</span><span class="s2">&quot;params&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span>
-                <span class="n">unflat_param_name</span>
-                <span class="k">for</span> <span class="n">unflat_param_names</span> <span class="ow">in</span> <span class="n">nested_unflat_param_names</span>
-                <span class="k">for</span> <span class="n">unflat_param_name</span> <span class="ow">in</span> <span class="n">unflat_param_names</span>
-            <span class="p">]</span>  <span class="c1"># flatten the list of lists</span>
-            <span class="n">full_osd_param_groups</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">unflat_param_group</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">full_osd</span></div>
+        <span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">group</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">dist</span><span class="o">.</span><span class="n">ProcessGroup</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        The API is similar to :meth:``full_optim_state_dict`` but this API</span>
+<span class="sd">        chunks all non-zero-dimension states to ShardedTensor to save memory.</span>
+<span class="sd">        This API should only be used when the model state_dict is derived with</span>
+<span class="sd">        the context manager ``with state_dict_type(SHARDED_STATE_DICT):``.</span>
+
+<span class="sd">        For the detail usages, refer to the :meth:``full_optim_state_dict`` doc.</span>
+
+<span class="sd">        .. warning:: The returned state dict contains ShardedTensor and cannot be</span>
+<span class="sd">            directly used by the regular ``optim.load_state_dict``.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="c1"># TODO: The ultimate goal of the optimizer state APIs should be the same</span>
+        <span class="c1"># as state_dict/load_state_dict -- using one API to get optimizer states</span>
+        <span class="c1"># and one API to load optimizer states. ``state_dict_type`` will be used</span>
+        <span class="c1"># to decide which optimizer states should be returned.</span>
+        <span class="c1"># There are currently two APIs to load a full optimizer state. So the</span>
+        <span class="c1"># first step of the unification is to merge the two full optimizer state</span>
+        <span class="c1"># loading APIs.</span>
+        <span class="c1"># Task: https://github.com/pytorch/pytorch/issues/82232</span>
+        <span class="k">return</span> <span class="n">_optim_state_dict</span><span class="p">(</span>
+            <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span>
+            <span class="n">optim</span><span class="o">=</span><span class="n">optim</span><span class="p">,</span>
+            <span class="n">optim_input</span><span class="o">=</span><span class="n">optim_input</span><span class="p">,</span>
+            <span class="n">rank0_only</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+            <span class="n">shard_state</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">group</span><span class="o">=</span><span class="n">group</span><span class="p">,</span>
+        <span class="p">)</span></div>
 
 <div class="viewcode-block" id="FullyShardedDataParallel.shard_full_optim_state_dict"><a class="viewcode-back" href="../../../../fsdp.html#torch.distributed.fsdp.FullyShardedDataParallel.shard_full_optim_state_dict">[docs]</a>    <span class="nd">@staticmethod</span>
     <span class="k">def</span> <span class="nf">shard_full_optim_state_dict</span><span class="p">(</span>
@@ -4327,10 +4244,49 @@
 <span class="sd">            flattened parameters instead of unflattened parameters and</span>
 <span class="sd">            restricted to only include this rank&#39;s part of the optimizer state.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">sharded_osd</span> <span class="o">=</span> <span class="n">_flatten_full_optim_state_dict</span><span class="p">(</span>
+        <span class="n">sharded_osd</span> <span class="o">=</span> <span class="n">_flatten_optim_state_dict</span><span class="p">(</span>
             <span class="n">full_optim_state_dict</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="kc">True</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="k">return</span> <span class="n">_rekey_sharded_optim_state_dict</span><span class="p">(</span><span class="n">sharded_osd</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">optim_input</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="FullyShardedDataParallel.flatten_sharded_optim_state_dict"><a class="viewcode-back" href="../../../../fsdp.html#torch.distributed.fsdp.FullyShardedDataParallel.flatten_sharded_optim_state_dict">[docs]</a>    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">flatten_sharded_optim_state_dict</span><span class="p">(</span>
+        <span class="n">sharded_optim_state_dict</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
+        <span class="n">model</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">,</span>
+        <span class="n">optim_input</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span>
+            <span class="n">Union</span><span class="p">[</span>
+                <span class="n">List</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]],</span> <span class="n">Iterable</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Parameter</span><span class="p">],</span>
+            <span class="p">]</span>
+        <span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        The API is similar to :meth:``shard_full_optim_state_dict``. The only</span>
+<span class="sd">        difference is that the input ``sharded_optim_state_dict`` should be</span>
+<span class="sd">        returned from :meth:`sharded_optim_state_dict`. Therefore, there will be</span>
+<span class="sd">        allgather calls on each rank to gather ShardedTensor.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            sharded_optim_state_dict (Dict[str, Any]): Optimizer state dict</span>
+<span class="sd">                corresponding to the unflattened parameters and holding the</span>
+<span class="sd">                sharded optimizer state.</span>
+<span class="sd">            model (torch.nn.Module):</span>
+<span class="sd">                Refer to :meth:``shard_full_optim_state_dict``.</span>
+<span class="sd">            optim_input (Optional[Union[List[Dict[str, Any]], Iterable[torch.nn.Parameter]]]):</span>
+<span class="sd">                Refer to :meth:``shard_full_optim_state_dict``.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            Refer to :meth:``shard_full_optim_state_dict``.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="c1"># TODO: The implementation is the same as ``shard_full_optim_state_dict``.</span>
+        <span class="c1"># See the TODO in ``shard_full_optim_state_dict`` for the future</span>
+        <span class="c1"># unification plan.</span>
+        <span class="n">flattened_osd</span> <span class="o">=</span> <span class="n">_flatten_optim_state_dict</span><span class="p">(</span>
+            <span class="n">sharded_optim_state_dict</span><span class="p">,</span>
+            <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span>
+            <span class="n">shard_state</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">_rekey_sharded_optim_state_dict</span><span class="p">(</span><span class="n">flattened_osd</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">optim_input</span><span class="p">)</span></div>
 
 <div class="viewcode-block" id="FullyShardedDataParallel.scatter_full_optim_state_dict"><a class="viewcode-back" href="../../../../fsdp.html#torch.distributed.fsdp.FullyShardedDataParallel.scatter_full_optim_state_dict">[docs]</a>    <span class="nd">@staticmethod</span>
     <span class="k">def</span> <span class="nf">scatter_full_optim_state_dict</span><span class="p">(</span>
@@ -4410,7 +4366,11 @@
         <span class="k">if</span> <span class="n">rank</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
             <span class="k">if</span> <span class="n">full_optim_state_dict</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Rank 0 must pass in the full optimizer state dict&quot;</span><span class="p">)</span>
-            <span class="n">flat_osd</span> <span class="o">=</span> <span class="n">_flatten_full_optim_state_dict</span><span class="p">(</span><span class="n">full_optim_state_dict</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+            <span class="n">flat_osd</span> <span class="o">=</span> <span class="n">_flatten_optim_state_dict</span><span class="p">(</span>
+                <span class="n">full_optim_state_dict</span><span class="p">,</span>
+                <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span>
+                <span class="n">shard_state</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+            <span class="p">)</span>
             <span class="n">processed_osd</span> <span class="o">=</span> <span class="n">_process_pos_dim_tensor_state</span><span class="p">(</span><span class="n">flat_osd</span><span class="p">,</span> <span class="n">world_size</span><span class="p">)</span>
         <span class="c1"># Broadcast the optim state dict without positive-dimension tensor</span>
         <span class="c1"># state and the FSDP parameter IDs from rank 0 to all ranks</span>
@@ -4536,7 +4496,7 @@
 <span class="sd">        Returns a default communication hook based on a sharding strategy.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">sharding_strategy</span> <span class="o">!=</span> <span class="n">ShardingStrategy</span><span class="o">.</span><span class="n">NO_SHARD</span><span class="p">:</span>
-            <span class="k">return</span> <span class="kc">None</span>
+            <span class="k">return</span> <span class="n">default_hooks</span><span class="o">.</span><span class="n">reduce_scatter_hook</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="k">return</span> <span class="n">default_hooks</span><span class="o">.</span><span class="n">allreduce_hook</span>
 
@@ -4544,10 +4504,7 @@
         <span class="sa">r</span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Returns a default communication hook state based on a sharding strategy.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">sharding_strategy</span> <span class="o">!=</span> <span class="n">ShardingStrategy</span><span class="o">.</span><span class="n">NO_SHARD</span><span class="p">:</span>
-            <span class="k">return</span> <span class="kc">None</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">default_hooks</span><span class="o">.</span><span class="n">DefaultState</span><span class="p">(</span><span class="n">process_group</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">process_group</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">default_hooks</span><span class="o">.</span><span class="n">DefaultState</span><span class="p">(</span><span class="n">process_group</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">process_group</span><span class="p">)</span>
 
 <div class="viewcode-block" id="FullyShardedDataParallel.register_comm_hook"><a class="viewcode-back" href="../../../../fsdp.html#torch.distributed.fsdp.FullyShardedDataParallel.register_comm_hook">[docs]</a>    <span class="k">def</span> <span class="nf">register_comm_hook</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="nb">object</span><span class="p">,</span> <span class="n">hook</span><span class="p">:</span> <span class="n">callable</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
@@ -4559,10 +4516,6 @@
 <span class="sd">        which involve different communication strategies for</span>
 <span class="sd">        parameter syncs while training with :class:`FullyShardedDataParallel`.</span>
 
-<span class="sd">        .. warning::</span>
-<span class="sd">            FSDP only support communication hooks for a ``NO_SHARD`` strategy at this time.</span>
-<span class="sd">            If other strategies are used, an error will be raised.</span>
-
 <span class="sd">        .. warning ::</span>
 <span class="sd">            FSDP communication hook should be registered before running an initial forward pass</span>
 <span class="sd">            and only once.</span>
@@ -4573,30 +4526,35 @@
 <span class="sd">                            peers to communicate with next in `GossipGrad &lt;https://arxiv.org/abs/1803.05880&gt;`_, etc.</span>
 <span class="sd">                            It is locally stored by each worker</span>
 <span class="sd">                            and shared by all the gradient tensors on the worker.</span>
-<span class="sd">            hook (Callable): Callable with the following signature:</span>
-<span class="sd">                            ``hook: Callable[torch.Tensor] -&gt; None``:</span>
+<span class="sd">            hook (Callable): Callable, which has one of the following signatures:</span>
+<span class="sd">                            1) ``hook: Callable[torch.Tensor] -&gt; None``:</span>
 <span class="sd">                            This function takes in a Python tensor, which represents</span>
 <span class="sd">                            the full, flattened, unsharded gradient with respect to all variables</span>
 <span class="sd">                            corresponding to the model this FSDP unit is wrapping</span>
 <span class="sd">                            (that are not wrapped by other FSDP sub-units).</span>
-<span class="sd">                            It then performs all necessary processing and returns ``None``.</span>
+<span class="sd">                            It then performs all necessary processing and returns ``None``;</span>
+<span class="sd">                            2) ``hook: Callable[torch.Tensor, torch.Tensor] -&gt; None``:</span>
+<span class="sd">                            This function takes in two Python tensors, the first one represents</span>
+<span class="sd">                            the full, flattened, unsharded gradient with respect to all variables</span>
+<span class="sd">                            corresponding to the model this FSDP unit is wrapping</span>
+<span class="sd">                            (that are not wrapped by other FSDP sub-units). The latter</span>
+<span class="sd">                            represents a pre-sized tensor to store a chunk of a sharded gradient after</span>
+<span class="sd">                            reduction.</span>
+<span class="sd">                            In both cases, callable performs all necessary processing and returns ``None``.</span>
+<span class="sd">                            Callables with signature 1 are expected to handle gradient communication for a `NO_SHARD` case.</span>
+<span class="sd">                            Callables with signature 2 are expected to handle gradient communication for sharded cases.</span>
 
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">check_is_root</span><span class="p">():</span>
             <span class="k">raise</span> <span class="ne">AssertionError</span><span class="p">(</span><span class="s2">&quot;register_comm_hook can only be called on a root instance.&quot;</span><span class="p">)</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">sharding_strategy</span> <span class="o">!=</span> <span class="n">ShardingStrategy</span><span class="o">.</span><span class="n">NO_SHARD</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
-                <span class="s2">&quot;Communication hooks are currently only available for a NO_SHARD strategy.&quot;</span>
-            <span class="p">)</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="c1"># register same hook for root and all submodules</span>
-            <span class="k">for</span> <span class="n">submodule</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">fsdp_modules</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-                <span class="k">assert</span> <span class="ow">not</span> <span class="n">submodule</span><span class="o">.</span><span class="n">_hook_registered</span><span class="p">,</span> <span class="s2">&quot;communication hook can be only registered once&quot;</span>
-                <span class="n">submodule</span><span class="o">.</span><span class="n">_hook_registered</span> <span class="o">=</span> <span class="kc">True</span>
-                <span class="k">assert</span> <span class="n">submodule</span><span class="o">.</span><span class="n">communication_hook</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_default_comm_hook</span><span class="p">(),</span>\
-                    <span class="sa">f</span><span class="s2">&quot;communication hook should be default, but it is </span><span class="si">{</span><span class="n">submodule</span><span class="o">.</span><span class="n">communication_hook</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> instead&quot;</span>
-                <span class="n">submodule</span><span class="o">.</span><span class="n">communication_hook_state</span> <span class="o">=</span> <span class="n">state</span>
-                <span class="n">submodule</span><span class="o">.</span><span class="n">communication_hook</span> <span class="o">=</span> <span class="n">hook</span></div></div>
+        <span class="k">for</span> <span class="n">submodule</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">fsdp_modules</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+            <span class="k">assert</span> <span class="ow">not</span> <span class="n">submodule</span><span class="o">.</span><span class="n">_hook_registered</span><span class="p">,</span> <span class="s2">&quot;communication hook can be only registered once&quot;</span>
+            <span class="n">submodule</span><span class="o">.</span><span class="n">_hook_registered</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="k">assert</span> <span class="n">submodule</span><span class="o">.</span><span class="n">_communication_hook</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_default_comm_hook</span><span class="p">(),</span>\
+                <span class="sa">f</span><span class="s2">&quot;communication hook should be default, but it is </span><span class="si">{</span><span class="n">submodule</span><span class="o">.</span><span class="n">_communication_hook</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> instead&quot;</span>
+            <span class="n">submodule</span><span class="o">.</span><span class="n">_communication_hook_state</span> <span class="o">=</span> <span class="n">state</span>
+            <span class="n">submodule</span><span class="o">.</span><span class="n">_communication_hook</span> <span class="o">=</span> <span class="n">hook</span></div></div>
+
 
 <span class="k">def</span> <span class="nf">_get_default_cuda_device</span><span class="p">(</span><span class="n">module</span><span class="p">:</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">:</span>
     <span class="sd">&quot;&quot;&quot;Try to infer CUDA device from module parameters.&quot;&quot;&quot;</span>
