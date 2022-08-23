@@ -50,7 +50,7 @@ nvFuser has great support for normalization kernels and related fusions frequent
 nvFuser, can also significantly reduce the training time of TIMM networks, up to over 1.3x vs. eager PyTorch, and up to 1.44x vs. eager PyTorch when combined with the torch.amp module. Figure 1 shows nvFuser’s speedup without torch.amp, and when torch.amp is used with the NHWC (“channels last”) and NCHW (“channels first”) formats. nvFuser is integrated in TIMM through FuncTorch tracing directly (without TorchDynamo) and can be used by adding the [--aot-autograd command line argument](https://github.com/rwightman/pytorch-image-models/commit/ca991c1fa57373286b9876aa63370fd19f5d6032) when running the TIMM benchmark or training script.
 
 <p align="center">
-  <img src="/assets/images/introducing-nvfuser-a-deep-learning-compiler-for-pytorch-2.png" width="70%">
+  <img src="/assets/images/introducing-nvfuser-a-deep-learning-compiler-for-pytorch-2.png" width="90%">
 </p>
 
 <p align="center">
@@ -60,11 +60,11 @@ Figure 1: The Y-axis is the performance gain nvFuser provides over not using nvF
 When running with float32 precision nvFuser provides a 1.12x geometric mean (“geomean”) speedup on TIMM networks, and when running with torch.amp and “channels first” it provides a 1.14x geomean speedup. However, nvFuser currently doesn’t speedup torch.amp and “channels last” training (a .9x geomean regression), so we recommend not using it in those cases. We are actively working on improving “channels last” performance now, and soon we will have two additional optimization strategies (grid persistent optimizations for channels-last normalizations and fast transposes) which we expect will provide speedups comparable to “channels first” in PyTorch version 1.13 and later. Many of nvFuser’s optimizations can also help in inference cases. However, in PyTorch when running inference on small batch sizes, the performance is typically limited by CPU overhead, which nvFuser can’t completely remove or fix. Therefore, typically the most important optimization for inference is to enable [CUDA Graphs](https://pytorch.org/blog/accelerating-pytorch-with-cuda-graphs/) when possible. Once CUDA Graphs is enabled, then it can also be beneficial to also enable fusion through nvFuser. Performance of inference is shown in Figure 2 and Figure 3. Inference is only run with float16 AMP as it is uncommon to run inference workloads in full float32 precision.
 
 <p align="center">
-  <img src="/assets/images/introducing-nvfuser-a-deep-learning-compiler-for-pytorch-3.png" width="70%">
+  <img src="/assets/images/introducing-nvfuser-a-deep-learning-compiler-for-pytorch-3.png" width="80%">
 </p>
 
 <p align="center">
-  <img src="/assets/images/introducing-nvfuser-a-deep-learning-compiler-for-pytorch-4.png" width="70%">
+  <img src="/assets/images/introducing-nvfuser-a-deep-learning-compiler-for-pytorch-4.png" width="80%">
 </p>
 
 <p align="center">
@@ -72,11 +72,11 @@ Figure 2: Performance gains of enabling CUDA Graphs, and CUDA Graphs with nvFuse
 </p>
 
 <p align="center">
-  <img src="/assets/images/introducing-nvfuser-a-deep-learning-compiler-for-pytorch-5.png" width="70%">
+  <img src="/assets/images/introducing-nvfuser-a-deep-learning-compiler-for-pytorch-5.png" width="80%">
 </p>
 
 <p align="center">
-  <img src="/assets/images/introducing-nvfuser-a-deep-learning-compiler-for-pytorch-6.png" width="70%">
+  <img src="/assets/images/introducing-nvfuser-a-deep-learning-compiler-for-pytorch-6.png" width="80%">
 </p>
 
 <p align="center">
