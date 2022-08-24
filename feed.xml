@@ -4,7 +4,7 @@
   <generator uri="https://jekyllrb.com/" version="3.9.0">Jekyll</generator>
   <link href="https://pytorch.org/feed.xml" rel="self" type="application/atom+xml" />
   <link href="https://pytorch.org/" rel="alternate" type="text/html" />
-  <updated>2022-08-23T17:43:07-07:00</updated>
+  <updated>2022-08-24T13:27:19-07:00</updated>
   <id>https://pytorch.org/feed.xml</id>
 
   
@@ -29,6 +29,163 @@
 
   
   
+  
+    <entry>
+      <title type="html">Accelerating PyTorch Vision Models with Channels Last on CPU</title>
+      <link href="https://pytorch.org/blog/accelerating-pytorch-vision-models-with-channels-last-on-cpu/" rel="alternate" type="text/html" title="Accelerating PyTorch Vision Models with Channels Last on CPU" />
+      <published>2022-08-24T00:00:00-07:00</published>
+      <updated>2022-08-24T00:00:00-07:00</updated>
+      <id>https://pytorch.org/blog/accelerating-pytorch-vision-models-with-channels-last-on-cpu</id>
+      <content type="html" xml:base="https://pytorch.org/blog/accelerating-pytorch-vision-models-with-channels-last-on-cpu/">&lt;h2 id=&quot;overview&quot;&gt;Overview&lt;/h2&gt;
+
+&lt;p&gt;Memory formats has significant impact on performance when running vision models, generally Channels Last is a more favorable from performance perspective due to better data locality.&lt;/p&gt;
+
+&lt;p&gt;This blog will introduce fundamental concepts of memory formats and demonstrate performance benefits using Channels Last on popular PyTorch vision models on Intel® Xeon® Scalable processors.&lt;/p&gt;
+
+&lt;h2 id=&quot;memory-formats-introduction&quot;&gt;Memory Formats Introduction&lt;/h2&gt;
+
+&lt;p&gt;Memory format refers to data representation that describes how a multidimensional (nD) array is stored in linear (1D) memory address space. The concept of memory format has two aspects:&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;strong&gt;Physical Order&lt;/strong&gt; is the layout of data storage in physical memory. For vision models, usually we talk about NCHW, NHWC. These are the descriptions of physical memory layout, also referred as Channels First and Channels Last respectively.&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;Logical Order&lt;/strong&gt; is a convention on how to describe tensor shape and stride. In PyTorch, this convention is NCHW. No matter what the physical order is, tensor shape and stride will always be depicted in the order of NCHW.&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;Fig-1 is the physical memory layout of a tensor with shape of [1, 3, 4, 4] on both Channels First and Channels Last memory format (channels denoted as R, G, B respectively):&lt;/p&gt;
+
+&lt;p align=&quot;center&quot;&gt;
+  &lt;img src=&quot;/assets/images/accelerating-pytorch-vision-models-with-channels-last-on-cpu-1.png&quot; width=&quot;70%&quot; /&gt;
+&lt;/p&gt;
+
+&lt;p align=&quot;center&quot;&gt;
+&lt;b&gt;Fig-1 Physical memory layout of Channels First and Channels Last&lt;/b&gt;
+&lt;/p&gt;
+
+&lt;h2 id=&quot;memory-formats-propagation&quot;&gt;Memory Formats Propagation&lt;/h2&gt;
+
+&lt;p&gt;The general rule for PyTorch memory format propagation is to preserve the input tensor’s memory format. Which means a Channels First input will generate a Channels First output and a Channels Last input will generate a Channels Last output.&lt;/p&gt;
+
+&lt;p&gt;For Convolution layers, PyTorch uses oneDNN (oneAPI Deep Neural Network Library) by default to achieve optimal performance on Intel CPUs. Since it is physically impossible to achieve highly optimized performance directly with Channels Frist memory format, input and weight are firstly converted to blocked format and then computed. oneDNN may choose different blocked formats according to input shapes, data type and hardware architecture, for vectorization and cache reuse purposes. The blocked format is opaque to PyTorch, so the output needs to be converted back to Channels First. Though blocked format would bring about optimal computing performance, the format conversions may add overhead and therefore offset the performance gain.&lt;/p&gt;
+
+&lt;p&gt;On the other hand, oneDNN is optimized for Channels Last memory format to use it for optimal performance directly and PyTorch will simply pass a memory view to oneDNN. Which means the conversion of input and output tensor is saved. Fig-2 indicates memory format propagation behavior of convolution on PyTorch CPU (the solid arrow indicates a memory format conversion, and the dashed arrow indicates a memory view):&lt;/p&gt;
+
+&lt;p align=&quot;center&quot;&gt;
+  &lt;img src=&quot;/assets/images/accelerating-pytorch-vision-models-with-channels-last-on-cpu-2.png&quot; width=&quot;70%&quot; /&gt;
+&lt;/p&gt;
+
+&lt;p align=&quot;center&quot;&gt;
+&lt;b&gt;Fig-2 CPU Conv memory format propagation&lt;/b&gt;
+&lt;/p&gt;
+
+&lt;p&gt;On PyTorch, the default memory format is Channels First. In case a particular operator doesn’t have support on Channels Last, the NHWC input would be treated as a non-contiguous NCHW and therefore fallback to Channels First, which will consume the previous memory bandwidth on CPU and result in suboptimal performance.&lt;/p&gt;
+
+&lt;p&gt;Therefore, it is very important to extend the scope of Channels Last support for optimal performance. And we have implemented Channels Last kernels for the commonly use operators in CV domain, applicable for both inference and training, such as:&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;Activations (e.g., ReLU, PReLU, etc.)&lt;/li&gt;
+  &lt;li&gt;Convolution (e.g., Conv2d)&lt;/li&gt;
+  &lt;li&gt;Normalization (e.g., BatchNorm2d, GroupNorm, etc.)&lt;/li&gt;
+  &lt;li&gt;Pooling (e.g., AdaptiveAvgPool2d, MaxPool2d, etc.)&lt;/li&gt;
+  &lt;li&gt;Shuffle (e.g., ChannelShuffle, PixelShuffle)&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;Refer to &lt;a href=&quot;https://github.com/pytorch/pytorch/wiki/Operators-with-Channels-Last-support&quot;&gt;Operators-with-Channels-Last-support&lt;/a&gt; for details.&lt;/p&gt;
+
+&lt;h2 id=&quot;native-level-optimization-on-channels-last&quot;&gt;Native Level Optimization on Channels Last&lt;/h2&gt;
+
+&lt;p&gt;As mentioned above, PyTorch uses oneDNN to achieve optimal performance on Intel CPUs for convolutions. The rest of memory format aware operators are optimized at PyTorch native level, which doesn’t require any third-party library support.&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;strong&gt;Cache friendly parallelization scheme:&lt;/strong&gt; keep the same parallelization scheme for all the memory format aware operators, this will help increase data locality when passing each layer’s output to the next.&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;Vectorization on multiple archs:&lt;/strong&gt; generally, we can vectorize on the most inner dimension on Channels Last memory format. And each of the vectorized CPU kernels will be generated for both AVX2 and AVX512.&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;While contributing to Channels Last kernels, we tried our best to optimize Channels First counterparts as well. The fact is some operators are physically impossible to achieve optimal performance on Channels First, such as Convolution, Pooling, etc.&lt;/p&gt;
+
+&lt;h2 id=&quot;run-vision-models-on-channels-last&quot;&gt;Run Vision Models on Channels Last&lt;/h2&gt;
+
+&lt;p&gt;The Channels Last related APIs are documented at &lt;a href=&quot;https://pytorch.org/tutorials/intermediate/memory_format_tutorial.html&quot;&gt;PyTorch memory format tutorial&lt;/a&gt;. Typically, we can convert a 4D tensor from Channels First to Channels Last by:&lt;/p&gt;
+
+&lt;div class=&quot;language-python highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c1&quot;&gt;# convert x to channels last
+# suppose x’s shape is (N, C, H, W)
+# then x’s stride will be (HWC, 1, WC, C)
+&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;x&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;x&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;to&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;memory_format&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;torch&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;channels_last&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;To run models on Channels Last memory format, simply need to convert input and model to Channels Last and then you are ready to go. The following is a minimal example showing how to run ResNet50 with TorchVision on Channels Last memory format:&lt;/p&gt;
+
+&lt;div class=&quot;language-python highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;kn&quot;&gt;import&lt;/span&gt; &lt;span class=&quot;nn&quot;&gt;torch&lt;/span&gt;
+&lt;span class=&quot;kn&quot;&gt;from&lt;/span&gt; &lt;span class=&quot;nn&quot;&gt;torchvision.models&lt;/span&gt; &lt;span class=&quot;kn&quot;&gt;import&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;resnet50&lt;/span&gt;
+
+&lt;span class=&quot;n&quot;&gt;N&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;C&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;H&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;W&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;3&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;224&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;224&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;x&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;torch&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;rand&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;N&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;C&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;H&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;W&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;model&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;resnet50&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;model&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;eval&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt;
+
+&lt;span class=&quot;c1&quot;&gt;# convert input and model to channels last
+&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;x&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;x&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;to&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;memory_format&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;torch&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;channels_last&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;model&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;model&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;to&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;memory_format&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;torch&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;channels_last&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;model&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;x&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;The Channels Last optimization is implemented at native kernel level, which means you may apply other functionalities such as torch.fx and torch script together with Channels Last as well.&lt;/p&gt;
+
+&lt;h2 id=&quot;performance-gains&quot;&gt;Performance Gains&lt;/h2&gt;
+
+&lt;p&gt;We benchmarked inference performance of TorchVision models on Intel® Xeon® Platinum 8380 CPU @ 2.3 GHz, single instance per socket (batch size = 2 x number of physical cores). Results show that Channels Last has 1.3x to 1.8x performance gain over Channels First.&lt;/p&gt;
+
+&lt;p align=&quot;center&quot;&gt;
+  &lt;img src=&quot;/assets/images/accelerating-pytorch-vision-models-with-channels-last-on-cpu-3.png&quot; width=&quot;100%&quot; /&gt;
+&lt;/p&gt;
+
+&lt;p&gt;The performance gain primarily comes from two aspects:&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;For Convolution layers, Channels Last saved the memory format conversion to blocked format for activations, which improves the overall computation efficiency.&lt;/li&gt;
+  &lt;li&gt;For Pooling and Upsampling layers, Channels Last can use vectorized logic along the most inner dimension, e.g., “C”, while Channels First can’t.&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;For memory format non aware layers, Channels Last and Channels First has the same performance.&lt;/p&gt;
+
+&lt;h2 id=&quot;conclusion--future-work&quot;&gt;Conclusion &amp;amp; Future Work&lt;/h2&gt;
+
+&lt;p&gt;In this blog we introduced fundamental concepts of Channels Last and demonstrated the performance benefits of CPU using Channels Last on vision models. The current work is limited to 2D models at the current stage, and we will extend the optimization effort to 3D models in near future!&lt;/p&gt;
+
+&lt;h2 id=&quot;acknowledgement&quot;&gt;Acknowledgement&lt;/h2&gt;
+
+&lt;p&gt;The results presented in this blog is a joint effort of Meta and Intel PyTorch team. Special thanks to Vitaly Fedyunin and Wei Wei from Meta who spent precious time and gave substantial assistance! Together we made one more step on the path of improving the PyTorch CPU eco system.&lt;/p&gt;
+
+&lt;h2 id=&quot;references&quot;&gt;References&lt;/h2&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;a href=&quot;https://pytorch.org/tutorials/intermediate/memory_format_tutorial.html&quot;&gt;PyTorch memory format tutorial&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://oneapi-src.github.io/oneDNN/dev_guide_understanding_memory_formats.html&quot;&gt;oneDNN guide on memory formats&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://github.com/pytorch/pytorch/wiki/Operators-with-Channels-Last-support&quot;&gt;PyTorch operators with Channels Last support&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;</content>
+
+      
+      
+      
+      
+      
+
+      <author>
+          <name>Mingfei Ma (Intel), Vitaly Fedyunin (Meta), Wei Wei (Meta)</name>
+        
+        
+      </author>
+
+      
+
+      
+
+      
+        <summary type="html">Overview</summary>
+      
+
+      
+      
+    </entry>
   
     <entry>
       <title type="html">Easily list and initialize models with new APIs in TorchVision</title>
@@ -2803,274 +2960,6 @@ function of the &lt;a href=&quot;https://github.com/pytorch/pytorch/blob/bc2c6ed
 
       
         <summary type="html">Welcome to the last entry into understanding the autograd engine of PyTorch series! If you haven’t read parts 1 &amp;amp; 2 check them now to understand how PyTorch creates the computational graph for the backward pass!</summary>
-      
-
-      
-      
-    </entry>
-  
-    <entry>
-      <title type="html">Geospatial deep learning with TorchGeo</title>
-      <link href="https://pytorch.org/blog/geospatial-deep-learning-with-torchgeo/" rel="alternate" type="text/html" title="Geospatial deep learning with TorchGeo" />
-      <published>2022-06-23T00:00:00-07:00</published>
-      <updated>2022-06-23T00:00:00-07:00</updated>
-      <id>https://pytorch.org/blog/geospatial-deep-learning-with-torchgeo</id>
-      <content type="html" xml:base="https://pytorch.org/blog/geospatial-deep-learning-with-torchgeo/">&lt;p&gt;TorchGeo is a PyTorch domain library providing datasets, samplers, transforms, and pre-trained models specific to geospatial data.&lt;/p&gt;
-
-&lt;p align=&quot;center&quot;&gt;
-  &lt;img src=&quot;/assets/images/torchgeo-logo.png&quot; width=&quot;100%&quot; /&gt;
-&lt;/p&gt;
-
-&lt;p align=&quot;center&quot;&gt;
-  &lt;a href=&quot;https://github.com/microsoft/torchgeo&quot;&gt;https://github.com/microsoft/torchgeo&lt;/a&gt;
-&lt;/p&gt;
-
-&lt;p&gt;For decades, Earth observation satellites, aircraft, and more recently UAV platforms have been collecting increasing amounts of imagery of the Earth’s surface. With information about seasonal and long-term trends, remotely sensed imagery can be invaluable for solving some of the greatest challenges to humanity, including climate change adaptation, natural disaster monitoring, water resource management, and food security for a growing global population. From a computer vision perspective, this includes applications like land cover mapping (semantic segmentation), deforestation and flood monitoring (change detection), glacial flow (pixel tracking), hurricane tracking and intensity estimation (regression), and building and road detection (object detection, instance segmentation). By leveraging recent advancements in deep learning architectures, cheaper and more powerful GPUs, and petabytes of freely available satellite imagery datasets, we can come closer to solving these important problems.&lt;/p&gt;
-
-&lt;p align=&quot;center&quot;&gt;
-  &lt;img src=&quot;/assets/images/torchgeo-hurricane.jpg&quot; width=&quot;80%&quot; /&gt;
-&lt;/p&gt;
-
-&lt;p align=&quot;center&quot;&gt;
-National Oceanic and Atmospheric Administration satellite image of Hurricane Katrina, taken on August 28, 2005 (&lt;a href=&quot;https://www.whoi.edu/know-your-ocean/ocean-topics/hazards/hurricanes/&quot;&gt;source&lt;/a&gt;). Geospatial machine learning libraries like TorchGeo can be used to detect, track, and predict future trajectories of hurricanes and other natural disasters.
-&lt;/p&gt;
-
-&lt;h1 id=&quot;the-challenges&quot;&gt;The challenges&lt;/h1&gt;
-
-&lt;p&gt;In traditional computer vision datasets, such as ImageNet, the image files themselves tend to be rather simple and easy to work with. Most images have 3 spectral bands (RGB), are stored in common file formats like PNG or JPEG, and can be easily loaded with popular software libraries like &lt;a href=&quot;https://pillow.readthedocs.io/en/stable/&quot;&gt;PIL&lt;/a&gt; or &lt;a href=&quot;https://opencv.org/&quot;&gt;OpenCV&lt;/a&gt;. Each image in these datasets is usually small enough to pass directly into a neural network. Furthermore, most of these datasets contain a finite number of well-curated images that are assumed to be independent and identically distributed, making train-val-test splits straightforward. As a result of this relative homogeneity, the same pre-trained models (e.g., CNNs pretrained on ImageNet) have shown to be effective across a wide range of vision tasks using transfer learning methods. Existing libraries, such as &lt;a href=&quot;https://github.com/pytorch/vision&quot;&gt;torchvision&lt;/a&gt;, handle these simple cases well, and have been used to make large advances in vision tasks over the past decade.&lt;/p&gt;
-
-&lt;p&gt;Remote sensing imagery is not so uniform. Instead of simple RGB images, satellites tend to capture images that are multispectral (&lt;a href=&quot;https://www.usgs.gov/landsat-missions&quot;&gt;Landsat 8&lt;/a&gt; has 11 spectral bands) or even hyperspectral (&lt;a href=&quot;https://www.usgs.gov/centers/eros/science/usgs-eros-archive-earth-observing-one-eo-1-hyperion&quot;&gt;Hyperion&lt;/a&gt; has 242 spectral bands). These images capture information at a wider range of wavelengths (400 nm–15 µm), far outside of the visible spectrum. Different satellites also have very different spatial resolutions—&lt;a href=&quot;https://www.goes.noaa.gov/&quot;&gt;GOES&lt;/a&gt; has a resolution of 4 km/px, &lt;a href=&quot;https://www.maxar.com/products/satellite-imagery&quot;&gt;Maxar&lt;/a&gt; imagery is 30 cm/px, and drone imagery resolution can be as high as 7 mm/px. These datasets almost always have a temporal component, with satellite revisists that are daily, weekly, or biweekly. Images often have overlap with other images in the dataset, and need to be stitched together based on geographic metadata. These images tend to be very large (e.g., 10K x 10K pixels), so it isn’t possible to pass an entire image through a neural network. This data is distributed in hundreds of different raster and vector file formats like GeoTIFF and ESRI Shapefile, requiring specialty libraries like &lt;a href=&quot;https://gdal.org/&quot;&gt;GDAL&lt;/a&gt; to load.&lt;/p&gt;
-
-&lt;p align=&quot;center&quot;&gt;
-  &lt;img src=&quot;/assets/images/torchgeo-map.png&quot; width=&quot;80%&quot; /&gt;
-&lt;/p&gt;
-
-&lt;p align=&quot;center&quot;&gt;
-From left to right: Mercator, Albers Equal Area, and Interrupted Goode Homolosine projections (&lt;a href=&quot;https://scitools.org.uk/cartopy/docs/latest/reference/projections.html&quot;&gt;source&lt;/a&gt;). Geospatial data is associated with one of many different types of reference systems that project the 3D Earth onto a 2D representation. Combining data from different sources often involves re-projecting to a common reference system in order to ensure that all layers are aligned.
-&lt;/p&gt;
-
-&lt;p&gt;Although each image is 2D, the Earth itself is 3D. In order to stitch together images, they first need to be projected onto a 2D representation of the Earth, called a coordinate reference system (CRS). Most people are familiar with equal angle representations like Mercator that distort the size of regions (Greenland looks larger than Africa even though Africa is 15x larger), but there are many other CRSs that are commonly used. Each dataset may use a different CRS, and each image within a single dataset may also be in a unique CRS. In order to use data from multiple layers, they must all share a common CRS, otherwise the data won’t be properly aligned. For those who aren’t familiar with remote sensing data, this can be a daunting task.&lt;/p&gt;
-
-&lt;p align=&quot;center&quot;&gt;
-  &lt;img src=&quot;/assets/images/torchgeo-reproject.png&quot; width=&quot;80%&quot; /&gt;
-&lt;/p&gt;
-
-&lt;p align=&quot;center&quot;&gt;
-Even if you correctly georeference images during indexing, if you don't project them to a common CRS, you'll end up with rotated images with nodata values around them, and the images won't be pixel-aligned.
-&lt;/p&gt;
-
-&lt;h1 id=&quot;the-solution&quot;&gt;The solution&lt;/h1&gt;
-
-&lt;p&gt;At the moment, it can be quite challenging to work with both deep learning models and geospatial data without having expertise in both of these very different fields. To address these challenges, we’ve built TorchGeo, a PyTorch domain library for working with geospatial data. TorchGeo is designed to make it simple:&lt;/p&gt;
-
-&lt;ol&gt;
-  &lt;li&gt;for machine learning experts to work with geospatial data, and&lt;/li&gt;
-  &lt;li&gt;for remote sensing experts to explore machine learning solutions.&lt;/li&gt;
-&lt;/ol&gt;
-
-&lt;p&gt;TorchGeo is not just a research project, but a production-quality library that uses continuous integration to test every commit with a range of Python versions on a range of platforms (Linux, macOS, Windows). It can be easily installed with any of your favorite package managers, including pip, conda, and &lt;a href=&quot;https://spack.io&quot;&gt;spack&lt;/a&gt;:&lt;/p&gt;
-
-&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;$ pip install torchgeo
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;TorchGeo is designed to have the same API as other PyTorch domain libraries like torchvision, torchtext, and torchaudio. If you already use torchvision in your workflow for computer vision datasets, you can switch to TorchGeo by changing only a few lines of code. All TorchGeo datasets and samplers are compatible with the PyTorch &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;DataLoader&lt;/code&gt; class, meaning that you can take advantage of wrapper libraries like &lt;a href=&quot;https://www.pytorchlightning.ai/&quot;&gt;PyTorch Lightning&lt;/a&gt; for distributed training. In the following sections, we’ll explore possible use cases for TorchGeo to show how simple it is to use.&lt;/p&gt;
-
-&lt;h1 id=&quot;geospatial-datasets-and-samplers&quot;&gt;Geospatial datasets and samplers&lt;/h1&gt;
-
-&lt;p align=&quot;center&quot;&gt;
-  &lt;img src=&quot;/assets/images/torchgeo-sample.png&quot; width=&quot;80%&quot; /&gt;
-&lt;/p&gt;
-
-&lt;p align=&quot;center&quot;&gt;
-Example application in which we combine A) a scene from &lt;a href=&quot;https://www.usgs.gov/landsat-missions&quot;&gt;Landsat 8&lt;/a&gt; and B) &lt;a href=&quot;https://data.nal.usda.gov/dataset/cropscape-cropland-data-layer&quot;&gt;Cropland Data Layer&lt;/a&gt; labels, even though these files are in different EPSG projections. We want to sample patches C) and D) from these datasets using a geospatial bounding box as an index.
-&lt;/p&gt;
-
-&lt;p&gt;Many remote sensing applications involve working with &lt;a href=&quot;https://torchgeo.readthedocs.io/en/latest/api/datasets.html#geospatial-datasets&quot;&gt;&lt;em&gt;geospatial datasets&lt;/em&gt;&lt;/a&gt; —datasets with geographic metadata. In TorchGeo, we define a &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;GeoDataset&lt;/code&gt; class to represent these kinds of datasets. Instead of being indexed by an integer, each &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;GeoDataset&lt;/code&gt; is indexed by a spatiotemporal bounding box, meaning that two or more datasets covering a different geographic extent can be intelligently combined.&lt;/p&gt;
-
-&lt;p&gt;In this example, we show how easy it is to work with geospatial data and to sample small image patches from a combination of Landsat and Cropland Data Layer (CDL) data using TorchGeo. First, we assume that the user has Landsat 7 and 8 imagery downloaded. Since Landsat 8 has more spectral bands than Landsat 7, we’ll only use the bands that both satellites have in common. We’ll create a single dataset including all images from both Landsat 7 and 8 data by taking the union between these two datasets.&lt;/p&gt;
-
-&lt;div class=&quot;language-c++ highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;n&quot;&gt;from&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;torch&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;utils&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;data&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;import&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;DataLoader&lt;/span&gt;
-&lt;span class=&quot;n&quot;&gt;from&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;torchgeo&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;datasets&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;import&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;CDL&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Landsat7&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Landsat8&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;stack_samples&lt;/span&gt;
-&lt;span class=&quot;n&quot;&gt;from&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;torchgeo&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;samplers&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;import&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;RandomGeoSampler&lt;/span&gt;
-
-&lt;span class=&quot;n&quot;&gt;landsat7&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Landsat7&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;root&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;...&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
-&lt;span class=&quot;n&quot;&gt;landsat8&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Landsat8&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;root&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;...&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;bands&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Landsat8&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;all_bands&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;:-&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;2&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;])&lt;/span&gt;
-&lt;span class=&quot;n&quot;&gt;landsat&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;landsat7&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;|&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;landsat8&lt;/span&gt;
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;Next, we take the intersection between this dataset and the CDL dataset. We want to take the intersection instead of the union to ensure that we only sample from regions where we have both Landsat and CDL data. Note that we can automatically download and checksum CDL data. Also note that each of these datasets may contain files in different CRSs or resolutions, but TorchGeo automatically ensures that a matching CRS and resolution is used.&lt;/p&gt;
-
-&lt;div class=&quot;language-c++ highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;n&quot;&gt;cdl&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;CDL&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;root&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;...&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;download&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;True&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;checksum&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;True&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
-&lt;span class=&quot;n&quot;&gt;dataset&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;landsat&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;amp;&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;cdl&lt;/span&gt;
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;This dataset can now be used with a PyTorch data loader. Unlike benchmark datasets, geospatial datasets often include very large images. For example, the CDL dataset consists of a single image covering the entire contiguous United States. In order to sample from these datasets using geospatial coordinates, TorchGeo defines a number of &lt;a href=&quot;https://torchgeo.readthedocs.io/en/latest/api/samplers.html&quot;&gt;&lt;em&gt;samplers&lt;/em&gt;&lt;/a&gt;. In this example, we’ll use a random sampler that returns 256 x 256 pixel images and 10,000 samples per epoch. We’ll also use a custom collation function to combine each sample dictionary into a mini-batch of samples.&lt;/p&gt;
-
-&lt;div class=&quot;language-c++ highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;n&quot;&gt;sampler&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;RandomGeoSampler&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;dataset&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;size&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;256&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;length&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;10000&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
-&lt;span class=&quot;n&quot;&gt;dataloader&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;DataLoader&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;dataset&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;batch_size&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;128&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;sampler&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;sampler&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;collate_fn&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;stack_samples&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;This data loader can now be used in your normal training/evaluation pipeline.&lt;/p&gt;
-
-&lt;div class=&quot;language-c++ highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;k&quot;&gt;for&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;batch&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;in&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;dataloader&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;:&lt;/span&gt;
-    &lt;span class=&quot;n&quot;&gt;image&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;batch&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;image&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]&lt;/span&gt;
-    &lt;span class=&quot;n&quot;&gt;mask&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;batch&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;mask&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]&lt;/span&gt;
-
-    &lt;span class=&quot;cp&quot;&gt;# train a model, or make predictions using a pre-trained model
-&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;Many applications involve intelligently composing datasets based on geospatial metadata like this. For example, users may want to:&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;Combine datasets for multiple image sources and treat them as equivalent (e.g., Landsat 7 and 8)&lt;/li&gt;
-  &lt;li&gt;Combine datasets for disparate geospatial locations (e.g., Chesapeake NY and PA)&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;These combinations require that all queries are present in &lt;em&gt;at least one&lt;/em&gt; dataset, and can be created using a &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;UnionDataset&lt;/code&gt;. Similarly, users may want to:&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;Combine image and target labels and sample from both simultaneously (e.g., Landsat and CDL)&lt;/li&gt;
-  &lt;li&gt;Combine datasets for multiple image sources for multimodal learning or data fusion (e.g., Landsat and Sentinel)&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;These combinations require that all queries are present in &lt;em&gt;both&lt;/em&gt; datasets, and can be created using an &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;IntersectionDataset&lt;/code&gt;. TorchGeo automatically composes these datasets for you when you use the intersection (&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;&amp;amp;&lt;/code&gt;) and union (&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;|&lt;/code&gt;) operators.&lt;/p&gt;
-
-&lt;h1 id=&quot;multispectral-and-geospatial-transforms&quot;&gt;Multispectral and geospatial transforms&lt;/h1&gt;
-
-&lt;p&gt;In deep learning, it’s common to augment and transform the data so that models are robust to variations in the input space. Geospatial data can have variations such as seasonal changes and warping effects, as well as image processing and capture issues like cloud cover and atmospheric distortion. TorchGeo utilizes augmentations and transforms from the &lt;a href=&quot;https://kornia.github.io/&quot;&gt;Kornia&lt;/a&gt; library, which supports GPU acceleration and supports multispectral imagery with more than 3 channels.&lt;/p&gt;
-
-&lt;p&gt;Traditional geospatial analyses compute and visualize spectral indices which are combinations of multispectral bands. Spectral indices are designed to highlight areas of interest in a multispectral image relevant to some application, such as vegetation health, areas of man-made change or increasing urbanization, or snow cover. TorchGeo supports numerous &lt;a href=&quot;https://torchgeo.readthedocs.io/en/latest/api/transforms.html&quot;&gt;&lt;em&gt;transforms&lt;/em&gt;&lt;/a&gt;, which can compute common spectral indices and append them as additional bands to a multispectral image tensor.&lt;/p&gt;
-
-&lt;p&gt;Below, we show a simple example where we compute the Normalized Difference Vegetation Index (NDVI) on a Sentinel-2 image. NDVI measures the presence of vegetation and vegetation health and is computed as the normalized difference between the red and near-infrared (NIR) spectral bands. Spectral index transforms operate on sample dictionaries returned from TorchGeo datasets and append the resulting spectral index to the image channel dimension.&lt;/p&gt;
-
-&lt;p&gt;First, we instantiate a Sentinel-2 dataset and load a sample image. Then, we plot the true color (RGB) representation of this data to see the region we are looking at.&lt;/p&gt;
-
-&lt;div class=&quot;language-c++ highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;n&quot;&gt;import&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;matplotlib&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;pyplot&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;as&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;plt&lt;/span&gt;
-&lt;span class=&quot;n&quot;&gt;from&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;torchgeo&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;datasets&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;import&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Sentinel2&lt;/span&gt;
-&lt;span class=&quot;n&quot;&gt;from&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;torchgeo&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;transforms&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;import&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;AppendNDVI&lt;/span&gt;
-
-&lt;span class=&quot;n&quot;&gt;dataset&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Sentinel2&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;root&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;...&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
-&lt;span class=&quot;n&quot;&gt;sample&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;dataset&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[...]&lt;/span&gt;
-&lt;span class=&quot;n&quot;&gt;fig&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;dataset&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;plot&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;sample&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
-&lt;span class=&quot;n&quot;&gt;plt&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;show&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt;
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;Next, we instantiate and compute an NDVI transform, appending this new channel to the end of the image. Sentinel-2 imagery uses index 0 for its red band and index 3 for its NIR band. In order to visualize the data, we also normalize the image. NDVI values can range from -1 to 1, but we want to use the range 0 to 1 for plotting.&lt;/p&gt;
-
-&lt;div class=&quot;language-c++ highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;n&quot;&gt;transform&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;AppendNDVI&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;index_red&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;index_nir&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;3&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
-&lt;span class=&quot;n&quot;&gt;sample&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;transform&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;sample&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
-&lt;span class=&quot;n&quot;&gt;sample&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;image&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;][&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;sample&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;image&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;][&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;+&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;/&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;2&lt;/span&gt;
-&lt;span class=&quot;n&quot;&gt;plt&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;imshow&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;sample&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;image&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;][&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;],&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;cmap&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;RdYlGn_r&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
-&lt;span class=&quot;n&quot;&gt;plt&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;show&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt;
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p align=&quot;center&quot;&gt;
-  &lt;img src=&quot;/assets/images/torchgeo-true-ndvi.png&quot; width=&quot;100%&quot; /&gt;
-&lt;/p&gt;
-
-&lt;p align=&quot;center&quot;&gt;
-True color (left) and NDVI (right) of the Texas Hill Region, taken on November 16, 2018 by the &lt;a href=&quot;https://sentinel.esa.int/web/sentinel/missions/sentinel-2&quot;&gt;Sentinel-2&lt;/a&gt; satellite. In the NDVI image, red indicates water bodies, yellow indicates barren soil, light green indicates unhealthy vegetation, and dark green indicates healthy vegetation.
-&lt;/p&gt;
-
-&lt;h1 id=&quot;benchmark-datasets&quot;&gt;Benchmark datasets&lt;/h1&gt;
-
-&lt;p&gt;One of the driving factors behind progress in computer vision is the existence of standardized benchmark datasets like ImageNet and MNIST. Using these datasets, researchers can directly compare the performance of different models and training procedures to determine which perform the best. In the remote sensing domain, there are many such datasets, but due to the aforementioned difficulties of working with this data and the lack of existing libraries for loading these datasets, many researchers opt to use their own custom datasets.&lt;/p&gt;
-
-&lt;p&gt;One of the goals of TorchGeo is to provide easy-to-use data loaders for these existing datasets. TorchGeo includes a number of &lt;a href=&quot;https://torchgeo.readthedocs.io/en/latest/api/datasets.html#non-geospatial-datasets&quot;&gt;&lt;em&gt;benchmark datasets&lt;/em&gt;&lt;/a&gt; —datasets that include both input images and target labels. This includes datasets for tasks like image classification, regression, semantic segmentation, object detection, instance segmentation, change detection, and more.&lt;/p&gt;
-
-&lt;p&gt;If you’ve used torchvision before, these types of datasets should be familiar. In this example, we’ll create a dataset for the Northwestern Polytechnical University (NWPU) very-high-resolution ten-class (VHR-10) geospatial object detection dataset. This dataset can be automatically downloaded, checksummed, and extracted, just like with torchvision.&lt;/p&gt;
-
-&lt;div class=&quot;language-c++ highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;n&quot;&gt;from&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;torch&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;utils&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;data&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;import&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;DataLoader&lt;/span&gt;
-&lt;span class=&quot;n&quot;&gt;from&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;torchgeo&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;datasets&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;import&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;VHR10&lt;/span&gt;
-
-&lt;span class=&quot;n&quot;&gt;dataset&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;VHR10&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;root&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;...&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;download&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;True&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;checksum&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;True&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
-&lt;span class=&quot;n&quot;&gt;dataloader&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;DataLoader&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;dataset&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;batch_size&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;128&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;shuffle&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;True&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;num_workers&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;4&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
-
-&lt;span class=&quot;k&quot;&gt;for&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;batch&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;in&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;dataloader&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;:&lt;/span&gt;
-    &lt;span class=&quot;n&quot;&gt;image&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;batch&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;image&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]&lt;/span&gt;
-    &lt;span class=&quot;n&quot;&gt;label&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;batch&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;label&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]&lt;/span&gt;
-
-    &lt;span class=&quot;cp&quot;&gt;# train a model, or make predictions using a pre-trained model
-&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;All TorchGeo datasets are compatible with PyTorch data loaders, making them easy to integrate into existing training workflows. The only difference between a benchmark dataset in TorchGeo and a similar dataset in torchvision is that each dataset returns a dictionary with keys for each PyTorch &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;Tensor&lt;/code&gt;.&lt;/p&gt;
-
-&lt;p align=&quot;center&quot;&gt;
-  &lt;img src=&quot;/assets/images/torchgeo-nwpu.png&quot; width=&quot;100%&quot; /&gt;
-&lt;/p&gt;
-
-&lt;p align=&quot;center&quot;&gt;
-Example predictions from a Mask R-CNN model trained on the &lt;a href=&quot;https://github.com/chaozhong2010/VHR-10_dataset_coco&quot;&gt;NWPU VHR-10&lt;/a&gt; dataset. The model predicts sharp bounding boxes and masks for all objects with high confidence scores.
-&lt;/p&gt;
-
-&lt;h1 id=&quot;reproducibility-with-pytorch-lightning&quot;&gt;Reproducibility with PyTorch Lightning&lt;/h1&gt;
-
-&lt;p&gt;Another key goal of TorchGeo is reproducibility. For many of these benchmark datasets, there is no predefined train-val-test split, or the predefined split has issues with class imbalance or geographic distribution. As a result, the performance metrics reported in the literature either can’t be reproduced, or aren’t indicative of how well a pre-trained model would work in a different geographic location.&lt;/p&gt;
-
-&lt;p&gt;In order to facilitate direct comparisons between results published in the literature and further reduce the boilerplate code needed to run experiments with datasets in TorchGeo, we have created PyTorch Lightning &lt;a href=&quot;https://torchgeo.readthedocs.io/en/latest/api/datamodules.html&quot;&gt;&lt;em&gt;datamodules&lt;/em&gt;&lt;/a&gt; with well-defined train-val-test splits and &lt;a href=&quot;https://torchgeo.readthedocs.io/en/latest/api/trainers.html&quot;&gt;&lt;em&gt;trainers&lt;/em&gt;&lt;/a&gt; for various tasks like classification, regression, and semantic segmentation. These datamodules show how to incorporate augmentations from the kornia library, include preprocessing transforms (with pre-calculated channel statistics), and let users easily experiment with hyperparameters related to the data itself (as opposed to the modeling process). Training a semantic segmentation model on the Inria Aerial Image Labeling dataset is as easy as a few imports and four lines of code.&lt;/p&gt;
-
-&lt;div class=&quot;language-c++ highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;n&quot;&gt;from&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;pytorch_lightning&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;import&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Trainer&lt;/span&gt;
-&lt;span class=&quot;n&quot;&gt;from&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;torchgeo&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;datamodules&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;import&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;InriaAerialImageLabelingDataModule&lt;/span&gt;
-&lt;span class=&quot;n&quot;&gt;from&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;torchgeo&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;trainers&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;import&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;SemanticSegmentationTask&lt;/span&gt;
-
-&lt;span class=&quot;n&quot;&gt;datamodule&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;InriaAerialImageLabelingDataModule&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;root_dir&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;...&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;batch_size&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;64&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;num_workers&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;6&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
-&lt;span class=&quot;n&quot;&gt;task&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;SemanticSegmentationTask&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;segmentation_model&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;unet&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;encoder_weights&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;imagenet&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;learning_rate&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;mf&quot;&gt;0.1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
-&lt;span class=&quot;n&quot;&gt;trainer&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Trainer&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;gpus&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;default_root_dir&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;...&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
-
-&lt;span class=&quot;n&quot;&gt;trainer&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;fit&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;model&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;task&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;datamodule&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;datamodule&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p align=&quot;center&quot;&gt;
-  &lt;img src=&quot;/assets/images/torchgeo-inria.png&quot; width=&quot;100%&quot; /&gt;
-&lt;/p&gt;
-
-&lt;p align=&quot;center&quot;&gt;
-Building segmentations produced by a U-Net model trained on the &lt;a href=&quot;https://project.inria.fr/aerialimagelabeling/&quot;&gt;Inria Aerial Image Labeling&lt;/a&gt; dataset. Reproducing these results is as simple as a few imports and four lines of code, making comparison of different models and training techniques simple and easy.
-&lt;/p&gt;
-
-&lt;p&gt;In our &lt;a href=&quot;https://arxiv.org/abs/2111.08872&quot;&gt;preprint&lt;/a&gt; we show a set of results that use the aforementioned datamodules and trainers to benchmark simple modeling approaches for several of the datasets in TorchGeo. For example, we find that a simple ResNet-50 can achieve state-of-the-art performance on the &lt;a href=&quot;https://ieeexplore.ieee.org/document/9014553&quot;&gt;So2Sat&lt;/a&gt; dataset. These types of baseline results are important for evaluating the contribution of different modeling choices when tackling problems with remotely sensed data.&lt;/p&gt;
-
-&lt;h1 id=&quot;future-work-and-contributing&quot;&gt;Future work and contributing&lt;/h1&gt;
-
-&lt;p&gt;There is still a lot of remaining work to be done in order to make TorchGeo as easy to use as possible, especially for users without prior deep learning experience. One of the ways in which we plan to achieve this is by expanding our tutorials to include subjects like “writing a custom dataset” and “transfer learning”, or tasks like “land cover mapping” and “object detection”.&lt;/p&gt;
-
-&lt;p&gt;Another important project we are working on is pre-training models. Most remote sensing researchers work with very small labeled datasets, and could benefit from pre-trained models and transfer learning approaches. TorchGeo is the first deep learning library to provide models pre-trained on multispectral imagery. Our goal is to provide models for different image modalities (optical, SAR, multispectral) and specific platforms (Landsat, Sentinel, MODIS) as well as benchmark results showing their performance with different amounts of training data. Self-supervised learning is a promising method for training such models. Satellite imagery datasets often contain petabytes of imagery, but accurately labeled datasets are much harder to come by. Self-supervised learning methods will allow us to train directly on the raw imagery without needing large labeled datasets.&lt;/p&gt;
-
-&lt;p&gt;Aside from these larger projects, we’re always looking to add new datasets, data augmentation transforms, and sampling strategies. If you’re Python savvy and interested in contributing to TorchGeo, we would love to see contributions! TorchGeo is open source under an MIT license, so you can use it in almost any project.&lt;/p&gt;
-
-&lt;p&gt;External links:&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;&lt;strong&gt;Homepage&lt;/strong&gt;: &lt;a href=&quot;https://github.com/microsoft/torchgeo&quot;&gt;https://github.com/microsoft/torchgeo&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;Documentation&lt;/strong&gt;: &lt;a href=&quot;https://torchgeo.readthedocs.io/&quot;&gt;https://torchgeo.readthedocs.io/&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;PyPI&lt;/strong&gt;: &lt;a href=&quot;https://pypi.org/project/torchgeo/&quot;&gt;https://pypi.org/project/torchgeo/&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;Paper&lt;/strong&gt;: &lt;a href=&quot;https://arxiv.org/abs/2111.08872&quot;&gt;https://arxiv.org/abs/2111.08872&lt;/a&gt;&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;If you like TorchGeo, give us a star on GitHub! And if you use TorchGeo in your work, please cite our paper.&lt;/p&gt;
-
-&lt;h1 id=&quot;acknowledgments&quot;&gt;Acknowledgments&lt;/h1&gt;
-
-&lt;p&gt;&lt;em&gt;We would like to thank all TorchGeo contributors for their efforts in creating the library, the Microsoft AI for Good program for support, and the PyTorch Team for their guidance. This research is part of the Blue Waters sustained-petascale computing project, which is supported by the National Science Foundation (awards OCI-0725070 and ACI-1238993), the State of Illinois, and as of December, 2019, the National Geospatial-Intelligence Agency. Blue Waters is a joint effort of the University of Illinois at Urbana-Champaign and its National Center for Supercomputing Applications. The research was supported in part by NSF grants IIS-1908104, OAC-1934634, and DBI-2021898.&lt;/em&gt;&lt;/p&gt;</content>
-
-      
-      
-      
-      
-      
-
-      <author>
-          <name>Adam Stewart (University of Illinois at Urbana-Champaign), Caleb Robinson (Microsoft AI for Good Research Lab), Isaac Corley (University of Texas at San Antonio)</name>
-        
-        
-      </author>
-
-      
-
-      
-
-      
-        <summary type="html">TorchGeo is a PyTorch domain library providing datasets, samplers, transforms, and pre-trained models specific to geospatial data.</summary>
       
 
       
