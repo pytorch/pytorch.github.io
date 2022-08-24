@@ -1,7 +1,7 @@
 ---
 layout: blog_detail
 title: "Fast Beam Search Decoding in PyTorch with TorchAudio and Flashlight Text"
-author: Caroline Chen, Jacob Kahn ([@jacob_d_kahn](https://twitter.com/jacob_d_kahn))
+author: Caroline Chen, Jacob Kahn (@jacob_d_kahn)
 featured-img: ""
 ---
 
