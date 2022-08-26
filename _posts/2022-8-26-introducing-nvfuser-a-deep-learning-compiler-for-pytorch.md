@@ -2,7 +2,7 @@
 layout: blog_detail
 title: 'Introducing nvFuser, a deep learning compiler for PyTorch'
 author: Christian Sarofeen, Piotr Bialecki, Jie Jiang, Kevin Stephano, Masaki Kozuki, Neal Vaidya, Stas Bekman
-featured-img: '/assets/images/introducing-nvfuser-a-deep-learning-compiler-for-pytorch-1.png'
+featured-img: "/assets/images/introducing-nvfuser-a-deep-learning-compiler-for-pytorch-1.png"
 ---
 
 nvFuser is a Deep Learning Compiler for NVIDIA GPUs that automatically just-in-time compiles fast and flexible kernels to reliably accelerate users' networks. It provides significant speedups for deep learning networks running on Volta and later CUDA accelerators by generating fast custom “fusion” kernels at runtime. nvFuser is specifically designed to meet the unique requirements of the PyTorch community, and it supports diverse network architectures and programs with dynamic inputs of varying shapes and strides.
@@ -45,7 +45,6 @@ Figure 1: Performance gains of 8 training scenarios from HuggingFace’s Transfo
 While these speedups are significant, it’s important to understand that nvFuser doesn’t (yet) automate everything about running networks quickly. For HuggingFace Transformers, for example, it was important to use the AdamW fused optimizer from [NVIDIA’s Apex repository](https://github.com/NVIDIA/apex) as the optimizer otherwise consumed a large portion of runtime. Using the fused AdamW optimizer to make the network faster exposes the next major performance bottleneck — memory bound operations. These operations are optimized by nvFuser, providing another large performance boost. With the fused optimizer and nvFuser enabled, the training speed of these networks improved between 1.12x to 1.5x.
 HuggingFace Transformer models were run with [the torch.amp module](https://pytorch.org/docs/stable/amp.html). (“amp” stands for Automated Mixed Precision, see the [“What Every User Should Know about Mixed Precision in PyTorch”](https://pytorch.org/blog/what-every-user-should-know-about-mixed-precision-training-in-pytorch/) blog post for details.) An option to use nvFuser was added to HuggingFace’sTrainer. If you have [TorchDynamo installed](https://github.com/pytorch/torchdynamo#requirements-and-setup) you can activate it to enable nvFuser in HuggingFace by passing *torchdynamo = ‘nvfuser’* to the Trainer class.
 nvFuser has great support for normalization kernels and related fusions frequently found in Natural Language Processing (NLP) models, and it is recommended users try nvFuser in their NLP workloads.
-12:22
 
 ## PyTorch Image Models (TIMM) Benchmarks
 nvFuser, can also significantly reduce the training time of TIMM networks, up to over 1.3x vs. eager PyTorch, and up to 1.44x vs. eager PyTorch when combined with the torch.amp module. Figure 1 shows nvFuser’s speedup without torch.amp, and when torch.amp is used with the NHWC (“channels last”) and NCHW (“channels first”) formats. nvFuser is integrated in TIMM through FuncTorch tracing directly (without TorchDynamo) and can be used by adding the [--aot-autograd command line argument](https://github.com/rwightman/pytorch-image-models/commit/ca991c1fa57373286b9876aa63370fd19f5d6032) when running the TIMM benchmark or training script.
