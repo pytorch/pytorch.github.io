@@ -2,7 +2,7 @@
 layout: blog_detail
 title: "Fast Beam Search Decoding in PyTorch with TorchAudio and Flashlight Text"
 author: Caroline Chen, Jacob Kahn (@jacob_d_kahn)
-featured-img: ""
+featured-img: "/assets/images/fast-beam-search-decoding-in-pytorch-with-torchaudio-and-flashlight-text-6.png"
 ---
 
 Beam search decoding with industry-leading speed from [Flashlight Text](https://github.com/flashlight/text) (part of the [Flashlight](https://arxiv.org/abs/2201.12465) ML framework) is now available with official support in [TorchAudio](https://pytorch.org/audio/0.12.0/models.decoder.html#ctcdecoder), bringing high-performance beam search and text utilities for speech and text applications built on top of PyTorch. The current integration supports CTC-style decoding, but it can be used for *any modeling setting that outputs token-level probability distributions over time steps*.
