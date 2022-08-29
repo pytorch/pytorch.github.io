@@ -4,7 +4,7 @@
   <generator uri="https://jekyllrb.com/" version="3.9.0">Jekyll</generator>
   <link href="https://pytorch.org/feed.xml" rel="self" type="application/atom+xml" />
   <link href="https://pytorch.org/" rel="alternate" type="text/html" />
-  <updated>2022-08-28T17:46:03-07:00</updated>
+  <updated>2022-08-29T11:58:14-07:00</updated>
   <id>https://pytorch.org/feed.xml</id>
 
   
@@ -29,6 +29,172 @@
 
   
   
+  
+    <entry>
+      <title type="html">Fast Beam Search Decoding in PyTorch with TorchAudio and Flashlight Text</title>
+      <link href="https://pytorch.org/blog/fast-beam-search-decoding-in-pytorch-with-torchaudio-and-flashlight-text/" rel="alternate" type="text/html" title="Fast Beam Search Decoding in PyTorch with TorchAudio and Flashlight Text" />
+      <published>2022-08-29T00:00:00-07:00</published>
+      <updated>2022-08-29T00:00:00-07:00</updated>
+      <id>https://pytorch.org/blog/fast-beam-search-decoding-in-pytorch-with-torchaudio-and-flashlight-text</id>
+      <content type="html" xml:base="https://pytorch.org/blog/fast-beam-search-decoding-in-pytorch-with-torchaudio-and-flashlight-text/">&lt;p&gt;Beam search decoding with industry-leading speed from &lt;a href=&quot;https://github.com/flashlight/text&quot;&gt;Flashlight Text&lt;/a&gt; (part of the &lt;a href=&quot;https://arxiv.org/abs/2201.12465&quot;&gt;Flashlight&lt;/a&gt; ML framework) is now available with official support in &lt;a href=&quot;https://pytorch.org/audio/0.12.0/models.decoder.html#ctcdecoder&quot;&gt;TorchAudio&lt;/a&gt;, bringing high-performance beam search and text utilities for speech and text applications built on top of PyTorch. The current integration supports CTC-style decoding, but it can be used for &lt;em&gt;any modeling setting that outputs token-level probability distributions over time steps&lt;/em&gt;.&lt;/p&gt;
+
+&lt;h2 id=&quot;a-brief-beam-search-refresher&quot;&gt;A brief beam search refresher&lt;/h2&gt;
+
+&lt;p&gt;In speech and language settings, &lt;em&gt;beam search&lt;/em&gt; is an efficient, greedy algorithm that can convert sequences of &lt;em&gt;continuous values&lt;/em&gt; (i.e. probabilities or scores) into &lt;em&gt;graphs&lt;/em&gt; or &lt;em&gt;sequences&lt;/em&gt; (i.e. tokens, word-pieces, words) using &lt;em&gt;optional constraints&lt;/em&gt; on valid sequences (i.e. a lexicon), &lt;em&gt;optional external scoring&lt;/em&gt; (i.e. an LM which scores valid sequences), and other &lt;em&gt;score adjustments&lt;/em&gt; for particular sequences.&lt;/p&gt;
+
+&lt;p&gt;In the example that follows, we’ll consider — a token set of {ϵ, a, b}, where ϵ is a special token that we can imagine denotes a space between words or a pause in speech. Graphics here and below are taken from Awni Hannun’s excellent &lt;a href=&quot;https://distill.pub/2017/ctc/&quot;&gt;distill.pub writeup&lt;/a&gt; on CTC and beam search.&lt;/p&gt;
+
+&lt;p align=&quot;center&quot;&gt;
+  &lt;img src=&quot;/assets/images/fast-beam-search-decoding-in-pytorch-with-torchaudio-and-flashlight-text-1.jpeg&quot; width=&quot;70%&quot; /&gt;
+&lt;/p&gt;
+
+&lt;p&gt;With a greedy-like approach, beam search considers the next viable token given an existing sequence of tokens — in the example above, a, b, b is a valid sequence, but a, b, a is not. We &lt;em&gt;rank&lt;/em&gt; each possible next token at each step of the beam search according to a scoring function. Scoring functions (s) typically looks something like:&lt;/p&gt;
+
+&lt;p align=&quot;center&quot;&gt;
+  &lt;img src=&quot;/assets/images/fast-beam-search-decoding-in-pytorch-with-torchaudio-and-flashlight-text-2.jpeg&quot; width=&quot;80%&quot; /&gt;
+&lt;/p&gt;
+
+&lt;p&gt;Where &lt;strong&gt;ŷ&lt;/strong&gt; is a potential path/sequence of tokens, &lt;strong&gt;x&lt;/strong&gt; is the input &lt;em&gt;&lt;strong&gt;(P(ŷ|x)&lt;/strong&gt;&lt;/em&gt; represents the model’s predictions over time), and 𝛼 is a weight on the language model probability &lt;em&gt;&lt;strong&gt;(P(y)&lt;/strong&gt;&lt;/em&gt; the probability of the sequence under the language model). Some scoring functions add &lt;em&gt;&lt;strong&gt;𝜷&lt;/strong&gt;&lt;/em&gt; which adjusts a score based on the length of the predicted sequence &lt;strong&gt;|ŷ|&lt;/strong&gt;. This particular scoring function is used in &lt;a href=&quot;https://arxiv.org/pdf/1911.08460.pdf&quot;&gt;FAIR’s prior work&lt;/a&gt; on end-to-end ASR, and there are many variations on scoring functions which can vary across application areas.&lt;/p&gt;
+
+&lt;p&gt;Given a particular sequence, to assess the next viable token in that sequence (perhaps constrained by a set of allowed words or sequences, such as a lexicon of words), the beam search algorithm scores the sequence with each candidate token added, and sorts token candidates based on those scores. For efficiency and since the number of paths is exponential in the token set size, the &lt;em&gt;&lt;strong&gt;top-k&lt;/strong&gt;&lt;/em&gt; highest-scoring candidates are kept — &lt;em&gt;&lt;strong&gt;k&lt;/strong&gt;&lt;/em&gt; represents the &lt;em&gt;&lt;strong&gt;beam size&lt;/strong&gt;&lt;/em&gt;.&lt;/p&gt;
+
+&lt;p align=&quot;center&quot;&gt;
+  &lt;img src=&quot;/assets/images/fast-beam-search-decoding-in-pytorch-with-torchaudio-and-flashlight-text-3.jpeg&quot; width=&quot;100%&quot; /&gt;
+&lt;/p&gt;
+
+&lt;p align=&quot;center&quot;&gt;There are many other nuances with how beam search can progress: similar hypothesis sequences can be “merged”, for instance.
+&lt;/p&gt;
+
+&lt;p&gt;The scoring function can be further augmented to up/down-weight token insertion or long or short words. Scoring with &lt;em&gt;stronger external language&lt;/em&gt; models, while incurring computational cost, can also significantly improve performance; this is frequently referred to as &lt;em&gt;LM fusion&lt;/em&gt;. There are many other knobs to tune for decoding — these are documented in &lt;a href=&quot;https://pytorch.org/audio/0.12.0/models.decoder.html#ctcdecoder&quot;&gt;TorchAudio’s documentation&lt;/a&gt; and explored further in &lt;a href=&quot;https://pytorch.org/audio/0.12.0/tutorials/asr_inference_with_ctc_decoder_tutorial.html#beam-search-decoder-parameters&quot;&gt;TorchAudio’s ASR Inference tutorial&lt;/a&gt;. Since decoding is quite efficient, parameters can be easily swept and tuned.&lt;/p&gt;
+
+&lt;p&gt;Beam search has been used in ASR extensively over the years in far too many works to cite, and in strong, recent results and systems including &lt;a href=&quot;https://proceedings.neurips.cc/paper/2020/file/92d1e1eb1cd6f9fba3227870bb6d7f07-Paper.pdf&quot;&gt;wav2vec 2.0&lt;/a&gt; and &lt;a href=&quot;https://developer.nvidia.com/nvidia-nemo&quot;&gt;NVIDIA’s NeMo&lt;/a&gt;.&lt;/p&gt;
+
+&lt;h2 id=&quot;why-beam-search&quot;&gt;Why beam search?&lt;/h2&gt;
+
+&lt;p&gt;Beam search remains a fast competitor to heavier-weight decoding approaches such as &lt;a href=&quot;https://arxiv.org/pdf/1211.3711.pdf&quot;&gt;RNN-Transducer&lt;/a&gt; that Google has invested in putting &lt;a href=&quot;https://ai.googleblog.com/2019/03/an-all-neural-on-device-speech.html&quot;&gt;on-device&lt;/a&gt; and has shown strong results with on &lt;a href=&quot;https://arxiv.org/pdf/2010.10504.pdf&quot;&gt;common benchmarks&lt;/a&gt;. Autoregressive text models at scale can benefit from beam search as well. Among other things, beam search gives:&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;A flexible performance/latency tradeoff — by adjusting beam size and the external LM, users can sacrifice latency for accuracy or pay for more accurate results with a small latency cost. Decoding with no external LM can improve results at very little performance cost.&lt;/li&gt;
+  &lt;li&gt;Portability without retraining — existing neural models can benefit from multiple decoding setups and plug-and-play with external LMs without training or fine-tuning.&lt;/li&gt;
+  &lt;li&gt;A compelling complexity/accuracy tradeoff — adding beam search to an existing modeling pipeline incurs little additional complexity and can improve performance.&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h2 id=&quot;performance-benchmarks&quot;&gt;Performance Benchmarks&lt;/h2&gt;
+
+&lt;p&gt;Today’s most commonly-used beam search decoding libraries today that support external language model integration include Kensho’s &lt;a href=&quot;https://github.com/kensho-technologies/pyctcdecode&quot;&gt;pyctcdecode&lt;/a&gt;, NVIDIA’s &lt;a href=&quot;https://github.com/NVIDIA/NeMo/tree/stable/scripts/asr_language_modeling&quot;&gt;NeMo toolkit&lt;/a&gt;. We benchmark the TorchAudio + Flashlight decoder against them with a &lt;em&gt;wav2vec 2.0&lt;/em&gt; base model trained on 100 hours of audio evaluated on &lt;a href=&quot;https://www.openslr.org/12&quot;&gt;LibriSpeech&lt;/a&gt; dev-other with the official &lt;a href=&quot;https://github.com/kpu/kenlm/&quot;&gt;KenLM&lt;/a&gt; 3-gram LM. Benchmarks were run on Intel E5-2698 CPUs on a single thread. All computation was in-memory — KenLM memory mapping was disabled as it wasn’t widely supported.&lt;/p&gt;
+
+&lt;p&gt;When benchmarking, we measure the &lt;em&gt;time-to-WER (word error rate)&lt;/em&gt; — because of subtle differences in the implementation of decoding algorithms and the complex relationships between parameters and decoding speed, some hyperparameters differed across runs. To fairly assess performance, we first sweep for parameters that achieve a baseline WER, minimizing beam size if possible.&lt;/p&gt;
+
+&lt;p align=&quot;center&quot;&gt;
+  &lt;img src=&quot;/assets/images/fast-beam-search-decoding-in-pytorch-with-torchaudio-and-flashlight-text-4.jpeg&quot; width=&quot;70%&quot; /&gt;
+&lt;/p&gt;
+
+&lt;p align=&quot;center&quot;&gt;
+Decoding performance on Librispeech dev-other of a pretrained wav2vec 2.0 model. TorchAudio + Flashlight decoding outperforms by an order of magnitude at low WERs.
+&lt;/p&gt;
+
+&lt;p align=&quot;center&quot;&gt;
+  &lt;img src=&quot;/assets/images/fast-beam-search-decoding-in-pytorch-with-torchaudio-and-flashlight-text-5.jpeg&quot; width=&quot;70%&quot; /&gt;
+&lt;/p&gt;
+
+&lt;p align=&quot;center&quot;&gt;
+Time-to-WER results, deferring to smaller beam size, across decoders. The TorchAudio + Flashlight decoder scales far better with larger beam sizes and at lower WERs.
+&lt;/p&gt;
+
+&lt;h2 id=&quot;torchaudio-api-and-usage&quot;&gt;TorchAudio API and Usage&lt;/h2&gt;
+
+&lt;p&gt;TorchAudio provides a Python API for CTC beam search decoding, with support for the following:&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;lexicon and lexicon-free decoding&lt;/li&gt;
+  &lt;li&gt;KenLM n-gram language model integration&lt;/li&gt;
+  &lt;li&gt;character and word-piece decoding&lt;/li&gt;
+  &lt;li&gt;sample pretrained LibriSpeech KenLM models and corresponding lexicon and token files&lt;/li&gt;
+  &lt;li&gt;various customizable beam search parameters (beam size, pruning threshold, LM weight…)&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;To set up the decoder, use the factory function torchaudio.models.decoder.ctc_decoder&lt;/p&gt;
+
+&lt;div class=&quot;language-python highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;kn&quot;&gt;from&lt;/span&gt; &lt;span class=&quot;nn&quot;&gt;torchaudio.models.decoder&lt;/span&gt; &lt;span class=&quot;kn&quot;&gt;import&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;ctc_decoder&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;download_pretrained_files&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;files&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;download_pretrained_files&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;librispeech-4-gram&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;decoder&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;ctc_decoder&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;
+   &lt;span class=&quot;n&quot;&gt;lexicon&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;files&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;lexicon&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
+   &lt;span class=&quot;n&quot;&gt;tokens&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;files&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;tokens&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
+   &lt;span class=&quot;n&quot;&gt;lm&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;files&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;lm&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
+   &lt;span class=&quot;n&quot;&gt;nbest&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
+   &lt;span class=&quot;p&quot;&gt;...&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;additional&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;optional&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;customizable&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;args&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;...&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Given emissions of shape &lt;em&gt;(batch, time, num_tokens)&lt;/em&gt;, the decoder will compute and return a List of batch Lists, each consisting of the nbest hypotheses corresponding to the emissions. Each hypothesis can be further broken down into tokens, words (if a lexicon is provided), score, and timesteps components.&lt;/p&gt;
+
+&lt;div class=&quot;language-python highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;n&quot;&gt;emissions&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;acoustic_model&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;waveforms&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;  &lt;span class=&quot;c1&quot;&gt;# (B, T, N)
+&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;batch_hypotheses&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;decoder&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;emissions&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;  &lt;span class=&quot;c1&quot;&gt;# List[List[CTCHypothesis]]
+&lt;/span&gt;
+&lt;span class=&quot;c1&quot;&gt;# transcript for a lexicon decoder
+&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;transcripts&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot; &quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;join&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;hypo&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;].&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;words&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;for&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;hypo&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;in&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;batch_hypotheses&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]&lt;/span&gt;
+
+&lt;span class=&quot;c1&quot;&gt;# transcript for a lexicon free decoder, splitting by sil token
+&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;batch_tokens&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;decoder&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;idxs_to_tokens&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;hypo&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;].&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;tokens&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;for&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;hypo&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;in&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;batch_hypotheses&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;transcripts&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;join&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;tokens&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;for&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tokens&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;in&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;batch_tokens&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Please refer to the &lt;a href=&quot;https://pytorch.org/audio/stable/models.decoder.html#ctcdecoder&quot;&gt;documentation&lt;/a&gt; for more API details, and the tutorial (&lt;a href=&quot;https://pytorch.org/audio/main/tutorials/asr_inference_with_ctc_decoder_tutorial.html&quot;&gt;ASR Inference Decoding&lt;/a&gt;) or sample &lt;a href=&quot;https://github.com/pytorch/audio/tree/main/examples/asr/librispeech_ctc_decoder&quot;&gt;inference script&lt;/a&gt; for more usage examples.&lt;/p&gt;
+
+&lt;h2 id=&quot;upcoming-improvements&quot;&gt;Upcoming Improvements&lt;/h2&gt;
+
+&lt;p&gt;&lt;strong&gt;Full NNLM support&lt;/strong&gt; — decoding with large neural language models (e.g. transformers) remains somewhat unexplored at scale. Already supported in Flashlight, we plan to add support in TorchAudio, allowing users to use custom decoder-compatible LMs. Custom word level language models are already available in the nightly TorchAudio build, and is slated to be released in TorchAudio 0.13.&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Autoregressive/seq2seq decoding&lt;/strong&gt; — Flashlight Text also supports &lt;a href=&quot;https://github.com/flashlight/text/blob/main/flashlight/lib/text/decoder/LexiconSeq2SeqDecoder.h&quot;&gt;sequence-to-sequence (seq2seq) decoding&lt;/a&gt; for autoregressive models, which we hope to add bindings for and add to TorchAudio and TorchText with efficient GPU implementations as well.&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Better build support&lt;/strong&gt; — to benefit from improvements in Flashlight Text, TorchAudio will directly submodule Flashlight Text to make upstreaming modifications and improvements easier. This is already in effect in the nightly TorchAudio build, and is slated to be released in TorchAudio 0.13.&lt;/p&gt;
+
+&lt;h2 id=&quot;citation&quot;&gt;Citation&lt;/h2&gt;
+
+&lt;p&gt;To cite the decoder, please use the following:&lt;/p&gt;
+
+&lt;div class=&quot;language-python highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;o&quot;&gt;@&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;inproceedings&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;kahn2022flashlight&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
+  &lt;span class=&quot;n&quot;&gt;title&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Flashlight&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Enabling&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;innovation&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;in&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tools&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;for&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;machine&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;learning&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;},&lt;/span&gt;
+  &lt;span class=&quot;n&quot;&gt;author&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Kahn&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Jacob&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;D&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;and&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Pratap&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Vineel&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;and&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Likhomanenko&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Tatiana&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;and&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Xu&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Qiantong&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;and&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Hannun&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Awni&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;and&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Cai&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Jeff&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;and&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Tomasello&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Paden&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;and&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Lee&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Ann&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;and&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Grave&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Edouard&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;and&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Avidov&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Gilad&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;and&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;others&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;},&lt;/span&gt;
+  &lt;span class=&quot;n&quot;&gt;booktitle&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;International&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Conference&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;on&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Machine&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Learning&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;},&lt;/span&gt;
+  &lt;span class=&quot;n&quot;&gt;pages&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;10557&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;--&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;10574&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;},&lt;/span&gt;
+  &lt;span class=&quot;n&quot;&gt;year&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;2022&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;},&lt;/span&gt;
+  &lt;span class=&quot;n&quot;&gt;organization&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;PMLR&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+&lt;div class=&quot;language-python highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;o&quot;&gt;@&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;inproceedings&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;yang2022torchaudio&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
+  &lt;span class=&quot;n&quot;&gt;title&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Torchaudio&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Building&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;blocks&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;for&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;audio&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;and&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;speech&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;processing&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;},&lt;/span&gt;
+  &lt;span class=&quot;n&quot;&gt;author&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Yang&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Yao&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Yuan&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;and&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Hira&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Moto&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;and&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Ni&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Zhaoheng&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;and&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Astafurov&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Artyom&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;and&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Chen&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Caroline&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;and&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Puhrsch&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Christian&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;and&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Pollack&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;David&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;and&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Genzel&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Dmitriy&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;and&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Greenberg&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Donny&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;and&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Yang&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Edward&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Z&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;and&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;others&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;},&lt;/span&gt;
+  &lt;span class=&quot;n&quot;&gt;booktitle&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;ICASSP&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;2022&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;2022&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;IEEE&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;International&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Conference&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;on&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Acoustics&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Speech&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;and&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Signal&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Processing&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;ICASSP&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)},&lt;/span&gt;
+  &lt;span class=&quot;n&quot;&gt;pages&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;6982&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;--&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;6986&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;},&lt;/span&gt;
+  &lt;span class=&quot;n&quot;&gt;year&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;2022&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;},&lt;/span&gt;
+  &lt;span class=&quot;n&quot;&gt;organization&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;IEEE&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;</content>
+
+      
+      
+      
+      
+      
+
+      <author>
+          <name>Caroline Chen, Jacob Kahn (@jacob_d_kahn)</name>
+        
+        
+      </author>
+
+      
+
+      
+
+      
+        <summary type="html">Beam search decoding with industry-leading speed from Flashlight Text (part of the Flashlight ML framework) is now available with official support in TorchAudio, bringing high-performance beam search and text utilities for speech and text applications built on top of PyTorch. The current integration supports CTC-style decoding, but it can be used for any modeling setting that outputs token-level probability distributions over time steps.</summary>
+      
+
+      
+      
+    </entry>
   
     <entry>
       <title type="html">Introducing nvFuser, a deep learning compiler for PyTorch</title>
@@ -1763,258 +1929,6 @@ with sparsity optimization enabled by enable_nested_tensor=True&lt;/b&gt;
 
       
         <summary type="html">We are bringing a number of improvements to the current PyTorch libraries, alongside the PyTorch 1.12 release. These updates demonstrate our focus on developing common and extensible APIs across all domains to make it easier for our community to build ecosystem projects on PyTorch.</summary>
-      
-
-      
-      
-    </entry>
-  
-    <entry>
-      <title type="html">PyTorch 1.12: TorchArrow, Functional API for Modules and nvFuser, are now available</title>
-      <link href="https://pytorch.org/blog/pytorch-1.12-released/" rel="alternate" type="text/html" title="PyTorch 1.12: TorchArrow, Functional API for Modules and nvFuser, are now available" />
-      <published>2022-06-28T00:00:00-07:00</published>
-      <updated>2022-06-28T00:00:00-07:00</updated>
-      <id>https://pytorch.org/blog/pytorch-1.12-released</id>
-      <content type="html" xml:base="https://pytorch.org/blog/pytorch-1.12-released/">&lt;p&gt;We are excited to announce the release of PyTorch 1.12 (&lt;a href=&quot;https://github.com/pytorch/pytorch/releases/tag/v1.12.0&quot;&gt;release note&lt;/a&gt;)! This release is composed of over 3124 commits, 433 contributors. Along with 1.12, we are releasing beta versions of AWS S3 Integration, PyTorch Vision Models on Channels Last on CPU, Empowering PyTorch on Intel® Xeon® Scalable processors with Bfloat16 and FSDP API. We want to sincerely thank our dedicated community for your contributions.&lt;/p&gt;
-
-&lt;p&gt;Summary:&lt;/p&gt;
-&lt;ul&gt;
-  &lt;li&gt;Functional APIs to functionally apply module computation with a given set of parameters&lt;/li&gt;
-  &lt;li&gt;Complex32 and Complex Convolutions in PyTorch&lt;/li&gt;
-  &lt;li&gt;DataPipes from TorchData fully backward compatible with DataLoader&lt;/li&gt;
-  &lt;li&gt;functorch with improved coverage for APIs&lt;/li&gt;
-  &lt;li&gt;nvFuser a deep learning compiler for PyTorch&lt;/li&gt;
-  &lt;li&gt;Changes to float32 matrix multiplication precision on Ampere and later CUDA hardware&lt;/li&gt;
-  &lt;li&gt;TorchArrow, a new beta library for machine learning preprocessing over batch data&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;h2 id=&quot;frontend-apis&quot;&gt;Frontend APIs&lt;/h2&gt;
-
-&lt;h3 id=&quot;introducing-torcharrow&quot;&gt;Introducing TorchArrow&lt;/h3&gt;
-
-&lt;p&gt;We’ve got a new Beta release ready for you to try and use: TorchArrow. This is a library for machine learning preprocessing over batch data. It features a performant and Pandas-style, easy-to-use API in order to speed up your preprocessing workflows and development.&lt;/p&gt;
-
-&lt;p&gt;Currently, it provides a Python DataFrame interface with the following features:&lt;/p&gt;
-&lt;ul&gt;
-  &lt;li&gt;High-performance CPU backend, vectorized and extensible User-Defined Functions (UDFs) with &lt;a href=&quot;https://github.com/facebookincubator/velox&quot;&gt;Velox&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;Seamless handoff with PyTorch or other model authoring, such as Tensor collation and easily plugging into PyTorch DataLoader and DataPipes&lt;/li&gt;
-  &lt;li&gt;Zero copy for external readers via Arrow in-memory columnar format&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;For more details, please find our &lt;a href=&quot;https://github.com/pytorch/torcharrow/blob/main/tutorial/tutorial.ipynb&quot;&gt;10-min tutorial&lt;/a&gt;, installation &lt;a href=&quot;https://github.com/pytorch/torcharrow#installation&quot;&gt;instructions&lt;/a&gt;, API &lt;a href=&quot;https://pytorch.org/torcharrow/beta/&quot;&gt;documentation&lt;/a&gt;, and a &lt;a href=&quot;https://github.com/pytorch/torchrec/tree/main/examples/torcharrow&quot;&gt;prototype&lt;/a&gt; for data preprocessing in TorchRec.&lt;/p&gt;
-
-&lt;h3 id=&quot;beta-functional-api-for-modules&quot;&gt;(Beta) Functional API for Modules&lt;/h3&gt;
-
-&lt;p&gt;PyTorch 1.12 introduces a new beta feature to functionally apply Module computation with a given set of parameters. Sometimes, the traditional PyTorch Module usage pattern that maintains a static set of parameters internally is too restrictive. This is often the case when implementing algorithms for meta-learning, where multiple sets of parameters may need to be maintained across optimizer steps.&lt;/p&gt;
-
-&lt;p&gt;The new &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;torch.nn.utils.stateless.functional_call()&lt;/code&gt; API allows for:&lt;/p&gt;
-&lt;ul&gt;
-  &lt;li&gt;Module computation with full flexibility over the set of parameters used&lt;/li&gt;
-  &lt;li&gt;No need to reimplement your module in a functional way&lt;/li&gt;
-  &lt;li&gt;Any parameter or buffer present in the module can be swapped with an externally-defined value for use in the call. Naming for referencing parameters / buffers follows the fully-qualified form in the module’s &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;state_dict()&lt;/code&gt;&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;Example:&lt;/p&gt;
-&lt;div class=&quot;language-python highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;kn&quot;&gt;import&lt;/span&gt; &lt;span class=&quot;nn&quot;&gt;torch&lt;/span&gt;
-&lt;span class=&quot;kn&quot;&gt;from&lt;/span&gt; &lt;span class=&quot;nn&quot;&gt;torch&lt;/span&gt; &lt;span class=&quot;kn&quot;&gt;import&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;nn&lt;/span&gt;
-&lt;span class=&quot;kn&quot;&gt;from&lt;/span&gt; &lt;span class=&quot;nn&quot;&gt;torch.nn.utils.stateless&lt;/span&gt; &lt;span class=&quot;kn&quot;&gt;import&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;functional_call&lt;/span&gt;
-
-&lt;span class=&quot;k&quot;&gt;class&lt;/span&gt; &lt;span class=&quot;nc&quot;&gt;MyModule&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;nn&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Module&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;):&lt;/span&gt;
-    &lt;span class=&quot;k&quot;&gt;def&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;__init__&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;bp&quot;&gt;self&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;):&lt;/span&gt;
-        &lt;span class=&quot;nb&quot;&gt;super&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;().&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;__init__&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt;
-        &lt;span class=&quot;bp&quot;&gt;self&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;fc1&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;nn&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Linear&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;3&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;3&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
-        &lt;span class=&quot;bp&quot;&gt;self&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;bn&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;nn&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;BatchNorm1d&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;3&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
-        &lt;span class=&quot;bp&quot;&gt;self&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;fc2&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;nn&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Linear&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;3&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;3&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
-
-    &lt;span class=&quot;k&quot;&gt;def&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;forward&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;bp&quot;&gt;self&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;x&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;):&lt;/span&gt;
-        &lt;span class=&quot;k&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;bp&quot;&gt;self&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;fc2&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;bp&quot;&gt;self&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;bn&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;bp&quot;&gt;self&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;fc1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;x&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)))&lt;/span&gt;
-
-&lt;span class=&quot;n&quot;&gt;m&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;MyModule&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt;
-
-&lt;span class=&quot;c1&quot;&gt;# Define parameter / buffer values to use during module computation.
-&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;my_weight&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;torch&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;randn&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;3&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;3&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;requires_grad&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;bp&quot;&gt;True&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
-&lt;span class=&quot;n&quot;&gt;my_bias&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;torch&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;tensor&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;([&lt;/span&gt;&lt;span class=&quot;mf&quot;&gt;1.&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mf&quot;&gt;2.&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mf&quot;&gt;3.&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;],&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;requires_grad&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;bp&quot;&gt;True&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
-&lt;span class=&quot;n&quot;&gt;params_and_buffers&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
-    &lt;span class=&quot;s&quot;&gt;'fc1.weight'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;my_weight&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
-    &lt;span class=&quot;s&quot;&gt;'fc1.bias'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;my_bias&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
-    &lt;span class=&quot;c1&quot;&gt;# Custom buffer values can be used too.
-&lt;/span&gt;    &lt;span class=&quot;s&quot;&gt;'bn.running_mean'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;torch&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;randn&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;3&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;),&lt;/span&gt;
-&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
-
-&lt;span class=&quot;c1&quot;&gt;# Apply module computation to the input with the specified parameters / buffers.
-&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;inp&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;torch&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;randn&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;5&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;3&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
-&lt;span class=&quot;n&quot;&gt;output&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;functional_call&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;m&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;params_and_buffers&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;inp&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;h3 id=&quot;beta-complex32-and-complex-convolutions-in-pytorch&quot;&gt;(Beta) Complex32 and Complex Convolutions in PyTorch&lt;/h3&gt;
-
-&lt;p&gt;PyTorch today natively supports complex numbers, complex autograd, complex modules, and numerous complex operations, including linear algebra and Fast Fourier Transform (FFT) operators. Many libraries, including torchaudio and ESPNet, already make use of complex numbers in PyTorch, and PyTorch 1.12 further extends complex functionality with complex convolutions and the experimental complex32 (“complex half”) data type that enables half precision FFT operations. Due to the bugs in CUDA 11.3 package, we recommend using CUDA 11.6 package from wheels if you are using complex numbers.&lt;/p&gt;
-
-&lt;h3 id=&quot;beta-forward-mode-automatic-differentiation&quot;&gt;(Beta) Forward-mode Automatic Differentiation&lt;/h3&gt;
-
-&lt;p&gt;Forward-mode AD allows the computation of directional derivatives (or equivalently, Jacobian-vector products) eagerly in the forward pass. PyTorch 1.12 significantly improves the operator coverage for forward-mode AD. See our &lt;a href=&quot;https://pytorch.org/tutorials/search.html?q=forward-mode+automatic+differentiation+%28beta%29&amp;amp;check_keywords=yes&amp;amp;area=default#&quot;&gt;tutorial&lt;/a&gt; for more information.&lt;/p&gt;
-
-&lt;h3 id=&quot;torchdata&quot;&gt;TorchData&lt;/h3&gt;
-
-&lt;h4 id=&quot;bc-dataloader--datapipe&quot;&gt;BC DataLoader + DataPipe&lt;/h4&gt;
-
-&lt;p&gt;`DataPipe` from TorchData becomes fully backward compatible with the existing `DataLoader` regarding shuffle determinism and dynamic sharding in both multiprocessing and distributed environments. For more details, please check out the &lt;a href=&quot;https://pytorch.org/data/0.4.0/tutorial.html#working-with-dataloader&quot;&gt;tutorial&lt;/a&gt;.&lt;/p&gt;
-
-&lt;h4 id=&quot;beta-aws-s3-integration&quot;&gt;(Beta) AWS S3 Integration&lt;/h4&gt;
-
-&lt;p&gt;DataPipes based on &lt;a href=&quot;https://github.com/aws/aws-sdk-cpp&quot;&gt;AWSSDK&lt;/a&gt; have been integrated into TorchData. It provides the following features backed by native AWSSDK:&lt;/p&gt;
-&lt;ul&gt;
-  &lt;li&gt;Retrieve list of urls from each S3 bucket based on prefix
-    &lt;ul&gt;
-      &lt;li&gt;Support timeout to prevent hanging indefinitely&lt;/li&gt;
-      &lt;li&gt;Support to specify S3 bucket region&lt;/li&gt;
-    &lt;/ul&gt;
-  &lt;/li&gt;
-  &lt;li&gt;Load data from S3 urls
-    &lt;ul&gt;
-      &lt;li&gt;Support buffered and multi-part download&lt;/li&gt;
-      &lt;li&gt;Support to specify S3 bucket region&lt;/li&gt;
-    &lt;/ul&gt;
-  &lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;AWS native DataPipes are still in the beta phase. And, we will keep tuning them to improve their performance.&lt;/p&gt;
-
-&lt;h4 id=&quot;prototype-dataloader2&quot;&gt;(Prototype) DataLoader2&lt;/h4&gt;
-
-&lt;p&gt;DataLoader2 became available in prototype mode. We are introducing new ways to interact between DataPipes, DataLoading API, and backends (aka ReadingServices). Feature is stable in terms of API, but functionally not complete yet. We welcome early adopters and feedback, as well as potential contributors.&lt;/p&gt;
-
-&lt;p&gt;For more details, please checkout the &lt;a href=&quot;https://github.com/pytorch/data/tree/main/torchdata/dataloader2&quot;&gt;link&lt;/a&gt;.&lt;/p&gt;
-
-&lt;h3 id=&quot;functorch&quot;&gt;functorch&lt;/h3&gt;
-
-&lt;p&gt;Inspired by &lt;a href=&quot;https://github.com/google/jax&quot;&gt;Google JAX&lt;/a&gt;, functorch is a library that offers composable vmap (vectorization) and autodiff transforms. It enables advanced autodiff use cases that would otherwise be tricky to express in PyTorch. Examples of these include:&lt;/p&gt;
-&lt;ul&gt;
-  &lt;li&gt;&lt;a href=&quot;https://pytorch.org/functorch/stable/notebooks/ensembling.html&quot;&gt;running ensembles of models on a single machine&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://pytorch.org/functorch/stable/notebooks/jacobians_hessians.html&quot;&gt;efficiently computing Jacobians and Hessians&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://pytorch.org/functorch/stable/notebooks/per_sample_grads.html&quot;&gt;computing per-sample-gradients (or other per-sample quantities)&lt;/a&gt;&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;We’re excited to announce functorch 0.2.0 with a number of improvements and new experimental features.&lt;/p&gt;
-
-&lt;h4 id=&quot;significantly-improved-coverage&quot;&gt;Significantly improved coverage&lt;/h4&gt;
-
-&lt;p&gt;We significantly improved coverage for &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;functorch.jvp&lt;/code&gt; (our forward-mode autodiff API) and other APIs that rely on it (&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;functorch.{jacfwd, hessian}&lt;/code&gt;).&lt;/p&gt;
-
-&lt;h4 id=&quot;prototype-functorchexperimentalfunctionalize&quot;&gt;(Prototype) functorch.experimental.functionalize&lt;/h4&gt;
-
-&lt;p&gt;Given a function f, &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;functionalize(f)&lt;/code&gt; returns a new function without mutations (with caveats). This is useful for constructing traces of PyTorch functions without in-place operations. For example, you can use &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;make_fx(functionalize(f))&lt;/code&gt; to construct a mutation-free trace of a pytorch function. To learn more, please see the &lt;a href=&quot;https://pytorch.org/functorch/stable/generated/functorch.experimental.functionalize.html#functorch.experimental.functionalize&quot;&gt;documentation&lt;/a&gt;.&lt;/p&gt;
-
-&lt;p&gt;For more details, please see our &lt;a href=&quot;https://pytorch.org/functorch/stable/install.html&quot;&gt;installation instructions&lt;/a&gt;, &lt;a href=&quot;https://pytorch.org/functorch/&quot;&gt;documentation&lt;/a&gt;, &lt;a href=&quot;https://pytorch.org/functorch&quot;&gt;tutorials&lt;/a&gt;, and &lt;a href=&quot;https://github.com/pytorch/functorch/releases&quot;&gt;release notes&lt;/a&gt;.&lt;/p&gt;
-
-&lt;h2 id=&quot;performance-improvements&quot;&gt;Performance Improvements&lt;/h2&gt;
-
-&lt;h3 id=&quot;introducing-nvfuser-a-deep-learning-compiler-for-pytorch&quot;&gt;Introducing nvFuser, a deep learning compiler for PyTorch&lt;/h3&gt;
-
-&lt;p&gt;In PyTorch 1.12, Torchscript is updating its default fuser  (for Volta and later CUDA accelerators) to nvFuser, which supports a wider range of operations and is faster than NNC, the previous fuser for CUDA devices. A soon to be published blog post will elaborate on nvFuser and show how it speeds up training on a variety of networks.&lt;/p&gt;
-
-&lt;p&gt;See &lt;a href=&quot;https://github.com/pytorch/pytorch/blob/release/1.12/torch/csrc/jit/codegen/cuda/README.md&quot;&gt;the nvFuser documentation&lt;/a&gt; for more details on usage and debugging.&lt;/p&gt;
-
-&lt;h3 id=&quot;changes-to-float32-matrix-multiplication-precision-on-ampere-and-later-cuda-hardware&quot;&gt;Changes to float32 matrix multiplication precision on Ampere and later CUDA hardware&lt;/h3&gt;
-
-&lt;p&gt;PyTorch supports a variety of “mixed precision” techniques, like the torch.amp (Automated Mixed Precision) module and performing float32 matrix multiplications using the TensorFloat32 datatype on Ampere and later CUDA hardware for faster internal computations. In PyTorch 1.12 we’re changing the default behavior of float32 matrix multiplications to always use full IEEE fp32 precision, which is more precise but slower than using the TensorFloat32 datatype for internal computation. For devices with a particularly high ratio of TensorFloat32 to float32 throughput such as A100, this change in defaults can result in a large slowdown.&lt;/p&gt;
-
-&lt;p&gt;If you’ve been using TensorFloat32 matrix multiplications then you can continue to do so by setting &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;torch.backends.cuda.matmul.allow_tf32 = True&lt;/code&gt;&lt;/p&gt;
-
-&lt;p&gt;which is supported since PyTorch 1.7. Starting in PyTorch 1.12 the new matmul precision API can be used, too: &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;torch.set_float32_matmul_precision(“highest”|”high”|”medium”)&lt;/code&gt;&lt;/p&gt;
-
-&lt;p&gt;To reiterate, PyTorch’s new default is “highest” precision for all device types. We think this provides better consistency across device types for matrix multiplications. Documentation for the new precision API can be found &lt;a href=&quot;https://pytorch.org/docs/master/generated/torch.set_float32_matmul_precision.html?highlight=precision#torch.set_float32_matmul_precision&quot;&gt;here&lt;/a&gt;. Setting the “high” or “medium” precision types will enable TensorFloat32 on Ampere and later CUDA devices. If you’re updating to PyTorch 1.12 then to preserve the current behavior and faster performance of matrix multiplications on Ampere devices, set precision to “high”.&lt;/p&gt;
-
-&lt;p&gt;Using mixed precision techniques is essential for training many modern deep learning networks efficiently, and if you’re already using torch.amp this change is unlikely to affect you. If you’re not familiar with mixed precision training then see our soon to be published “What Every User Should Know About Mixed Precision Training in PyTorch” blogpost.&lt;/p&gt;
-
-&lt;h3 id=&quot;beta-accelerating-pytorch-vision-models-with-channels-last-on-cpu&quot;&gt;(Beta) Accelerating PyTorch Vision Models with Channels Last on CPU&lt;/h3&gt;
-
-&lt;p&gt;Memory formats have a significant impact on performance when running vision models, generally Channels Last is more favorable from a performance perspective due to better data locality. 1.12 includes fundamental concepts of memory formats and demonstrates performance benefits using Channels Last on popular PyTorch vision models on Intel® Xeon® Scalable processors.&lt;/p&gt;
-&lt;ul&gt;
-  &lt;li&gt;Enables Channels Last memory format support for the commonly used operators in CV domain on CPU, applicable for both inference and training&lt;/li&gt;
-  &lt;li&gt;Provides native level optimization on Channels Last kernels from ATen, applicable for both AVX2 and AVX512&lt;/li&gt;
-  &lt;li&gt;Delivers 1.3x to 1.8x inference performance gain over Channels First for TorchVision models on Intel® Xeon® Ice Lake (or newer) CPUs&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;h3 id=&quot;beta-empowering-pytorch-on-intel-xeon-scalable-processors-with-bfloat16&quot;&gt;(Beta) Empowering PyTorch on Intel® Xeon® Scalable processors with Bfloat16&lt;/h3&gt;
-
-&lt;p&gt;Reduced precision numeric formats like bfloat16 improves PyTorch performance across multiple deep learning training workloads. PyTorch 1.12 includes the latest software enhancements on bfloat16 which applies to a broader scope of user scenarios and showcases even higher performance gains. The main improvements include:&lt;/p&gt;
-&lt;ul&gt;
-  &lt;li&gt;2x hardware compute throughput vs. float32 with the new bfloat16 native instruction VDPBF16PS, introduced on Intel® Xeon® Cooper Lake CPUs&lt;/li&gt;
-  &lt;li&gt;1/2 memory footprint of float32, faster speed for memory bandwidth intensive operators&lt;/li&gt;
-  &lt;li&gt;1.4x to 2.2x inference performance gain over float32 for TorchVision models on Intel® Xeon® Cooper Lake (or newer) CPUs&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;h3 id=&quot;prototype-introducing-accelerated-pytorch-training-on-mac&quot;&gt;(Prototype) Introducing Accelerated PyTorch Training on Mac&lt;/h3&gt;
-
-&lt;p&gt;With the PyTorch 1.12 release, developers and researchers can now take advantage of Apple silicon GPUs for significantly faster model training. This unlocks the ability to perform machine learning workflows like prototyping and fine-tuning locally, right on Mac. Accelerated GPU training is enabled using Apple’s Metal Performance Shaders (MPS) as a backend. The benefits include performance speedup from accelerated GPU training and the ability to train larger networks or batch sizes locally. Learn more &lt;a href=&quot;https://pytorch.org/blog/introducing-accelerated-pytorch-training-on-mac/&quot;&gt;here&lt;/a&gt;.&lt;/p&gt;
-
-&lt;p align=&quot;center&quot;&gt;
-  &lt;img src=&quot;/assets/images/apple_m1_eval.png&quot; width=&quot;80%&quot; /&gt;
-&lt;/p&gt;
-
-&lt;p align=&quot;center&quot;&gt;
- Accelerated GPU training and evaluation speedups over CPU-only (times faster)
-&lt;/p&gt;
-
-&lt;p&gt;Alongside the new MPS device support, the M1 binaries for Core and Domain libraries that have been available for the last few releases are now an official prototype feature. These binaries can be used to run PyTorch natively on Apple Silicon.&lt;/p&gt;
-
-&lt;h3 id=&quot;prototype-bettertransformer-fastpath-execution-for-transformer-encoder-inference&quot;&gt;(Prototype) BetterTransformer: Fastpath execution for Transformer Encoder Inference&lt;/h3&gt;
-
-&lt;p&gt;PyTorch now supports CPU and GPU fastpath implementations (“BetterTransformer”) for several Transformer Encoder modules including TransformerEncoder, TransformerEncoderLayer, and MultiHeadAttention (MHA). The BetterTransformer fastpath architecture Better Transformer is consistently faster –  2x for many common execution scenarios, depending on model and input characteristics. The new BetterTransformer-enabled modules are API compatible with previous releases of the PyTorch Transformer API and will accelerate existing models if they meet fastpath execution requirements, as well as read models trained with previous versions of PyTorch. PyTorch 1.12 includes:&lt;/p&gt;
-&lt;ul&gt;
-  &lt;li&gt;BetterTransformer integration for Torchtext’s pretrained RoBERTa and XLM-R models&lt;/li&gt;
-  &lt;li&gt;Torchtext which builds on the PyTorch Transformer API&lt;/li&gt;
-  &lt;li&gt;Fastpath execution for improved performance by reducing execution overheads with fused kernels which combines multiple operators into a single kernel&lt;/li&gt;
-  &lt;li&gt;Option to achieve additional speedups by taking advantage of data sparsity during the processing of padding tokens in natural-language processing (by setting enable_nested_tensor=True when creating a TransformerEncoder)&lt;/li&gt;
-  &lt;li&gt;Diagnostics to help users understand why fastpath execution did not occur&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p align=&quot;center&quot;&gt;
-  &lt;img src=&quot;/assets/images/transformer_fastpath.png&quot; width=&quot;80%&quot; /&gt;
-&lt;/p&gt;
-
-&lt;h2 id=&quot;distributed&quot;&gt;Distributed&lt;/h2&gt;
-
-&lt;h3 id=&quot;beta-fully-sharded-data-parallel-fsdp-api&quot;&gt;(Beta) Fully Sharded Data Parallel (FSDP) API&lt;/h3&gt;
-
-&lt;p&gt;&lt;a href=&quot;https://pytorch.org/blog/introducing-pytorch-fully-sharded-data-parallel-api/&quot;&gt;FSDP API&lt;/a&gt; helps easily scale large model training by sharding a model’s parameters, gradients and optimizer states across data parallel workers while maintaining the simplicity of data parallelism. The prototype version was released in PyTorch 1.11 with a minimum set of features that helped &lt;a href=&quot;https://medium.com/pytorch/training-a-1-trillion-parameter-model-with-pytorch-fully-sharded-data-parallel-on-aws-3ac13aa96cff&quot;&gt;scaling tests of models with up to 1T parameters&lt;/a&gt;.&lt;/p&gt;
-
-&lt;p&gt;In this beta release, FSDP API added the following features to support various production workloads. Highlights of the the newly added features in this beta release include:&lt;/p&gt;
-&lt;ol&gt;
-  &lt;li&gt;Universal sharding strategy API - Users can easily change between sharding strategies with a single line change, and thus compare and use DDP (only data sharding), FSDP (full model and data sharding), or Zero2 (only sharding of optimizer and gradients) to optimize memory and performance for their specific training needs&lt;/li&gt;
-  &lt;li&gt;Fine grained mixed precision policies - Users can specify a mix of half and full data types (bfloat16, fp16 or fp32) for model parameters, gradient communication, and buffers via mixed precision policies.  Models are automatically saved in fp32 to allow for maximum portability&lt;/li&gt;
-  &lt;li&gt;Transformer auto wrapping policy - allows for optimal wrapping of Transformer based models by registering the models layer class, and thus accelerated training performance&lt;/li&gt;
-  &lt;li&gt;Faster model initialization using device_id init - initialization is performed in a streaming fashion to avoid OOM issues and optimize init performance vs CPU init&lt;/li&gt;
-  &lt;li&gt;Rank0 streaming for full model saving of larger models - Fully sharded models can be saved by all GPU’s streaming their shards to the rank 0 GPU, and the model is built in full state on the rank 0 CPU for saving&lt;/li&gt;
-&lt;/ol&gt;
-
-&lt;p&gt;For more details and example code, please checkout the &lt;a href=&quot;https://pytorch.org/docs/1.11/fsdp.html?highlight=fsdp#module-torch.distributed.fsdp&quot;&gt;documentation&lt;/a&gt; and the &lt;a href=&quot;https://pytorch.org/tutorials/intermediate/FSDP_tutorial.html&quot;&gt;tutorial&lt;/a&gt;.&lt;/p&gt;
-
-&lt;p&gt;Thanks for reading, If you’re interested in these updates and want to join the PyTorch community, we encourage you to join the &lt;a href=&quot;https://discuss.pytorch.org/&quot;&gt;discussion forums&lt;/a&gt; and &lt;a href=&quot;https://github.com/pytorch/pytorch/issues&quot;&gt;open GitHub issues&lt;/a&gt;. To get the latest news from PyTorch, follow us on &lt;a href=&quot;https://twitter.com/PyTorch&quot;&gt;Twitter&lt;/a&gt;, &lt;a href=&quot;https://medium.com/pytorch&quot;&gt;Medium&lt;/a&gt;, &lt;a href=&quot;https://www.youtube.com/pytorch&quot;&gt;YouTube&lt;/a&gt;, and &lt;a href=&quot;https://www.linkedin.com/company/pytorch&quot;&gt;LinkedIn&lt;/a&gt;.&lt;/p&gt;
-
-&lt;p&gt;Cheers!&lt;/p&gt;
-
-&lt;p&gt;Team PyTorch&lt;/p&gt;</content>
-
-      
-      
-      
-      
-      
-
-      <author>
-          <name>Team PyTorch</name>
-        
-        
-      </author>
-
-      
-
-      
-
-      
-        <summary type="html">We are excited to announce the release of PyTorch 1.12 (release note)! This release is composed of over 3124 commits, 433 contributors. Along with 1.12, we are releasing beta versions of AWS S3 Integration, PyTorch Vision Models on Channels Last on CPU, Empowering PyTorch on Intel® Xeon® Scalable processors with Bfloat16 and FSDP API. We want to sincerely thank our dedicated community for your contributions.</summary>
       
 
       
