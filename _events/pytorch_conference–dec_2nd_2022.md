@@ -2,7 +2,7 @@
 category: event
 title: PyTorch Conference – Dec 2nd 2022 | Save the Date 
 date: December 2, 2022
-header-image: assets/images/horse2zebra.gif
+header-image: /assets/images/pytorch_conference–dec_2nd_2022.gif
 ---
 
 [Content Submission Form](https://docs.google.com/forms/d/121ptOuhqhmcPev9g5Zt2Ffl-NtB_oeyFk5CWjumUVLQ/edit) — Complete by Sept. 30th
@@ -25,4 +25,4 @@ Join us for technical talks, project deep dives, and a poster exhibition with th
 - Product/features are new or innovative to the community
 - Content can be shared openly with the community
 
-**Questions**: Contact Helen Suk or Julia Levy.
+**Questions**: Contact pytorch-marketing@fb.com
