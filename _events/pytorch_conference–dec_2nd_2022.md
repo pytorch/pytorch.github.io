@@ -11,7 +11,7 @@ We are excited to announce that the PyTorch Conference returns in-person as a sa
 
 **When**: Dec 2nd, 2022
 
-**Where**: New Orleans, Louisiana (USA) at Generations Hall | *Virtual option as well*
+**Where**: New Orleans, Louisiana (USA) at Generations Hall &#124 *Virtual option as well*
 
 **What**: The PyTorch Conference brings together leading academics, researchers and developers from the Machine Learning community to learn more about software releases on PyTorch, ways PyTorch is being used in academia and industry, development in trends, and more.
 
