@@ -7,7 +7,7 @@ header-image: assets/images/horse2zebra.gif
 
 [Content Submission Form](https://docs.google.com/forms/d/121ptOuhqhmcPev9g5Zt2Ffl-NtB_oeyFk5CWjumUVLQ/edit) — Complete by Sept. 30th
 
-We are excited to announce that the PyTorch Conference returns in-person as a satellite event to [NeurlPS](https://nips.cc/) (Neural Information Processing Systems) in New Orleans on Dec. 2nd. This is an opportunity to be part of the biggest PyTorch event of the year!
+We are excited to announce that the PyTorch Conference returns in-person as a satellite event to [NeurlPS](https://nips.cc/) (<font size="3">Neural Information Processing Systems</font>) in New Orleans on Dec. 2nd. This is an opportunity to be part of the biggest PyTorch event of the year!
 
 **When**: Dec 2nd, 2022
 
@@ -26,10 +26,3 @@ Join us for technical talks, project deep dives, and a poster exhibition with th
 - Content can be shared openly with the community
 
 **Questions**: Contact Helen Suk or Julia Levy.
-
-<font size="1"> This is my text number 1</font>
-<font size="2"> This is my text number 2</font>
-<font size="3"> This is my text number 3</font>
-<font size="4"> This is my text number 4</font>
-<font size="5"> This is my text number 5</font>
-<font size="6"> This is my text number 6</font>
