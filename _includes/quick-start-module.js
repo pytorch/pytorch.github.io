@@ -259,14 +259,13 @@ $("[data-toggle='cloud-dropdown']").on("click", function(e) {
 
 function commandMessage(key) {
   var object = {{ installMatrix }};
-  var lts_notice = "<div class='alert-secondary'><b>Note</b>: Additional support for these binaries may be provided by <a href='/enterprise-support-program' style='font-size:100%'>PyTorch Enterprise Support Program Participants</a>.</div>";
 
   if (!object.hasOwnProperty(key)) {
     $("#command").html(
       "<pre> # Follow instructions at this URL: https://github.com/pytorch/pytorch#from-source </pre>"
     );
   } else if (key.indexOf("lts") == 0  && key.indexOf('rocm') < 0) {
-    $("#command").html("<pre>" + object[key] + "</pre>" + lts_notice);
+    $("#command").html("<pre>" + object[key] + "</pre>");
   } else {
     $("#command").html("<pre>" + object[key] + "</pre>");
   }

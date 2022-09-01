@@ -207,7 +207,7 @@ For how to optimize batch size performance, check out the step-by-step tutorial 
 ## What’s Next for the PyTorch Profiler?
 You just saw how PyTorch Profiler can help optimize a model. You can now try the Profiler by ```pip install torch-tb-profiler``` to optimize your PyTorch model. 
 
-Look out for an advanced version of this tutorial in the future. If you want tailored enterprise-grade support for this, check out [PyTorch Enterprise on Azure](https://azure.microsoft.com/en-us/develop/pytorch/). We are also thrilled to continue to bring state-of-the-art tool to PyTorch users to improve ML performance. We'd love to hear from you. Feel free to open an issue [here](https://github.com/pytorch/kineto/issues).   
+Look out for an advanced version of this tutorial in the future. We are also thrilled to continue to bring state-of-the-art tool to PyTorch users to improve ML performance. We'd love to hear from you. Feel free to open an issue [here](https://github.com/pytorch/kineto/issues).   
 
 For new and exciting features coming up with PyTorch Profiler, follow @PyTorch on Twitter and check us out on pytorch.org. 
 
