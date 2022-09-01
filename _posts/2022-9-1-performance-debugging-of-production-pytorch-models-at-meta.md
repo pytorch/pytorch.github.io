@@ -119,4 +119,5 @@ We are also planning to make MAIProf available outside Meta.
 ## References
 
 [1] [https://docs.nvidia.com/gameworks/content/developertools/desktop/analysis/report/ cudaexperiments/kernellevel/achievedoccupancy.htm](https://docs.nvidia.com/gameworks/content/developertools/desktop/analysis/report/cudaexperiments/kernellevel/achievedoccupancy.htm)
+
 [2] [https://www.nvidia.com/en-us/data-center/tensor-cores/](https://www.nvidia.com/en-us/data-center/tensor-cores/)
