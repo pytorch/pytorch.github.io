@@ -266,7 +266,7 @@ function commandMessage(key) {
       "<pre> # Follow instructions at this URL: https://github.com/pytorch/pytorch#from-source </pre>"
     );
   } else if (key.indexOf("lts") == 0  && key.indexOf('rocm') < 0) {
-    $("#command").html("<pre>" + object[key] + "</pre>" + lts_notice);
+    $("#command").html("<pre>" + object[key] + "</pre>");
   } else {
     $("#command").html("<pre>" + object[key] + "</pre>");
   }
