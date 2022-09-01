@@ -8,7 +8,7 @@ featured-img: "/assets/images/performance-debugging-of-production-pytorch-models
 ## 1. Meta’s AI Performance Profiling (MAIProf)
 
 <p align="center">
-  <img src="/assets/images/performance-debugging-of-production-pytorch-models-at-meta-1.png" width="100%">
+  <img src="/assets/images/performance-debugging-of-production-pytorch-models-at-meta-1.png" width="90%">
 </p>
 
 <p align="center">
@@ -38,7 +38,7 @@ To be concrete, we use a case study on a PyTorch model used by Instagram (IG). F
 Inspect the CPU and GPU utilization on the same timeline, as shown in Figure 2.
 
 <p align="center">
-  <img src="/assets/images/performance-debugging-of-production-pytorch-models-at-meta-2.png" width="100%">
+  <img src="/assets/images/performance-debugging-of-production-pytorch-models-at-meta-2.png" width="90%">
 </p>
 
 <p align="center">
@@ -118,5 +118,5 @@ We are also planning to make MAIProf available outside Meta.
 
 ## References
 
-[1] [https://docs.nvidia.com/gameworks/content/developertools/desktop/analysis/report/cudaexperiments/kernellevel/achievedoccupancy.htm](https://docs.nvidia.com/gameworks/content/developertools/desktop/analysis/report/cudaexperiments/kernellevel/achievedoccupancy.htm)
+[1] [https://docs.nvidia.com/gameworks/content/developertools/desktop/analysis/report/ cudaexperiments/kernellevel/achievedoccupancy.htm](https://docs.nvidia.com/gameworks/content/developertools/desktop/analysis/report/cudaexperiments/kernellevel/achievedoccupancy.htm)
 [2] [https://www.nvidia.com/en-us/data-center/tensor-cores/](https://www.nvidia.com/en-us/data-center/tensor-cores/)
