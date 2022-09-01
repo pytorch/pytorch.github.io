@@ -1,7 +1,7 @@
 ---
 layout: blog_detail
 title: "Performance Debugging of Production PyTorch Models at Meta"
-author: PlayTorch Team
+author: CK Luk, Lei Tian
 featured-img: "/assets/images/performance-debugging-of-production-pytorch-models-at-meta-1.png"
 ---
 
