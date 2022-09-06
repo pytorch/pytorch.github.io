@@ -1,5 +1,5 @@
 ---
 order: 2
-link: https://pytorch.org/blog/pytorch-1.12-new-library-releases/
-summary: New libraries updates in PyTorch 1.12
+link: https://ai.facebook.com/blog/pytorch-foundation/
+summary: "Announcing the PyTorch Foundation: A new era for the cutting-edge AI framework"
 ---
