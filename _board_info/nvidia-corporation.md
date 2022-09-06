@@ -1,5 +1,5 @@
 ---
-title: Nvidia Corporation
+title: Nvidia
 summary: ''
 link: https://pytorch.org/resources/contributors
 image: /assets/images/announcement-logo-nvidia.jpg

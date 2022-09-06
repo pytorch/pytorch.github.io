@@ -1,5 +1,5 @@
 ---
-title: Microsoft Corporation
+title: Microsoft
 summary: ''
 link: https://pytorch.org/resources/contributors
 image: /assets/images/announcement-logo-microsoft.jpg

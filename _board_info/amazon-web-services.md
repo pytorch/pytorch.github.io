@@ -1,9 +1,9 @@
 ---
-title: Advanced Micro Devices, Inc
+title: Amazon
 summary: ''
 link: https://pytorch.org/resources/contributors
-image: /assets/images/announcement-logo-amd.jpg
+image: /assets/images/announcement-logo-aws.jpg
 class: pytorch-resource
-order: 1
+order: 2
 featured-home: true
 ---
