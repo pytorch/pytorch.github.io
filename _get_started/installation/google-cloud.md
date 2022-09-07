@@ -11,7 +11,7 @@ Google Cloud [provides](https://cloud.google.com/products/){:target="_blank"} bo
 ## Google Cloud Primer
 {: #google-cloud-primer}
 
-In order to use Google Cloud, you need to set up an [Google account](https://accounts.google.com/){:target="_blank"}, if you do not have one already. You will create a username (typically an `@gmail.com` email address) and password. After words, you will be able to [try Google Cloud](https://console.cloud.google.com/freetrial){:target="_blank"}. You will also provide contact and billing information. The billing information is initially used to prove you are a real person. And then, after your trial, you can choose to upgrade to a paid account.
+In order to use Google Cloud, you need to set up an [Google account](https://accounts.google.com/){:target="_blank"}, if you do not have one already. You will create a username (typically an `@gmail.com` email address) and password. Afterwards, you will be able to [try Google Cloud](https://console.cloud.google.com/freetrial){:target="_blank"}. You will also provide contact and billing information. The billing information is initially used to prove you are a real person. And then, after your trial, you can choose to upgrade to a paid account.
 
 Once you are logged in, you will be brought to your [Google Cloud console](https://console.cloud.google.com/){:target="_blank"}.  You can even learn more about Google Cloud through a set of [simple tutorials](https://console.cloud.google.com/getting-started){:target="_blank"}.
 
