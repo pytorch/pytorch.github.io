@@ -1,5 +1,5 @@
 ---
 order: 3
-link: /pytorch-foundation
+link: /foundation
 summary: "Learn more about the PyTorch Foundation"
 ---
