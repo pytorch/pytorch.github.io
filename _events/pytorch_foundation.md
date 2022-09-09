@@ -2,7 +2,7 @@
 category: event
 title: 'Webinar: PyTorch, a Foundation for Open Source AI/ML'
 date: September 15, 2022
-header-image: assets/images/linux+pytorch.png
+header-image: assets/images/WebinarPytorchEvent.png
 ---
 **Date:** Thursday, September 15, 2022 at 8am PT
 
