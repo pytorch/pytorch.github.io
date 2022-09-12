@@ -1,7 +1,7 @@
 ---
 title: Microsoft
 summary: ''
-link: https://pytorch.org/resources/contributors
+link: https://azure.microsoft.com
 image: /assets/images/announcement-logo-microsoft.jpg
 class: pytorch-resource
 order: 5

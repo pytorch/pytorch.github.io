@@ -1,7 +1,7 @@
 ---
 title: Meta
 summary: ''
-link: https://pytorch.org/resources/contributors
+link: https://meta.com
 image: /assets/images/announcement-logo-meta.jpg
 class: pytorch-resource
 order: 4
