@@ -1,7 +1,7 @@
 ---
 title: Google Cloud
 summary: ''
-link: https://pytorch.org/resources/contributors
+link: https://cloud.google.com
 image: /assets/images/announcement-logo-google.png
 class: pytorch-resource
 order: 3
