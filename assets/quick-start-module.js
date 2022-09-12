@@ -120,12 +120,12 @@ function changeCUDAVersion(ptbuild) {
   var cuda_element_x = document.getElementById("cuda11.x");
   var cuda_element_y = document.getElementById("cuda11.y");
   var rocm_element = document.getElementById("rocm5.x");
-  if (cuda_element == null) {
-    console.log("Failed to find cuda11.x element");
+  if (cuda_element_x == null || cuda_element_y == null) {
+    console.log("Failed to find cuda11 elements");
     return;
   }
-  if (cuda_element.childElementCount != 1) {
-    console.log("Unexpected number of children for cuda11.x element");
+  if (cuda_element_x.childElementCount != 1 || cuda_element_y.childElementCount != 1) {
+    console.log("Unexpected number of children for cuda11 element");
     return;
   }
   if (rocm_element == null) {
