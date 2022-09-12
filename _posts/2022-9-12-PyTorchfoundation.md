@@ -5,9 +5,6 @@ author: Soumith Chintala
 featured-img: ""
 ---
 
-<p align="center">
-</p>
-
 Today, I am proud to announce that PyTorch is moving to the [Linux Foundation (LF)](https://www.linuxfoundation.org/) as a top-level project under the name PyTorch Foundation. The [core mission](https://www.linuxfoundation.org/about/) of the Linux Foundation is the collaborative development of open source software. With a governing board of leaders from AMD, Amazon Web Services (AWS), Google Cloud, Meta, Microsoft Azure and NVIDIA, this model aligns with where PyTorch stands today and what it needs to travel forward. The creation of the PyTorch Foundation will ensure business decisions are being made in a transparent and open manner by a diverse group of members for years to come. The technical decisions remain in control of individual maintainers. I’m excited that the Linux Foundation will be our new home as they have notable experience supporting large open-source projects like ours such as Kubernetes and NodeJS. At this pivotal moment, I want to take a look back at how we started, share why we are moving, and what’s ahead.  
 
 This January, PyTorch celebrated its 5 year anniversary! I reflected on what it meant to me in this [tweet thread](https://soumith.ch/posts/2022/01/pytorch-retro/), and [this](https://www.youtube.com/watch?v=r7qB7mKJOFk) conversation with my colleagues Mike Schroepfer, Lin Qiao, and Yann LeCun. When we started PyTorch development in 2016, it was a collective effort by a band of people from the [Lua]Torch community with a big chunk of people and funding from Meta and individuals contributing from NVIDIA, Twitter and other entities.
