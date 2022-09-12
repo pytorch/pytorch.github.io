@@ -117,7 +117,7 @@ function disableUnsupportedPlatforms(os) {
 
 // Change compute versions depending on build type
 function changeCUDAVersion(ptbuild) {
-  var cuda_element = document.getElementById("cuda11.x");
+  var cuda_element_x = document.getElementById("cuda11.x");
   var cuda_element_y = document.getElementById("cuda11.y");
   var rocm_element = document.getElementById("rocm5.x");
   if (cuda_element == null) {
@@ -138,15 +138,15 @@ function changeCUDAVersion(ptbuild) {
   }
   if (ptbuild == "preview") {
     rocm_element.children[0].textContent = "ROCm 5.2";
-    cuda_element.children[0].textContent = "CUDA 11.6";
+    cuda_element_x.children[0].textContent = "CUDA 11.6";
     cuda_element_y.children[0].textContent = "CUDA 11.7";
   } else if (ptbuild == "stable") {
     rocm_element.children[0].textContent = "ROCm 5.1.1";
-    cuda_element.children[0].textContent = "CUDA 11.3";
+    cuda_element_x.children[0].textContent = "CUDA 11.3";
     cuda_element_y.children[0].textContent = "CUDA 11.6";
   } else {
     rocm_element.children[0].textContent = "ROCm 5.1.1";
-    cuda_element.children[0].textContent = "CUDA 11.3";
+    cuda_element_x.children[0].textContent = "CUDA 11.3";
     cuda_element_y.children[0].textContent = "CUDA 11.6";
   }
 }
