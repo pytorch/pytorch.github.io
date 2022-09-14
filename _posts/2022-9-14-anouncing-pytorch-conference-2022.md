@@ -2,7 +2,7 @@
 layout: blog_detail
 title: "Announcing PyTorch Conference 2022"
 author:
-featured-img: ""
+featured-img: "/assets/images/announcing-pytorch-conference-2022.gif"
 ---
 
 The PyTorch Conference is turning a new chapter as we look to the future of PyTorch, encompassing the entire PyTorch Community. This conference will bring together leading researchers and developers from the Machine Learning (ML) and Deep Learning (DL) communities to join a multiple set of talks covering new software releases on [PyTorch](https://pytorch.org/), use cases in academia and industry, ML/DL development and production trends, a poster session, and many opportunities for networking.
