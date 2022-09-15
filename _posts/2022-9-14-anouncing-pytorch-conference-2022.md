@@ -11,7 +11,7 @@ We changed the name from PyTorch Developer Day to PyTorch Conference to encompas
 
 <p align="center">
   <video width="100%" controls>
-    <source src="/assets/videos/announcing-pytorch-conference-2022-video.mov" type="video/mov">
+    <source src="/assets/videos/announcing-pytorch-conference-2022-video.mov" type="video/mp4">
   </video>
 </p>
 
