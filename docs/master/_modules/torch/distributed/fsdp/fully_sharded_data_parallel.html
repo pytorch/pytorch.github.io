@@ -219,7 +219,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href='https://pytorch.org/docs/versions.html'>master (1.13.0a0+gitb8bf11b ) &#x25BC</a>
+      <a href='https://pytorch.org/docs/versions.html'>master (1.13.0a0+git7df0878 ) &#x25BC</a>
     </div>
     
 
@@ -599,7 +599,7 @@
 <span class="k">class</span> <span class="nc">MixedPrecision</span><span class="p">:</span>
     <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    A config to enable mixed precision training with FullyShardedDataParallel.</span>
-<span class="sd">    This class can be constructed with three flags:</span>
+<span class="sd">    This class can be constructed with several flags:</span>
 <span class="sd">        ``param_dtype`` controls the precision of model parameters, inputs, and</span>
 <span class="sd">        therefore the precision under which computation happens. After forward</span>
 <span class="sd">        and backward passes, FSDP parameters point to full precision shards</span>
@@ -615,6 +615,11 @@
 <span class="sd">        are checkpointed in their full precision (and then restored back to</span>
 <span class="sd">        to their reduced precision) as expected. Note that this checkpoint</span>
 <span class="sd">        support is currently limited to ``StateDictType.FULL_STATE_DICT``.</span>
+<span class="sd">        ``keep_casted_gradients``: Whether to upcast gradients back to the</span>
+<span class="sd">        full parameter precision after backwards or not. This can be disabled</span>
+<span class="sd">        to keep the gradients in the lower precision, which can potentially</span>
+<span class="sd">        save memory if custom Optimizers are able to perform parameter updates</span>
+<span class="sd">        effectively with lower precision grads.</span>
 
 <span class="sd">    .. note:: In ``summon_full_params``, parameters are summoned in full</span>
 <span class="sd">        precision but buffers are not.</span>
@@ -642,6 +647,12 @@
     <span class="c1"># TODO: buffer + param are usually of the same type, if user specifies</span>
     <span class="c1"># param but not buffer, should we automatically make buffer be the same?</span>
     <span class="n">buffer_dtype</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">dtype</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="c1"># Whether to upcast gradients back to the full parameter precision after</span>
+    <span class="c1"># backwards or not. This can be disabled to keep the gradients in the</span>
+    <span class="c1"># lower precision, which can potentially save memory if custom Optimizers</span>
+    <span class="c1"># are able to perform parameter updates effectively with lower precision</span>
+    <span class="c1"># grads.</span>
+    <span class="n">keep_casted_gradients</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">bool</span><span class="p">]</span> <span class="o">=</span> <span class="kc">False</span>
 
 
 <span class="nd">@dataclass</span>
@@ -1462,6 +1473,7 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">cpu_offload</span><span class="o">.</span><span class="n">offload_params</span><span class="p">,</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">mixed_precision</span><span class="o">.</span><span class="n">param_dtype</span><span class="p">,</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">mixed_precision</span><span class="o">.</span><span class="n">reduce_dtype</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">mixed_precision</span><span class="o">.</span><span class="n">keep_casted_gradients</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_fsdp_wrapped_module</span> <span class="o">=</span> <span class="n">FlattenParamsWrapper</span><span class="p">(</span>
             <span class="n">module</span><span class="p">,</span>
@@ -2076,6 +2088,12 @@
 <span class="sd">        gradient reduction or not.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">mixed_precision</span><span class="o">.</span><span class="n">reduce_dtype</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+
+    <span class="k">def</span> <span class="nf">_mixed_precision_keep_low_precision_grads</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">mixed_precision</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+            <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">mixed_precision</span><span class="o">.</span><span class="n">keep_casted_gradients</span>
+        <span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">_low_precision_hook_enabled</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
         <span class="sd">&quot;&quot;&quot;</span>
@@ -3676,7 +3694,13 @@
                     <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">sharding_strategy</span> <span class="o">==</span> <span class="n">ShardingStrategy</span><span class="o">.</span><span class="n">NO_SHARD</span><span class="p">:</span>
                         <span class="bp">self</span><span class="o">.</span><span class="n">_communication_hook</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_communication_hook_state</span><span class="p">,</span> <span class="n">param</span><span class="o">.</span><span class="n">grad</span><span class="p">)</span>
 
-                    <span class="bp">self</span><span class="o">.</span><span class="n">_cast_grad_to_param_dtype</span><span class="p">(</span><span class="n">param</span><span class="o">.</span><span class="n">grad</span><span class="p">,</span> <span class="n">param</span><span class="p">)</span>
+                    <span class="c1"># For NO_SHARD keeping grads in the reduced precision, we</span>
+                    <span class="c1"># can simply omit the cast as needed, we can&#39;t do this for</span>
+                    <span class="c1"># other sharding strategies because grad field is assigned</span>
+                    <span class="c1"># in _finalize_params. TODO (rvarm1) this divergence in</span>
+                    <span class="c1"># logic is not ideal.</span>
+                    <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_mixed_precision_keep_low_precision_grads</span><span class="p">():</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">_cast_grad_to_param_dtype</span><span class="p">(</span><span class="n">param</span><span class="o">.</span><span class="n">grad</span><span class="p">,</span> <span class="n">param</span><span class="p">)</span>
 
                 <span class="c1"># Regardless of sharding or not, offload the grad to CPU if we are</span>
                 <span class="c1"># offloading params. This is so param and grad reside on same device</span>
@@ -3843,6 +3867,10 @@
                         <span class="c1"># lands. If it was not called, there is no new gradient to accumulate</span>
                         <span class="k">if</span> <span class="n">p</span><span class="o">.</span><span class="n">_post_backward_called</span><span class="p">:</span>
                             <span class="n">p</span><span class="o">.</span><span class="n">grad</span> <span class="o">=</span> <span class="n">p</span><span class="o">.</span><span class="n">_saved_grad_shard</span>
+                            <span class="k">if</span> <span class="n">fsdp_module</span><span class="o">.</span><span class="n">_mixed_precision_keep_low_precision_grads</span><span class="p">():</span>
+                                <span class="n">p</span><span class="o">.</span><span class="n">grad</span><span class="o">.</span><span class="n">data</span> <span class="o">=</span> <span class="n">p</span><span class="o">.</span><span class="n">grad</span><span class="o">.</span><span class="n">to</span><span class="p">(</span>
+                                    <span class="n">fsdp_module</span><span class="o">.</span><span class="n">mixed_precision</span><span class="o">.</span><span class="n">param_dtype</span>
+                                <span class="p">)</span>
                     <span class="k">else</span><span class="p">:</span>
                         <span class="n">p_assert</span><span class="p">(</span>
                             <span class="ow">not</span> <span class="n">handle</span><span class="o">.</span><span class="n">uses_sharded_strategy</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">p</span><span class="o">.</span><span class="n">_post_backward_called</span><span class="p">,</span>
