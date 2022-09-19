@@ -27,9 +27,9 @@ To serve production uses, we deliberately made the following design choices for 
 - **Support distributed GPU profiling**: MAIProf can collect profiling data from multiple hosts, each with multiple GPUs. It then shows a combined view/analysis of the entire system.
 - **Highly scalable**: MAIProf is built as a service on top of existing infrastructures in Meta data centers such as a scalable storage system called Manifold. Its profiling capability can be easily scaled by adding more machines in the service pool with the increase of workloads.
 
-## 2. Case Study: Optimizing an Instagram (IG) Model
+## 2. Case Study: Optimizing a Protection PyTorch
 
-To be concrete, we use a case study on a PyTorch model used by Instagram (IG). First, we discuss our steps for identifying the performance bottlenecks in the model with MAIProf. Then we describe the corresponding optimizations applied and their impacts.
+To be concrete, we use a case study on a protection PyTorch model used in production. First, we discuss our steps for identifying the performance bottlenecks in the model with MAIProf. Then we describe the corresponding optimizations applied and their impacts.
 
 ### 2.1 Performance Bottlenecks
 
@@ -59,7 +59,7 @@ Collect a Python function call trace on the CPU with MAIProf while the GPU is id
 <b>Figure 3: A Python call trace.</b>
 </p>
 
-The Python trace shows that most of the CPU time is spent inside a Python function `sharded_iterrows()`. From the source code of the IG mode, we learned that this function processes a big feature table in parallel. The number of worker threads used is controlled by a configurable parameter (`num_worker_threads`). Also, after investigating how the feature table is generated, we understood the performance anomaly: the training dataset is too large to fit in the CPU memory all at once; it needs to be broken into multiple sub-datasets, each has sufficient data for running 10 epochs. Consequently, a new sub-dataset needs to be read from the disk to memory every 10 epochs,  during which the GPU is totally idle.
+The Python trace shows that most of the CPU time is spent inside a Python function `sharded_iterrows()`. From the source code of the model, we learned that this function processes a big feature table in parallel. The number of worker threads used is controlled by a configurable parameter (`num_worker_threads`). Also, after investigating how the feature table is generated, we understood the performance anomaly: the training dataset is too large to fit in the CPU memory all at once; it needs to be broken into multiple sub-datasets, each has sufficient data for running 10 epochs. Consequently, a new sub-dataset needs to be read from the disk to memory every 10 epochs,  during which the GPU is totally idle.
 
 #### Step 3:
 
@@ -91,7 +91,7 @@ Collect a GPU trace (aka Kineto trace) of the training loop as shown in Figure 5
 <b>Figure 5: A GPU trace (aka Kineto trace) of the training loop.</b>
 </p>
 
-Since commonly used PyTorch functions are already annotated, their names are automatically shown on the trace. With them, we can roughly divide the trace into the four phases in a training iteration: (1) data loading, (2) forward pass, (3) backward pass, (4) gradient optimization.
+Since commonly used PyTorch functions are already annotated, their names are automatically shown on the trace. With them, we can roughly divide the trace into the four phases in a training iteration: (1) data loading, (2) forward pass, (3) backward pass, (4) gradient optimization (note: In Figure 5, the “optimizer” phase is from the previous batch while the other three phases are from the current batch).
 
 ### 2.2 Optimizations
 
@@ -112,9 +112,7 @@ We performed four simple optimizations that target the bottlenecks identified ab
 
 Performance tuning for PyTorch in production environments is increasingly important. A capable performance-debugging tool is a key to this process. We demonstrate with a case study on a production model that MAIProf is a powerful infrastructure for identifying optimization opportunities. 
 
-At Meta, MAIProf has been used by 100s of engineers, from performance novices to experts, to identify many more types of bottlenecks. These include slow data loading, small and/or slow GPU kernels, distributed training issues such as load imbalance and excessive communication. MAIProf covers major classes of models, including recommendation, vision, and natural language processing.
-
-We are also planning to make MAIProf available outside Meta.
+At Meta, MAIProf has been used by 100s of engineers, from performance novices to experts, to identify many more types of bottlenecks. These include slow data loading, small and/or slow GPU kernels, distributed training issues such as load imbalance and excessive communication. MAIProf covers major classes of models, including recommendation, vision, and natural language processing. In summary, it is now an indispensable tool for tuning the performance of production PyTorch workloads.
 
 ## References
 
