@@ -55,9 +55,9 @@ pip install torch==1.12.0 torchvision==0.13.0 torchaudio==0.12.0
 # ROCM 5.1.1 (Linux only)
 pip install torch==1.12.0+rocm5.1.1 torchvision==0.13.0+rocm5.1.1 torchaudio==0.12.0 -f https://download.pytorch.org/whl/torch_stable.html
 # CUDA 11.6
-pip install torch==1.12.0+cu102 torchvision==0.13.0+cu116 torchaudio==0.12.0 -f https://download.pytorch.org/whl/torch_stable.html
+pip install torch==1.12.0+cu116 torchvision==0.13.0+cu116 torchaudio==0.12.0 -f https://download.pytorch.org/whl/torch_stable.html
 # CUDA 11.3
-pip install torch==1.12.0+cu111 torchvision==0.13.0+cu113 torchaudio==0.12.0 -f https://download.pytorch.org/whl/torch_stable.html
+pip install torch==1.12.0+cu113 torchvision==0.13.0+cu113 torchaudio==0.12.0 -f https://download.pytorch.org/whl/torch_stable.html
 # CUDA 10.2
 pip install torch==1.12.0+cu102 torchvision==0.13.0+cu102 torchaudio==0.12.0 -f https://download.pytorch.org/whl/torch_stable.html
 # CPU only
