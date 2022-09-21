@@ -219,7 +219,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href='https://pytorch.org/docs/versions.html'>master (1.13.0a0+git53fdd60 ) &#x25BC</a>
+      <a href='https://pytorch.org/docs/versions.html'>master (1.13.0a0+git52fd7e4 ) &#x25BC</a>
     </div>
     
 
@@ -429,13 +429,54 @@
              <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
               
   <h1>Source code for torch.optim.adam</h1><div class="highlight"><pre>
-<span></span><span class="kn">import</span> <span class="nn">math</span>
+<span></span><span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">defaultdict</span>
+<span class="kn">import</span> <span class="nn">math</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">cast</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">Tuple</span>
+
 <span class="kn">import</span> <span class="nn">torch</span>
 <span class="kn">from</span> <span class="nn">torch</span> <span class="kn">import</span> <span class="n">Tensor</span>
 <span class="kn">from</span> <span class="nn">.optimizer</span> <span class="kn">import</span> <span class="n">Optimizer</span><span class="p">,</span> <span class="n">_use_grad_for_differentiable</span>
-<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span>
 
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;Adam&#39;</span><span class="p">,</span> <span class="s1">&#39;adam&#39;</span><span class="p">]</span>
+
+
+<span class="c1"># TODO(crcrpar): Move this to soemwhere (e.g. torch/optim/_utils?) else when adding another fused optimizer.</span>
+<span class="c1"># NOTE(crcrpar): Almost the same as `_MultiDeviceReplicator` defined in</span>
+<span class="c1"># torch/cuda/amp/grad_scaler.py except for the key being str only for torch script.</span>
+<span class="k">class</span> <span class="nc">_MultiDeviceReplicator</span><span class="p">:</span>
+    <span class="n">main_tensor</span><span class="p">:</span> <span class="n">Tensor</span>
+    <span class="n">_per_device_tensors</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">]</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">main_tensor</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">main_tensor</span> <span class="o">=</span> <span class="n">main_tensor</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_per_device_tensors</span> <span class="o">=</span> <span class="p">{</span><span class="nb">str</span><span class="p">(</span><span class="n">main_tensor</span><span class="o">.</span><span class="n">device</span><span class="p">):</span> <span class="n">main_tensor</span><span class="p">}</span>
+
+    <span class="k">def</span> <span class="nf">get</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">device</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">device</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_per_device_tensors</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_per_device_tensors</span><span class="p">[</span><span class="n">device</span><span class="p">]</span>
+        <span class="n">tensor</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">main_tensor</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">non_blocking</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">copy</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_per_device_tensors</span><span class="p">[</span><span class="n">device</span><span class="p">]</span> <span class="o">=</span> <span class="n">tensor</span>
+        <span class="k">return</span> <span class="n">tensor</span>
+
+
+<span class="c1"># todo(crcrpar): Move this to another place when adding another fused optimizer.</span>
+<span class="k">def</span> <span class="nf">_get_fp16AMP_params</span><span class="p">(</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">optimizer</span><span class="p">:</span> <span class="n">Optimizer</span><span class="p">,</span>
+    <span class="n">grad_scaler</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">amp</span><span class="o">.</span><span class="n">GradScaler</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">_MultiDeviceReplicator</span><span class="p">]:</span>
+    <span class="k">if</span> <span class="n">grad_scaler</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="n">found_inf_dict</span> <span class="o">=</span> <span class="n">grad_scaler</span><span class="o">.</span><span class="n">_check_inf_per_device</span><span class="p">(</span><span class="n">optimizer</span><span class="p">)</span>
+    <span class="c1"># Combines found_inf tensors from all devices. As in GradScaler.update(),</span>
+    <span class="c1"># tensors are combined on the scale&#39;s device, which is an arbitrary but</span>
+    <span class="c1"># reasonable choice that avoids new context creation.</span>
+    <span class="n">found_infs</span> <span class="o">=</span> <span class="p">[</span><span class="n">f</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="p">,</span> <span class="n">non_blocking</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span> <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">found_inf_dict</span><span class="o">.</span><span class="n">values</span><span class="p">()]</span>
+    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">found_infs</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;No inf checks were recorded in _check_inf_per_device.&quot;</span>
+    <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>
+        <span class="n">found_inf_combined</span> <span class="o">=</span> <span class="n">cast</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="nb">sum</span><span class="p">(</span><span class="n">found_infs</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">_MultiDeviceReplicator</span><span class="p">(</span><span class="n">found_inf_combined</span><span class="p">)</span>
 
 <div class="viewcode-block" id="Adam"><a class="viewcode-back" href="../../../generated/torch.optim.Adam.html#torch.optim.Adam">[docs]</a><span class="k">class</span> <span class="nc">Adam</span><span class="p">(</span><span class="n">Optimizer</span><span class="p">):</span>
     <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Implements Adam algorithm.</span>
@@ -496,6 +537,9 @@
 <span class="sd">        capturable (bool, optional): whether this instance is safe to capture in a CUDA graph.</span>
 <span class="sd">            Passing True can impair ungraphed performance, so if you don&#39;t intend to</span>
 <span class="sd">            graph capture this instance, leave it False (default: False)</span>
+<span class="sd">        fused (bool, optional): whether fused implementation of optimizer is used.</span>
+<span class="sd">            Currently, `torch.float64`, `torch.float32`, `torch.float16`, and `torch.bfloat16`</span>
+<span class="sd">            are supported. (default: False)</span>
 
 <span class="sd">    .. _Adam\: A Method for Stochastic Optimization:</span>
 <span class="sd">        https://arxiv.org/abs/1412.6980</span>
@@ -506,7 +550,7 @@
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">params</span><span class="p">,</span> <span class="n">lr</span><span class="o">=</span><span class="mf">1e-3</span><span class="p">,</span> <span class="n">betas</span><span class="o">=</span><span class="p">(</span><span class="mf">0.9</span><span class="p">,</span> <span class="mf">0.999</span><span class="p">),</span> <span class="n">eps</span><span class="o">=</span><span class="mf">1e-8</span><span class="p">,</span>
                  <span class="n">weight_decay</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">amsgrad</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">foreach</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">bool</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
                  <span class="n">maximize</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span> <span class="n">capturable</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
-                 <span class="n">differentiable</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">):</span>
+                 <span class="n">differentiable</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span> <span class="n">fused</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">):</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="mf">0.0</span> <span class="o">&lt;=</span> <span class="n">lr</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Invalid learning rate: </span><span class="si">{}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">lr</span><span class="p">))</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="mf">0.0</span> <span class="o">&lt;=</span> <span class="n">eps</span><span class="p">:</span>
@@ -520,8 +564,22 @@
         <span class="n">defaults</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">lr</span><span class="o">=</span><span class="n">lr</span><span class="p">,</span> <span class="n">betas</span><span class="o">=</span><span class="n">betas</span><span class="p">,</span> <span class="n">eps</span><span class="o">=</span><span class="n">eps</span><span class="p">,</span>
                         <span class="n">weight_decay</span><span class="o">=</span><span class="n">weight_decay</span><span class="p">,</span> <span class="n">amsgrad</span><span class="o">=</span><span class="n">amsgrad</span><span class="p">,</span>
                         <span class="n">maximize</span><span class="o">=</span><span class="n">maximize</span><span class="p">,</span> <span class="n">foreach</span><span class="o">=</span><span class="n">foreach</span><span class="p">,</span> <span class="n">capturable</span><span class="o">=</span><span class="n">capturable</span><span class="p">,</span>
-                        <span class="n">differentiable</span><span class="o">=</span><span class="n">differentiable</span><span class="p">)</span>
+                        <span class="n">differentiable</span><span class="o">=</span><span class="n">differentiable</span><span class="p">,</span> <span class="n">fused</span><span class="o">=</span><span class="n">fused</span><span class="p">)</span>
         <span class="nb">super</span><span class="p">(</span><span class="n">Adam</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">params</span><span class="p">,</span> <span class="n">defaults</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">fused</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">differentiable</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;`fused` cannot be `differentiable`&quot;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_step_supports_amp_scaling</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="c1"># TODO(crcrpar): [low prec params &amp; their higher prec copy]</span>
+            <span class="c1"># Suppor AMP with FP16/BF16 model params which would need</span>
+            <span class="c1"># higher prec copy of params to do update math in higher prec to</span>
+            <span class="c1"># alleviate the loss of information.</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">all</span><span class="p">(</span>
+                <span class="n">p</span><span class="o">.</span><span class="n">is_cuda</span> <span class="ow">and</span> <span class="n">torch</span><span class="o">.</span><span class="n">is_floating_point</span><span class="p">(</span><span class="n">p</span><span class="p">)</span>
+                <span class="k">for</span> <span class="n">pg</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">param_groups</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">pg</span><span class="p">[</span><span class="s1">&#39;params&#39;</span><span class="p">]</span>
+            <span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;FusedAdam requires all the params to be CUDA, floating point&quot;</span><span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">__setstate__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">):</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">__setstate__</span><span class="p">(</span><span class="n">state</span><span class="p">)</span>
@@ -531,6 +589,7 @@
             <span class="n">group</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s1">&#39;foreach&#39;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
             <span class="n">group</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s1">&#39;capturable&#39;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
             <span class="n">group</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s1">&#39;differentiable&#39;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+            <span class="n">group</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s1">&#39;fused&#39;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
         <span class="n">state_values</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">values</span><span class="p">())</span>
         <span class="n">step_is_tensor</span> <span class="o">=</span> <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">state_values</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">)</span> <span class="ow">and</span> <span class="n">torch</span><span class="o">.</span><span class="n">is_tensor</span><span class="p">(</span><span class="n">state_values</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="s1">&#39;step&#39;</span><span class="p">])</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">step_is_tensor</span><span class="p">:</span>
@@ -538,12 +597,14 @@
                 <span class="n">s</span><span class="p">[</span><span class="s1">&#39;step&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">s</span><span class="p">[</span><span class="s1">&#39;step&#39;</span><span class="p">]))</span>
 
     <span class="nd">@_use_grad_for_differentiable</span>
-    <span class="k">def</span> <span class="nf">step</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">closure</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">step</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">closure</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">grad_scaler</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Performs a single optimization step.</span>
 
 <span class="sd">        Args:</span>
 <span class="sd">            closure (Callable, optional): A closure that reevaluates the model</span>
 <span class="sd">                and returns the loss.</span>
+<span class="sd">            grad_scaler (:class:`torch.cuda.amp.GradScaler`, optional): A GradScaler which is</span>
+<span class="sd">                supplied from ``grad_scaler.step(optimizer)``.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_cuda_graph_capture_health_check</span><span class="p">()</span>
 
@@ -561,6 +622,14 @@
             <span class="n">state_steps</span> <span class="o">=</span> <span class="p">[]</span>
             <span class="n">beta1</span><span class="p">,</span> <span class="n">beta2</span> <span class="o">=</span> <span class="n">group</span><span class="p">[</span><span class="s1">&#39;betas&#39;</span><span class="p">]</span>
 
+            <span class="n">grad_scale</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="n">found_inf</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="k">if</span> <span class="n">group</span><span class="p">[</span><span class="s1">&#39;fused&#39;</span><span class="p">]</span> <span class="ow">and</span> <span class="n">grad_scaler</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">grad_scale</span> <span class="o">=</span> <span class="n">grad_scaler</span><span class="o">.</span><span class="n">_get_scale_async</span><span class="p">()</span>
+                <span class="n">device</span> <span class="o">=</span> <span class="n">grad_scale</span><span class="o">.</span><span class="n">device</span>
+                <span class="n">grad_scale</span> <span class="o">=</span> <span class="n">_MultiDeviceReplicator</span><span class="p">(</span><span class="n">grad_scale</span><span class="p">)</span>
+                <span class="n">found_inf</span> <span class="o">=</span> <span class="n">_get_fp16AMP_params</span><span class="p">(</span><span class="n">optimizer</span><span class="o">=</span><span class="bp">self</span><span class="p">,</span> <span class="n">grad_scaler</span><span class="o">=</span><span class="n">grad_scaler</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+
             <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">group</span><span class="p">[</span><span class="s1">&#39;params&#39;</span><span class="p">]:</span>
                 <span class="k">if</span> <span class="n">p</span><span class="o">.</span><span class="n">grad</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                     <span class="n">params_with_grad</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">p</span><span class="p">)</span>
@@ -571,8 +640,11 @@
                     <span class="n">state</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">state</span><span class="p">[</span><span class="n">p</span><span class="p">]</span>
                     <span class="c1"># Lazy state initialization</span>
                     <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">state</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
-                        <span class="n">state</span><span class="p">[</span><span class="s1">&#39;step&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">1</span><span class="p">,),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">p</span><span class="o">.</span><span class="n">device</span><span class="p">)</span> \
-                            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">defaults</span><span class="p">[</span><span class="s1">&#39;capturable&#39;</span><span class="p">]</span> <span class="k">else</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="mf">0.</span><span class="p">)</span>
+                        <span class="n">state</span><span class="p">[</span><span class="s1">&#39;step&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+                            <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">1</span><span class="p">,),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">p</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+                            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">defaults</span><span class="p">[</span><span class="s1">&#39;capturable&#39;</span><span class="p">]</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">defaults</span><span class="p">[</span><span class="s1">&#39;fused&#39;</span><span class="p">]</span>
+                            <span class="k">else</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="mf">0.</span><span class="p">)</span>
+                        <span class="p">)</span>
                         <span class="c1"># Exponential moving average of gradient values</span>
                         <span class="n">state</span><span class="p">[</span><span class="s1">&#39;exp_avg&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="n">memory_format</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">preserve_format</span><span class="p">)</span>
                         <span class="c1"># Exponential moving average of squared gradient values</span>
@@ -605,7 +677,10 @@
                  <span class="n">maximize</span><span class="o">=</span><span class="n">group</span><span class="p">[</span><span class="s1">&#39;maximize&#39;</span><span class="p">],</span>
                  <span class="n">foreach</span><span class="o">=</span><span class="n">group</span><span class="p">[</span><span class="s1">&#39;foreach&#39;</span><span class="p">],</span>
                  <span class="n">capturable</span><span class="o">=</span><span class="n">group</span><span class="p">[</span><span class="s1">&#39;capturable&#39;</span><span class="p">],</span>
-                 <span class="n">differentiable</span><span class="o">=</span><span class="n">group</span><span class="p">[</span><span class="s1">&#39;differentiable&#39;</span><span class="p">])</span>
+                 <span class="n">differentiable</span><span class="o">=</span><span class="n">group</span><span class="p">[</span><span class="s1">&#39;differentiable&#39;</span><span class="p">],</span>
+                 <span class="n">fused</span><span class="o">=</span><span class="n">group</span><span class="p">[</span><span class="s1">&#39;fused&#39;</span><span class="p">],</span>
+                 <span class="n">grad_scale</span><span class="o">=</span><span class="n">grad_scale</span><span class="p">,</span>
+                 <span class="n">found_inf</span><span class="o">=</span><span class="n">found_inf</span><span class="p">)</span>
 
         <span class="k">return</span> <span class="n">loss</span></div>
 
@@ -618,9 +693,12 @@
          <span class="n">state_steps</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Tensor</span><span class="p">],</span>
          <span class="c1"># kwonly args with defaults are not supported by functions compiled with torchscript issue #70627</span>
          <span class="c1"># setting this as kwarg for now as functional API is compiled by torch/distributed/optim</span>
-         <span class="n">foreach</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+         <span class="n">foreach</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">bool</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
          <span class="n">capturable</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
          <span class="n">differentiable</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+         <span class="n">fused</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+         <span class="n">grad_scale</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">_MultiDeviceReplicator</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+         <span class="n">found_inf</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">_MultiDeviceReplicator</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
          <span class="o">*</span><span class="p">,</span>
          <span class="n">amsgrad</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
          <span class="n">beta1</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
@@ -645,6 +723,8 @@
 
     <span class="k">if</span> <span class="n">foreach</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">torch</span><span class="o">.</span><span class="n">jit</span><span class="o">.</span><span class="n">is_scripting</span><span class="p">():</span>
         <span class="n">func</span> <span class="o">=</span> <span class="n">_multi_tensor_adam</span>
+    <span class="k">elif</span> <span class="n">fused</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">torch</span><span class="o">.</span><span class="n">jit</span><span class="o">.</span><span class="n">is_scripting</span><span class="p">():</span>
+        <span class="n">func</span> <span class="o">=</span> <span class="n">_fused_adam</span>
     <span class="k">else</span><span class="p">:</span>
         <span class="n">func</span> <span class="o">=</span> <span class="n">_single_tensor_adam</span>
 
@@ -662,7 +742,9 @@
          <span class="n">eps</span><span class="o">=</span><span class="n">eps</span><span class="p">,</span>
          <span class="n">maximize</span><span class="o">=</span><span class="n">maximize</span><span class="p">,</span>
          <span class="n">capturable</span><span class="o">=</span><span class="n">capturable</span><span class="p">,</span>
-         <span class="n">differentiable</span><span class="o">=</span><span class="n">differentiable</span><span class="p">)</span>
+         <span class="n">differentiable</span><span class="o">=</span><span class="n">differentiable</span><span class="p">,</span>
+         <span class="n">grad_scale</span><span class="o">=</span><span class="n">grad_scale</span><span class="p">,</span>
+         <span class="n">found_inf</span><span class="o">=</span><span class="n">found_inf</span><span class="p">)</span>
 
 
 <span class="k">def</span> <span class="nf">_single_tensor_adam</span><span class="p">(</span><span class="n">params</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Tensor</span><span class="p">],</span>
@@ -671,6 +753,8 @@
                         <span class="n">exp_avg_sqs</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Tensor</span><span class="p">],</span>
                         <span class="n">max_exp_avg_sqs</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Tensor</span><span class="p">],</span>
                         <span class="n">state_steps</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Tensor</span><span class="p">],</span>
+                        <span class="n">grad_scale</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">_MultiDeviceReplicator</span><span class="p">],</span>
+                        <span class="n">found_inf</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">_MultiDeviceReplicator</span><span class="p">],</span>
                         <span class="o">*</span><span class="p">,</span>
                         <span class="n">amsgrad</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
                         <span class="n">beta1</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
@@ -681,6 +765,8 @@
                         <span class="n">maximize</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
                         <span class="n">capturable</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
                         <span class="n">differentiable</span><span class="p">:</span> <span class="nb">bool</span><span class="p">):</span>
+
+    <span class="k">assert</span> <span class="n">grad_scale</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">found_inf</span> <span class="ow">is</span> <span class="kc">None</span>
 
     <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">param</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">params</span><span class="p">):</span>
 
@@ -763,6 +849,8 @@
                        <span class="n">exp_avg_sqs</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Tensor</span><span class="p">],</span>
                        <span class="n">max_exp_avg_sqs</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Tensor</span><span class="p">],</span>
                        <span class="n">state_steps</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Tensor</span><span class="p">],</span>
+                       <span class="n">grad_scale</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">_MultiDeviceReplicator</span><span class="p">],</span>
+                       <span class="n">found_inf</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">_MultiDeviceReplicator</span><span class="p">],</span>
                        <span class="o">*</span><span class="p">,</span>
                        <span class="n">amsgrad</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
                        <span class="n">beta1</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
@@ -779,6 +867,8 @@
     <span class="k">if</span> <span class="n">capturable</span><span class="p">:</span>
         <span class="k">assert</span> <span class="nb">all</span><span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">is_cuda</span> <span class="ow">and</span> <span class="n">step</span><span class="o">.</span><span class="n">is_cuda</span> <span class="k">for</span> <span class="n">p</span><span class="p">,</span> <span class="n">step</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">params</span><span class="p">,</span> <span class="n">state_steps</span><span class="p">)),</span> \
             <span class="s2">&quot;If capturable=True, params and state_steps must be CUDA tensors.&quot;</span>
+
+    <span class="k">assert</span> <span class="n">grad_scale</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">found_inf</span> <span class="ow">is</span> <span class="kc">None</span>
 
     <span class="k">if</span> <span class="n">maximize</span><span class="p">:</span>
         <span class="n">grads</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">_foreach_neg</span><span class="p">(</span><span class="nb">tuple</span><span class="p">(</span><span class="n">grads</span><span class="p">))</span>  <span class="c1"># type: ignore[assignment]</span>
@@ -862,6 +952,89 @@
             <span class="n">denom</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">_foreach_add</span><span class="p">(</span><span class="n">exp_avg_sq_sqrt</span><span class="p">,</span> <span class="n">eps</span><span class="p">)</span>
 
         <span class="n">torch</span><span class="o">.</span><span class="n">_foreach_addcdiv_</span><span class="p">(</span><span class="n">params_</span><span class="p">,</span> <span class="n">exp_avgs</span><span class="p">,</span> <span class="n">denom</span><span class="p">,</span> <span class="n">step_size</span><span class="p">)</span>
+
+
+<span class="c1"># TODO(crcrpar): Move this to another place when adding another fused optimizer.</span>
+<span class="c1"># TODO(crcrpar): Make this generic when there&#39;s more fused optimizers.</span>
+<span class="c1"># TODO(crcrpar): Think of rewriting this in C++.</span>
+<span class="nd">@torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">()</span>
+<span class="k">def</span> <span class="nf">_group_params_by_device_and_dtype</span><span class="p">(</span>
+    <span class="n">params</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Tensor</span><span class="p">],</span>
+    <span class="n">grads</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Tensor</span><span class="p">],</span>
+    <span class="n">exp_avgs</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Tensor</span><span class="p">],</span>
+    <span class="n">exp_avg_sqs</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Tensor</span><span class="p">],</span>
+    <span class="n">max_exp_avg_sqs</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Tensor</span><span class="p">],</span>
+    <span class="n">state_steps</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Tensor</span><span class="p">],</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">dtype</span><span class="p">],</span> <span class="n">List</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="n">Tensor</span><span class="p">]]]:</span>
+    <span class="n">per_device_and_dtype_tensors</span> <span class="o">=</span> <span class="n">defaultdict</span><span class="p">(</span><span class="k">lambda</span><span class="p">:</span> <span class="p">[[]</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">6</span><span class="p">)])</span>
+    <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="n">step</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="n">params</span><span class="p">,</span> <span class="n">state_steps</span><span class="p">)):</span>
+        <span class="n">key</span> <span class="o">=</span> <span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">device</span><span class="p">),</span> <span class="n">p</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
+        <span class="n">per_device_and_dtype_tensors</span><span class="p">[</span><span class="n">key</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">p</span><span class="p">)</span>
+        <span class="n">per_device_and_dtype_tensors</span><span class="p">[</span><span class="n">key</span><span class="p">][</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">grads</span><span class="p">[</span><span class="n">i</span><span class="p">])</span>
+        <span class="n">per_device_and_dtype_tensors</span><span class="p">[</span><span class="n">key</span><span class="p">][</span><span class="mi">2</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">exp_avgs</span><span class="p">[</span><span class="n">i</span><span class="p">])</span>
+        <span class="n">per_device_and_dtype_tensors</span><span class="p">[</span><span class="n">key</span><span class="p">][</span><span class="mi">3</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">exp_avg_sqs</span><span class="p">[</span><span class="n">i</span><span class="p">])</span>
+        <span class="k">if</span> <span class="n">max_exp_avg_sqs</span><span class="p">:</span>
+            <span class="n">per_device_and_dtype_tensors</span><span class="p">[</span><span class="n">key</span><span class="p">][</span><span class="mi">4</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">max_exp_avg_sqs</span><span class="p">[</span><span class="n">i</span><span class="p">])</span>
+        <span class="n">per_device_and_dtype_tensors</span><span class="p">[</span><span class="n">key</span><span class="p">][</span><span class="mi">5</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">step</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">per_device_and_dtype_tensors</span>
+
+
+<span class="k">def</span> <span class="nf">_fused_adam</span><span class="p">(</span>
+    <span class="n">params</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Tensor</span><span class="p">],</span>
+    <span class="n">grads</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Tensor</span><span class="p">],</span>
+    <span class="n">exp_avgs</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Tensor</span><span class="p">],</span>
+    <span class="n">exp_avg_sqs</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Tensor</span><span class="p">],</span>
+    <span class="n">max_exp_avg_sqs</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Tensor</span><span class="p">],</span>
+    <span class="n">state_steps</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Tensor</span><span class="p">],</span>
+    <span class="n">grad_scale</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">_MultiDeviceReplicator</span><span class="p">],</span>
+    <span class="n">found_inf</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">_MultiDeviceReplicator</span><span class="p">],</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">amsgrad</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
+    <span class="n">beta1</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="n">beta2</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="n">lr</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="n">weight_decay</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="n">eps</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="n">maximize</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
+    <span class="n">capturable</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>  <span class="c1"># Needed for consistency.</span>
+    <span class="n">differentiable</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="n">grouped_tensors</span> <span class="o">=</span> <span class="n">_group_params_by_device_and_dtype</span><span class="p">(</span><span class="n">params</span><span class="p">,</span> <span class="n">grads</span><span class="p">,</span> <span class="n">exp_avgs</span><span class="p">,</span> <span class="n">exp_avg_sqs</span><span class="p">,</span> <span class="n">max_exp_avg_sqs</span><span class="p">,</span> <span class="n">state_steps</span><span class="p">)</span>
+    <span class="k">for</span> <span class="p">(</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="p">)</span> <span class="ow">in</span> <span class="n">grouped_tensors</span><span class="p">:</span>
+        <span class="p">(</span>
+            <span class="n">device_params</span><span class="p">,</span>
+            <span class="n">device_grads</span><span class="p">,</span>
+            <span class="n">device_exp_avgs</span><span class="p">,</span>
+            <span class="n">device_exp_avg_sqs</span><span class="p">,</span>
+            <span class="n">device_max_exp_avg_sqs</span><span class="p">,</span>
+            <span class="n">device_state_steps</span><span class="p">,</span>
+        <span class="p">)</span> <span class="o">=</span> <span class="n">grouped_tensors</span><span class="p">[(</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="p">)]</span>
+        <span class="k">if</span> <span class="n">grad_scale</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">found_inf</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">device_grad_scale</span> <span class="o">=</span> <span class="n">grad_scale</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
+            <span class="n">device_found_inf</span> <span class="o">=</span> <span class="n">found_inf</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">device_grad_scale</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="n">device_found_inf</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="n">torch</span><span class="o">.</span><span class="n">_foreach_add_</span><span class="p">(</span><span class="n">device_state_steps</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">torch</span><span class="o">.</span><span class="n">_fused_adam_</span><span class="p">(</span>
+            <span class="n">device_params</span><span class="p">,</span>
+            <span class="n">device_grads</span><span class="p">,</span>
+            <span class="n">device_exp_avgs</span><span class="p">,</span>
+            <span class="n">device_exp_avg_sqs</span><span class="p">,</span>
+            <span class="n">device_max_exp_avg_sqs</span><span class="p">,</span>
+            <span class="n">device_state_steps</span><span class="p">,</span>
+            <span class="n">amsgrad</span><span class="o">=</span><span class="n">amsgrad</span><span class="p">,</span>
+            <span class="n">lr</span><span class="o">=</span><span class="n">lr</span><span class="p">,</span>
+            <span class="n">beta1</span><span class="o">=</span><span class="n">beta1</span><span class="p">,</span>
+            <span class="n">beta2</span><span class="o">=</span><span class="n">beta2</span><span class="p">,</span>
+            <span class="n">weight_decay</span><span class="o">=</span><span class="n">weight_decay</span><span class="p">,</span>
+            <span class="n">eps</span><span class="o">=</span><span class="n">eps</span><span class="p">,</span>
+            <span class="n">maximize</span><span class="o">=</span><span class="n">maximize</span><span class="p">,</span>
+            <span class="n">grad_scale</span><span class="o">=</span><span class="n">device_grad_scale</span><span class="p">,</span>
+            <span class="n">found_inf</span><span class="o">=</span><span class="n">device_found_inf</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="n">device_found_inf</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">_foreach_sub_</span><span class="p">(</span><span class="n">device_state_steps</span><span class="p">,</span> <span class="p">[</span><span class="n">device_found_inf</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">device_state_steps</span><span class="p">))</span>
 </pre></div>
 
              </article>
