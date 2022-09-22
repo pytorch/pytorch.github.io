@@ -27,7 +27,7 @@ To serve production uses, we deliberately made the following design choices for 
 - **Support distributed GPU profiling**: MAIProf can collect profiling data from multiple hosts, each with multiple GPUs. It then shows a combined view/analysis of the entire system.
 - **Highly scalable**: MAIProf is built as a service on top of existing infrastructures in Meta data centers such as a scalable storage system called Manifold. Its profiling capability can be easily scaled by adding more machines in the service pool with the increase of workloads.
 
-## 2. Case Study: Optimizing a Protection PyTorch
+## 2. Case Study: Optimizing a Protection PyTorch Model
 
 To be concrete, we use a case study on a protection PyTorch model used in production. First, we discuss our steps for identifying the performance bottlenecks in the model with MAIProf. Then we describe the corresponding optimizations applied and their impacts.
 
