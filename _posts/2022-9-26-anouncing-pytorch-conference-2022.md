@@ -37,10 +37,10 @@ Where: New Orleans, Louisiana (USA) &#124; *Virtual option as well*
 
 <em><sup>Agenda subject to change.</sup></em>
 
-All talks will be livestreamed and available to the public. The in-person event will be by invitation only as space is limited. If you’d like to apply to attend in person, please submit all requests [here](https://forms.gle/EcDTorMWqsWKXB1M8).
+All talks will be livestreamed and available to the public. The in-person event will be by invitation only as space is limited. If you’d like to apply to attend in person, please submit all requests [here](https://pytorchconference22.splashthat.com/).
 
 ### LINKS
 
 - [Submit Content for Consideration by Sept. 30th](https://docs.google.com/forms/d/121ptOuhqhmcPev9g5Zt2Ffl-NtB_oeyFk5CWjumUVLQ/edit)
 - [Livestream event page](https://www.facebook.com/events/1562940847455759)
-- [Apply for an invitation to the in-person event](https://forms.gle/EcDTorMWqsWKXB1M8)
+- [Apply for an invitation to the in-person event](https://pytorchconference22.splashthat.com/)
