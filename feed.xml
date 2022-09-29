@@ -4,7 +4,7 @@
   <generator uri="https://jekyllrb.com/" version="3.9.0">Jekyll</generator>
   <link href="https://pytorch.org/feed.xml" rel="self" type="application/atom+xml" />
   <link href="https://pytorch.org/" rel="alternate" type="text/html" />
-  <updated>2022-09-28T17:50:24-07:00</updated>
+  <updated>2022-09-29T09:08:26-07:00</updated>
   <id>https://pytorch.org/feed.xml</id>
 
   
@@ -29,6 +29,180 @@
 
   
   
+  
+    <entry>
+      <title type="html">Performance Debugging of Production PyTorch Models at Meta</title>
+      <link href="https://pytorch.org/blog/performance-debugging-of-production-pytorch-models-at-meta/" rel="alternate" type="text/html" title="Performance Debugging of Production PyTorch Models at Meta" />
+      <published>2022-09-29T00:00:00-07:00</published>
+      <updated>2022-09-29T00:00:00-07:00</updated>
+      <id>https://pytorch.org/blog/performance-debugging-of-production-pytorch-models-at-meta</id>
+      <content type="html" xml:base="https://pytorch.org/blog/performance-debugging-of-production-pytorch-models-at-meta/">&lt;h2 id=&quot;1-metas-ai-performance-profiling-maiprof&quot;&gt;1. Meta’s AI Performance Profiling (MAIProf)&lt;/h2&gt;
+
+&lt;p align=&quot;center&quot;&gt;
+  &lt;img src=&quot;/assets/images/performance-debugging-of-production-pytorch-models-at-meta-1.png&quot; width=&quot;90%&quot; /&gt;
+&lt;/p&gt;
+
+&lt;p align=&quot;center&quot;&gt;
+&lt;b&gt;Figure 1: A simplified illustration of the Meta’s AI performance profiling (MAIProf) infrastructure.&lt;/b&gt;
+&lt;/p&gt;
+
+&lt;p&gt;Figure 1 gives a simplified illustration of the AI performance profiling infrastructure at Meta. ML research and performance engineers submit through the User Portal a profiling request for a training job to the Profiling Service, which subsequently broadcasts the request to all the GPU hosts running the training job. When the Monitoring Daemon on a GPU host receives the profiling request, it will notify the Kineto GPU tracer (built on top of NVIDIA’s libcupti) inside the PyTorch program corresponding to the training job. As a result, Kineto traces will be collected and uploaded to the Object Store asynchronously (in more details: there is one Kineto trace collected for each individual GPU, each is treated and stored as a blob; an example will be given in Section 2). Meanwhile, MAIProf also collects a variety of aggregated performance metrics: the Monitoring Daemon on every GPU host continuously reads performance counters from NVIDIA’s DCGM/NVML and logs them to a Time Series DB.&lt;/p&gt;
+
+&lt;p&gt;Once both trace and metrics collections are completed, the Profiling Service will automatically download traces from the Object Store for trace analysis and performance metrics from the Time Series DB for metric analysis. Finally, an overall profiling report with detailed and insightful analysis is delivered to the user.&lt;/p&gt;
+
+&lt;p&gt;To serve production uses, we deliberately made the following design choices for MAIProf:&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;strong&gt;No source-code change required in the PyTorch models&lt;/strong&gt;: profiling is triggered by sampling the execution of an unmodified model for a user-specified amount of time.&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;Provide a holistic view of performance&lt;/strong&gt;: MAIProf performs system-wide analysis that cover both CPU and GPU. Under the hood, it invokes various CPU tools (e.g., Python tracer, Autograd Observer) and GPU tools (e.g., Kineto, DCGM) and correlates their results.&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;Provide multiple tools that target a wide range of AI partitioners&lt;/strong&gt;: At Meta, there are engineers with different backgrounds who may need to tune their AI workload performance. Some of them are AI experts while others are general software engineers. Therefore, MAIProf provides a variety of tools for different levels of performance debugging, from high-level automatic trace comprehension to low-level trace analysis.&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;Support distributed GPU profiling&lt;/strong&gt;: MAIProf can collect profiling data from multiple hosts, each with multiple GPUs. It then shows a combined view/analysis of the entire system.&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;Highly scalable&lt;/strong&gt;: MAIProf is built as a service on top of existing infrastructures in Meta data centers such as a scalable storage system called Manifold. Its profiling capability can be easily scaled by adding more machines in the service pool with the increase of workloads.&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h2 id=&quot;2-case-study-optimizing-a-protection-pytorch-model&quot;&gt;2. Case Study: Optimizing a Protection PyTorch Model&lt;/h2&gt;
+
+&lt;p&gt;To be concrete, we use a case study on a protection PyTorch model used in production. First, we discuss our steps for identifying the performance bottlenecks in the model with MAIProf. Then we describe the corresponding optimizations applied and their impacts.&lt;/p&gt;
+
+&lt;h3 id=&quot;21-performance-bottlenecks&quot;&gt;2.1 Performance Bottlenecks&lt;/h3&gt;
+
+&lt;h4 id=&quot;step-1&quot;&gt;Step 1:&lt;/h4&gt;
+
+&lt;p&gt;Inspect the CPU and GPU utilization on the same timeline, as shown in Figure 2.&lt;/p&gt;
+
+&lt;p align=&quot;center&quot;&gt;
+  &lt;img src=&quot;/assets/images/performance-debugging-of-production-pytorch-models-at-meta-2.png&quot; width=&quot;90%&quot; /&gt;
+&lt;/p&gt;
+
+&lt;p align=&quot;center&quot;&gt;
+&lt;b&gt;Figure 2: CPU usage over time (the top) vs. GPU usage over time (the bottom).&lt;/b&gt;
+&lt;/p&gt;
+
+&lt;p&gt;The first performance anomaly we noticed in Figure 2 is the pattern: &lt;em&gt;“GPU-idle, GPU-active, GPU-idle, GPU-active …”&lt;/em&gt; throughout the training. Overall, the GPU is idle for more than half of the training time (this is bad for performance because the GPU is a higher-performance device and so we want it to be utilized as much as possible).&lt;/p&gt;
+
+&lt;h4 id=&quot;step-2&quot;&gt;Step 2:&lt;/h4&gt;
+
+&lt;p&gt;Collect a Python function call trace on the CPU with MAIProf while the GPU is idle, which is shown in Figure 3.&lt;/p&gt;
+
+&lt;p align=&quot;center&quot;&gt;
+  &lt;img src=&quot;/assets/images/performance-debugging-of-production-pytorch-models-at-meta-3.png&quot; width=&quot;100%&quot; /&gt;
+&lt;/p&gt;
+
+&lt;p align=&quot;center&quot;&gt;
+&lt;b&gt;Figure 3: A Python call trace.&lt;/b&gt;
+&lt;/p&gt;
+
+&lt;p&gt;The Python trace shows that most of the CPU time is spent inside a Python function &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;sharded_iterrows()&lt;/code&gt;. From the source code of the model, we learned that this function processes a big feature table in parallel. The number of worker threads used is controlled by a configurable parameter (&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;num_worker_threads&lt;/code&gt;). Also, after investigating how the feature table is generated, we understood the performance anomaly: the training dataset is too large to fit in the CPU memory all at once; it needs to be broken into multiple sub-datasets, each has sufficient data for running 10 epochs. Consequently, a new sub-dataset needs to be read from the disk to memory every 10 epochs,  during which the GPU is totally idle.&lt;/p&gt;
+
+&lt;h4 id=&quot;step-3&quot;&gt;Step 3:&lt;/h4&gt;
+
+&lt;p&gt;Collect GPU performance metrics, which is shown in Figure 4.&lt;/p&gt;
+
+&lt;p align=&quot;center&quot;&gt;
+  &lt;img src=&quot;/assets/images/performance-debugging-of-production-pytorch-models-at-meta-4.png&quot; width=&quot;100%&quot; /&gt;
+&lt;/p&gt;
+
+&lt;p align=&quot;center&quot;&gt;
+&lt;b&gt;Figure 4: GPU performance metrics in MAIProf.&lt;/b&gt;
+&lt;/p&gt;
+
+&lt;p&gt;We made the following observations from Figure 4:&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;The streaming multiprocessor (SM) runs the model’s CUDA kernels. Its utilization [1] is 9.1%, indicating that the parallel compute units on the GPU are not well utilized.&lt;/li&gt;
+  &lt;li&gt;Tensor Core utilization is 0, meaning that Tensor Core (the mixed-precision compute unit on GPU) [2] is not used at all.&lt;/li&gt;
+  &lt;li&gt;Max GPU memory utilization is 47.13%, indicating that half of the GPU memory is left unused.&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h4 id=&quot;step-4&quot;&gt;Step 4:&lt;/h4&gt;
+
+&lt;p&gt;Collect a GPU trace (aka Kineto trace) of the training loop as shown in Figure 5.&lt;/p&gt;
+
+&lt;p align=&quot;center&quot;&gt;
+  &lt;img src=&quot;/assets/images/performance-debugging-of-production-pytorch-models-at-meta-5.png&quot; width=&quot;100%&quot; /&gt;
+&lt;/p&gt;
+
+&lt;p align=&quot;center&quot;&gt;
+&lt;b&gt;Figure 5: A GPU trace (aka Kineto trace) of the training loop.&lt;/b&gt;
+&lt;/p&gt;
+
+&lt;p&gt;Since commonly used PyTorch functions are already annotated, their names are automatically shown on the trace. With them, we can roughly divide the trace into the four phases in a training iteration: (1) data loading, (2) forward pass, (3) backward pass, (4) gradient optimization (note: In Figure 5, the “optimizer” phase is from the previous batch while the other three phases are from the current batch).&lt;/p&gt;
+
+&lt;h3 id=&quot;22-optimizations&quot;&gt;2.2 Optimizations&lt;/h3&gt;
+
+&lt;p&gt;We performed four simple optimizations that target the bottlenecks identified above, each requiring only a change in a config parameter or at most a few source lines. They are listed in Figure 6.&lt;/p&gt;
+
+&lt;table&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th&gt;Optimization&lt;/th&gt;
+      &lt;th&gt;Amount of changes&lt;/th&gt;
+      &lt;th&gt;Bottlenecks addressed&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td&gt;Tune &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;num_worker_threads&lt;/code&gt; by trying a few possible values within the number of CPU cores on each host.&lt;/td&gt;
+      &lt;td&gt;1 source line&lt;/td&gt;
+      &lt;td&gt;GPU totally idle time&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;Double the batch sizes&lt;/td&gt;
+      &lt;td&gt;2 config parameters&lt;/td&gt;
+      &lt;td&gt;GPU memory under-utilization&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;Use &lt;a href=&quot;https://pytorch.org/tutorials/recipes/recipes/amp_recipe.html&quot;&gt;automatic mixed precision&lt;/a&gt; in PyTorch&lt;/td&gt;
+      &lt;td&gt;13 source lines&lt;/td&gt;
+      &lt;td&gt;Zero Tensor Core utilization&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;Use &lt;a href=&quot;https://pytorch.org/docs/stable/generated/torch.optim.AdamW.html#torch.optim.AdamW&quot;&gt;mulitensor optimizer&lt;/a&gt; in PyTorch&lt;/td&gt;
+      &lt;td&gt;1 source line&lt;/td&gt;
+      &lt;td&gt;Many small GPU kernels in the optimizer&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;p align=&quot;center&quot;&gt;
+&lt;b&gt;Figure 6: Four simple optimizations applied.&lt;/b&gt;
+&lt;/p&gt;
+
+&lt;h2 id=&quot;3-concluding-remarks&quot;&gt;3. Concluding Remarks&lt;/h2&gt;
+
+&lt;p&gt;Performance tuning for PyTorch in production environments is increasingly important. A capable performance-debugging tool is a key to this process. We demonstrate with a case study on a production model that MAIProf is a powerful infrastructure for identifying optimization opportunities.&lt;/p&gt;
+
+&lt;p&gt;At Meta, MAIProf has been used by 100s of engineers, from performance novices to experts, to identify many more types of bottlenecks. These include slow data loading, small and/or slow GPU kernels, distributed training issues such as load imbalance and excessive communication. MAIProf covers major classes of models, including recommendation, vision, and natural language processing. In summary, it is now an indispensable tool for tuning the performance of production PyTorch workloads.&lt;/p&gt;
+
+&lt;h2 id=&quot;references&quot;&gt;References&lt;/h2&gt;
+
+&lt;p&gt;[1] &lt;a href=&quot;https://docs.nvidia.com/gameworks/content/developertools/desktop/analysis/report/cudaexperiments/kernellevel/achievedoccupancy.htm&quot;&gt;https://docs.nvidia.com/gameworks/content/developertools/desktop/analysis/report/ cudaexperiments/kernellevel/achievedoccupancy.htm&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;[2] &lt;a href=&quot;https://www.nvidia.com/en-us/data-center/tensor-cores/&quot;&gt;https://www.nvidia.com/en-us/data-center/tensor-cores/&lt;/a&gt;&lt;/p&gt;</content>
+
+      
+      
+      
+      
+      
+
+      <author>
+          <name>CK Luk, Lei Tian</name>
+        
+        
+      </author>
+
+      
+
+      
+
+      
+        <summary type="html">1. Meta’s AI Performance Profiling (MAIProf)</summary>
+      
+
+      
+      
+    </entry>
   
     <entry>
       <title type="html">Announcing PyTorch Conference 2022</title>
@@ -1113,150 +1287,6 @@ Figure 5: Relative peak throughput of float16 (FP16) vs float32 matrix multiplic
 
       
         <summary type="html">Efficient training of modern neural networks often relies on using lower precision data types. Peak float16 matrix multiplication and convolution performance is 16x faster than peak float32 performance on A100 GPUs. And since the float16 and bfloat16 data types are only half the size of float32 they can double the performance of bandwidth-bound kernels and reduce the memory required to train a network, allowing for larger models, larger batches, or larger inputs. Using a module like torch.amp (short for “Automated Mixed Precision”) makes it easy to get the speed and memory usage benefits of lower precision data types while preserving convergence behavior.</summary>
-      
-
-      
-      
-    </entry>
-  
-    <entry>
-      <title type="html">Case Study: PathAI Uses PyTorch to Improve Patient Outcomes with AI-powered Pathology</title>
-      <link href="https://pytorch.org/blog/PathAI-Uses-PyTorch-to-Improve-Patient-Outcomes-with-AI-powered-Pathology/" rel="alternate" type="text/html" title="Case Study: PathAI Uses PyTorch to Improve Patient Outcomes with AI-powered Pathology" />
-      <published>2022-07-15T00:00:00-07:00</published>
-      <updated>2022-07-15T00:00:00-07:00</updated>
-      <id>https://pytorch.org/blog/PathAI-Uses-PyTorch-to-Improve-Patient-Outcomes-with-AI-powered-Pathology</id>
-      <content type="html" xml:base="https://pytorch.org/blog/PathAI-Uses-PyTorch-to-Improve-Patient-Outcomes-with-AI-powered-Pathology/">&lt;p&gt;​&lt;a href=&quot;https://pathai.com&quot;&gt;​PathAI&lt;/a&gt; is the leading provider of AI-powered technology tools and services for pathology (the study of disease). Our platform was built to enable substantial improvements to the accuracy of diagnosis and the measurement of therapeutic efficacy for complex diseases, leveraging modern approaches in machine learning like image segmentation, graph neural networks, and multiple instance learning.&lt;/p&gt;
-
-&lt;p align=&quot;center&quot;&gt;
-  &lt;img src=&quot;/assets/images/2022-7-15-PathAI-Uses-PyTorch-to-Improve-Patient-Outcomes-with-AI-powered-Pathology-1.png&quot; width=&quot;100%&quot; /&gt;
-&lt;/p&gt;
-
-&lt;p&gt;Traditional manual pathology is prone to &lt;a href=&quot;https://www.journal-of-hepatology.eu/article/S0168-8278(20)30399-8/fulltext&quot;&gt;subjectivity and observer variability&lt;/a&gt; that can negatively affect diagnoses and drug development trials. Before we dive into how we use PyTorch to improve our diagnosis workflow, let us first lay out the traditional analog Pathology workflow without machine learning.&lt;/p&gt;
-
-&lt;h2 id=&quot;how-traditional-biopharma-works&quot;&gt;How Traditional Biopharma Works&lt;/h2&gt;
-
-&lt;p&gt;There are many avenues that biopharma companies take to discover novel therapeutics or diagnostics. One of those avenues relies heavily on the analysis of pathology slides to answer a variety of questions: how does a particular cellular communication pathway work? Can a specific disease state be linked to the presence or lack of a particular protein? Why did a particular drug in a clinical trial work for some patients but not others? Might there be an association between patient outcomes and a novel biomarker?&lt;/p&gt;
-
-&lt;p&gt;To help answer these questions, biopharma companies rely on expert pathologists to analyze slides and help evaluate the questions they might have. &lt;/p&gt;
-
-&lt;p&gt;As you might imagine, it takes an expert board certified pathologist to make accurate interpretations and diagnosis. In &lt;a href=&quot;https://www.bmj.com/content/357/bmj.j2813.full&quot;&gt;one study&lt;/a&gt;, a single biopsy result was given to 36 different pathologists and the outcome was 18 different diagnoses varying in severity from no treatment to aggressive treatment necessary. Pathologists also often solicit feedback from colleagues in difficult edge cases. Given the complexity of the problem, even with expert training and collaboration, pathologists can still have a hard time making a correct diagnosis. This potential variance can be the difference between a drug being approved and it failing the clinical trial.&lt;/p&gt;
-
-&lt;h2 id=&quot;how-pathai-utilizes-machine-learning-to-power-drug-development&quot;&gt;How PathAI utilizes machine learning to power drug development&lt;/h2&gt;
-
-&lt;p&gt;PathAI develops machine learning models which provide insights for drug development R&amp;amp;D, for powering clinical trials, and for making diagnoses. To this end, PathAI leverages PyTorch for slide level inference using a variety of methods including graph neural networks (GNN) as well as multiple instance learning. In this context, “slides” refers to full size scanned images of glass slides, which are pieces of glass with a thin slice of tissue between them, stained to show various cell formations. PyTorch enables our teams using these different methodologies to share a common framework which is robust enough to work in all the conditions we need. PyTorch’s high level, imperative, and pythonic syntax allows us to prototype models quickly and then take those models to scale once we have the results we want. &lt;/p&gt;
-
-&lt;h2 id=&quot;multi-instance-learning-on-gigabyte-images&quot;&gt;Multi-instance learning on gigabyte images&lt;/h2&gt;
-
-&lt;p&gt;One of the uniquely challenging aspects of applying ML to pathology is the immense size of the images. These digital slides can often be 100,000 x 100,000 pixels or more in resolution and gigabytes in size. Loading the full image in GPU memory and applying traditional computer vision algorithms on them is an almost impossible task. It also takes both a considerable amount of time and resources to have a full slide image (100k x 100k) annotated, especially when annotators need to be domain experts (board-certified pathologists). We often build models to predict image-level labels, like the presence of cancer, on a patient slide which covers a few thousand pixels in the whole image. The cancerous area is sometimes a tiny fraction of the entire slide, which makes the ML problem similar to finding a needle in a haystack. On the other hand, some problems like the prediction of certain histological biomarkers require an aggregation of information from the whole slide which is again hard due to the size of the images. All these factors add significant algorithmic, computational, and logistical complexity when applying ML techniques to pathology problems.&lt;/p&gt;
-
-&lt;p&gt;Breaking down the image into smaller patches, learning patch representations, and then pooling those representations to predict an image-level label is one way to solve this problem as is depicted in the image below. One popular method for doing this is called &lt;a href=&quot;https://paperswithcode.com/task/multiple-instance-learning&quot;&gt;Multiple Instance Learning (MIL)&lt;/a&gt;. Each patch is considered an ‘instance’ and a set of patches forms a ‘bag’. The individual patch representations are pooled together to predict a final bag-level label. Algorithmically, the individual patch instances in the bag do not require labels and hence allow us to learn bag-level labels in a weakly-supervised way. They also use permutation invariant pooling functions which make the prediction independent of the order of patches and allows for an efficient aggregation of information. Typically, attention based pooling functions are used which not only allow for efficient aggregation but also provide attention values for each patch in the bag. These values indicate the importance of the corresponding patch in the prediction and can be visualized to better understand the model predictions. This element of interpretability can be very important to drive adoption of these models in the real world and we use variations like &lt;a href=&quot;https://arxiv.org/pdf/2206.01794.pdf&quot;&gt;Additive MIL models&lt;/a&gt; to enable such spatial explainability. Computationally, MIL models circumvent the problem of applying neural networks to large image sizes since patch representations are obtained independently of the size of the image.&lt;/p&gt;
-
-&lt;p align=&quot;center&quot;&gt;
-  &lt;img src=&quot;/assets/images/2022-7-15-PathAI-Uses-PyTorch-to-Improve-Patient-Outcomes-with-AI-powered-Pathology-2.png&quot; width=&quot;100%&quot; /&gt;
-&lt;/p&gt;
-
-&lt;p&gt;At PathAI, we use custom MIL models based on deep nets to predict image-level labels. The overview of this process is as follows:&lt;/p&gt;
-
-&lt;ol&gt;
-  &lt;li&gt;Select patches from a slide using different sampling approaches.&lt;/li&gt;
-  &lt;li&gt;Construct a bag of patches based on random sampling or heuristic rules.&lt;/li&gt;
-  &lt;li&gt;Generate patch representations for each instance based on pre-trained models or large-scale representation learning models.&lt;/li&gt;
-  &lt;li&gt;Apply permutation invariant pooling functions to get the final slide-level score.&lt;/li&gt;
-&lt;/ol&gt;
-
-&lt;p&gt;Now that we have walked through some of the high-level details around MIL in PyTorch, let’s look at some code to see how simple it is to go from ideation to code in production with PyTorch. We begin by defining a sampler, transformations, and our MIL dataset:&lt;/p&gt;
-
-&lt;div class=&quot;language-python highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c1&quot;&gt;# Create a bag sampler which randomly samples patches from a slide
-&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;bag_sampler&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;RandomBagSampler&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;bag_size&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;12&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
-
-&lt;span class=&quot;c1&quot;&gt;# Setup the transformations
-&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;crop_transform&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;FlipRotateCenterCrop&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;use_flips&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;bp&quot;&gt;True&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
-
-&lt;span class=&quot;c1&quot;&gt;# Create the dataset which loads patches for each bag
-&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;train_dataset&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;MILDataset&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;
-  &lt;span class=&quot;n&quot;&gt;bag_sampler&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;bag_sampler&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
-  &lt;span class=&quot;n&quot;&gt;samples_loader&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;sample_loader&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
-  &lt;span class=&quot;n&quot;&gt;transform&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;crop_transform&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
-&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;After we have defined our sampler and dataset, we need to define the model we will actually train with said dataset. PyTorch’s familiar model definition syntax makes this easy to do while also allowing us to create bespoke models at the same time.&lt;/p&gt;
-
-&lt;div class=&quot;language-python highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;n&quot;&gt;classifier&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;DefaultPooledClassifier&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;hidden_dims&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;256&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;256&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;],&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;input_dims&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1024&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;output_dims&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
-
-&lt;span class=&quot;n&quot;&gt;pooling&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;DefaultAttentionModule&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;
-  &lt;span class=&quot;n&quot;&gt;input_dims&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1024&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
-  &lt;span class=&quot;n&quot;&gt;hidden_dims&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;256&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;256&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;],&lt;/span&gt;
-  &lt;span class=&quot;n&quot;&gt;output_activation&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;StableSoftmax&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt;
-&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
-
-&lt;span class=&quot;c1&quot;&gt;# Define the model which is a composition of the featurizer, pooling module and a classifier
-&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;model&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;DefaultMILGraph&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;featurizer&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;ShuffleNetV2&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(),&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;classifier&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;classifier&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;pooling&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;pooling&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;Since these models are trained end-to-end, they offer a powerful way to go directly from a gigapixel whole slide image to a single label. Due to their wide applicability to different biological problems, two aspects of their implementation and deployment are important:&lt;/p&gt;
-
-&lt;ol&gt;
-  &lt;li&gt;Configurable control over each part of the pipeline including the data loaders, the modular parts of the model, and their interaction with each other.&lt;/li&gt;
-  &lt;li&gt;Ability to rapidly iterate through the ideate-implement-experiment-productionize loop.&lt;/li&gt;
-&lt;/ol&gt;
-
-&lt;p&gt;PyTorch has various advantages when it comes to MIL modeling. It offers an intuitive way to create dynamic computational graphs with flexible control flow which is great for rapid research experimentation. The map-style datasets, configurable sampler and batch-samplers allow us to customize how we construct bags of patches, enabling faster experimentation. Since MIL models are IO heavy, data parallelism and pythonic data loaders make the task very efficient and user friendly. Lastly, the object-oriented nature of PyTorch enables building of reusable modules which aid in the rapid experimentation, maintainable implementation and ease of building compositional components of the pipeline.&lt;/p&gt;
-
-&lt;h2 id=&quot;exploring-spatial-tissue-organization-with-gnns-in-pytorch&quot;&gt;Exploring spatial tissue organization with GNNs in PyTorch&lt;/h2&gt;
-
-&lt;p align=&quot;center&quot;&gt;
-  &lt;img src=&quot;/assets/images/2022-7-15-PathAI-Uses-PyTorch-to-Improve-Patient-Outcomes-with-AI-powered-Pathology-3.png&quot; width=&quot;100%&quot; /&gt;
-&lt;/p&gt;
-
-&lt;p&gt;In both healthy and diseased tissue, the spatial arrangement and structure of cells can oftentimes be as important as the cells themselves. For example, when assessing lung cancers, pathologists try to look at the overall grouping and structure of tumor cells (do they form solid sheets? Or do they occur in smaller, localized clusters?) to determine if the cancer belongs to specific subtypes which can have vastly &lt;a href=&quot;https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3369269/&quot;&gt;different prognosis&lt;/a&gt;. Such spatial relationships between cells and other tissue structures can be modeled using graphs to capture tissue topology and cellular composition at the same time. &lt;a href=&quot;https://openaccess.thecvf.com/content_CVPRW_2020/papers/w16/Lu_Capturing_Cellular_Topology_in_Multi-Gigapixel_Pathology_Images_CVPRW_2020_paper.pdf&quot;&gt;Graph Neural Networks&lt;/a&gt; (GNNs) allow learning spatial patterns within these graphs that relate to other clinical variables, for example overexpression of genes in certain cancers.&lt;/p&gt;
-
-&lt;p&gt;In late 2020, when PathAI started using GNNs on tissue samples, PyTorch had the best and most mature support for GNN functionality via the &lt;a href=&quot;https://pytorch-geometric.readthedocs.io/en/latest/&quot;&gt;PyG package&lt;/a&gt;. This made PyTorch the natural choice for our team given that GNN models were something that we knew would be an important ML concept we wanted to explore. &lt;/p&gt;
-
-&lt;p&gt;One of the main value-adds of GNN’s in the context of tissue samples is that the graph itself can uncover spatial relationships that would otherwise be very difficult to find by visual inspection alone. In our recent &lt;a href=&quot;https://aacrjournals.org/cancerres/article/82/12_Supplement/1922/701539&quot;&gt;AACR publication&lt;/a&gt;, we showed that by using GNNs, we can better understand the way the presence of immune cell aggregates (specifically tertiary lymphoid structures, or TLS) in the tumor microenvironment can influence patient prognosis. In this case, the GNN approach was used to predict expression of genes associated with the presence of TLS, and identify histological features beyond the TLS region itself that are relevant to TLS. Such insights into gene expression are difficult to identify from tissue sample images when unassisted by ML models. &lt;/p&gt;
-
-&lt;p&gt;One of the most promising GNN variations we have had success with is &lt;a href=&quot;https://arxiv.org/pdf/1904.08082.pdf&quot;&gt;self attention graph pooling&lt;/a&gt;. Let’s take a look at how we define our Self Attention Graph Pooling (SAGPool) model using PyTorch and PyG:&lt;/p&gt;
-
-&lt;div class=&quot;language-python highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;k&quot;&gt;class&lt;/span&gt; &lt;span class=&quot;nc&quot;&gt;SAGPool&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;torch&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;nn&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Module&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;):&lt;/span&gt;
-  &lt;span class=&quot;k&quot;&gt;def&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;__init__&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;bp&quot;&gt;self&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;...):&lt;/span&gt;
-    &lt;span class=&quot;nb&quot;&gt;super&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;().&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;__init__&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt;
-    &lt;span class=&quot;bp&quot;&gt;self&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;conv1&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;GraphConv&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;in_features&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;hidden_features&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;aggr&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;'mean'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
-    &lt;span class=&quot;bp&quot;&gt;self&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;convs&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;torch&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;nn&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;ModuleList&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt;
-    &lt;span class=&quot;bp&quot;&gt;self&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;pools&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;torch&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;nn&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;ModuleList&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt;
-    &lt;span class=&quot;bp&quot;&gt;self&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;convs&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;extend&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;([&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;GraphConv&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;hidden_features&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;hidden_features&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;aggr&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;'mean'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;for&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;i&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;in&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;range&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;num_layers&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)])&lt;/span&gt;
-    &lt;span class=&quot;bp&quot;&gt;self&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;pools&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;extend&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;([&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;SAGPooling&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;hidden_features&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;ratio&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;GNN&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;GraphConv&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;min_score&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;min_score&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;for&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;i&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;in&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;range&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;((&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;num_layers&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;//&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;2&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)])&lt;/span&gt;
-    &lt;span class=&quot;bp&quot;&gt;self&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;jump&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;JumpingKnowledge&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;mode&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;'cat'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
-    &lt;span class=&quot;bp&quot;&gt;self&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;lin1&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Linear&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;num_layers&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;hidden_features&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;hidden_features&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
-    &lt;span class=&quot;bp&quot;&gt;self&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;lin2&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Linear&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;hidden_features&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;out_features&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
-    &lt;span class=&quot;bp&quot;&gt;self&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;out_activation&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;out_activation&lt;/span&gt;
-    &lt;span class=&quot;bp&quot;&gt;self&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;dropout&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;dropout&lt;/span&gt;
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;In the above code, we begin by defining a single convolutional graph layer and then add two &lt;a href=&quot;https://pytorch.org/docs/stable/generated/torch.nn.ModuleList.html&quot;&gt;module list layers&lt;/a&gt; which allow us to pass in a variable number of layers. We then take our &lt;a href=&quot;https://pytorch.org/docs/stable/generated/torch.nn.ModuleList.html?highlight=extend#torch.nn.ModuleList.extend&quot;&gt;empty module list and append&lt;/a&gt; a variable number of &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;GraphConv&lt;/code&gt; layers followed by a variable number of &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;SAGPooling&lt;/code&gt; layers. We finish up our &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;SAGPool&lt;/code&gt; definition by adding a &lt;a href=&quot;https://pytorch-geometric.readthedocs.io/en/latest/modules/nn.html#torch_geometric.nn.models.JumpingKnowledge&quot;&gt;JumpingKnowledge Layer&lt;/a&gt;, two linear layers, our activation function, and our dropout value. PyTorch’s intuitive syntax allows us to abstract away the complexity of working with state of the art methods like SAG Poolings while also maintaining the common approach to model development we are familiar with.&lt;/p&gt;
-
-&lt;p&gt;Models like our SAG Pool one described above are just one example of how GNNs with PyTorch are allowing us to explore new and novel ideas. We also recently explored &lt;a href=&quot;https://openaccess.thecvf.com/content/CVPR2022W/CVMI/papers/Dwivedi_Multi_Stain_Graph_Fusion_for_Multimodal_Integration_in_Pathology_CVPRW_2022_paper.pdf&quot;&gt;multimodal CNN - GNN hybrid models&lt;/a&gt; which ended up being 20% more accurate than traditional Pathologist consensus scores. These innovations and interplay between traditional CNNs and GNNs are again enabled by the short research to production model development loop.&lt;/p&gt;
-
-&lt;h2 id=&quot;improving-patient-outcomes&quot;&gt;Improving Patient Outcomes&lt;/h2&gt;
-&lt;p&gt;In order to achieve our mission of improving patient outcomes with AI-powered pathology, PathAI needs to rely on an ML development framework that (1) facilitates quick iteration and easy extension (i.e. Model configuration as code) during initial phases of development and exploration (2) scales model training and inference to massive images (3) easily and robustly serves models for production uses of our products (in clinical trials and beyond). As we’ve demonstrated, PyTorch offers us all of these capabilities and more. We are incredibly excited about the future of PyTorch and cannot wait to see what other impactful challenges we can solve using the framework.&lt;/p&gt;</content>
-
-      
-      
-      
-      
-      
-
-      <author>
-          <name>Logan Kilpatrick - Sr. Technology Advocate, Harshith Padigela - ML Engineer, Syed Ashar Javed - ML Technical Lead, Robert Egger - Biomedical Data Scientist</name>
-        
-        
-      </author>
-
-      
-
-      
-
-      
-        <summary type="html">​​PathAI is the leading provider of AI-powered technology tools and services for pathology (the study of disease). Our platform was built to enable substantial improvements to the accuracy of diagnosis and the measurement of therapeutic efficacy for complex diseases, leveraging modern approaches in machine learning like image segmentation, graph neural networks, and multiple instance learning.</summary>
       
 
       

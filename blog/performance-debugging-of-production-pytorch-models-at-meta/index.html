@@ -14,21 +14,20 @@
   <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico?">
   <title>
     
-      Stanford University | PyTorch
+      Performance Debugging of Production PyTorch Models at Meta | PyTorch
     
   </title>
   
-  <meta property="og:title" content="PyTorch" />
-  <meta
-    name="description"
-    property="og:description"
-    content="An open source machine learning framework that accelerates the path from research prototyping to production deployment."
-  />
-  <meta
-  property="og:image"
-  content="https://pytorch.org/assets/images/pytorch-logo.png"
-  />
-  <meta property="og:url" content="https://www.pytorch.org" />
+  <meta property="og:title" content="Performance Debugging of Production PyTorch Models at Meta" />
+  <meta property="og:description" content="1. Meta’s AI Performance Profiling (MAIProf)
+
+" />
+  <meta property="og:image" content="https://pytorch.org//assets/images/performance-debugging-of-production-pytorch-models-at-meta-1.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Performance Debugging of Production PyTorch Models at Meta">
+  <meta name="twitter:description" content="1. Meta’s AI Performance Profiling (MAIProf)
+
+" />
 
 
 <meta property="og:type" content="website" />
@@ -141,7 +140,7 @@
       <a href="/mobile">Mobile</a>
     </li>
 
-    <li class="main-menu-item ">
+    <li class="main-menu-item active">
       <a href="/blog">Blog</a>
     </li>
 
@@ -271,7 +270,7 @@
         <div class="container blog-detail-container">
             <p class="featured-post">September 29, 2022</p>
             <h1>
-                <a class="blog-title">Stanford University</a>
+                <a class="blog-title">Performance Debugging of Production PyTorch Models at Meta</a>
             </h1>
         </div>
     </div>
@@ -284,10 +283,152 @@
                     <p class="author">
                       by
                       
-                        The PyTorch Team
+                        CK Luk, Lei Tian
                       
                     </p>
-                    <p>Using PyTorch’s flexibility to efficiently research new algorithmic approaches.</p>
+                    <h2 id="1-metas-ai-performance-profiling-maiprof">1. Meta’s AI Performance Profiling (MAIProf)</h2>
+
+<p align="center">
+  <img src="/assets/images/performance-debugging-of-production-pytorch-models-at-meta-1.png" width="90%" />
+</p>
+
+<p align="center">
+<b>Figure 1: A simplified illustration of the Meta’s AI performance profiling (MAIProf) infrastructure.</b>
+</p>
+
+<p>Figure 1 gives a simplified illustration of the AI performance profiling infrastructure at Meta. ML research and performance engineers submit through the User Portal a profiling request for a training job to the Profiling Service, which subsequently broadcasts the request to all the GPU hosts running the training job. When the Monitoring Daemon on a GPU host receives the profiling request, it will notify the Kineto GPU tracer (built on top of NVIDIA’s libcupti) inside the PyTorch program corresponding to the training job. As a result, Kineto traces will be collected and uploaded to the Object Store asynchronously (in more details: there is one Kineto trace collected for each individual GPU, each is treated and stored as a blob; an example will be given in Section 2). Meanwhile, MAIProf also collects a variety of aggregated performance metrics: the Monitoring Daemon on every GPU host continuously reads performance counters from NVIDIA’s DCGM/NVML and logs them to a Time Series DB.</p>
+
+<p>Once both trace and metrics collections are completed, the Profiling Service will automatically download traces from the Object Store for trace analysis and performance metrics from the Time Series DB for metric analysis. Finally, an overall profiling report with detailed and insightful analysis is delivered to the user.</p>
+
+<p>To serve production uses, we deliberately made the following design choices for MAIProf:</p>
+
+<ul>
+  <li><strong>No source-code change required in the PyTorch models</strong>: profiling is triggered by sampling the execution of an unmodified model for a user-specified amount of time.</li>
+  <li><strong>Provide a holistic view of performance</strong>: MAIProf performs system-wide analysis that cover both CPU and GPU. Under the hood, it invokes various CPU tools (e.g., Python tracer, Autograd Observer) and GPU tools (e.g., Kineto, DCGM) and correlates their results.</li>
+  <li><strong>Provide multiple tools that target a wide range of AI partitioners</strong>: At Meta, there are engineers with different backgrounds who may need to tune their AI workload performance. Some of them are AI experts while others are general software engineers. Therefore, MAIProf provides a variety of tools for different levels of performance debugging, from high-level automatic trace comprehension to low-level trace analysis.</li>
+  <li><strong>Support distributed GPU profiling</strong>: MAIProf can collect profiling data from multiple hosts, each with multiple GPUs. It then shows a combined view/analysis of the entire system.</li>
+  <li><strong>Highly scalable</strong>: MAIProf is built as a service on top of existing infrastructures in Meta data centers such as a scalable storage system called Manifold. Its profiling capability can be easily scaled by adding more machines in the service pool with the increase of workloads.</li>
+</ul>
+
+<h2 id="2-case-study-optimizing-a-protection-pytorch-model">2. Case Study: Optimizing a Protection PyTorch Model</h2>
+
+<p>To be concrete, we use a case study on a protection PyTorch model used in production. First, we discuss our steps for identifying the performance bottlenecks in the model with MAIProf. Then we describe the corresponding optimizations applied and their impacts.</p>
+
+<h3 id="21-performance-bottlenecks">2.1 Performance Bottlenecks</h3>
+
+<h4 id="step-1">Step 1:</h4>
+
+<p>Inspect the CPU and GPU utilization on the same timeline, as shown in Figure 2.</p>
+
+<p align="center">
+  <img src="/assets/images/performance-debugging-of-production-pytorch-models-at-meta-2.png" width="90%" />
+</p>
+
+<p align="center">
+<b>Figure 2: CPU usage over time (the top) vs. GPU usage over time (the bottom).</b>
+</p>
+
+<p>The first performance anomaly we noticed in Figure 2 is the pattern: <em>“GPU-idle, GPU-active, GPU-idle, GPU-active …”</em> throughout the training. Overall, the GPU is idle for more than half of the training time (this is bad for performance because the GPU is a higher-performance device and so we want it to be utilized as much as possible).</p>
+
+<h4 id="step-2">Step 2:</h4>
+
+<p>Collect a Python function call trace on the CPU with MAIProf while the GPU is idle, which is shown in Figure 3.</p>
+
+<p align="center">
+  <img src="/assets/images/performance-debugging-of-production-pytorch-models-at-meta-3.png" width="100%" />
+</p>
+
+<p align="center">
+<b>Figure 3: A Python call trace.</b>
+</p>
+
+<p>The Python trace shows that most of the CPU time is spent inside a Python function <code class="language-plaintext highlighter-rouge">sharded_iterrows()</code>. From the source code of the model, we learned that this function processes a big feature table in parallel. The number of worker threads used is controlled by a configurable parameter (<code class="language-plaintext highlighter-rouge">num_worker_threads</code>). Also, after investigating how the feature table is generated, we understood the performance anomaly: the training dataset is too large to fit in the CPU memory all at once; it needs to be broken into multiple sub-datasets, each has sufficient data for running 10 epochs. Consequently, a new sub-dataset needs to be read from the disk to memory every 10 epochs,  during which the GPU is totally idle.</p>
+
+<h4 id="step-3">Step 3:</h4>
+
+<p>Collect GPU performance metrics, which is shown in Figure 4.</p>
+
+<p align="center">
+  <img src="/assets/images/performance-debugging-of-production-pytorch-models-at-meta-4.png" width="100%" />
+</p>
+
+<p align="center">
+<b>Figure 4: GPU performance metrics in MAIProf.</b>
+</p>
+
+<p>We made the following observations from Figure 4:</p>
+
+<ul>
+  <li>The streaming multiprocessor (SM) runs the model’s CUDA kernels. Its utilization [1] is 9.1%, indicating that the parallel compute units on the GPU are not well utilized.</li>
+  <li>Tensor Core utilization is 0, meaning that Tensor Core (the mixed-precision compute unit on GPU) [2] is not used at all.</li>
+  <li>Max GPU memory utilization is 47.13%, indicating that half of the GPU memory is left unused.</li>
+</ul>
+
+<h4 id="step-4">Step 4:</h4>
+
+<p>Collect a GPU trace (aka Kineto trace) of the training loop as shown in Figure 5.</p>
+
+<p align="center">
+  <img src="/assets/images/performance-debugging-of-production-pytorch-models-at-meta-5.png" width="100%" />
+</p>
+
+<p align="center">
+<b>Figure 5: A GPU trace (aka Kineto trace) of the training loop.</b>
+</p>
+
+<p>Since commonly used PyTorch functions are already annotated, their names are automatically shown on the trace. With them, we can roughly divide the trace into the four phases in a training iteration: (1) data loading, (2) forward pass, (3) backward pass, (4) gradient optimization (note: In Figure 5, the “optimizer” phase is from the previous batch while the other three phases are from the current batch).</p>
+
+<h3 id="22-optimizations">2.2 Optimizations</h3>
+
+<p>We performed four simple optimizations that target the bottlenecks identified above, each requiring only a change in a config parameter or at most a few source lines. They are listed in Figure 6.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>Optimization</th>
+      <th>Amount of changes</th>
+      <th>Bottlenecks addressed</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Tune <code class="language-plaintext highlighter-rouge">num_worker_threads</code> by trying a few possible values within the number of CPU cores on each host.</td>
+      <td>1 source line</td>
+      <td>GPU totally idle time</td>
+    </tr>
+    <tr>
+      <td>Double the batch sizes</td>
+      <td>2 config parameters</td>
+      <td>GPU memory under-utilization</td>
+    </tr>
+    <tr>
+      <td>Use <a href="https://pytorch.org/tutorials/recipes/recipes/amp_recipe.html">automatic mixed precision</a> in PyTorch</td>
+      <td>13 source lines</td>
+      <td>Zero Tensor Core utilization</td>
+    </tr>
+    <tr>
+      <td>Use <a href="https://pytorch.org/docs/stable/generated/torch.optim.AdamW.html#torch.optim.AdamW">mulitensor optimizer</a> in PyTorch</td>
+      <td>1 source line</td>
+      <td>Many small GPU kernels in the optimizer</td>
+    </tr>
+  </tbody>
+</table>
+
+<p align="center">
+<b>Figure 6: Four simple optimizations applied.</b>
+</p>
+
+<h2 id="3-concluding-remarks">3. Concluding Remarks</h2>
+
+<p>Performance tuning for PyTorch in production environments is increasingly important. A capable performance-debugging tool is a key to this process. We demonstrate with a case study on a production model that MAIProf is a powerful infrastructure for identifying optimization opportunities.</p>
+
+<p>At Meta, MAIProf has been used by 100s of engineers, from performance novices to experts, to identify many more types of bottlenecks. These include slow data loading, small and/or slow GPU kernels, distributed training issues such as load imbalance and excessive communication. MAIProf covers major classes of models, including recommendation, vision, and natural language processing. In summary, it is now an indispensable tool for tuning the performance of production PyTorch workloads.</p>
+
+<h2 id="references">References</h2>
+
+<p>[1] <a href="https://docs.nvidia.com/gameworks/content/developertools/desktop/analysis/report/cudaexperiments/kernellevel/achievedoccupancy.htm">https://docs.nvidia.com/gameworks/content/developertools/desktop/analysis/report/ cudaexperiments/kernellevel/achievedoccupancy.htm</a></p>
+
+<p>[2] <a href="https://www.nvidia.com/en-us/data-center/tensor-cores/">https://www.nvidia.com/en-us/data-center/tensor-cores/</a></p>
 
                 </article>
             </div>
@@ -439,7 +580,7 @@
           <a href="/mobile">Mobile</a>
         </li>
 
-        <li class="">
+        <li class="active">
           <a href="/blog">Blog</a>
         </li>
 
