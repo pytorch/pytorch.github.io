@@ -219,7 +219,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href='https://pytorch.org/docs/versions.html'>master (1.13.0a0+gitd542aab ) &#x25BC</a>
+      <a href='https://pytorch.org/docs/versions.html'>master (1.13.0a0+gitbe29ca9 ) &#x25BC</a>
     </div>
     
 
@@ -498,6 +498,8 @@
         <span class="k">else</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">freeze_bn_stats</span><span class="p">()</span>
 
+        <span class="bp">self</span><span class="o">.</span><span class="n">_enable_slow_path_for_better_numerical_stability</span> <span class="o">=</span> <span class="kc">False</span>
+
     <span class="k">def</span> <span class="nf">reset_running_stats</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">bn</span><span class="o">.</span><span class="n">reset_running_stats</span><span class="p">()</span>
 
@@ -525,6 +527,14 @@
         <span class="k">return</span> <span class="bp">self</span>
 
     <span class="k">def</span> <span class="nf">_forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="nb">input</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_enable_slow_path_for_better_numerical_stability</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_forward_slow</span><span class="p">(</span><span class="nb">input</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_forward_approximate</span><span class="p">(</span><span class="nb">input</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_forward_approximate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="nb">input</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Approximated method to fuse conv and bn. It requires only one forward pass.</span>
+<span class="sd">        conv_orig = conv / scale_factor where scale_factor = bn.weight / running_std</span>
+<span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">bn</span><span class="o">.</span><span class="n">running_var</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
         <span class="n">running_std</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">bn</span><span class="o">.</span><span class="n">running_var</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">bn</span><span class="o">.</span><span class="n">eps</span><span class="p">)</span>
         <span class="n">scale_factor</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">bn</span><span class="o">.</span><span class="n">weight</span> <span class="o">/</span> <span class="n">running_std</span>
@@ -545,6 +555,97 @@
             <span class="n">conv_orig</span> <span class="o">=</span> <span class="n">conv_orig</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">bias</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">bias_shape</span><span class="p">)</span>
         <span class="n">conv</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">bn</span><span class="p">(</span><span class="n">conv_orig</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">conv</span>
+
+    <span class="k">def</span> <span class="nf">_forward_slow</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="nb">input</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        A more accurate but slow method to compute conv bn fusion, following https://arxiv.org/pdf/1806.08342.pdf</span>
+<span class="sd">        It requires two forward passes but handles the case bn.weight == 0</span>
+
+<span class="sd">        Conv: Y = WX + B_c</span>
+<span class="sd">        Conv without bias: Y0 = WX = Y - B_c, Y = Y0 + B_c</span>
+
+<span class="sd">        Batch statistics:</span>
+<span class="sd">          mean_Y = Y.mean()</span>
+<span class="sd">                 = Y0.mean() + B_c</span>
+<span class="sd">          var_Y = (Y - mean_Y)^2.mean()</span>
+<span class="sd">                = (Y0 - Y0.mean())^2.mean()</span>
+<span class="sd">        BN (r: bn.weight, beta: bn.bias):</span>
+<span class="sd">          Z = r * (Y - mean_Y) / sqrt(var_Y + eps) + beta</span>
+<span class="sd">            = r * (Y0 - Y0.mean()) / sqrt(var_Y + eps) + beta</span>
+
+<span class="sd">        Fused Conv BN training (std_Y = sqrt(var_Y + eps)):</span>
+<span class="sd">          Z = (r * W / std_Y) * X + r * (B_c - mean_Y) / std_Y + beta</span>
+<span class="sd">            = (r * W / std_Y) * X - r * Y0.mean() / std_Y + beta</span>
+
+<span class="sd">        Fused Conv BN inference (running_std = sqrt(running_var + eps)):</span>
+<span class="sd">          Z = (r * W / running_std) * X - r * (running_mean - B_c) / running_std + beta</span>
+
+<span class="sd">        QAT with fused conv bn:</span>
+<span class="sd">          Z_train = fake_quant(r * W / running_std) * X * (running_std / std_Y) - r * Y0.mean() / std_Y + beta</span>
+<span class="sd">                  = conv(X, fake_quant(r * W / running_std)) * (running_std / std_Y) - r * Y0.mean() / std_Y + beta</span>
+<span class="sd">          Z_inference = conv(X, fake_quant(r * W / running_std)) - r * (running_mean - B_c) / running_std + beta</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">bn</span><span class="o">.</span><span class="n">running_var</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+        <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">bn</span><span class="o">.</span><span class="n">running_mean</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+
+        <span class="c1"># using zero bias here since the bias for original conv</span>
+        <span class="c1"># will be added later</span>
+        <span class="n">zero_bias</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">out_channels</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">weight</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">input</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
+
+        <span class="n">weight_shape</span> <span class="o">=</span> <span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">weight</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+        <span class="n">weight_shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>
+        <span class="n">bias_shape</span> <span class="o">=</span> <span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">weight</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+        <span class="n">bias_shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">bn</span><span class="o">.</span><span class="n">training</span><span class="p">:</span>
+            <span class="c1"># needed to compute batch mean/std</span>
+            <span class="n">conv_out</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_conv_forward</span><span class="p">(</span><span class="nb">input</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">weight</span><span class="p">,</span> <span class="n">zero_bias</span><span class="p">)</span>
+            <span class="c1"># update bn statistics</span>
+            <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>
+                <span class="n">conv_out_bias</span> <span class="o">=</span> <span class="p">(</span>
+                    <span class="n">conv_out</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">bias</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">conv_out</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">bias</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">bias_shape</span><span class="p">)</span>
+                <span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">bn</span><span class="p">(</span><span class="n">conv_out_bias</span><span class="p">)</span>
+
+        <span class="c1"># fused conv + bn without bias using bn running statistics</span>
+        <span class="n">running_std</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">bn</span><span class="o">.</span><span class="n">running_var</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">bn</span><span class="o">.</span><span class="n">eps</span><span class="p">)</span>
+        <span class="n">scale_factor</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">bn</span><span class="o">.</span><span class="n">weight</span> <span class="o">/</span> <span class="n">running_std</span>
+        <span class="n">scaled_weight</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">weight_fake_quant</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">weight</span> <span class="o">*</span> <span class="n">scale_factor</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">weight_shape</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="c1"># fused conv without bias for inference: (r * W / running_std) * X</span>
+        <span class="n">conv_bn</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_conv_forward</span><span class="p">(</span><span class="nb">input</span><span class="p">,</span> <span class="n">scaled_weight</span><span class="p">,</span> <span class="n">zero_bias</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">bn</span><span class="o">.</span><span class="n">training</span><span class="p">:</span>
+            <span class="n">avg_dims</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">+</span> <span class="nb">list</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">weight</span><span class="o">.</span><span class="n">shape</span><span class="p">)))</span>
+            <span class="n">batch_mean</span> <span class="o">=</span> <span class="n">conv_out</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">avg_dims</span><span class="p">)</span>
+            <span class="n">batch_var</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">square</span><span class="p">(</span><span class="n">conv_out</span> <span class="o">-</span> <span class="n">batch_mean</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">bias_shape</span><span class="p">))</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span>
+                <span class="n">avg_dims</span>
+            <span class="p">)</span>
+            <span class="n">batch_std</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">batch_var</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">bn</span><span class="o">.</span><span class="n">eps</span><span class="p">)</span>
+
+            <span class="c1"># scale to use batch std in training mode</span>
+            <span class="c1"># conv(X, r * W / std_Y) = conv(X, r * W / running_std) * (running_std / std_Y)</span>
+            <span class="n">unscale_factor</span> <span class="o">=</span> <span class="n">running_std</span> <span class="o">/</span> <span class="n">batch_std</span>
+            <span class="n">conv_bn</span> <span class="o">*=</span> <span class="n">unscale_factor</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">bias_shape</span><span class="p">)</span>
+
+            <span class="n">fused_mean</span> <span class="o">=</span> <span class="n">batch_mean</span>
+            <span class="n">fused_std</span> <span class="o">=</span> <span class="n">batch_std</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">fused_mean</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">bn</span><span class="o">.</span><span class="n">running_mean</span> <span class="o">-</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">bias</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">bias</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="mi">0</span><span class="p">)</span>
+            <span class="n">fused_std</span> <span class="o">=</span> <span class="n">running_std</span>
+
+        <span class="c1"># fused bias = beta - r * mean / std</span>
+        <span class="n">fused_bias</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">bn</span><span class="o">.</span><span class="n">bias</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">bn</span><span class="o">.</span><span class="n">weight</span> <span class="o">*</span> <span class="n">fused_mean</span> <span class="o">/</span> <span class="n">fused_std</span>
+        <span class="n">conv_bn</span> <span class="o">+=</span> <span class="n">fused_bias</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">bias_shape</span><span class="p">)</span>
+
+        <span class="c1"># HACK to let conv bias particpiate in loss to avoid DDP error (parameters</span>
+        <span class="c1">#   were not used in producing loss)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">bias</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">conv_bn</span> <span class="o">+=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">bias</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">bias</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">bias_shape</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">conv_bn</span>
 
     <span class="k">def</span> <span class="nf">extra_repr</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="c1"># TODO(jerryzh): extend</span>
