@@ -25,4 +25,4 @@ Join us for technical talks, project deep dives, and a poster exhibition with th
 - Product/features are new or innovative to the community
 - Content can be shared openly with the community
 
-**Questions**: Contact pytorch-marketing@fb.com
+**Questions**: Contact pytorch-marketing@fb.com 
