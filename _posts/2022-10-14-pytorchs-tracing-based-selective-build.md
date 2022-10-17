@@ -28,7 +28,7 @@ This method can work seamlessly with any existing PyTorch Mobile deployment work
 Building the PyTorch Runtime in a special **“instrumentation” mode** ( by passing the `TRACING_BASED=1` build option) generates an **instrumentation build** runtime of PyTorch, along with a **model_tracer** binary. Running a model with this build allows us to trace the parts of PyTorch used by the model.
 
 <p align="center">
-  <img src="/assets/images/pytorchs-tracing-based-selective-build_Figure_1.png" width="100%">
+  <img src="/assets/images/pytorchs-tracing-based-selective-build_Figure1.png" width="100%">
 </p>
 
 <p align="center">
@@ -48,7 +48,7 @@ USE_NUMPY=0 USE_DISTRIBUTED=0 USE_CUDA=0 TRACING_BASED=1 \
 Now this instrumentation build is used to run a model inference with representative inputs. The **model_tracer** binary observes parts of the instrumentation build that were activated during the inference run, and dumps it to a YAML file.
 
 <p align="center">
-  <img src="/assets/images/pytorchs-tracing-based-selective-build_Figure_2.png" width="100%">
+  <img src="/assets/images/pytorchs-tracing-based-selective-build_Figure2.png" width="100%">
 </p>
 
 <p align="center">
@@ -79,7 +79,7 @@ TRACING_BASED=1 \
 ```
 
 <p align="center">
-  <img src="/assets/images/pytorchs-tracing-based-selective-build_Figure_3.png" width="100%">
+  <img src="/assets/images/pytorchs-tracing-based-selective-build_Figure3.png" width="100%">
 </p>
 
 <p align="center">
