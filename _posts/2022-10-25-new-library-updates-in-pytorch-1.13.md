@@ -1,21 +1,21 @@
 ---
 layout: blog_detail
-title: "New Library Updates in PyTorch 1.13, introducing Torchmultimodal, TorchEval and TorchSnapshot"
+title: "New Library Updates in PyTorch 1.13"
 author: Team PyTorch
-featured-img: ''
+featured-img: "assets/images/new-library-updates-in-pytorch-1.13.png"
 ---
 
 ## Summary
 
-We are bringing a number of improvements to the current PyTorch libraries, alongside the PyTorch 1.13 release. These updates demonstrate our focus on developing common and extensible APIs across all domains to make it easier for our community to build ecosystem projects on PyTorch.
+We are bringing a number of improvements to the current PyTorch libraries, alongside the PyTorch 1.13 [release](https://github.com/pytorch/pytorch/releases). These updates demonstrate our focus on developing common and extensible APIs across all domains to make it easier for our community to build ecosystem projects on PyTorch.
 
-Along with 1.13, we are releasing updates to the PyTorch Libraries, please find them below.
+Along with **1.13**, we are releasing updates to the PyTorch Libraries, please find them below.
 
 ### TorchAudio 
 
 #### (Beta) Hybrid Demucs Model and Pipeline
 
-Hybrid Demucs is a music source separation model that uses both spectrogram and time domain features. It has demonstrated state-of-the-art performance in the Sony® Music DeMixing Challenge. (citation: [https://arxiv.org/abs/2111.03600](https://arxiv.org/abs/2111.03600))
+Hybrid Demucs is a music source separation model that uses both spectrogram and time domain features. It has demonstrated state-of-the-art performance in the Sony<sup>®</sup> Music DeMixing Challenge. (citation: [https://arxiv.org/abs/2111.03600](https://arxiv.org/abs/2111.03600))
 
 The TorchAudio v0.13 release includes the following features
 
@@ -26,14 +26,14 @@ The TorchAudio v0.13 release includes the following features
 - SDR Results of pre-trained pipelines on MUSDB_HQ test set
 - Tutorial that steps through music source separation using the pretrained pipeline ([docs](https://pytorch.org/audio/0.13.0/tutorials/hybrid_demucs_tutorial.html))
 
-| Pipeline                             |  All  | Drums |  Bass | Other | Vocals |
-|--------------------------------------|-------|-------|-------|-------|--------|
-| <em>HDEMUCS_HIGH_MUSDB*</em>         |  6.42 |  7.76 |  6.51 |  4.47 |   6.93 |
-| <em>HDEMUCS_HIGH_MUSDB_PLUS**</em>   |  9.37 | 11.38 | 10.53 |  7.24 |   8.32 |
+| Pipeline                               |  All  | Drums |  Bass  | Other | Vocals |
+|----------------------------------------|-------|-------|--------|-------|--------|
+| <em>HDEMUCS_HIGH_MUSDB*</em>           |  6.42 |  7.76 |   6.51 |  4.47 |   6.93 |
+| <em>HDEMUCS_HIGH_MUSDB_PLUS**</em>     |  9.37 | 11.38 |  10.53 |  7.24 |   8.32 |
 
-* Trained on the training data of MUSDB-HQ dataset.
+<p><small>* Trained on the training data of MUSDB-HQ dataset.</small></p>
 
-** Trained on both training and test sets of MUSDB-HQ and 150 extra songs.
+<p><small>** Trained on both training and test sets of MUSDB-HQ and 150 extra songs.</small></p>
 
 Special thanks to Alexandre Defossez (@adefossez) for the guidance.
 
@@ -62,27 +62,25 @@ Learn more with our [documentation](https://pytorch.org/audio/0.13.0/generated/t
 
 #### (Beta) StreamWriter
 
-torchaudio.io.StreamWriter is a class for encoding media including audio and video. This can handle a wide variety of codecs, chunk-by-chunk encoding and GPU encoding. 
+torchaudio.io.StreamWriter is a class for encoding media including audio and video. This can handle a wide variety of codecs, chunk-by-chunk encoding and GPU encoding.
 
 Learn more with our [documentation](https://pytorch.org/audio/0.13.0/generated/torchaudio.io.StreamWriter.html) and tutorials [[basic usage](https://pytorch.org/audio/0.13.0/tutorials/streamwriter_basic_tutorial.html), [advanced usage](https://pytorch.org/audio/0.13.0/tutorials/streamwriter_advanced.html), [hardware encoding](https://pytorch.org/audio/0.13.0/hw_acceleration_tutorial.html)].
 
 ### TorchData
 
+For a complete list of changes and new features, please visit [our repository’s 0.5.0 release note](https://github.com/pytorch/data/releases).
+
 #### (Prototype) DataLoader2
 
-`DataLoader2` is introduced to execute `DataPipe` graph, with support for:
+`DataLoader2` was introduced in the last release to execute `DataPipe` graph, with support for dynamic sharding for multi-process/distributed data loading, multiple backend ReadingServices, and `DataPipe` graph in-place modification (e.g. shuffle control).
 
-- dynamic sharding for multi-process and distributed data loading
-- multiple backend ReadingServices (WIP for DistributedReadingService)
-- `DataPipe` graph in-place modification like shuffle control, memory pinning, etc.
-- snapshot the state of data-preprocessing pipeline (WIP)
+In this release, we further consolidated the API for `DataLoader2` and a [detailed documentation is now available here](https://pytorch.org/data/0.5/dataloader2.html). We continue to welcome early adopters and feedback, as well as potential contributors. If you are interested in trying it out, we encourage you to install the nightly version of TorchData.
 
-`DataPipe` is introduced to not only decompose the data pre-processing operations, but also decouple the overloaded data-manipulation features from `DataLoader`. Therefore, a light-weight `DataLoader2` is required. Moreover, certain features can only be achieved with `DataLoader2`, such as snapshotting and switching backend services to execute high-performant operations.
+#### (Beta) Data Loading from Cloud Service Providers
 
-- These options are configured by the constructor arguments of DataLoader2, which has the signature:
-- `DataLoader2(datapipe, datapipe_adapter_fn=None, reading_service=None)`
+We extended our support to load data from additional cloud storage providers via DataPipes, now covering AWS, Google Cloud Storage, and Azure. A [tutorial is also available](https://pytorch.org/data/0.5/tutorial.html#working-with-cloud-storage-providers). We are open to feedback and feature requests.
 
-Learn more with our [DataLoader2 README](https://github.com/pytorch/data/tree/main/torchdata/dataloader2#dataloader2-prototype).
+We also performed a simple benchmark, comparing the performance of data loading from AWS S3 and attached volume on an AWS EC2 instance. The results are [visible here](https://github.com/pytorch/data/blob/gh/NivekT/100/head/benchmarks/cloud/aws_s3_results.md).
 
 ### torch::deploy (Beta)
 
@@ -130,7 +128,7 @@ Learn more with our [docs](https://pytorch.org/torcheval), see our [examples](ht
 
 ### TorchMultimodal Release (Beta)
 
-Please watch for upcoming blogs in early November that will introduce TorchMultimodal in more details; in the meantime, learn more with our [tutorial](https://github.com/pytorch/tutorials/pull/2054).
+Please watch for upcoming blogs in early November that will introduce TorchMultimodal, a PyTorch domain library for training SoTA multi-task multimodal models at scale, in more details; in the meantime, play around with the library and models through our [tutorial](https://github.com/pytorch/tutorials/pull/2054).
 
 ### TorchRec
 
@@ -144,7 +142,7 @@ We’re introducing the shard API, which now allows you to shard only the embedd
 
 #### (Beta) Quantized Comms
 
-Applying [quantization or mixed precision](https://dlp-kdd.github.io/assets/pdf/a11-yang.pdf) to tensors in a collective call during model parallel training greatly improves training efficiency, with little to no effect on model quality. TorchRec now integrates with the [quantized comms library provided by FBGEMM GPU](https://github.com/pytorch/FBGEMM/blob/main/fbgemm_gpu/fbgemm_gpu/quantize_comm.py) and provides an interface to construct encoders and decoders (codecs) that surround the all_to_all, and reduce_scatter collective calls in the output_dist of a sharded module. We also allow you to construct your own codecs to apply to your sharded module. The codces provided by FBGEMM allow FP16, BF16, FP8, and INT8 compressions, and you may use different quantizations for the forward path and backward pass.
+Applying [quantization or mixed precision](https://dlp-kdd.github.io/assets/pdf/a11-yang.pdf) to tensors in a collective call during model parallel training greatly improves training efficiency, with little to no effect on model quality. TorchRec now integrates with the [quantized comms library provided by FBGEMM GPU](https://github.com/pytorch/FBGEMM/blob/main/fbgemm_gpu/fbgemm_gpu/quantize_comm.py) and provides an interface to construct encoders and decoders (codecs) that surround the all_to_all, and reduce_scatter collective calls in the output_dist of a sharded module. We also allow you to construct your own codecs to apply to your sharded module. The codces provided by FBGEMM allow FP16, BF16, FP8, and INT8 compressions, and you may use different quantizations for the forward pass and backward pass.
 
 ### TorchSnapshot (Beta)
 
@@ -243,7 +241,7 @@ In this release we’ve added the [SimpleCopyPaste](https://arxiv.org/abs/2012.0
 
 #### (Prototype) TensorRT with FX2TRT frontend
 
-Torch-TensorRT is the PyTorch integration for TensorRT, providing high performance inference on NVIDIA GPUs. Torch-TRT allows for optimizing models directly in PyTorch for deployment providing up to 6x performance improvement.
+Torch-TensorRT is the PyTorch integration for TensorRT, providing high performance inference on NVIDIA GPUs. Torch-TRT allows for optimizing models directly in PyTorch for deployment providing up to 6x performance improvement. 
 
 Torch-TRT is an AoT compiler which ingests an nn.Module or TorchScript module, optimizes compatible subgraphs in TensorRT & leaves the rest to run in PyTorch. This gives users the performance of TensorRT, but the usability and familiarity of Torch.
 
@@ -253,10 +251,10 @@ The Torchscript front-end was included in v1.0 and should be considered stable. 
 
 Relevant Links:
 
-- Github
-- Documentation
-- Generic (TS) getting started guide
-- FX getting started guide
+- [Github](https://github.com/pytorch/TensorRT)
+- [Documentation](https://pytorch.org/TensorRT/)
+- [Generic (TS) getting started guide](https://pytorch.org/TensorRT/getting_started/getting_started_with_python_api.html)
+- [FX getting started guide](https://pytorch.org/TensorRT/tutorials/getting_started_with_fx_path.html)
 
 #### (Stable)  Introducing Torch-TensorRT
 
@@ -313,6 +311,7 @@ Added prototype support for the IBM Spectrum LSF scheduler.
 #### (Beta) AWS Batch Scheduler
 
 The AWS Batch scheduler integration is now in beta.
+
 - log fetching and listing jobs is now supported.
 - Added configs for job priorities and queue policies
 - Easily access job UI via ui_url
@@ -322,7 +321,8 @@ The AWS Batch scheduler integration is now in beta.
 
 Drop in replacement for AdamW optimizer that reduces GPU memory, enables two main features:
 
-- Ability to successfully train the entire model pipeline in full BFloat16. Kahan summation ensures precision. This can improve training throughput, especially on huge models, by reduced memory and increased computation speed.
+- Ability to successfully train the entire model pipeline in full BFloat16.
+Kahan summation ensures precision.  This can improve training throughput, especially on huge models, by reduced memory and increased computation speed.
 - Ability to change the variance state to BFloat16.  This can reduce overall memory required for model training with additional speed improvements.
 
 Find more information [here](https://github.com/pytorch/torchdistx/pull/52).
