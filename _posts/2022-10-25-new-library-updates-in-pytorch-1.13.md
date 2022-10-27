@@ -31,15 +31,25 @@ The TorchAudio v0.13 release includes the following features
 | <em>HDEMUCS_HIGH_MUSDB*</em>           |  6.42 |  7.76 |   6.51 |  4.47 |   6.93 |
 | <em>HDEMUCS_HIGH_MUSDB_PLUS**</em>     |  9.37 | 11.38 |  10.53 |  7.24 |   8.32 |
 
-<p><small>* Trained on the training data of MUSDB-HQ dataset.</small></p>
+<p><small>* Trained on the training data of MUSDB-HQ dataset.<br/>** Trained on both training and test sets of MUSDB-HQ and 150 extra songs from an internal database that were specifically produced for Meta.</small></p>
 
-<p><small>** Trained on both training and test sets of MUSDB-HQ and 150 extra songs.</small></p>
+```python
+from torchaudio.pipelines import HDEMUCS_HIGH_MUSDB_PLUS
 
-Special thanks to Alexandre Defossez (@adefossez) for the guidance.
+bundle = HDEMUCS_HIGH_MUSDB_PLUS
+model = bundle.get_model()
+sources_list = model.sources
+
+mixture, samplerate = torchaudio.load(“song.wav”)
+sources = model(mixture)
+audios = dict(zip(sources_list, sources)
+```
+
+Special thanks to Alexandre Defossez for the guidance.
 
 #### (Beta) Datasets and Metadata Mode for SUPERB Benchmark
 
-TorchAudio adds support for various audio-related datasets used in downstream tasks for benchmarking self-supervised learning models. With the addition of several new datasets, there is now support for the downstream tasks in version 1 of the [SUPERB benchmark](https://superbbenchmark.org/), which can be found in the [s3prl repository](https://github.com/s3prl/s3prl/tree/master/s3prl/downstream).
+TorchAudio adds support for various audio-related datasets used in downstream tasks for benchmarking self-supervised learning models. With the addition of several new datasets, there is now support for the downstream tasks in version 1 of the [SUPERB benchmark](https://superbbenchmark.org/), which can be found in the [s3prl repository](https://github.com/s3prl/s3prl/blob/master/s3prl/downstream/docs/superb.md).
 
 For these datasets, we also add metadata support through a `get_metadata` function, enabling faster dataset iteration or preprocessing without the need to load waveforms. The function returns the same features as `__getitem__`, except it returns the relative waveform path rather than the loaded waveform.
 
@@ -58,13 +68,33 @@ Datasets with metadata functionality
 
 TorchAudio released a CTC beam search decoder in release 0.12, with KenLM language model support. This release, there is added functionality for creating custom Python language models that are compatible with the decoder, using the `torchaudio.models.decoder.CTCDecoderLM` wrapper.
 
-Learn more with our [documentation](https://pytorch.org/audio/0.13.0/generated/torchaudio.models.decoder.CTCDecoder.html#support-structures) and [tutorial](https://pytorch.org/audio/0.13.0/tutorials/asr_inference_with_ctc_decoder_tutorial.html).
+For more information on using a custom language model, please refer to the [documentation](https://pytorch.org/audio/0.13.0/generated/torchaudio.models.decoder.CTCDecoder.html#ctcdecoderlm) and [tutorial](https://pytorch.org/audio/0.13.0/tutorials/asr_inference_with_ctc_decoder_tutorial.html#custom-language-model).
 
 #### (Beta) StreamWriter
 
 torchaudio.io.StreamWriter is a class for encoding media including audio and video. This can handle a wide variety of codecs, chunk-by-chunk encoding and GPU encoding.
 
-Learn more with our [documentation](https://pytorch.org/audio/0.13.0/generated/torchaudio.io.StreamWriter.html) and tutorials [[basic usage](https://pytorch.org/audio/0.13.0/tutorials/streamwriter_basic_tutorial.html), [advanced usage](https://pytorch.org/audio/0.13.0/tutorials/streamwriter_advanced.html), [hardware encoding](https://pytorch.org/audio/0.13.0/hw_acceleration_tutorial.html)].
+```python
+writer = StreamWriter("example.mp4")
+writer.add_audio_stream(
+    sample_rate=16_000,
+    num_channels=2,
+)
+writer.add_video_stream(
+    frame_rate=30,
+    height=96,
+    width=128,
+    format="rgb24",
+)
+with writer.open():
+    writer.write_audio_chunk(0, audio)
+    writer.write_video_chunk(1, video)
+```
+
+For more information, refer to [the documentation](https://pytorch.org/audio/0.13.0/generated/torchaudio.io.StreamWriter.html) and the following tutorials
+- [StreamWriter Basic Usage](https://pytorch.org/audio/0.13.0/tutorials/streamwriter_basic_tutorial.html)
+- [StreamWriter Advanced Usage](https://pytorch.org/audio/0.13.0/tutorials/streamwriter_advanced.html)
+- [Hardware-Accelerated Video Decoding and Encoding](https://pytorch.org/audio/0.13.0/hw_acceleration_tutorial.html)
 
 ### TorchData
 
@@ -156,7 +186,7 @@ Learn more with our [tutorial](https://pytorch.org/torchsnapshot/main/getting_st
 
 ### TorchVision 
 
-We are happy to introduce torchvision v0.14. This version introduces a new [model registration API](https://pytorch.org/blog/easily-list-and-initialize-models-with-new-apis-in-torchvision/) to help users retrieving and listing models and weights. It also includes new image and video classification models such as MViT, S3D, Swin Transformer V2, and MaxViT. Last but not least, we also have new primitives and augmentation such as PolynomicalLR scheduler and SimpleCopyPaste.
+We are happy to introduce torchvision v0.14 [(release note)](https://github.com/pytorch/vision/releases). This version introduces a new [model registration API](https://pytorch.org/blog/easily-list-and-initialize-models-with-new-apis-in-torchvision/) to help users retrieving and listing models and weights. It also includes new image and video classification models such as MViT, S3D, Swin Transformer V2, and MaxViT. Last but not least, we also have new primitives and augmentation such as PolynomicalLR scheduler and SimpleCopyPaste.
 
 #### (Beta) Model Registration API
 
@@ -206,7 +236,7 @@ Here is the table showing the accuracy of the new video classification models te
 | mvit_v2_s                      |    83.196 |     96.36 |
 | s3d                            |    83.582 |     96.64 |
 
-We would like to thank [Haoqi Fan](https://github.com/haooooooqi), [Yanghao Li](https://github.com/lyttonhao), [Christoph Feichtenhofer](https://github.com/feichtenhofer) and [Wan-Yen Lo](https://www.linkedin.com/in/wanyenlo) for their work on [PyTorchVideo](https://github.com/facebookresearch/pytorchvideo/) and their support during the development of the MViT model. We would like to thank [Sophia Zhi](https://github.com/sophiazhi) for her contribution implementing the S3D model in torchvision.
+We would like to thank Haoqi Fan, Yanghao Li, Christoph Feichtenhofer and Wan-Yen Lo for their work on [PyTorchVideo](https://github.com/facebookresearch/pytorchvideo/) and their support during the development of the MViT model. We would like to thank Sophia Zhi for her contribution implementing the S3D model in torchvision.
 
 #### (Stable) New Architecture and Model Variants
 
