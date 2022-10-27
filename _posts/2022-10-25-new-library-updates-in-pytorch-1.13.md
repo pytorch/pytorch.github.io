@@ -156,7 +156,7 @@ Learn more with our [tutorial](https://pytorch.org/torchsnapshot/main/getting_st
 
 ### TorchVision 
 
-We are happy to introduce torchvision v0.14. This version introduces a new  [model registration API](https://pytorch.org/blog/easily-list-and-initialize-models-with-new-apis-in-torchvision/) to help users retrieving and listing models and weights. It also includes new image and video classification models such as MViT, S3D, Swin Transformer V2, and MaxViT. Last but not least, we also have new primitives and augmentation such as PolynomicalLR scheduler and SimpleCopyPaste.
+We are happy to introduce torchvision v0.14. This version introduces a new [model registration API](https://pytorch.org/blog/easily-list-and-initialize-models-with-new-apis-in-torchvision/) to help users retrieving and listing models and weights. It also includes new image and video classification models such as MViT, S3D, Swin Transformer V2, and MaxViT. Last but not least, we also have new primitives and augmentation such as PolynomicalLR scheduler and SimpleCopyPaste.
 
 #### (Beta) Model Registration API
 
