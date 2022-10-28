@@ -2,7 +2,7 @@
 layout: blog_detail
 title: "New Library Updates in PyTorch 1.13"
 author: Team PyTorch
-featured-img: "assets/images/new-library-updates-in-pytorch-1.13.png"
+featured-img: "assets/images/new-library-updates-in-pytorch-1.13-2.jpg"
 ---
 
 ## Summary
