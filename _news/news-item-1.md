@@ -1,5 +1,5 @@
 ---
 order: 1
-link: /blog/PyTorchfoundation
-summary: "Breaking News: PyTorch strengthens its governance by joining the Linux Foundation."
+link: /blog/PyTorch-1.13-release/
+summary: "1.13 Core blog: PyTorch 1.13 release, including beta versions of functorch and improved support for Apple’s new M1 chips."
 ---
