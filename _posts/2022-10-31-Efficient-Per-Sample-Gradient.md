@@ -25,11 +25,11 @@ In the previous [blog post](https://bit.ly/per-sample-gradient-computing-opacus)
 
 - Highway gradients retain per-sample information, but exit gradients do not.
 
-- einsum facilitates vectorized computation.
+- `einsum` facilitates vectorized computation.
 
 We invite you to check out the previous [blog post](https://bit.ly/per-sample-gradient-computing-opacus) for details; briefly, Opacus computes per-sample gradients with the help of PyTorch hooks - we access the activation values with the forward hooks and the highway gradients for calculating per-sample gradients with the backward hooks. Some linear algebra on top of these captured values gives us the end result.
 
-The basic concepts for other module types (other than nn.linear) remains the same; what changes is the linear algebra we do with einsum on activations and highway-gradients. This is what we explore in this post.
+The basic concepts for other module types (other than nn.linear) remains the same; what changes is the linear algebra we do with `einsum` on activations and highway-gradients. This is what we explore in this post.
 
 ## Extending the idea to other modules
 
@@ -43,13 +43,13 @@ As a refresher, let’s look at the forward pass of a convolution module. For si
 <img src="/assets/images/blog-2022-10-31-Efficient-Per-Sample-Convolution-Layer.gif" width="90%">
 </p>
 
-Evidently, this operation is more than just a simple matrix multiplication that we see with an nn.linear module. However, if we were to “unfold” the input (read more about it here), we achieve the same results by performing a simple matrix multiplication (and some reshaping) as follows:
+Evidently, this operation is more than just a simple matrix multiplication that we see with an `nn.linear` module. However, if we were to “unfold” the input (read more about it here), we achieve the same results by performing a simple matrix multiplication (and some reshaping) as follows:
 
 <p align="center">
 <img src="/assets/images/blog-2022-10-31-Efficient-Per-Sample-Gradient-still.png" width="90%">
 </p>
 
-Now that we have rewritten convolution using matrix multiplication, we can implement an efficient matrix multiplication using einsum as we did for linear layers before. Opacus does exactly this: unfold, matmul, reshape. (see [here](https://github.com/pytorch/opacus/blob/main/opacus/grad_sample/conv.py) for the code)
+Now that we have rewritten convolution using matrix multiplication, we can implement an efficient matrix multiplication using `einsum` as we did for linear layers before. Opacus does exactly this: `unfold, matmul, reshape`. (see [here](https://github.com/pytorch/opacus/blob/main/opacus/grad_sample/conv.py) for the code)
 
 Now is that the only way to compute vectorized per-sample gradients for Conv layers? No it’s not. Another approach is by exploiting the fact that the gradient of a convolution is [yet another convolution](https://medium.com/@pavisj/convolutions-and-backpropagations-46026a8f5d2c). It’s possible compute per-sample gradients, at a lower memory footprint using this approach, but at slower speed on pre-Volta GPUs (see [https://github.com/pytorch/opacus/issues/145](https://github.com/pytorch/opacus/issues/145) )
 
@@ -59,9 +59,9 @@ A little background. Recurrent neural networks catch temporal effects by using i
 
 Okay, now let’s now talk about how to handle recurrent layers in Opacus. To efficiently compute per-sample gradients for recurrent layers, we need to overcome a little obstacle: the recurrent layers in PyTorch are implemented at the cuDNN layer, which means that it is not possible for Opacus to add a hook to the internal components of the cells.
 
-To overcome this obstacle, we re-implemented all three cell types based on the [RNNLinear](https://github.com/pytorch/opacus/blob/fc71e2b627e5b0bf7119d8dee866af9057f78bb1/opacus/layers/dp_rnn.py#L39) layer. Basically, we clone nn.Linear to have a separate per-sample gradient computation function that accumulates gradients in a chain instead of concatenating them. Put simply, using RNNLinear linear tells Opacus that multiple occurrences of the same cell in the neural network are not for different training examples, rather they are for different tokens in one example. This allows Opacus to sum across the time dimension and save a lot of memory.
+To overcome this obstacle, we re-implemented all three cell types based on the [RNNLinear](https://github.com/pytorch/opacus/blob/fc71e2b627e5b0bf7119d8dee866af9057f78bb1/opacus/layers/dp_rnn.py#L39) layer. Basically, we clone `nn.Linear` to have a separate per-sample gradient computation function that accumulates gradients in a chain instead of concatenating them. Put simply, using RNNLinear linear tells Opacus that multiple occurrences of the same cell in the neural network are not for different training examples, rather they are for different tokens in one example. This allows Opacus to sum across the time dimension and save a lot of memory.
 
-The final piece to add is a set of compatible replacements of the [original layers](https://pytorch.org/docs/stable/nn.html#recurrent-layers): DPRNN, DPGRU, DPLSTM. They implement the same logic as the original modules from torch.nn, but based on the cells compatible with Opacus.
+The final piece to add is a set of compatible replacements of the [original layers](https://pytorch.org/docs/stable/nn.html#recurrent-layers): DPRNN, DPGRU, DPLSTM. They implement the same logic as the original modules from `torch.nn`, but based on the cells compatible with Opacus.
 
 ## Multi-Head Attention
 
@@ -69,17 +69,17 @@ A refresher on muli-head attention: Multi-head attention is one of the main comp
 
 We implemented multi-head attention in Opacus in two steps:
 
-- We rewrote the multi-head attention which has the underlying three linear layers. Opacus automatically hooks itself to these linear layers to compute per-sample gradients; these linear layers use einsum to compute grad samples, as discussed in the previous blog post.
+- We rewrote the multi-head attention which has the underlying three linear layers. Opacus automatically hooks itself to these linear layers to compute per-sample gradients; these linear layers use `einsum` to compute grad samples, as discussed in the previous blog post.
 
 - We implemented an additional SequenceBias layer which adds a bias vector to the whole sequence augmented with per-sample gradient computation. Note that the main part of implementation is SequenceBias, which is a pretty straightforward module.
 
-In other words, Multi Head Attention is basically a collection of Linear layers, each of which uses einsum to compute per-sample gradients.
+In other words, Multi Head Attention is basically a collection of Linear layers, each of which uses `einsum` to compute per-sample gradients.
 
 ### Normalization Layers
 
-With Differential Privacy, batch normalization layers are prohibited because they mix information across samples of a batch. Nevertheless, other types of normalization - such as LayerNorm, InstanceNorm, or GroupNorm - are allowed and supported as they do not normalize over the batch dimension and hence do not mix information.
+With Differential Privacy, batch normalization layers are prohibited because they mix information across samples of a batch. Nevertheless, other types of normalization - such as `LayerNorm`, `InstanceNorm`, or `GroupNorm`- are allowed and supported as they do not normalize over the batch dimension and hence do not mix information.
 
-LayerNorm normalizes over all the channels of a particular sample and InstanceNorm normalizes over one channel of a particular sample. GroupNorm‘s operation lies in between those of LayerNorm and InstanceNorm; it normalizes over a “group” of channels of a particular sample.
+`LayerNorm` normalizes over all the channels of a particular sample and `InstanceNorm` normalizes over one channel of a particular sample. `GroupNorm‘s` operation lies in between those of LayerNorm and InstanceNorm; it normalizes over a “group” of channels of a particular sample.
 
 These normalization layers are illustrated in the following image (borrowed from [https://arxiv.org/abs/1803.08494](https://arxiv.org/abs/1803.08494) )
 
@@ -87,7 +87,7 @@ These normalization layers are illustrated in the following image (borrowed from
 <img src="/assets/images/blog-2022-10-31-Efficient-Per-Sample-Normalization.png" width="90%">
 </p>
 
-It is easily seen that these normalization layers can be split into a linear layer (have you realized the pattern of our tricks yet? :) ) and a non-parameterized layer (that performs the mean/variance normalization - the normalization layer). Consequently, the implementations for computing per-sample gradients are also quite simple and similar to that of a linear layer.
+It is easily seen that these normalization layers can be split into a `linear` layer (have you realized the pattern of our tricks yet? :) ) and a non-parameterized layer (that performs the mean/variance normalization - the normalization layer). Consequently, the implementations for computing per-sample gradients are also quite simple and similar to that of a linear layer.
 
 ### Embedding
 
@@ -103,15 +103,15 @@ Thus, the layer’s gradient is the outer product of the one-hot input and the g
 
 In summary, Opacus computes per-sample gradients by (1) capturing the activations and highway gradients, and then (2) efficiently performing matrix multiplications.
 
-For modules that are not readily amenable to matrix multiplications (e.g., Conv, normalization), we do some linear algebra circus to get it in the right form. For modules that do not allow us to attach hooks (e.g., RNNs, MultiHeadAttention), we reimplement them using nn.Linear and proceed as usual.
+For modules that are not readily amenable to matrix multiplications (e.g., Conv, normalization), we do some linear algebra circus to get it in the right form. For modules that do not allow us to attach hooks (e.g., RNNs, MultiHeadAttention), we reimplement them using `nn.Linear` and proceed as usual.
 
-When we re-implement the modules, we ensure that their param_dict() is fully compatible with that of their non-DP counterparts. This way, for instance, when you finish training your DPMultiHeadAttention, you can directly load its weights onto a nn.MultiheadAttention and serve it in production for inference, without even requiring that you have Opacus installed!
+When we re-implement the modules, we ensure that their `param_dict()` is fully compatible with that of their non-DP counterparts. This way, for instance, when you finish training your `DPMultiHeadAttention`, you can directly load its weights onto a `nn.MultiheadAttention` and serve it in production for inference, without even requiring that you have Opacus installed!
 
 A module can be either a **building block**, or a **composite**:
 
-1. **building block.** These are “atomic” trainable modules (i.e., “default classes”) that have their own hooks, and can be used directly, for example, nn.Linear, nn.Conv1d, nn.Conv2d, nn.Conv3d, and the normalization layers (`nn.LayerNorm, nn.GroupNorm, nn.InstanceNorm`). See points 1,2,3 [here](https://github.com/pytorch/opacus/tree/main/opacus#supported-modules).
+1. **building block.** These are “atomic” trainable modules (i.e., “default classes”) that have their own hooks, and can be used directly, for example, `nn.Linear, nn.Conv1d, nn.Conv2d, nn.Conv3d,` and the normalization layers (`nn.LayerNorm, nn.GroupNorm, nn.InstanceNorm`). See points 1,2,3 [here](https://github.com/pytorch/opacus/tree/main/opacus#supported-modules).
 
-2. **Composite.** These are modules that are composed of building blocks. Composite modules are supported as long as all trainable submodules are supported. Frozen submodules need not be supported; A nn.Module can be frozen in PyTorch by unsetting requires_grad in each of its parameters.
+2. **Composite.** These are modules that are composed of building blocks. Composite modules are supported as long as all trainable submodules are supported. Frozen submodules need not be supported; A nn.Module can be frozen in PyTorch by unsetting `requires_grad` in each of its parameters.
 
 Needless to say, modules with no trainable parameters (e.g. nn.ReLU, and nn.Tanh) and modules that are frozen don’t need their per-sample gradients computed, and hence these modules are supported out of the box.
 
