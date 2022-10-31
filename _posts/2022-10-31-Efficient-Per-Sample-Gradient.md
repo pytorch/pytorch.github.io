@@ -18,7 +18,7 @@ In the previous [blog post](https://bit.ly/per-sample-gradient-computing-opacus)
 - The per-sample gradient formula is
 
 <p align="center">
-<img src="/assets/images/blog-2022-10-31-Efficient-Per-Sample-Gradient.png" width="90%">
+<img src="/assets/images/blog-2022-10-31-Efficient-Per-Sample-Gradient.png" width="20%">
 </p>
 
 - We call the gradients with respect to activations the “highway gradients” and the gradients with respect to the weights the “exit gradients”.
@@ -94,7 +94,7 @@ It is easily seen that these normalization layers can be split into a linear lay
 An embedding layer can (once again) be viewed as a special case of a linear layer where the input is one-hot encoded, as shown in this figure.
 
 <p align="center">
-<img src="/assets/images/blog-2022-10-31-Efficient-Per-Sample-matrix-multiplication" width="90%">
+<img src="/assets/images/blog-2022-10-31-Efficient-Per-Sample-matrix-multiplication.png" width="90%">
 </p>
 
 Thus, the layer’s gradient is the outer product of the one-hot input and the gradient of the output: concretely, this means that the layer’s gradient is a matrix of zeros, except at the row corresponding to the input index, where the value is the gradient of the output. In particular, the gradient with respect to the embedding layer is very sparse (the only updated embeddings are those from the current data sample). Hence for implementing per-sample gradients, we instantiate a zero-matrix for the embedding gradient and add the gradient only to the input positions.
