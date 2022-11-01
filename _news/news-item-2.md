@@ -1,5 +1,5 @@
 ---
 order: 2
-link: https://ai.facebook.com/blog/pytorch-foundation/
-summary: "Announcing the PyTorch Foundation: A new era for the cutting-edge AI framework"
+link: /blog/new-library-updates-in-pytorch-1.13/
+summary: "1.13 Libraries blog: New Library Updates in PyTorch 1.13"
 ---
