@@ -2,7 +2,7 @@
 layout: blog_detail
 title: "New Library Updates in PyTorch 1.13"
 author: Team PyTorch
-featured-img: "assets/images/new-library-updates-in-pytorch-1.13.png"
+featured-img: "assets/images/new-library-updates-in-pytorch-1.13-2.jpg"
 ---
 
 ## Summary
@@ -158,7 +158,7 @@ Learn more with our [docs](https://pytorch.org/torcheval), see our [examples](ht
 
 ### TorchMultimodal Release (Beta)
 
-Please watch for upcoming blogs in early November that will introduce TorchMultimodal, a PyTorch domain library for training SoTA multi-task multimodal models at scale, in more details; in the meantime, play around with the library and models through our [tutorial](https://github.com/pytorch/tutorials/pull/2054).
+Please watch for upcoming blogs in early November that will introduce TorchMultimodal, a PyTorch domain library for training SoTA multi-task multimodal models at scale, in more details; in the meantime, play around with the library and models through our [tutorial](https://pytorch.org/tutorials/beginner/flava_finetuning_tutorial.html).
 
 ### TorchRec
 
