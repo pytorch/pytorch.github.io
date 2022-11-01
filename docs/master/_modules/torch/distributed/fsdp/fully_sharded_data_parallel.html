@@ -235,7 +235,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href='https://pytorch.org/docs/versions.html'>master (1.14.0a0+git9109ecf ) &#x25BC</a>
+      <a href='https://pytorch.org/docs/versions.html'>master (1.14.0a0+gitafd0067 ) &#x25BC</a>
     </div>
     
 
@@ -448,8 +448,7 @@
              <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
               
   <h1>Source code for torch.distributed.fsdp.fully_sharded_data_parallel</h1><div class="highlight"><pre>
-<span></span><span class="kn">import</span> <span class="nn">collections</span>
-<span class="kn">import</span> <span class="nn">contextlib</span>
+<span></span><span class="kn">import</span> <span class="nn">contextlib</span>
 <span class="kn">import</span> <span class="nn">copy</span>
 <span class="kn">import</span> <span class="nn">functools</span>
 <span class="kn">import</span> <span class="nn">itertools</span>
@@ -463,7 +462,6 @@
     <span class="n">Any</span><span class="p">,</span>
     <span class="n">Callable</span><span class="p">,</span>
     <span class="n">cast</span><span class="p">,</span>
-    <span class="n">Deque</span><span class="p">,</span>
     <span class="n">Dict</span><span class="p">,</span>
     <span class="n">Generator</span><span class="p">,</span>
     <span class="n">Iterable</span><span class="p">,</span>
@@ -488,13 +486,38 @@
 <span class="p">)</span>
 <span class="kn">from</span> <span class="nn">torch.distributed.algorithms._comm_hooks</span> <span class="kn">import</span> <span class="n">default_hooks</span><span class="p">,</span> <span class="n">LOW_PRECISION_HOOKS</span>
 <span class="kn">from</span> <span class="nn">torch.distributed.distributed_c10d</span> <span class="kn">import</span> <span class="n">_get_default_group</span>
-<span class="kn">from</span> <span class="nn">torch.distributed.fsdp._common_utils</span> <span class="kn">import</span> <span class="n">HandleTrainingState</span><span class="p">,</span> <span class="n">TrainingState</span>
+<span class="kn">from</span> <span class="nn">torch.distributed.fsdp._common_utils</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">_get_param_to_unflat_param_names</span><span class="p">,</span>
+    <span class="n">FSDP_PREFIX</span><span class="p">,</span>
+    <span class="n">FSDP_WRAPPED_MODULE</span><span class="p">,</span>
+    <span class="n">HandleTrainingState</span><span class="p">,</span>
+    <span class="n">TrainingState</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span> <span class="nn">torch.distributed.fsdp._init_utils</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">_check_orig_params_flattened</span><span class="p">,</span>
+    <span class="n">_check_single_device_module</span><span class="p">,</span>
+    <span class="n">_get_buffer_names</span><span class="p">,</span>
+    <span class="n">_get_compute_device</span><span class="p">,</span>
+    <span class="n">_get_device_from_device_id</span><span class="p">,</span>
+    <span class="n">_get_ignored_modules</span><span class="p">,</span>
+    <span class="n">_get_ignored_params</span><span class="p">,</span>
+    <span class="n">_get_orig_params</span><span class="p">,</span>
+    <span class="n">_materialize_module</span><span class="p">,</span>
+    <span class="n">_move_module_to_device</span><span class="p">,</span>
+    <span class="n">_sync_module_states</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span> <span class="nn">torch.distributed.fsdp._limiter_utils</span> <span class="kn">import</span> <span class="n">_FreeEventQueue</span>
 <span class="kn">from</span> <span class="nn">torch.distributed.fsdp._runtime_utils</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">_clear_grads_if_needed</span><span class="p">,</span>
     <span class="n">_prepare_forward_inputs</span><span class="p">,</span>
     <span class="n">_wait_for_computation_stream</span><span class="p">,</span>
 <span class="p">)</span>
-<span class="kn">from</span> <span class="nn">torch.distributed.utils</span> <span class="kn">import</span> <span class="n">_sync_params_and_buffers</span>
+<span class="kn">from</span> <span class="nn">torch.distributed.fsdp.api</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">BackwardPrefetch</span><span class="p">,</span>
+    <span class="n">CPUOffload</span><span class="p">,</span>
+    <span class="n">MixedPrecision</span><span class="p">,</span>
+    <span class="n">ShardingStrategy</span><span class="p">,</span>
+<span class="p">)</span>
 
 <span class="kn">from</span> <span class="nn">._optim_utils</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">_broadcast_pos_dim_tensor_states</span><span class="p">,</span>
@@ -514,11 +537,9 @@
     <span class="n">_pre_load_state_dict_hook</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span> <span class="nn">._utils</span> <span class="kn">import</span> <span class="p">(</span>
-    <span class="n">_apply_to_modules</span><span class="p">,</span>
     <span class="n">_apply_to_tensors</span><span class="p">,</span>
     <span class="n">_contains_batchnorm</span><span class="p">,</span>
     <span class="n">_free_storage</span><span class="p">,</span>
-    <span class="n">_is_fsdp_flattened</span><span class="p">,</span>
     <span class="n">_override_batchnorm_mixed_precision</span><span class="p">,</span>
     <span class="n">p_assert</span><span class="p">,</span>
 <span class="p">)</span>
@@ -535,12 +556,6 @@
     <span class="n">ParamExecOrderWrapPolicy</span><span class="p">,</span>
 <span class="p">)</span>
 
-<span class="n">_TORCHDISTX_AVAIL</span> <span class="o">=</span> <span class="kc">True</span>
-<span class="k">try</span><span class="p">:</span>
-    <span class="kn">from</span> <span class="nn">torchdistx</span> <span class="kn">import</span> <span class="n">deferred_init</span><span class="p">,</span> <span class="n">fake</span>
-<span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
-    <span class="n">_TORCHDISTX_AVAIL</span> <span class="o">=</span> <span class="kc">False</span>
-
 <span class="n">_TORCH_FX_AVAIL</span> <span class="o">=</span> <span class="kc">True</span>
 <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">torch</span><span class="p">,</span> <span class="s2">&quot;fx&quot;</span><span class="p">):</span>
     <span class="n">_TORCH_FX_AVAIL</span> <span class="o">=</span> <span class="kc">False</span>
@@ -550,164 +565,16 @@
 
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
     <span class="s2">&quot;FullyShardedDataParallel&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;ShardingStrategy&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;MixedPrecision&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;CPUOffload&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;BackwardPrefetch&quot;</span><span class="p">,</span>
     <span class="s2">&quot;StateDictType&quot;</span><span class="p">,</span>
     <span class="s2">&quot;StateDictConfig&quot;</span><span class="p">,</span>
     <span class="s2">&quot;FullStateDictConfig&quot;</span><span class="p">,</span>
     <span class="s2">&quot;LocalStateDictConfig&quot;</span><span class="p">,</span>
     <span class="s2">&quot;ShardedStateDictConfig&quot;</span><span class="p">,</span>
     <span class="s2">&quot;OptimStateKeyType&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;clean_tensor_name&quot;</span><span class="p">,</span>
 <span class="p">]</span>
 
 
-<span class="c1"># NOTE: `FSDP_WRAPPED_MODULE` cannot be a substring of any other module wrapper</span>
-<span class="c1"># name (e.g. for activation checkpointing) since then `replace()`-based FQN</span>
-<span class="c1"># cleaning breaks.</span>
-<span class="n">FSDP_WRAPPED_MODULE</span> <span class="o">=</span> <span class="s2">&quot;_fsdp_wrapped_module&quot;</span>
-<span class="n">FSDP_PREFIX</span> <span class="o">=</span> <span class="n">FSDP_WRAPPED_MODULE</span> <span class="o">+</span> <span class="s2">&quot;.&quot;</span>
 <span class="n">FLAT_PARAM</span> <span class="o">=</span> <span class="s2">&quot;_flat_param&quot;</span>
-
-<span class="n">_PARAM_BROADCAST_BUCKET_SIZE</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="mi">250</span> <span class="o">*</span> <span class="mi">1024</span> <span class="o">*</span> <span class="mi">1024</span><span class="p">)</span>
-
-
-<span class="k">class</span> <span class="nc">ShardingStrategy</span><span class="p">(</span><span class="n">Enum</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    This specifies the sharding strategy to be used for distributed training by</span>
-<span class="sd">    :class:`FullyShardedDataParallel`.</span>
-<span class="sd">    FULL_SHARD: Parameters, gradients, and optimizer states are sharded. For</span>
-<span class="sd">                the parameters, this algorithm all-gathers before the forward,</span>
-<span class="sd">                reshards after the forward, all-gathers before the backward</span>
-<span class="sd">                computation, and reshards after the backward computation. The</span>
-<span class="sd">                gradients are synchronized and sharded via reduce-scatter after</span>
-<span class="sd">                the backward computation. The sharded optimizer states are</span>
-<span class="sd">                updated locally.</span>
-<span class="sd">    SHARD_GRAD_OP: Gradients and optimizer states are sharded during</span>
-<span class="sd">                   computation, and additionally parameters are sharded outside</span>
-<span class="sd">                   computation. For the parameters, this algorithm all-gathers</span>
-<span class="sd">                   before the forward, does not reshard after the forward, and</span>
-<span class="sd">                   only reshards after the backward computation. The gradients</span>
-<span class="sd">                   are synchronized and sharded via reduce-scatter after the</span>
-<span class="sd">                   backward computation. The sharded optimizer states are</span>
-<span class="sd">                   updated locally. Inside ``no_sync()``, the parameters are</span>
-<span class="sd">                   not resharded after the backward computation.</span>
-<span class="sd">    NO_SHARD: Parameters, gradients, and optimizer states are not sharded but</span>
-<span class="sd">              instead replicated across ranks, similar to PyTorch&#39;s</span>
-<span class="sd">              ``DistributedDataParallel`` API. The gradients are synchronized</span>
-<span class="sd">              via all-reduce after the backward computation. The unsharded</span>
-<span class="sd">              optimizer states are updated locally.</span>
-<span class="sd">    HYBRID_SHARD(future support): Apply ``FULL_SHARD`` intra-node and</span>
-<span class="sd">                                  ``NO_SHARD`` inter-node.</span>
-
-<span class="sd">    &quot;&quot;&quot;</span>
-
-    <span class="n">FULL_SHARD</span> <span class="o">=</span> <span class="n">auto</span><span class="p">()</span>
-    <span class="n">SHARD_GRAD_OP</span> <span class="o">=</span> <span class="n">auto</span><span class="p">()</span>
-    <span class="n">NO_SHARD</span> <span class="o">=</span> <span class="n">auto</span><span class="p">()</span>
-    <span class="c1"># TODO</span>
-    <span class="c1"># HYBRID_SHARD = auto()</span>
-
-
-<span class="nd">@dataclass</span>
-<span class="k">class</span> <span class="nc">MixedPrecision</span><span class="p">:</span>
-    <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    A config to enable mixed precision training with FullyShardedDataParallel.</span>
-<span class="sd">    This class can be constructed with several flags:</span>
-<span class="sd">        ``param_dtype`` controls the precision of model parameters, inputs, and</span>
-<span class="sd">        therefore the precision under which computation happens. After forward</span>
-<span class="sd">        and backward passes, FSDP parameters point to full precision shards</span>
-<span class="sd">        that are kept in memory. Full precision parameters are always</span>
-<span class="sd">        checkpointed.</span>
-<span class="sd">        ``reduce_dtype`` controls the precision under which gradient reduction</span>
-<span class="sd">        would occur, which can potentially be different than ``param_dtype``</span>
-<span class="sd">        for use cases such as communication efficiency.</span>
-<span class="sd">        ``buffer_dtype`` controls the precision that buffers are cast to. Note</span>
-<span class="sd">        that buffers are unsharded and are cast in the first forward pass, and</span>
-<span class="sd">        remain in their reduced precision state even after forward/backward</span>
-<span class="sd">        passes. However, when taking checkpoints with ``state_dict``, buffers</span>
-<span class="sd">        are checkpointed in their full precision (and then restored back to</span>
-<span class="sd">        to their reduced precision) as expected. Note that this checkpoint</span>
-<span class="sd">        support is currently limited to ``StateDictType.FULL_STATE_DICT``.</span>
-<span class="sd">        ``keep_low_precision_grads``: Whether to upcast gradients back to the</span>
-<span class="sd">        full parameter precision after backwards or not. This can be disabled</span>
-<span class="sd">        to keep the gradients in the lower precision, which can potentially</span>
-<span class="sd">        save memory if custom Optimizers are able to perform parameter updates</span>
-<span class="sd">        effectively with lower precision grads.</span>
-
-<span class="sd">    .. note:: In ``summon_full_params``, parameters are summoned in full</span>
-<span class="sd">        precision but buffers are not.</span>
-
-<span class="sd">    .. note:: Parameters and buffers are checkpointed in full precision. For</span>
-<span class="sd">        buffers, this is only guaranteed to work for ``StateDictType.FULL_STATE_DICT``.</span>
-
-<span class="sd">    .. note:: This API is experimental and subject to change.</span>
-
-<span class="sd">    .. note:: Specification of reduced precision types must be explicit, in that</span>
-<span class="sd">        if, for example, ``param_dtype`` is not specified, it will not be cast by</span>
-<span class="sd">        FSDP. Thus, a config such as ``MixedPrecision(reduce_dtype=torch.float16)``</span>
-<span class="sd">        will not cast buffers or parameters. Note that if a ``MixedPrecision``</span>
-<span class="sd">        config is specified without a ``reduce_dtype``, gradient communication</span>
-<span class="sd">        would occur in the `param_dtype` precision, if given, otherwise, in the</span>
-<span class="sd">        original parameter precision.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-
-    <span class="c1"># maintain a tensor of this dtype that the fp32 param shard will be cast to.</span>
-    <span class="c1"># Will control the precision of model params, inputs, and thus compute as</span>
-    <span class="c1"># well.</span>
-    <span class="n">param_dtype</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">dtype</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="c1"># Gradient communication precision.</span>
-    <span class="n">reduce_dtype</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">dtype</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="c1"># Buffer precision.</span>
-    <span class="c1"># TODO: buffer + param are usually of the same type, if user specifies</span>
-    <span class="c1"># param but not buffer, should we automatically make buffer be the same?</span>
-    <span class="n">buffer_dtype</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">dtype</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="n">keep_low_precision_grads</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">bool</span><span class="p">]</span> <span class="o">=</span> <span class="kc">False</span>
-
-
-<span class="nd">@dataclass</span>
-<span class="k">class</span> <span class="nc">CPUOffload</span><span class="p">:</span>
-    <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    CPU offloading config. Currently, only parameter and gradient CPU</span>
-<span class="sd">    offload are supported.</span>
-<span class="sd">    offload_params: Offloading parameters to CPUs when these parameters are</span>
-<span class="sd">                    not used for computation on GPUs. This implicitly enables</span>
-<span class="sd">                    gradient offloading to CPUs in order for parameters and</span>
-<span class="sd">                    gradients to be on the same device to work with optimizer.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-
-    <span class="n">offload_params</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
-
-
-<span class="k">class</span> <span class="nc">BackwardPrefetch</span><span class="p">(</span><span class="n">Enum</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Specify where to prefetch next layer&#39;s full parameters</span>
-<span class="sd">    during backward pass.</span>
-<span class="sd">    BACKWARD_PRE: prefetch right before current layer&#39;s backward computation</span>
-<span class="sd">                  starts, this approach will increase backward communication</span>
-<span class="sd">                  and computation overalpping and potentialy improve training</span>
-<span class="sd">                  performance, but it may increase the peak memory usage as</span>
-<span class="sd">                  the prefetched full parameters will be kept in the GPU memory</span>
-<span class="sd">                  until next layer&#39;s backward computation is done.</span>
-<span class="sd">    BACKWARD_POST: prefetch right after current layer&#39;s backward computation finishes,</span>
-<span class="sd">                   this approach will not increase peak memory as prefetching happens</span>
-<span class="sd">                   after current layer&#39;s full parameters are freed.</span>
-<span class="sd">                   It could potentially improve backward communication and computation</span>
-<span class="sd">                   overlapping as it avoids all_gather and reduce_scatter are blocked</span>
-<span class="sd">                   each other in the single NCCL stream. However, based on our experiments,</span>
-<span class="sd">                   for some models, the backward post backward hook fire order is not always</span>
-<span class="sd">                   the reversed forward computation order, so this</span>
-<span class="sd">                   approach may prefetch full parameters for layers ahead of next layer,</span>
-<span class="sd">                   this &#39;ahead&#39; all_gather could delay next layer&#39;s all_gather in the</span>
-<span class="sd">                   single NCCL stream and cause the next layer&#39;s computation delay. So it may</span>
-<span class="sd">                   cause some performance regession for some models.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-
-    <span class="n">BACKWARD_PRE</span> <span class="o">=</span> <span class="n">auto</span><span class="p">()</span>
-    <span class="n">BACKWARD_POST</span> <span class="o">=</span> <span class="n">auto</span><span class="p">()</span>
-    <span class="c1"># TODO, BACKWARD_PRE_CPU, prefetch full parameters and keep them in the CPU memory</span>
 
 
 <span class="k">class</span> <span class="nc">StateDictType</span><span class="p">(</span><span class="n">Enum</span><span class="p">):</span>
@@ -1167,35 +1034,6 @@
                 <span class="bp">self</span><span class="o">.</span><span class="n">warn_status</span> <span class="o">=</span> <span class="n">_ExecOrderWarnStatus</span><span class="o">.</span><span class="n">WARNED</span>
 
 
-<span class="k">class</span> <span class="nc">_FreeEventQueue</span><span class="p">:</span>
-    <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    This tracks all pending frees corresponding to inflight all-gathers. The</span>
-<span class="sd">    queueing pattern is iterative enqueues with a single dequeue per iteration</span>
-<span class="sd">    once the limit ``_max_num_inflight_all_gathers`` is reached.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_queue</span><span class="p">:</span> <span class="n">Deque</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">Event</span><span class="p">]</span> <span class="o">=</span> <span class="n">collections</span><span class="o">.</span><span class="n">deque</span><span class="p">()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_max_num_inflight_all_gathers</span> <span class="o">=</span> <span class="mi">2</span>  <span class="c1"># empirically chosen</span>
-
-    <span class="k">def</span> <span class="nf">enqueue</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">free_event</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">Event</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="sd">&quot;&quot;&quot;Enqueues a free event.&quot;&quot;&quot;</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_queue</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">free_event</span><span class="p">)</span>
-
-    <span class="k">def</span> <span class="nf">dequeue_if_needed</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">Event</span><span class="p">]:</span>
-        <span class="sd">&quot;&quot;&quot;Dequeues a single event if the limit is reached.&quot;&quot;&quot;</span>
-        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_queue</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_max_num_inflight_all_gathers</span><span class="p">:</span>
-            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dequeue</span><span class="p">()</span>
-        <span class="k">return</span> <span class="kc">None</span>
-
-    <span class="k">def</span> <span class="nf">_dequeue</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">Event</span><span class="p">]:</span>
-        <span class="sd">&quot;&quot;&quot;Dequeues a free event if possible.&quot;&quot;&quot;</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_queue</span><span class="p">:</span>
-            <span class="n">event</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_queue</span><span class="o">.</span><span class="n">popleft</span><span class="p">()</span>
-            <span class="k">return</span> <span class="n">event</span>
-        <span class="k">return</span> <span class="kc">None</span>
-
-
 <span class="c1"># TODO (awgu): Refactor this later</span>
 <span class="n">sharding_strategy_map</span> <span class="o">=</span> <span class="p">{</span>
     <span class="n">ShardingStrategy</span><span class="o">.</span><span class="n">NO_SHARD</span><span class="p">:</span> <span class="n">HandleShardingStrategy</span><span class="o">.</span><span class="n">NO_SHARD</span><span class="p">,</span>
@@ -1459,11 +1297,11 @@
         <span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">_log_api_usage_once</span><span class="p">(</span><span class="s2">&quot;torch.distributed.fsdp&quot;</span><span class="p">)</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">_ignored_modules</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_ignored_modules</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">ignored_modules</span><span class="p">)</span>
-        <span class="n">ignored_params</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ignored_param_names</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_ignored_params</span><span class="p">(</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_ignored_modules</span> <span class="o">=</span> <span class="n">_get_ignored_modules</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">ignored_modules</span><span class="p">)</span>
+        <span class="n">ignored_params</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ignored_param_names</span> <span class="o">=</span> <span class="n">_get_ignored_params</span><span class="p">(</span>
             <span class="n">module</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ignored_modules</span>
         <span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_buffer_names</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_buffer_names</span><span class="p">(</span><span class="n">module</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_buffer_names</span> <span class="o">=</span> <span class="n">_get_buffer_names</span><span class="p">(</span><span class="n">module</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">auto_wrap_policy</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">auto_wrap_kwargs</span> <span class="o">=</span> <span class="p">{</span>
                 <span class="s2">&quot;module&quot;</span><span class="p">:</span> <span class="n">module</span><span class="p">,</span>
@@ -1511,20 +1349,25 @@
         <span class="c1"># dtype for model checkpointing</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_buffer_name_to_orig_dtype</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">dtype</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">_check_single_device_module</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">ignored_params</span><span class="p">)</span>
-        <span class="n">device_from_device_id</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_device_from_device_id</span><span class="p">(</span>
-            <span class="n">device_id</span>
+        <span class="n">_check_single_device_module</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">ignored_params</span><span class="p">)</span>
+        <span class="n">device_from_device_id</span> <span class="o">=</span> <span class="n">_get_device_from_device_id</span><span class="p">(</span><span class="n">device_id</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">rank</span><span class="p">)</span>
+        <span class="n">_materialize_module</span><span class="p">(</span>
+            <span class="n">module</span><span class="p">,</span>
+            <span class="n">param_init_fn</span><span class="p">,</span>
+            <span class="n">ignored_params</span><span class="p">,</span>
+            <span class="n">device_from_device_id</span><span class="p">,</span>
+            <span class="k">lambda</span> <span class="n">k</span><span class="p">:</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">k</span><span class="p">,</span> <span class="n">FullyShardedDataParallel</span><span class="p">),</span>
         <span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_materialize_module</span><span class="p">(</span>
-            <span class="n">module</span><span class="p">,</span> <span class="n">param_init_fn</span><span class="p">,</span> <span class="n">ignored_params</span><span class="p">,</span> <span class="n">device_from_device_id</span>
+        <span class="n">_move_module_to_device</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">ignored_params</span><span class="p">,</span> <span class="n">device_from_device_id</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">compute_device</span> <span class="o">=</span> <span class="n">_get_compute_device</span><span class="p">(</span>
+            <span class="n">module</span><span class="p">,</span>
+            <span class="n">ignored_params</span><span class="p">,</span>
+            <span class="n">device_from_device_id</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">rank</span><span class="p">,</span>
         <span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_move_module_to_device</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">ignored_params</span><span class="p">,</span> <span class="n">device_from_device_id</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">compute_device</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_compute_device</span><span class="p">(</span>
-            <span class="n">module</span><span class="p">,</span> <span class="n">ignored_params</span><span class="p">,</span> <span class="n">device_from_device_id</span>
-        <span class="p">)</span>
-        <span class="n">params_to_flatten</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_get_orig_params</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">ignored_params</span><span class="p">))</span>
+        <span class="n">params_to_flatten</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">_get_orig_params</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">ignored_params</span><span class="p">))</span>
         <span class="k">if</span> <span class="n">sync_module_states</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_sync_module_states</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">params_to_flatten</span><span class="p">)</span>
+            <span class="n">_sync_module_states</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">params_to_flatten</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">process_group</span><span class="p">)</span>
 
         <span class="c1"># This FSDP instance&#39;s handles should inherit the same process group,</span>
         <span class="c1"># compute device, CPU offload, and mixed precision settings. However,</span>
@@ -1560,7 +1403,7 @@
             <span class="p">):</span>
                 <span class="n">handle</span><span class="o">.</span><span class="n">flat_param_to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s2">&quot;cpu&quot;</span><span class="p">))</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">use_orig_params</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_check_orig_params_flattened</span><span class="p">(</span><span class="n">ignored_params</span><span class="p">)</span>
+            <span class="n">_check_orig_params_flattened</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ignored_params</span><span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_register_flat_param</span><span class="p">()</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_sync_gradients</span> <span class="o">=</span> <span class="kc">True</span>
@@ -1598,103 +1441,6 @@
             <span class="n">_pre_load_state_dict_hook</span><span class="p">,</span> <span class="n">with_module</span><span class="o">=</span><span class="kc">True</span>
         <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">register_load_state_dict_post_hook</span><span class="p">(</span><span class="n">_post_load_state_dict_hook</span><span class="p">)</span>
-
-    <span class="k">def</span> <span class="nf">_get_ignored_modules</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span>
-        <span class="n">root_module</span><span class="p">:</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">,</span>
-        <span class="n">_ignored_modules</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Iterable</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">]],</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Set</span><span class="p">[</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">]:</span>
-        <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Checks that ``_ignored_modules`` is an iterable of ``nn.Module`` s</span>
-<span class="sd">        without any FSDP instances, and returns the modules contained in their</span>
-<span class="sd">        module subtrees as a :class:`set`. Nested FSDP instances are excluded,</span>
-<span class="sd">        but their already-computed ignored modules are included.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">if</span> <span class="n">_ignored_modules</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">return</span> <span class="nb">set</span><span class="p">()</span>
-        <span class="n">msg_prefix</span> <span class="o">=</span> <span class="s2">&quot;`ignored_modules` should be an iterable of `torch.nn.Module`s &quot;</span>
-        <span class="k">try</span><span class="p">:</span>
-            <span class="n">ignored_root_modules</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">_ignored_modules</span><span class="p">)</span>
-        <span class="k">except</span> <span class="ne">TypeError</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="n">msg_prefix</span> <span class="o">+</span> <span class="sa">f</span><span class="s2">&quot;but got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">_ignored_modules</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-        <span class="k">for</span> <span class="n">module</span> <span class="ow">in</span> <span class="n">ignored_root_modules</span><span class="p">:</span>
-            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
-                <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="n">msg_prefix</span> <span class="o">+</span> <span class="sa">f</span><span class="s2">&quot;but got an iterable with </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">module</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">FullyShardedDataParallel</span><span class="p">):</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;`ignored_modules` should not include FSDP modules&quot;</span><span class="p">)</span>
-        <span class="c1"># Include child modules and exclude nested FSDP modules themselves</span>
-        <span class="n">ignored_modules</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span>
-            <span class="n">child</span>
-            <span class="k">for</span> <span class="n">module</span> <span class="ow">in</span> <span class="n">ignored_root_modules</span>
-            <span class="k">for</span> <span class="n">child</span> <span class="ow">in</span> <span class="n">module</span><span class="o">.</span><span class="n">modules</span><span class="p">()</span>
-            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">child</span><span class="p">,</span> <span class="n">FullyShardedDataParallel</span><span class="p">)</span>
-        <span class="p">)</span>
-        <span class="k">if</span> <span class="n">root_module</span> <span class="ow">in</span> <span class="n">ignored_modules</span><span class="p">:</span>
-            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
-                <span class="s2">&quot;Trying to ignore the top-level module passed into the FSDP &quot;</span>
-                <span class="s2">&quot;constructor itself will result in all parameters being &quot;</span>
-                <span class="sa">f</span><span class="s2">&quot;ignored and is not well-supported: </span><span class="si">{</span><span class="n">module</span><span class="si">}</span><span class="s2">&quot;</span>
-            <span class="p">)</span>
-        <span class="c1"># Include nested FSDP modules&#39; ignored modules</span>
-        <span class="k">for</span> <span class="n">submodule</span> <span class="ow">in</span> <span class="n">root_module</span><span class="o">.</span><span class="n">modules</span><span class="p">():</span>
-            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">submodule</span><span class="p">,</span> <span class="n">FullyShardedDataParallel</span><span class="p">):</span>
-                <span class="k">assert</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">submodule</span><span class="p">,</span> <span class="s2">&quot;_ignored_modules&quot;</span><span class="p">)</span>
-                <span class="n">ignored_modules</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">submodule</span><span class="o">.</span><span class="n">_ignored_modules</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">ignored_modules</span>
-
-    <span class="k">def</span> <span class="nf">_get_ignored_params</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span>
-        <span class="n">root_module</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">,</span>
-        <span class="n">ignored_modules</span><span class="p">:</span> <span class="n">Set</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">],</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">Set</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Parameter</span><span class="p">],</span> <span class="n">Set</span><span class="p">[</span><span class="nb">str</span><span class="p">]]:</span>
-        <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Returns the parameters of the modules in ``ignored_modules``,</span>
-<span class="sd">        excluding any :class:`FlatParameter` s, and their fully prefixed names,</span>
-<span class="sd">        both as :class:`set` s.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">ignored_params</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span>
-            <span class="n">p</span>
-            <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="n">ignored_modules</span>
-            <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">m</span><span class="o">.</span><span class="n">parameters</span><span class="p">()</span>
-            <span class="k">if</span> <span class="ow">not</span> <span class="n">_is_fsdp_flattened</span><span class="p">(</span><span class="n">p</span><span class="p">)</span>
-        <span class="p">)</span>
-        <span class="c1"># Conservatively include all shared parameters&#39; names</span>
-        <span class="n">param_to_unflat_param_names</span> <span class="o">=</span> <span class="n">_get_param_to_unflat_param_names</span><span class="p">(</span>
-            <span class="n">root_module</span><span class="p">,</span>
-            <span class="n">dedup_shared_params</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-        <span class="p">)</span>
-        <span class="n">ignored_param_names</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
-        <span class="k">for</span> <span class="n">param</span> <span class="ow">in</span> <span class="n">ignored_params</span><span class="p">:</span>
-            <span class="n">unflat_param_names</span> <span class="o">=</span> <span class="n">param_to_unflat_param_names</span><span class="p">[</span><span class="n">param</span><span class="p">]</span>
-            <span class="n">clean_names</span> <span class="o">=</span> <span class="p">[]</span>
-            <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">unflat_param_names</span><span class="p">:</span>
-                <span class="c1"># Clean any module wrapper prefixes in case of nested wrapping</span>
-                <span class="n">clean_names</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">clean_tensor_name</span><span class="p">(</span><span class="n">k</span><span class="p">))</span>
-            <span class="n">ignored_param_names</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">clean_names</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">ignored_params</span><span class="p">,</span> <span class="n">ignored_param_names</span>
-
-    <span class="k">def</span> <span class="nf">_get_buffer_names</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">root_module</span><span class="p">:</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Set</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
-        <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Returns the fully prefixed names of all buffers in the module hierarchy</span>
-<span class="sd">        rooted at ``root_module`` as a class:`set`.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-
-        <span class="k">def</span> <span class="nf">module_fn</span><span class="p">(</span><span class="n">module</span><span class="p">:</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">,</span> <span class="n">prefix</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">buffer_names</span><span class="p">:</span> <span class="n">Set</span><span class="p">[</span><span class="nb">str</span><span class="p">]):</span>
-            <span class="k">for</span> <span class="n">buffer_name</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">module</span><span class="o">.</span><span class="n">named_buffers</span><span class="p">(</span><span class="n">recurse</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
-                <span class="c1"># Clean module wrapper prefixes in case of nested wrapping</span>
-                <span class="n">prefixed_buffer_name</span> <span class="o">=</span> <span class="n">clean_tensor_name</span><span class="p">(</span><span class="n">prefix</span> <span class="o">+</span> <span class="n">buffer_name</span><span class="p">)</span>
-                <span class="n">buffer_names</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">prefixed_buffer_name</span><span class="p">)</span>
-
-        <span class="k">def</span> <span class="nf">return_fn</span><span class="p">(</span><span class="n">buffer_names</span><span class="p">:</span> <span class="n">Set</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="o">*</span><span class="n">args</span><span class="p">):</span>
-            <span class="k">return</span> <span class="n">buffer_names</span>
-
-        <span class="n">buffer_names</span><span class="p">:</span> <span class="n">Set</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
-        <span class="k">return</span> <span class="n">_apply_to_modules</span><span class="p">(</span>
-            <span class="n">root_module</span><span class="p">,</span>
-            <span class="n">module_fn</span><span class="p">,</span>
-            <span class="n">return_fn</span><span class="p">,</span>
-            <span class="n">buffer_names</span><span class="p">,</span>
-        <span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">_auto_wrap</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -1736,256 +1482,6 @@
             <span class="p">)</span>
             <span class="n">auto_wrap_kwargs</span><span class="p">[</span><span class="s2">&quot;auto_wrap_policy&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">auto_wrap_policy</span>
         <span class="n">_recursive_wrap</span><span class="p">(</span><span class="o">**</span><span class="n">auto_wrap_kwargs</span><span class="p">,</span> <span class="o">**</span><span class="n">fsdp_kwargs</span><span class="p">)</span>
-
-    <span class="k">def</span> <span class="nf">_check_single_device_module</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span>
-        <span class="n">module</span><span class="p">:</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">,</span>
-        <span class="n">ignored_params</span><span class="p">:</span> <span class="n">Set</span><span class="p">[</span><span class="n">nn</span><span class="o">.</span><span class="n">Parameter</span><span class="p">],</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Raises an error if ``module`` has original parameters on multiple</span>
-<span class="sd">        devices, ignoring the parameters in ``ignored_params``. Thus, after</span>
-<span class="sd">        this method, the module must be either fully on the CPU or fully on a</span>
-<span class="sd">        non-CPU device.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">devices</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span>
-            <span class="n">param</span><span class="o">.</span><span class="n">device</span> <span class="k">for</span> <span class="n">param</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_orig_params</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">ignored_params</span><span class="p">)</span>
-        <span class="p">)</span>
-        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">devices</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;FSDP only supports single device modules but got params on </span><span class="si">{</span><span class="n">devices</span><span class="si">}</span><span class="s2">&quot;</span>
-            <span class="p">)</span>
-
-    <span class="k">def</span> <span class="nf">_get_device_from_device_id</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span>
-        <span class="n">device_id</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">]],</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">]:</span>
-        <span class="sd">&quot;&quot;&quot; &quot;&quot;&quot;</span>
-        <span class="k">if</span> <span class="n">device_id</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">return</span> <span class="kc">None</span>
-        <span class="n">device</span> <span class="o">=</span> <span class="p">(</span>
-            <span class="n">device_id</span>
-            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">device_id</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
-            <span class="k">else</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="n">device_id</span><span class="p">)</span>
-        <span class="p">)</span>
-        <span class="k">if</span> <span class="n">device</span> <span class="o">==</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s2">&quot;cuda&quot;</span><span class="p">):</span>
-            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;FSDP got the argument `device_id` </span><span class="si">{</span><span class="n">device_id</span><span class="si">}</span><span class="s2"> on rank &quot;</span>
-                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">rank</span><span class="si">}</span><span class="s2">, which does not have an explicit index. &quot;</span>
-                <span class="sa">f</span><span class="s2">&quot;FSDP will use the current device </span><span class="si">{</span><span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">current_device</span><span class="p">()</span><span class="si">}</span><span class="s2">. &quot;</span>
-                <span class="s2">&quot;If this is incorrect, please explicitly call `torch.cuda.set_device()` &quot;</span>
-                <span class="s2">&quot;before FSDP initialization or pass in the explicit device &quot;</span>
-                <span class="s2">&quot;index as the `device_id` argument.&quot;</span>
-            <span class="p">)</span>
-            <span class="n">device</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s2">&quot;cuda&quot;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">current_device</span><span class="p">())</span>
-        <span class="k">return</span> <span class="n">device</span>
-
-    <span class="k">def</span> <span class="nf">_materialize_module</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span>
-        <span class="n">module</span><span class="p">:</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">,</span>
-        <span class="n">param_init_fn</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Callable</span><span class="p">[[</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">],</span> <span class="kc">None</span><span class="p">]],</span>
-        <span class="n">ignored_params</span><span class="p">:</span> <span class="n">Set</span><span class="p">[</span><span class="n">nn</span><span class="o">.</span><span class="n">Parameter</span><span class="p">],</span>
-        <span class="n">device_from_device_id</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">],</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Materializes the wrapped module ``module`` in place if needed: either</span>
-<span class="sd">        if the module has parameters that use meta device or are torchdistX</span>
-<span class="sd">        fake tensors.</span>
-
-<span class="sd">        This method uses ``param_init_fn`` to materialize the module if the</span>
-<span class="sd">        function is not ``None`` and falls back to default behavior otherwise.</span>
-<span class="sd">        For meta device, this moves the module to ``device_from_device_id`` if</span>
-<span class="sd">        it is not ``None`` or the current device otherwise and calls</span>
-<span class="sd">        ``reset_parameters()``, and for torchdistX fake tensors, this calls</span>
-<span class="sd">        ``deferred_init.materialize_module()``.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">is_meta_module</span> <span class="o">=</span> <span class="nb">any</span><span class="p">(</span>
-            <span class="n">p</span><span class="o">.</span><span class="n">is_meta</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_orig_params</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">ignored_params</span><span class="p">)</span>
-        <span class="p">)</span>
-        <span class="n">is_torchdistX_deferred_init</span> <span class="o">=</span> <span class="p">(</span>
-            <span class="ow">not</span> <span class="n">is_meta_module</span>
-            <span class="ow">and</span> <span class="n">_TORCHDISTX_AVAIL</span>
-            <span class="ow">and</span> <span class="nb">any</span><span class="p">(</span>
-                <span class="n">fake</span><span class="o">.</span><span class="n">is_fake</span><span class="p">(</span><span class="n">p</span><span class="p">)</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_orig_params</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">ignored_params</span><span class="p">)</span>
-            <span class="p">)</span>
-        <span class="p">)</span>
-        <span class="k">if</span> <span class="p">(</span>
-            <span class="n">is_meta_module</span> <span class="ow">or</span> <span class="n">is_torchdistX_deferred_init</span>
-        <span class="p">)</span> <span class="ow">and</span> <span class="n">param_init_fn</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">if</span> <span class="ow">not</span> <span class="n">callable</span><span class="p">(</span><span class="n">param_init_fn</span><span class="p">):</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                    <span class="sa">f</span><span class="s2">&quot;Expected </span><span class="si">{</span><span class="n">param_init_fn</span><span class="si">}</span><span class="s2"> to be callable but got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">param_init_fn</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
-                <span class="p">)</span>
-            <span class="n">param_init_fn</span><span class="p">(</span><span class="n">module</span><span class="p">)</span>
-        <span class="k">elif</span> <span class="n">is_meta_module</span><span class="p">:</span>
-            <span class="c1"># Run default meta device initialization</span>
-            <span class="n">materialization_device</span> <span class="o">=</span> <span class="p">(</span>
-                <span class="n">device_from_device_id</span> <span class="ow">or</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">current_device</span><span class="p">()</span>
-            <span class="p">)</span>
-            <span class="n">module</span><span class="o">.</span><span class="n">to_empty</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="n">materialization_device</span><span class="p">)</span>
-            <span class="k">try</span><span class="p">:</span>
-                <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>
-                    <span class="n">module</span><span class="o">.</span><span class="n">reset_parameters</span><span class="p">()</span>
-            <span class="k">except</span> <span class="ne">BaseException</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-                <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
-                    <span class="s2">&quot;Unable to call `reset_parameters()` for module on meta &quot;</span>
-                    <span class="sa">f</span><span class="s2">&quot;device with error </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="si">}</span><span class="s2">. Please ensure your &quot;</span>
-                    <span class="s2">&quot;module implements a `reset_parameters()` method.&quot;</span>
-                <span class="p">)</span>
-                <span class="k">raise</span> <span class="n">e</span>
-        <span class="k">elif</span> <span class="n">is_torchdistX_deferred_init</span><span class="p">:</span>
-            <span class="c1"># Run default torchdistX initialization</span>
-            <span class="n">deferred_init</span><span class="o">.</span><span class="n">materialize_module</span><span class="p">(</span>
-                <span class="n">module</span><span class="p">,</span>
-                <span class="n">check_fn</span><span class="o">=</span><span class="k">lambda</span> <span class="n">k</span><span class="p">:</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">k</span><span class="p">,</span> <span class="n">FullyShardedDataParallel</span><span class="p">),</span>
-            <span class="p">)</span>
-
-    <span class="k">def</span> <span class="nf">_move_module_to_device</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span>
-        <span class="n">module</span><span class="p">:</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">,</span>
-        <span class="n">ignored_params</span><span class="p">:</span> <span class="n">Set</span><span class="p">[</span><span class="n">nn</span><span class="o">.</span><span class="n">Parameter</span><span class="p">],</span>
-        <span class="n">device_from_device_id</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">],</span>
-    <span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Moves ``module`` depending on ``device_from_device_id`` and its current</span>
-<span class="sd">        device. This includes moving ignored modules&#39; parameters.</span>
-
-<span class="sd">        - If ``device_from_device_id`` is not ``None``, then this moves</span>
-<span class="sd">        ``module`` to the device.</span>
-<span class="sd">        - If ``device_from_device_id`` is ``None``, then this does not move</span>
-<span class="sd">        ``module`` but warns the user if it is on CPU.</span>
-
-<span class="sd">        Precondition: ``_check_single_device_module()``.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">cpu_device</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s2">&quot;cpu&quot;</span><span class="p">)</span>
-        <span class="n">param</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_get_orig_params</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">ignored_params</span><span class="p">),</span> <span class="kc">None</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">param</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">return</span>  <span class="c1"># no original parameters to manage</span>
-        <span class="k">if</span> <span class="n">device_from_device_id</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">if</span> <span class="n">param</span><span class="o">.</span><span class="n">device</span> <span class="o">==</span> <span class="n">cpu_device</span><span class="p">:</span>
-                <span class="c1"># NOTE: This includes moving ignored modules&#39; parameters.</span>
-                <span class="n">module</span> <span class="o">=</span> <span class="n">module</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device_from_device_id</span><span class="p">)</span>
-                <span class="c1"># TODO: This is a temporary fix to move already- constructed</span>
-                <span class="c1"># `FlatParameter`s back to CPU if needed. This is needed to</span>
-                <span class="c1"># make CPU offload work with `device_id`.</span>
-                <span class="k">for</span> <span class="n">submodule</span> <span class="ow">in</span> <span class="n">module</span><span class="o">.</span><span class="n">modules</span><span class="p">():</span>
-                    <span class="k">if</span> <span class="p">(</span>
-                        <span class="nb">isinstance</span><span class="p">(</span><span class="n">submodule</span><span class="p">,</span> <span class="n">FullyShardedDataParallel</span><span class="p">)</span>
-                        <span class="ow">and</span> <span class="n">submodule</span><span class="o">.</span><span class="n">cpu_offload</span><span class="o">.</span><span class="n">offload_params</span>
-                    <span class="p">):</span>
-                        <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>
-                            <span class="k">for</span> <span class="n">handle</span> <span class="ow">in</span> <span class="n">submodule</span><span class="o">.</span><span class="n">_handles</span><span class="p">:</span>
-                                <span class="n">handle</span><span class="o">.</span><span class="n">flat_param_to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s2">&quot;cpu&quot;</span><span class="p">))</span>
-        <span class="k">elif</span> <span class="n">param</span><span class="o">.</span><span class="n">device</span> <span class="o">==</span> <span class="n">cpu_device</span><span class="p">:</span>
-            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
-                <span class="s2">&quot;Module is put on CPU and will thus have flattening and sharding&quot;</span>
-                <span class="s2">&quot; run on CPU, which is less efficient than on GPU. We recommend passing in &quot;</span>
-                <span class="s2">&quot;`device_id` argument which will enable FSDP to put module on GPU device,&quot;</span>
-                <span class="s2">&quot; module must also be on GPU device to work with `sync_module_states=True` flag&quot;</span>
-                <span class="s2">&quot; which requires GPU communication.&quot;</span>
-            <span class="p">)</span>
-
-    <span class="k">def</span> <span class="nf">_get_compute_device</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span>
-        <span class="n">module</span><span class="p">:</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">,</span>
-        <span class="n">ignored_params</span><span class="p">:</span> <span class="n">Set</span><span class="p">[</span><span class="n">nn</span><span class="o">.</span><span class="n">Parameter</span><span class="p">],</span>
-        <span class="n">device_from_device_id</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">],</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">:</span>
-        <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Determines and returns this FSDP instance&#39;s compute device. If the</span>
-<span class="sd">        module is already on a non-CPU device, then the compute device is that</span>
-<span class="sd">        non-CPU device. If the module is on CPU, then the compute device is the</span>
-<span class="sd">        current device.</span>
-
-<span class="sd">        Since this method should be called after materializing the module, any</span>
-<span class="sd">        non-CPU device should not be meta device. For now, the compute device</span>
-<span class="sd">        is always a CUDA GPU device with its explicit index.</span>
-
-<span class="sd">        Precondition: ``_check_single_device_module()`` and</span>
-<span class="sd">        ``_move_module_to_device()``.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="c1"># If the module is on GPU already, then that GPU device has priority</span>
-        <span class="c1"># over the current device</span>
-        <span class="n">param</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_get_orig_params</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">ignored_params</span><span class="p">),</span> <span class="kc">None</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">param</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">param</span><span class="o">.</span><span class="n">device</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s2">&quot;cuda&quot;</span><span class="p">:</span>
-            <span class="n">compute_device</span> <span class="o">=</span> <span class="n">param</span><span class="o">.</span><span class="n">device</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">compute_device</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s2">&quot;cuda&quot;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">current_device</span><span class="p">())</span>
-        <span class="k">if</span> <span class="p">(</span>
-            <span class="n">device_from_device_id</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
-            <span class="ow">and</span> <span class="n">compute_device</span> <span class="o">!=</span> <span class="n">device_from_device_id</span>
-        <span class="p">):</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="s2">&quot;Inconsistent compute device and `device_id` on rank &quot;</span>
-                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">rank</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">compute_device</span><span class="si">}</span><span class="s2"> vs </span><span class="si">{</span><span class="n">device_from_device_id</span><span class="si">}</span><span class="s2">&quot;</span>
-            <span class="p">)</span>
-        <span class="k">return</span> <span class="n">compute_device</span>
-
-    <span class="k">def</span> <span class="nf">_sync_module_states</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">module</span><span class="p">:</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">,</span> <span class="n">params</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">nn</span><span class="o">.</span><span class="n">Parameter</span><span class="p">]</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Synchronizes module states (i.e. parameters ``params`` and all</span>
-<span class="sd">        not-yet-synced buffers) by broadcasting from rank 0 to all ranks.</span>
-
-<span class="sd">        Precondition: ``sync_module_states == True`` and ``self.process_group``</span>
-<span class="sd">        has been set.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">if</span> <span class="n">params</span> <span class="ow">and</span> <span class="nb">any</span><span class="p">(</span><span class="n">param</span><span class="o">.</span><span class="n">device</span> <span class="o">==</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s2">&quot;cpu&quot;</span><span class="p">)</span> <span class="k">for</span> <span class="n">param</span> <span class="ow">in</span> <span class="n">params</span><span class="p">):</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="s2">&quot;Module has CPU parameters, but sync_module_states=True is specified.&quot;</span>
-                <span class="s2">&quot;This only works for GPU module, please specify `device_id` argument or move&quot;</span>
-                <span class="s2">&quot; module to GPU before init.&quot;</span>
-            <span class="p">)</span>
-        <span class="n">module_states</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
-        <span class="c1"># TODO (awgu): When exposing the original parameters, we need to also</span>
-        <span class="c1"># use this attribute to prevent re-synchronizing parameters.</span>
-        <span class="k">for</span> <span class="n">buffer</span> <span class="ow">in</span> <span class="n">module</span><span class="o">.</span><span class="n">buffers</span><span class="p">():</span>
-            <span class="c1"># Avoid re-synchronizing buffers in case of nested wrapping</span>
-            <span class="k">if</span> <span class="ow">not</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">buffer</span><span class="p">,</span> <span class="s2">&quot;_fsdp_synced&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">):</span>
-                <span class="n">buffer</span><span class="o">.</span><span class="n">_fsdp_synced</span> <span class="o">=</span> <span class="kc">True</span>
-                <span class="n">module_states</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">buffer</span><span class="o">.</span><span class="n">detach</span><span class="p">())</span>
-        <span class="n">module_states</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">param</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span> <span class="k">for</span> <span class="n">param</span> <span class="ow">in</span> <span class="n">params</span><span class="p">)</span>
-        <span class="n">_sync_params_and_buffers</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">process_group</span><span class="p">,</span>
-            <span class="n">module_states</span><span class="p">,</span>
-            <span class="n">_PARAM_BROADCAST_BUCKET_SIZE</span><span class="p">,</span>
-            <span class="n">src</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
-        <span class="p">)</span>
-
-    <span class="k">def</span> <span class="nf">_get_orig_params</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span>
-        <span class="n">module</span><span class="p">:</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">,</span>
-        <span class="n">ignored_params</span><span class="p">:</span> <span class="n">Set</span><span class="p">[</span><span class="n">nn</span><span class="o">.</span><span class="n">Parameter</span><span class="p">],</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">nn</span><span class="o">.</span><span class="n">Parameter</span><span class="p">]:</span>
-        <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Returns an iterator over the original parameters in ``module``,</span>
-<span class="sd">        ignoring the parameters in ``ignored_params``, any ``FlatParameter``</span>
-<span class="sd">        s (which may be present due to nested FSDP wrapping), and any original</span>
-<span class="sd">        parameters already flattened (only relevant when using the original</span>
-<span class="sd">        parameters).</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">param_gen</span> <span class="o">=</span> <span class="n">module</span><span class="o">.</span><span class="n">parameters</span><span class="p">()</span>
-        <span class="k">try</span><span class="p">:</span>
-            <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
-                <span class="n">param</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="n">param_gen</span><span class="p">)</span>
-                <span class="k">if</span> <span class="n">param</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">ignored_params</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">_is_fsdp_flattened</span><span class="p">(</span><span class="n">param</span><span class="p">):</span>
-                    <span class="k">yield</span> <span class="n">param</span>
-        <span class="k">except</span> <span class="ne">StopIteration</span><span class="p">:</span>
-            <span class="k">pass</span>
-
-    <span class="k">def</span> <span class="nf">_check_orig_params_flattened</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ignored_params</span><span class="p">:</span> <span class="n">Set</span><span class="p">[</span><span class="n">nn</span><span class="o">.</span><span class="n">Parameter</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Checks that all original parameters have been flattened and hence made</span>
-<span class="sd">        invisible to ``named_parameters()``. This should be called as a sanity</span>
-<span class="sd">        check after flattening the wrapped module&#39;s parameters.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">for</span> <span class="n">param_name</span><span class="p">,</span> <span class="n">param</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">named_parameters</span><span class="p">():</span>
-            <span class="k">if</span> <span class="n">param</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">ignored_params</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">_is_fsdp_flattened</span><span class="p">(</span><span class="n">param</span><span class="p">):</span>
-                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
-                    <span class="sa">f</span><span class="s2">&quot;Found an unflattened parameter: </span><span class="si">{</span><span class="n">param_name</span><span class="si">}</span><span class="s2">; &quot;</span>
-                    <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">param</span><span class="o">.</span><span class="n">size</span><span class="p">()</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">param</span><span class="o">.</span><span class="vm">__class__</span><span class="si">}</span><span class="s2">&quot;</span>
-                <span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">_register_param_handle</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">handle</span><span class="p">:</span> <span class="n">FlatParamHandle</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="sd">&quot;&quot;&quot;Registers the parameter handle to this FSDP instance.&quot;&quot;&quot;</span>
@@ -4687,56 +4183,6 @@
     <span class="k">return</span> <span class="n">grad_norm</span>
 
 
-<span class="k">def</span> <span class="nf">_get_param_to_unflat_param_names</span><span class="p">(</span>
-    <span class="n">model</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">,</span>
-    <span class="n">dedup_shared_params</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Parameter</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]:</span>
-    <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Constructs a mapping from flattened parameter (including non-FSDP-module</span>
-<span class="sd">    parameters) to its unflattened parameter names. For non-FSDP-module</span>
-<span class="sd">    parameters, these mapped-to lists always contain a single element. The</span>
-<span class="sd">    unflattened parameter names should match the keys of the model state dict.</span>
-
-<span class="sd">    For shared parameters, only the first parameter name is included (following</span>
-<span class="sd">    the ``torch.nn.Module.parameters()`` order).</span>
-
-<span class="sd">    Args:</span>
-<span class="sd">        model (torch.nn.Module): Root module (which may or may not be a</span>
-<span class="sd">            :class:`FullyShardedDataParallel` instance).</span>
-<span class="sd">        dedup_shared_params (bool): If ``True``, only includes the first</span>
-<span class="sd">            list of unflattened parameter names corresponding to a parameter</span>
-<span class="sd">            in the module walk order; if ``False``, then includes all of the</span>
-<span class="sd">            unflattened parameter names.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-
-    <span class="k">def</span> <span class="nf">module_fn</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">prefix</span><span class="p">,</span> <span class="n">param_to_unflat_param_names</span><span class="p">):</span>
-        <span class="k">for</span> <span class="n">param_name</span><span class="p">,</span> <span class="n">param</span> <span class="ow">in</span> <span class="n">module</span><span class="o">.</span><span class="n">named_parameters</span><span class="p">(</span><span class="n">recurse</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
-            <span class="n">module_prefixed_param_names</span> <span class="o">=</span> <span class="p">(</span>
-                <span class="n">param</span><span class="o">.</span><span class="n">_fqns</span> <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="n">param</span><span class="p">)</span> <span class="ow">is</span> <span class="n">FlatParameter</span> <span class="k">else</span> <span class="p">[</span><span class="n">param_name</span><span class="p">]</span>
-            <span class="p">)</span>  <span class="c1"># prefixed from `module`</span>
-            <span class="n">fully_prefixed_param_names</span> <span class="o">=</span> <span class="p">[</span>
-                <span class="n">clean_tensor_name</span><span class="p">(</span><span class="n">prefix</span> <span class="o">+</span> <span class="n">name</span><span class="p">)</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">module_prefixed_param_names</span>
-            <span class="p">]</span>  <span class="c1"># fully prefixed from the top level including `prefix`</span>
-            <span class="c1"># If this parameter has already been visited, then it is a</span>
-            <span class="c1"># shared parameter; then, only take the first parameter name</span>
-            <span class="n">is_shared_param</span> <span class="o">=</span> <span class="n">param</span> <span class="ow">in</span> <span class="n">param_to_unflat_param_names</span>
-            <span class="k">if</span> <span class="ow">not</span> <span class="n">is_shared_param</span><span class="p">:</span>
-                <span class="n">param_to_unflat_param_names</span><span class="p">[</span><span class="n">param</span><span class="p">]</span> <span class="o">=</span> <span class="n">fully_prefixed_param_names</span>
-            <span class="k">elif</span> <span class="ow">not</span> <span class="n">dedup_shared_params</span><span class="p">:</span>
-                <span class="n">param_to_unflat_param_names</span><span class="p">[</span><span class="n">param</span><span class="p">]</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">fully_prefixed_param_names</span><span class="p">)</span>
-
-    <span class="k">def</span> <span class="nf">return_fn</span><span class="p">(</span><span class="n">param_to_unflat_param_names</span><span class="p">):</span>
-        <span class="k">return</span> <span class="n">param_to_unflat_param_names</span>
-
-    <span class="n">param_to_unflat_param_names</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Parameter</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{}</span>
-    <span class="k">return</span> <span class="n">_apply_to_modules</span><span class="p">(</span>
-        <span class="n">model</span><span class="p">,</span>
-        <span class="n">module_fn</span><span class="p">,</span>
-        <span class="n">return_fn</span><span class="p">,</span>
-        <span class="n">param_to_unflat_param_names</span><span class="p">,</span>
-    <span class="p">)</span>
-
-
 <span class="k">def</span> <span class="nf">_get_param_to_param_name</span><span class="p">(</span>
     <span class="n">model</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Parameter</span><span class="p">,</span> <span class="nb">str</span><span class="p">]:</span>
@@ -4774,18 +4220,6 @@
     <span class="sd">&quot;&quot;&quot;Constructs the inverse mapping of :meth:`_get_param_to_param_name`.&quot;&quot;&quot;</span>
     <span class="n">param_to_param_name</span> <span class="o">=</span> <span class="n">_get_param_to_param_name</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
     <span class="k">return</span> <span class="nb">dict</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="n">param_to_param_name</span><span class="o">.</span><span class="n">values</span><span class="p">(),</span> <span class="n">param_to_param_name</span><span class="o">.</span><span class="n">keys</span><span class="p">()))</span>
-
-
-<span class="k">def</span> <span class="nf">clean_tensor_name</span><span class="p">(</span><span class="n">tensor_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-    <span class="sd">&quot;&quot;&quot;Cleans the parameter or buffer name by removing any module wrapper</span>
-<span class="sd">    prefixes.&quot;&quot;&quot;</span>
-    <span class="n">tensor_name</span> <span class="o">=</span> <span class="n">tensor_name</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="n">FSDP_PREFIX</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
-    <span class="c1"># TODO: Explicitly replacing checkpoint_wrapper prefix is not ideal,</span>
-    <span class="c1"># as it increases coupling between CheckpointWrapper and FSDP. This is also not</span>
-    <span class="c1"># scalable for additional wrapped modules, we should come up with a general solution</span>
-    <span class="c1"># for this issue.</span>
-    <span class="n">tensor_name</span> <span class="o">=</span> <span class="n">tensor_name</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="n">_CHECKPOINT_PREFIX</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">tensor_name</span>
 </pre></div>
 
              </article>
