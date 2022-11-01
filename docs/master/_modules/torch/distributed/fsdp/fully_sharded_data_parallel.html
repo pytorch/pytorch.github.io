@@ -235,7 +235,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href='https://pytorch.org/docs/versions.html'>master (1.14.0a0+git6cc4ae3 ) &#x25BC</a>
+      <a href='https://pytorch.org/docs/versions.html'>master (1.14.0a0+git9109ecf ) &#x25BC</a>
     </div>
     
 
@@ -477,17 +477,24 @@
 
 <span class="kn">import</span> <span class="nn">torch</span>
 <span class="kn">import</span> <span class="nn">torch.distributed</span> <span class="k">as</span> <span class="nn">dist</span>
-<span class="kn">import</span> <span class="nn">torch.distributed.algorithms._checkpoint.checkpoint_wrapper</span> <span class="k">as</span> <span class="nn">checkpoint_wrapper</span>
 <span class="kn">import</span> <span class="nn">torch.nn</span> <span class="k">as</span> <span class="nn">nn</span>
 <span class="kn">import</span> <span class="nn">torch.nn.functional</span> <span class="k">as</span> <span class="nn">F</span>
 <span class="kn">from</span> <span class="nn">torch.autograd</span> <span class="kn">import</span> <span class="n">Variable</span>
 <span class="kn">from</span> <span class="nn">torch.distributed</span> <span class="kn">import</span> <span class="n">ProcessGroup</span>
 <span class="kn">from</span> <span class="nn">torch.distributed.algorithms._checkpoint.checkpoint_wrapper</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">_CHECKPOINT_PREFIX</span><span class="p">,</span>
+    <span class="n">_CHECKPOINT_WRAPPED_MODULE</span><span class="p">,</span>
+    <span class="n">ActivationWrapper</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span> <span class="nn">torch.distributed.algorithms._comm_hooks</span> <span class="kn">import</span> <span class="n">default_hooks</span><span class="p">,</span> <span class="n">LOW_PRECISION_HOOKS</span>
 <span class="kn">from</span> <span class="nn">torch.distributed.distributed_c10d</span> <span class="kn">import</span> <span class="n">_get_default_group</span>
-<span class="kn">from</span> <span class="nn">torch.distributed.utils</span> <span class="kn">import</span> <span class="n">_sync_params_and_buffers</span><span class="p">,</span> <span class="n">_to_kwargs</span>
+<span class="kn">from</span> <span class="nn">torch.distributed.fsdp._common_utils</span> <span class="kn">import</span> <span class="n">HandleTrainingState</span><span class="p">,</span> <span class="n">TrainingState</span>
+<span class="kn">from</span> <span class="nn">torch.distributed.fsdp._runtime_utils</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">_clear_grads_if_needed</span><span class="p">,</span>
+    <span class="n">_prepare_forward_inputs</span><span class="p">,</span>
+    <span class="n">_wait_for_computation_stream</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span> <span class="nn">torch.distributed.utils</span> <span class="kn">import</span> <span class="n">_sync_params_and_buffers</span>
 
 <span class="kn">from</span> <span class="nn">._optim_utils</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">_broadcast_pos_dim_tensor_states</span><span class="p">,</span>
@@ -520,7 +527,6 @@
     <span class="n">FlatParamHandle</span><span class="p">,</span>
     <span class="n">HandleConfig</span><span class="p">,</span>
     <span class="n">HandleShardingStrategy</span><span class="p">,</span>
-    <span class="n">HandleTrainingState</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span> <span class="nn">.wrap</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">_or_policy</span><span class="p">,</span>
@@ -554,7 +560,6 @@
     <span class="s2">&quot;LocalStateDictConfig&quot;</span><span class="p">,</span>
     <span class="s2">&quot;ShardedStateDictConfig&quot;</span><span class="p">,</span>
     <span class="s2">&quot;OptimStateKeyType&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;TrainingState_&quot;</span><span class="p">,</span>
     <span class="s2">&quot;clean_tensor_name&quot;</span><span class="p">,</span>
 <span class="p">]</span>
 
@@ -703,24 +708,6 @@
     <span class="n">BACKWARD_PRE</span> <span class="o">=</span> <span class="n">auto</span><span class="p">()</span>
     <span class="n">BACKWARD_POST</span> <span class="o">=</span> <span class="n">auto</span><span class="p">()</span>
     <span class="c1"># TODO, BACKWARD_PRE_CPU, prefetch full parameters and keep them in the CPU memory</span>
-
-
-<span class="k">class</span> <span class="nc">TrainingState_</span><span class="p">(</span><span class="n">Enum</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Simple enum to indicate what state FSDP is in. Used for asserting</span>
-<span class="sd">    to make sure APIs are called in the correct state.</span>
-<span class="sd">    ..note::</span>
-<span class="sd">        ``BACKWARD_PRE`` and ``BACKWARD_POST`` states are used to ensure we</span>
-<span class="sd">        receives backward hooks in the correct order. It is used to catch</span>
-<span class="sd">        unexpected order of hooks being called (likely due to our</span>
-<span class="sd">        hook registration logic or autograd engine logic changes).</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-
-    <span class="n">IDLE</span> <span class="o">=</span> <span class="n">auto</span><span class="p">()</span>
-    <span class="n">FORWARD</span> <span class="o">=</span> <span class="n">auto</span><span class="p">()</span>
-    <span class="n">BACKWARD_PRE</span> <span class="o">=</span> <span class="n">auto</span><span class="p">()</span>
-    <span class="n">BACKWARD_POST</span> <span class="o">=</span> <span class="n">auto</span><span class="p">()</span>
-    <span class="n">SUMMON_FULL_PARAMS</span> <span class="o">=</span> <span class="n">auto</span><span class="p">()</span>
 
 
 <span class="k">class</span> <span class="nc">StateDictType</span><span class="p">(</span><span class="n">Enum</span><span class="p">):</span>
@@ -1504,7 +1491,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">process_group</span> <span class="o">=</span> <span class="n">process_group</span> <span class="ow">or</span> <span class="n">_get_default_group</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">rank</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">process_group</span><span class="o">.</span><span class="n">rank</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">world_size</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">process_group</span><span class="o">.</span><span class="n">size</span><span class="p">()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">training_state</span> <span class="o">=</span> <span class="n">TrainingState_</span><span class="o">.</span><span class="n">IDLE</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">training_state</span> <span class="o">=</span> <span class="n">TrainingState</span><span class="o">.</span><span class="n">IDLE</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">cpu_offload</span> <span class="o">=</span> <span class="n">cpu_offload</span> <span class="ow">or</span> <span class="n">CPUOffload</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">backward_prefetch</span> <span class="o">=</span> <span class="n">backward_prefetch</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">forward_prefetch</span> <span class="o">=</span> <span class="n">forward_prefetch</span>
@@ -2084,6 +2071,10 @@
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Returns the wrapped module (like :class:`DistributedDataParallel`).</span>
 <span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># FSDP&#39;s `.module` must refer to the innermost wrapped module when</span>
+        <span class="c1"># composing with other module wrappers in order for state dict to work</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_fsdp_wrapped_module</span><span class="p">,</span> <span class="n">ActivationWrapper</span><span class="p">):</span>
+            <span class="k">return</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_fsdp_wrapped_module</span><span class="p">,</span> <span class="n">_CHECKPOINT_WRAPPED_MODULE</span><span class="p">)</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fsdp_wrapped_module</span>
 
     <span class="nd">@property</span>
@@ -2137,6 +2128,18 @@
             <span class="ow">and</span> <span class="p">(</span><span class="ow">not</span> <span class="n">root_only</span> <span class="ow">or</span> <span class="n">submodule</span><span class="o">.</span><span class="n">check_is_root</span><span class="p">())</span>
         <span class="p">]</span></div>
 
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">_fsdp_handles</span><span class="p">(</span><span class="n">module</span><span class="p">:</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">FlatParamHandle</span><span class="p">]:</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Returns all nested FSDP instances&#39; handles in the module hierarchy</span>
+<span class="sd">        rooted at ``module``.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="p">[</span>
+            <span class="n">handle</span>
+            <span class="k">for</span> <span class="n">fsdp_module</span> <span class="ow">in</span> <span class="n">FullyShardedDataParallel</span><span class="o">.</span><span class="n">fsdp_modules</span><span class="p">(</span><span class="n">module</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">handle</span> <span class="ow">in</span> <span class="n">fsdp_module</span><span class="o">.</span><span class="n">_handles</span>
+        <span class="p">]</span>
+
 <div class="viewcode-block" id="FullyShardedDataParallel.apply"><a class="viewcode-back" href="../../../../fsdp.html#torch.distributed.fsdp.FullyShardedDataParallel.apply">[docs]</a>    <span class="k">def</span> <span class="nf">apply</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fn</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">],</span> <span class="kc">None</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="s2">&quot;FullyShardedDataParallel&quot;</span><span class="p">:</span>
         <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Applies ``fn`` recursively to every submodule (as returned by ``.children()``)</span>
 <span class="sd">        as well as self. Typical use includes initializing the parameters of a model</span>
@@ -2153,7 +2156,7 @@
 <span class="sd">            Module: self</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">uninitialized</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_root</span> <span class="ow">is</span> <span class="kc">None</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_assert_state</span><span class="p">(</span><span class="n">TrainingState_</span><span class="o">.</span><span class="n">IDLE</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_assert_state</span><span class="p">(</span><span class="n">TrainingState</span><span class="o">.</span><span class="n">IDLE</span><span class="p">)</span>
         <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_summon_full_params</span><span class="p">(</span><span class="n">recurse</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">writeback</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
             <span class="n">ret</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">fn</span><span class="p">)</span>
 
@@ -2200,31 +2203,6 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">_communication_hook</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
             <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_communication_hook</span> <span class="ow">in</span> <span class="n">LOW_PRECISION_HOOKS</span>
         <span class="p">)</span>
-
-    <span class="k">def</span> <span class="nf">_cast_fp_inputs_to_dtype</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">dtype</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
-        <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Casts floating point tensors in ``args`` and ``kwargs`` to the</span>
-<span class="sd">        precision given by ``dtype``, while respecting the existing</span>
-<span class="sd">        ``requires_grad`` on the tensors.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-
-        <span class="k">def</span> <span class="nf">cast_fn</span><span class="p">(</span><span class="n">x</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
-            <span class="k">if</span> <span class="ow">not</span> <span class="n">torch</span><span class="o">.</span><span class="n">is_floating_point</span><span class="p">(</span><span class="n">x</span><span class="p">):</span>
-                <span class="k">return</span> <span class="n">x</span>
-            <span class="n">y</span> <span class="o">=</span> <span class="n">x</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">dtype</span><span class="p">)</span>
-            <span class="c1"># Explicitly copy over `requires_grad` since this runs inside</span>
-            <span class="c1"># `torch.no_grad()`</span>
-            <span class="k">if</span> <span class="n">x</span><span class="o">.</span><span class="n">is_leaf</span><span class="p">:</span>
-                <span class="n">y</span><span class="o">.</span><span class="n">requires_grad</span> <span class="o">=</span> <span class="n">x</span><span class="o">.</span><span class="n">requires_grad</span>
-            <span class="k">return</span> <span class="n">y</span>
-
-        <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>
-            <span class="k">return</span> <span class="p">(</span>
-                <span class="n">_apply_to_tensors</span><span class="p">(</span><span class="n">cast_fn</span><span class="p">,</span> <span class="n">args</span><span class="p">),</span>
-                <span class="n">_apply_to_tensors</span><span class="p">(</span><span class="n">cast_fn</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">),</span>
-            <span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">_cast_buffers</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -2324,7 +2302,7 @@
         <span class="c1"># The following logic is only run on the root FSDP instance since it</span>
         <span class="c1"># will set `_is_root=False` for the non-root instances</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_is_root</span> <span class="o">=</span> <span class="kc">True</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_assert_state</span><span class="p">(</span><span class="n">TrainingState_</span><span class="o">.</span><span class="n">IDLE</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_assert_state</span><span class="p">(</span><span class="n">TrainingState</span><span class="o">.</span><span class="n">IDLE</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_init_streams</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_cast_buffers</span><span class="p">(</span><span class="n">recurse</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
         <span class="k">for</span> <span class="n">handle</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_handles</span><span class="p">:</span>
@@ -2483,21 +2461,6 @@
         <span class="c1"># Stream for pre-unshard logic, namely allocations and writes for</span>
         <span class="c1"># CPU offloading (H2D copy) and mixed precision (low precision cast).</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_streams</span><span class="p">[</span><span class="s2">&quot;pre_unshard&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">Stream</span><span class="p">()</span>
-
-    <span class="k">def</span> <span class="nf">_wait_for_previous_optim_step</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        The root :class:`FullyShardedDataParallel` instance needs to</span>
-<span class="sd">        synchronize with the default stream to ensure that the previous</span>
-<span class="sd">        optimizer step is done.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_root</span><span class="p">:</span>
-            <span class="k">return</span>
-        <span class="n">current_stream</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">current_stream</span><span class="p">()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_streams</span><span class="p">[</span><span class="s2">&quot;unshard&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">wait_stream</span><span class="p">(</span><span class="n">current_stream</span><span class="p">)</span>
-        <span class="c1"># Having the pre-all-gather stream wait for the current stream even if</span>
-        <span class="c1"># we do not leverage the pre-all-gather stream is tolerable since this</span>
-        <span class="c1"># only runs once per iteration</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_streams</span><span class="p">[</span><span class="s2">&quot;pre_unshard&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">wait_stream</span><span class="p">(</span><span class="n">current_stream</span><span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">_prefetch_handles</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -2716,9 +2679,7 @@
             <span class="n">module_name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">module_name</span><span class="si">}</span><span class="s2">.&quot;</span>
         <span class="c1"># Activation checkpoint adds a prefix that has to be</span>
         <span class="c1"># removed as well.</span>
-        <span class="n">module_name</span> <span class="o">=</span> <span class="n">module_name</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span>
-            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">checkpoint_wrapper</span><span class="o">.</span><span class="n">_CHECKPOINT_PREFIX</span><span class="si">}</span><span class="s2">.&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span>
-        <span class="p">)</span>
+        <span class="n">module_name</span> <span class="o">=</span> <span class="n">module_name</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="n">_CHECKPOINT_PREFIX</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">module_name</span>
 
     <span class="nd">@property</span>
@@ -2781,7 +2742,8 @@
         <span class="k">if</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span><span class="p">():</span>
             <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">synchronize</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_lazy_init</span><span class="p">()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_clear_grads_if_needed</span><span class="p">()</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_root</span><span class="p">:</span>
+            <span class="n">_clear_grads_if_needed</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_fsdp_handles</span><span class="p">(</span><span class="bp">self</span><span class="p">))</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_state_dict_type</span> <span class="o">==</span> <span class="n">StateDictType</span><span class="o">.</span><span class="n">FULL_STATE_DICT</span><span class="p">:</span>
             <span class="c1"># Get config args</span>
             <span class="n">full_state_dict_config</span> <span class="o">=</span> <span class="p">(</span>
@@ -2798,7 +2760,7 @@
                     <span class="n">offload_to_cpu</span><span class="o">=</span><span class="n">offload_to_cpu</span><span class="p">,</span>
                     <span class="n">rank0_only</span><span class="o">=</span><span class="n">rank0_only</span><span class="p">,</span>
                 <span class="p">)</span>
-                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">training_state</span> <span class="o">!=</span> <span class="n">TrainingState_</span><span class="o">.</span><span class="n">SUMMON_FULL_PARAMS</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">training_state</span> <span class="o">!=</span> <span class="n">TrainingState</span><span class="o">.</span><span class="n">SUMMON_FULL_PARAMS</span>
                 <span class="k">else</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">suppress</span><span class="p">()</span>
             <span class="p">)</span>
             <span class="k">with</span> <span class="n">summon_ctx</span><span class="p">:</span>
@@ -2892,7 +2854,7 @@
 <span class="sd">            module (nn.Module): Unused; expected by the hook signature.</span>
 <span class="sd">            input (Any): Unused; expected by the hook signature.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">training_state</span> <span class="o">=</span> <span class="n">TrainingState_</span><span class="o">.</span><span class="n">FORWARD</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">training_state</span> <span class="o">=</span> <span class="n">TrainingState</span><span class="o">.</span><span class="n">FORWARD_BACKWARD</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_exec_order_data</span><span class="o">.</span><span class="n">record_pre_forward</span><span class="p">(</span><span class="n">handles</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">training</span><span class="p">)</span>
         <span class="k">for</span> <span class="n">handle</span> <span class="ow">in</span> <span class="n">handles</span><span class="p">:</span>
             <span class="n">handle</span><span class="o">.</span><span class="n">_training_state</span> <span class="o">=</span> <span class="n">HandleTrainingState</span><span class="o">.</span><span class="n">FORWARD</span>
@@ -2951,29 +2913,10 @@
         <span class="c1"># Register pre-backward hooks to unshard the flattened parameters</span>
         <span class="c1"># for the gradient computation (if needed)</span>
         <span class="n">output</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_register_pre_backward_hooks</span><span class="p">(</span><span class="n">output</span><span class="p">,</span> <span class="n">handles</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">training_state</span> <span class="o">=</span> <span class="n">TrainingState_</span><span class="o">.</span><span class="n">IDLE</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">training_state</span> <span class="o">=</span> <span class="n">TrainingState</span><span class="o">.</span><span class="n">IDLE</span>
         <span class="k">for</span> <span class="n">handle</span> <span class="ow">in</span> <span class="n">handles</span><span class="p">:</span>
             <span class="n">handle</span><span class="o">.</span><span class="n">_training_state</span> <span class="o">=</span> <span class="n">HandleTrainingState</span><span class="o">.</span><span class="n">IDLE</span>
         <span class="k">return</span> <span class="n">output</span>
-
-    <span class="k">def</span> <span class="nf">_cast_forward_inputs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;Moves the forward inputs to the compute device and casts them to the</span>
-<span class="sd">        appropriate dtype if needed.&quot;&quot;&quot;</span>
-        <span class="c1"># TODO: Do not use the side stream for tensor copies for now;</span>
-        <span class="c1"># investigate the perf with/without it</span>
-        <span class="c1"># TODO: For mixed precision, move the inputs to the compute device and</span>
-        <span class="c1"># cast to reduced-precision in a single `to()` call</span>
-        <span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span> <span class="o">=</span> <span class="n">_to_kwargs</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">compute_device</span><span class="o">.</span><span class="n">index</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
-        <span class="n">args</span> <span class="o">=</span> <span class="n">args</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
-        <span class="n">kwargs</span> <span class="o">=</span> <span class="n">kwargs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_mixed_precision_enabled_for_params</span><span class="p">():</span>
-            <span class="n">input_dtype</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">mixed_precision</span><span class="o">.</span><span class="n">param_dtype</span>
-            <span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cast_fp_inputs_to_dtype</span><span class="p">(</span>
-                <span class="n">input_dtype</span><span class="p">,</span>
-                <span class="o">*</span><span class="n">args</span><span class="p">,</span>
-                <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
-            <span class="p">)</span>
-        <span class="k">return</span> <span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span>
 
     <span class="k">def</span> <span class="nf">_fsdp_root_pre_forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
@@ -2991,24 +2934,21 @@
                 <span class="n">handles_key</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">fsdp_module</span><span class="o">.</span><span class="n">_handles</span><span class="p">)</span>
                 <span class="k">if</span> <span class="n">handles_key</span><span class="p">:</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">_needs_pre_forward_unshard</span><span class="p">[</span><span class="n">handles_key</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_wait_for_previous_optim_step</span><span class="p">()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_clear_grads_if_needed</span><span class="p">()</span>
-        <span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cast_forward_inputs</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="n">_wait_for_computation_stream</span><span class="p">(</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">current_stream</span><span class="p">(),</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_streams</span><span class="p">[</span><span class="s2">&quot;unshard&quot;</span><span class="p">],</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_streams</span><span class="p">[</span><span class="s2">&quot;pre_unshard&quot;</span><span class="p">],</span>
+        <span class="p">)</span>
+        <span class="n">_clear_grads_if_needed</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_fsdp_handles</span><span class="p">(</span><span class="bp">self</span><span class="p">))</span>
+        <span class="n">input_dtype</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">mixed_precision</span><span class="o">.</span><span class="n">param_dtype</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_mixed_precision_enabled_for_params</span><span class="p">()</span>
+            <span class="k">else</span> <span class="kc">None</span>
+        <span class="p">)</span>
+        <span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span> <span class="o">=</span> <span class="n">_prepare_forward_inputs</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">compute_device</span><span class="p">,</span> <span class="n">input_dtype</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
+        <span class="p">)</span>
         <span class="k">return</span> <span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span>
-
-    <span class="k">def</span> <span class="nf">_clear_grads_if_needed</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Iterates over all handles to clear original parameter gradients if</span>
-<span class="sd">        needed. See :meth:`FlatParamHandle._clear_grads_if_needed` for details.</span>
-<span class="sd">        Since this method&#39;s CPU overhead is minimal, we may call throughout</span>
-<span class="sd">        FSDP methods, which may serve as callsites to free the gradient memory</span>
-<span class="sd">        earlier.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_use_orig_params</span> <span class="ow">or</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_root</span><span class="p">:</span>
-            <span class="k">return</span>
-        <span class="k">for</span> <span class="n">fsdp_module</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">fsdp_modules</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-            <span class="k">for</span> <span class="n">handle</span> <span class="ow">in</span> <span class="n">fsdp_module</span><span class="o">.</span><span class="n">_handles</span><span class="p">:</span>
-                <span class="n">handle</span><span class="o">.</span><span class="n">_clear_grads_if_needed</span><span class="p">()</span>
 
 <div class="viewcode-block" id="FullyShardedDataParallel.summon_full_params"><a class="viewcode-back" href="../../../../fsdp.html#torch.distributed.fsdp.FullyShardedDataParallel.summon_full_params">[docs]</a>    <span class="nd">@staticmethod</span>
     <span class="nd">@contextlib</span><span class="o">.</span><span class="n">contextmanager</span>
@@ -3150,14 +3090,15 @@
 
         <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">synchronize</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_lazy_init</span><span class="p">()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_assert_state</span><span class="p">([</span><span class="n">TrainingState_</span><span class="o">.</span><span class="n">IDLE</span><span class="p">])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_assert_state</span><span class="p">([</span><span class="n">TrainingState</span><span class="o">.</span><span class="n">IDLE</span><span class="p">])</span>
         <span class="k">for</span> <span class="n">handle</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_handles</span><span class="p">:</span>
             <span class="k">assert</span> <span class="n">handle</span><span class="o">.</span><span class="n">_training_state</span> <span class="o">==</span> <span class="n">HandleTrainingState</span><span class="o">.</span><span class="n">IDLE</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">training_state</span> <span class="o">=</span> <span class="n">TrainingState_</span><span class="o">.</span><span class="n">SUMMON_FULL_PARAMS</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">training_state</span> <span class="o">=</span> <span class="n">TrainingState</span><span class="o">.</span><span class="n">SUMMON_FULL_PARAMS</span>
         <span class="k">for</span> <span class="n">handle</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_handles</span><span class="p">:</span>
             <span class="n">handle</span><span class="o">.</span><span class="n">_training_state</span> <span class="o">=</span> <span class="n">HandleTrainingState</span><span class="o">.</span><span class="n">SUMMON_FULL_PARAMS</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">_clear_grads_if_needed</span><span class="p">()</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_root</span><span class="p">:</span>
+            <span class="n">_clear_grads_if_needed</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_fsdp_handles</span><span class="p">(</span><span class="bp">self</span><span class="p">))</span>
         <span class="n">free_unsharded_flat_params</span> <span class="o">=</span> <span class="p">[</span>
             <span class="n">handle</span><span class="o">.</span><span class="n">needs_unshard</span><span class="p">()</span> <span class="k">for</span> <span class="n">handle</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_handles</span>
         <span class="p">]</span>
@@ -3176,7 +3117,7 @@
             <span class="k">try</span><span class="p">:</span>
                 <span class="k">yield</span>
             <span class="k">finally</span><span class="p">:</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">training_state</span> <span class="o">=</span> <span class="n">TrainingState_</span><span class="o">.</span><span class="n">IDLE</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">training_state</span> <span class="o">=</span> <span class="n">TrainingState</span><span class="o">.</span><span class="n">IDLE</span>
                 <span class="k">for</span> <span class="n">handle</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_handles</span><span class="p">:</span>
                     <span class="n">handle</span><span class="o">.</span><span class="n">_training_state</span> <span class="o">=</span> <span class="n">HandleTrainingState</span><span class="o">.</span><span class="n">IDLE</span>
         <span class="k">else</span><span class="p">:</span>
@@ -3202,7 +3143,7 @@
                     <span class="bp">self</span><span class="o">.</span><span class="n">_reshard</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_handles</span><span class="p">,</span> <span class="n">free_unsharded_flat_params</span><span class="p">)</span>
                     <span class="k">if</span> <span class="n">with_grads</span><span class="p">:</span>
                         <span class="bp">self</span><span class="o">.</span><span class="n">_reshard_grads</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_handles</span><span class="p">)</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">training_state</span> <span class="o">=</span> <span class="n">TrainingState_</span><span class="o">.</span><span class="n">IDLE</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">training_state</span> <span class="o">=</span> <span class="n">TrainingState</span><span class="o">.</span><span class="n">IDLE</span>
                     <span class="k">for</span> <span class="n">handle</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_handles</span><span class="p">:</span>
                         <span class="n">handle</span><span class="o">.</span><span class="n">_training_state</span> <span class="o">=</span> <span class="n">HandleTrainingState</span><span class="o">.</span><span class="n">IDLE</span>
 
@@ -3292,7 +3233,8 @@
 <span class="sd">        attribute but dynamically change whether it is visible to ``nn.Module``</span>
 <span class="sd">        methods.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="o">.</span><span class="n">_parameters</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">FLAT_PARAM</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_has_params</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="o">.</span><span class="n">_parameters</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">FLAT_PARAM</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
 
     <span class="nd">@contextlib</span><span class="o">.</span><span class="n">contextmanager</span>
     <span class="k">def</span> <span class="nf">_deregister_orig_params_ctx</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -3379,7 +3321,7 @@
 <span class="sd">        when inside the :meth:`summon_full_params` context manager.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">should_clean_name</span> <span class="o">=</span> <span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">training_state</span> <span class="o">==</span> <span class="n">TrainingState_</span><span class="o">.</span><span class="n">SUMMON_FULL_PARAMS</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">training_state</span> <span class="o">==</span> <span class="n">TrainingState</span><span class="o">.</span><span class="n">SUMMON_FULL_PARAMS</span>
             <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">_use_orig_params</span>
         <span class="p">)</span>
         <span class="k">for</span> <span class="n">buffer_name</span><span class="p">,</span> <span class="n">buffer</span> <span class="ow">in</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">named_buffers</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
@@ -3400,7 +3342,7 @@
 <span class="sd">        when inside the :meth:`summon_full_params` context manager.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">should_clean_name</span> <span class="o">=</span> <span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">training_state</span> <span class="o">==</span> <span class="n">TrainingState_</span><span class="o">.</span><span class="n">SUMMON_FULL_PARAMS</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">training_state</span> <span class="o">==</span> <span class="n">TrainingState</span><span class="o">.</span><span class="n">SUMMON_FULL_PARAMS</span>
             <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">_use_orig_params</span>
         <span class="p">)</span>
         <span class="k">for</span> <span class="n">param_name</span><span class="p">,</span> <span class="n">param</span> <span class="ow">in</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">named_parameters</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
@@ -3456,10 +3398,10 @@
                 <span class="c1"># that it is called after all backward calls complete</span>
                 <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_root</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_post_backward_callback_queued</span><span class="p">:</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">_queue_wait_for_post_backward</span><span class="p">()</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">_clear_grads_if_needed</span><span class="p">()</span>
+                    <span class="n">_clear_grads_if_needed</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_fsdp_handles</span><span class="p">(</span><span class="bp">self</span><span class="p">))</span>
                 <span class="k">elif</span> <span class="n">_handles_key</span><span class="p">:</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">_assert_state</span><span class="p">([</span><span class="n">TrainingState_</span><span class="o">.</span><span class="n">IDLE</span><span class="p">])</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">training_state</span> <span class="o">=</span> <span class="n">TrainingState_</span><span class="o">.</span><span class="n">BACKWARD_PRE</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_assert_state</span><span class="p">([</span><span class="n">TrainingState</span><span class="o">.</span><span class="n">IDLE</span><span class="p">])</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">training_state</span> <span class="o">=</span> <span class="n">TrainingState</span><span class="o">.</span><span class="n">FORWARD_BACKWARD</span>
                 <span class="c1"># Queueing the post-backward callback is the only logic that is</span>
                 <span class="c1"># not per-handle in the pre-backward hook, so we can return</span>
                 <span class="c1"># early here if there are no handles.</span>
@@ -3552,12 +3494,12 @@
         <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">autograd</span><span class="o">.</span><span class="n">profiler</span><span class="o">.</span><span class="n">record_function</span><span class="p">(</span>
             <span class="s2">&quot;FullyShardedDataParallel._post_backward_hook&quot;</span>
         <span class="p">):</span>
-            <span class="c1"># First hook callback will see PRE state. If we have multiple params,</span>
-            <span class="c1"># then subsequent hook callbacks will see POST state.</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_assert_state</span><span class="p">(</span>
-                <span class="p">[</span><span class="n">TrainingState_</span><span class="o">.</span><span class="n">BACKWARD_PRE</span><span class="p">,</span> <span class="n">TrainingState_</span><span class="o">.</span><span class="n">BACKWARD_POST</span><span class="p">]</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_assert_state</span><span class="p">([</span><span class="n">TrainingState</span><span class="o">.</span><span class="n">FORWARD_BACKWARD</span><span class="p">])</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">training_state</span> <span class="o">=</span> <span class="n">TrainingState</span><span class="o">.</span><span class="n">FORWARD_BACKWARD</span>
+            <span class="n">p_assert</span><span class="p">(</span>
+                <span class="n">handle</span><span class="o">.</span><span class="n">_training_state</span> <span class="o">==</span> <span class="n">HandleTrainingState</span><span class="o">.</span><span class="n">BACKWARD_PRE</span><span class="p">,</span>
+                <span class="sa">f</span><span class="s2">&quot;Expects `BACKWARD_PRE` state but got </span><span class="si">{</span><span class="n">handle</span><span class="o">.</span><span class="n">_training_state</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
             <span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">training_state</span> <span class="o">=</span> <span class="n">TrainingState_</span><span class="o">.</span><span class="n">BACKWARD_POST</span>
             <span class="n">handle</span><span class="o">.</span><span class="n">_training_state</span> <span class="o">=</span> <span class="n">HandleTrainingState</span><span class="o">.</span><span class="n">BACKWARD_POST</span>
 
             <span class="k">if</span> <span class="p">(</span>
@@ -3730,7 +3672,7 @@
 <span class="sd">        However, if a low precision communication hook is registered, then this</span>
 <span class="sd">        dtype cast happens in the hook instead.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_assert_state</span><span class="p">(</span><span class="n">TrainingState_</span><span class="o">.</span><span class="n">BACKWARD_POST</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_assert_state</span><span class="p">(</span><span class="n">TrainingState</span><span class="o">.</span><span class="n">FORWARD_BACKWARD</span><span class="p">)</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_low_precision_hook_enabled</span><span class="p">()</span> <span class="ow">and</span> <span class="p">(</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_mixed_precision_enabled_for_params</span><span class="p">()</span>
             <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">_mixed_precision_enabled_for_reduce</span><span class="p">()</span>
@@ -3757,7 +3699,7 @@
         <span class="p">)</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_post_backward_callback_queued</span><span class="p">:</span>
             <span class="k">return</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_assert_state</span><span class="p">([</span><span class="n">TrainingState_</span><span class="o">.</span><span class="n">IDLE</span><span class="p">])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_assert_state</span><span class="p">([</span><span class="n">TrainingState</span><span class="o">.</span><span class="n">IDLE</span><span class="p">])</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_post_backward_callback_queued</span> <span class="o">=</span> <span class="kc">True</span>
         <span class="n">Variable</span><span class="o">.</span><span class="n">_execution_engine</span><span class="o">.</span><span class="n">queue_callback</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_wait_for_post_backward</span><span class="p">)</span>
 
@@ -3851,7 +3793,7 @@
             <span class="n">_catch_all_reshard</span><span class="p">(</span><span class="n">m</span><span class="p">)</span>
             <span class="n">_finalize_params</span><span class="p">(</span><span class="n">m</span><span class="p">)</span>
             <span class="n">m</span><span class="o">.</span><span class="n">_ran_pre_backward_hook</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
-            <span class="n">m</span><span class="o">.</span><span class="n">training_state</span> <span class="o">=</span> <span class="n">TrainingState_</span><span class="o">.</span><span class="n">IDLE</span>
+            <span class="n">m</span><span class="o">.</span><span class="n">training_state</span> <span class="o">=</span> <span class="n">TrainingState</span><span class="o">.</span><span class="n">IDLE</span>
             <span class="k">for</span> <span class="n">handle</span> <span class="ow">in</span> <span class="n">m</span><span class="o">.</span><span class="n">_handles</span><span class="p">:</span>
                 <span class="n">handle</span><span class="o">.</span><span class="n">_training_state</span> <span class="o">=</span> <span class="n">HandleTrainingState</span><span class="o">.</span><span class="n">IDLE</span>
             <span class="n">m</span><span class="o">.</span><span class="n">_handles_prefetched</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
@@ -3890,12 +3832,12 @@
         <span class="c1"># TODO (linjianma): Patch the forward of each model in the keys</span>
         <span class="c1"># of fsdp_wrap_map based on the information above.</span>
 
-    <span class="k">def</span> <span class="nf">_assert_state</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">TrainingState_</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="n">TrainingState_</span><span class="p">]])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">def</span> <span class="nf">_assert_state</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">TrainingState</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="n">TrainingState</span><span class="p">]])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="sd">&quot;&quot;&quot;Assert we are in the given state.&quot;&quot;&quot;</span>
         <span class="c1"># Since assert can be turned off and this error checking</span>
         <span class="c1"># is really important, we use explicit error checking</span>
         <span class="c1"># and raise a ValueError if needed.</span>
-        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="n">TrainingState_</span><span class="p">):</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="n">TrainingState</span><span class="p">):</span>
             <span class="n">state</span> <span class="o">=</span> <span class="p">[</span><span class="n">state</span><span class="p">]</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">training_state</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">state</span><span class="p">:</span>
             <span class="n">msg</span> <span class="o">=</span> <span class="p">(</span>
@@ -3933,7 +3875,7 @@
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
                 <span class="s2">&quot;`no_sync()` on inner FSDP instances is not supported. Please call `no_sync()` on root FSDP module.&quot;</span>
             <span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_assert_state</span><span class="p">(</span><span class="n">TrainingState_</span><span class="o">.</span><span class="n">IDLE</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_assert_state</span><span class="p">(</span><span class="n">TrainingState</span><span class="o">.</span><span class="n">IDLE</span><span class="p">)</span>
         <span class="n">old_flags</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">modules</span><span class="p">():</span>
             <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">m</span><span class="p">,</span> <span class="n">FullyShardedDataParallel</span><span class="p">):</span>
@@ -3977,12 +3919,16 @@
 <span class="sd">            collective communications.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_lazy_init</span><span class="p">()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_wait_for_previous_optim_step</span><span class="p">()</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_root</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
                 <span class="s2">&quot;`clip_grad_norm_()` should only be called on the root FSDP instance&quot;</span>
             <span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_assert_state</span><span class="p">(</span><span class="n">TrainingState_</span><span class="o">.</span><span class="n">IDLE</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_assert_state</span><span class="p">(</span><span class="n">TrainingState</span><span class="o">.</span><span class="n">IDLE</span><span class="p">)</span>
+        <span class="n">_wait_for_computation_stream</span><span class="p">(</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">current_stream</span><span class="p">(),</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_streams</span><span class="p">[</span><span class="s2">&quot;unshard&quot;</span><span class="p">],</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_streams</span><span class="p">[</span><span class="s2">&quot;pre_unshard&quot;</span><span class="p">],</span>
+        <span class="p">)</span>
 
         <span class="n">max_norm</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">max_norm</span><span class="p">)</span>
         <span class="n">norm_type</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">norm_type</span><span class="p">)</span>
@@ -4838,7 +4784,7 @@
     <span class="c1"># as it increases coupling between CheckpointWrapper and FSDP. This is also not</span>
     <span class="c1"># scalable for additional wrapped modules, we should come up with a general solution</span>
     <span class="c1"># for this issue.</span>
-    <span class="n">tensor_name</span> <span class="o">=</span> <span class="n">tensor_name</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="n">_CHECKPOINT_PREFIX</span> <span class="o">+</span> <span class="s2">&quot;.&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
+    <span class="n">tensor_name</span> <span class="o">=</span> <span class="n">tensor_name</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="n">_CHECKPOINT_PREFIX</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">tensor_name</span>
 </pre></div>
 
