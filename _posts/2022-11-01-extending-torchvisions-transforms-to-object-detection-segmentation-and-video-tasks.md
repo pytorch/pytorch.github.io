@@ -2,7 +2,7 @@
 layout: blog_detail
 title: "Extending TorchVision’s Transforms to Object Detection, Segmentation & Video tasks"
 author: Philip Meier, Victor Fomin, Vasilis Vryniotis
-featured-img: ""
+featured-img: "assets/images/Transforms-v2-feature-image.png"
 ---
 
 TorchVision is extending its Transforms API! Here is what’s new:
@@ -17,9 +17,17 @@ The interface remains the same to assist the migration and adoption. The new API
 
 The stable Transforms API of TorchVision (aka V1) only supports single images. As a result it can only be used for classification tasks:
 
-<p align="center">
-  <img src="" width="90%">
-</p>
+```Python
+from torchvision import transforms
+
+trans = transforms.Compose([
+   transforms.ColorJitter(contrast=0.5),
+   transforms.RandomRotation(30),
+   transforms.CenterCrop(480),
+])
+
+imgs = trans(imgs)
+```
 
 The above approach doesn’t support Object Detection, Segmentation or Classification transforms that require the use of Labels (such as MixUp & CutMix). This limitation made any non-classification Computer Vision tasks second-class citizens as one couldn’t use the Transforms API to perform the necessary augmentations. Historically this made it difficult to train high-accuracy models using TorchVision’s primitives and thus our Model Zoo lagged by several points from SoTA.
 
@@ -29,45 +37,72 @@ To circumvent this limitation, TorchVision offered [custom implementations](http
 
 The Transforms V2 API supports videos, bounding boxes, labels and segmentation masks meaning that it offers native support for many Computer Vision tasks. The new solution is a drop-in replacement:
 
-<p align="center">
-  <img src="" width="90%">
-</p>
+```Python
+from torchvision.prototype import transforms
+
+
+# Exactly the same interface as V1:
+trans = transforms.Compose([
+    transforms.ColorJitter(contrast=0.5),
+    transforms.RandomRotation(30),
+    transforms.CenterCrop(480),
+])
+
+imgs, bboxes, labels = trans(imgs, bboxes, labels)
+```
 
 The new Transform Classes can receive any arbitrary number of inputs without enforcing specific order or structure:
 
-<p align="center">
-  <img src="" width="90%">
-</p>
+```Python
+# Already supported:
+trans(imgs)  # Image Classification
+trans(videos)  # Video Tasks
+trans(imgs_or_videos, labels)  # MixUp/CutMix-style Transforms
+trans(imgs, bboxes, labels)  # Object Detection
+trans(imgs, bboxes, masks, labels)  # Instance Segmentation
+trans(imgs, masks)  # Semantic Segmentation
+trans({"image": imgs, "box": bboxes, "tag": labels})  # Arbitrary Structure
 
-The Transform Classes make sure that they apply the same random transforms to all the inputs to ensure consistent results:
+# Future support:
+trans(imgs, bboxes, labels, keypoints)  # Keypoint Detection
+trans(stereo_images, disparities, masks)  # Depth Perception
+trans(image1, image2, optical_flows, masks)  # Optical Flow
+```
 
-<p align="center">
-  <img src="" width="90%">
-</p>
-
-<p align="center">
-<b>Original</b>
-</p>
-
-<p align="center">
-  <img src="" width="90%">
-</p>
-
-<p align="center">
-<b>Rotated and Cropped</b>
-</p>
+The Transform Classes make sure that they apply the same random transforms to all the inputs to ensure consistent results.
 
 The functional API has been updated to support all necessary signal processing kernels (resizing, cropping, affine transforms, padding etc) for all inputs:
 
-<p align="center">
-  <img src="" width="90%">
-</p>
+
+```Python
+from torchvision.prototype.transforms import functional as F
+
+
+# High-level dispatcher, accepts any supported input type, fully BC
+F.resize(inpt, resize=[224, 224])
+# Image tensor kernel
+F.resize_image_tensor(img_tensor, resize=[224, 224], antialias=True) 
+# PIL image kernel
+F.resize_image_pil(img_pil, resize=[224, 224], interpolation=BILINEAR)
+# Video kernel
+F.resize_video(video, resize=[224, 224], antialias=True) 
+# Mask kernel
+F.resize_mask(mask, resize=[224, 224])
+# Bounding box kernel
+F.resize_bounding_box(bbox, resize=[224, 224], spatial_size=[256, 256])
+```
 
 The API uses Tensor subclassing to wrap input, attach useful meta-data and dispatch to the right kernel. Once the Datasets V2 work is complete, which makes use of TorchData’s Data Pipes, the manual wrapping of input won’t be necessary. For now, users can manually wrap the input by:
 
-<p align="center">
-  <img src="" width="90%">
-</p>
+```Python
+from torchvision.prototype import features
+
+imgs = features.Image(images, color_space=ColorSpace.RGB)
+vids = features.Video(videos, color_space=ColorSpace.RGB)
+masks = features.Mask(target["masks"])
+bboxes = features.BoundingBox(target["boxes"], format=BoundingBoxFormat.XYXY, spatial_size=imgs.spatial_size)
+labels = features.Label(target["labels"], categories=["dog", "cat"])
+```
 
 In addition to the new API, we now provide importable implementations for several data augmentations that are used in SoTA research such as [MixUp](https://github.com/pytorch/vision/blob/main/torchvision/prototype/transforms/_augment.py#L129), [CutMix](https://github.com/pytorch/vision/blob/main/torchvision/prototype/transforms/_augment.py#L152), [Large Scale Jitter](https://github.com/pytorch/vision/blob/main/torchvision/prototype/transforms/_geometry.py#L705), [SimpleCopyPaste](https://github.com/pytorch/vision/blob/main/torchvision/prototype/transforms/_augment.py#L197), [AutoAugmentation](https://github.com/pytorch/vision/blob/main/torchvision/prototype/transforms/_auto_augment.py) methods and [several](https://github.com/pytorch/vision/blob/main/torchvision/prototype/transforms/__init__.py) new Geometric, Colour and Type Conversion transforms.
 
