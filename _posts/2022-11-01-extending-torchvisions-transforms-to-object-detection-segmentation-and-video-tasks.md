@@ -17,7 +17,7 @@ The interface remains the same to assist the migration and adoption. The new API
 
 The stable Transforms API of TorchVision (aka V1) only supports single images. As a result it can only be used for classification tasks:
 
-```Python
+```python
 from torchvision import transforms
 trans = transforms.Compose([
    transforms.ColorJitter(contrast=0.5),
@@ -35,7 +35,7 @@ To circumvent this limitation, TorchVision offered [custom implementations](http
 
 The Transforms V2 API supports videos, bounding boxes, labels and segmentation masks meaning that it offers native support for many Computer Vision tasks. The new solution is a drop-in replacement:
 
-```Python
+```python
 from torchvision.prototype import transforms
 # Exactly the same interface as V1:
 trans = transforms.Compose([
@@ -48,7 +48,7 @@ imgs, bboxes, labels = trans(imgs, bboxes, labels)
 
 The new Transform Classes can receive any arbitrary number of inputs without enforcing specific order or structure:
 
-```Python
+```python
 # Already supported:
 trans(imgs)  # Image Classification
 trans(videos)  # Video Tasks
@@ -67,7 +67,7 @@ The Transform Classes make sure that they apply the same random transforms to al
 
 The functional API has been updated to support all necessary signal processing kernels (resizing, cropping, affine transforms, padding etc) for all inputs:
 
-```Python
+```python
 from torchvision.prototype.transforms import functional as F
 # High-level dispatcher, accepts any supported input type, fully BC
 F.resize(inpt, resize=[224, 224])
@@ -85,7 +85,7 @@ F.resize_bounding_box(bbox, resize=[224, 224], spatial_size=[256, 256])
 
 The API uses Tensor subclassing to wrap input, attach useful meta-data and dispatch to the right kernel. Once the Datasets V2 work is complete, which makes use of TorchData’s Data Pipes, the manual wrapping of input won’t be necessary. For now, users can manually wrap the input by:
 
-```Python
+```python
 from torchvision.prototype import features
 imgs = features.Image(images, color_space=ColorSpace.RGB)
 vids = features.Video(videos, color_space=ColorSpace.RGB)
@@ -106,7 +106,7 @@ Though the functional API (kernels) remain JIT-scriptable and fully-BC, the Tran
 
 Here is an example of the new API using the following [image](https://user-images.githubusercontent.com/5347466/195350223-8683ef25-1367-4292-9174-c15f85c7358e.jpg). It works both with PIL images and Tensors:
 
-```Python
+```python
 import PIL
 from torchvision import io, utils
 from torchvision.prototype import features, transforms as T
