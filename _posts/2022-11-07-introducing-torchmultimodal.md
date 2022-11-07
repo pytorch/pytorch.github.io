@@ -37,7 +37,7 @@ TorchMultimodal is a PyTorch domain library for training multi-task multimodal m
 
   - [MultiHeadAttention](https://github.com/facebookresearch/multimodal/blob/main/torchmultimodal/modules/layers/attention.py#L134). A critical component for attention-based models with support for fast auto-regressive decoding.
 
-- [Examples](https://github.com/facebookresearch/multimodal/tree/main/examples). A collection of examples that show how to combine these building blocks with components and common infrastructure (Lightning, TorchMetrics) from across the PyTorch Ecosystem to replicate state-of-the-art models published in literature. We currently provide five examples, which include.
+- **[Examples](https://github.com/facebookresearch/multimodal/tree/main/examples)**. A collection of examples that show how to combine these building blocks with components and common infrastructure (Lightning, TorchMetrics) from across the PyTorch Ecosystem to replicate state-of-the-art models published in literature. We currently provide five examples, which include.
 
   - [FLAVA](https://arxiv.org/abs/2112.04482) \[[paper](https://arxiv.org/abs/2112.04482)\]. Official code for the paper accepted at CVPR, including a tutorial on finetuning FLAVA.
 
