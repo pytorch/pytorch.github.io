@@ -6,9 +6,8 @@ var supportedOperatingSystems = new Map([
 ]);
 
 var supportedComputePlatforms = new Map([
-  ['cuda10.2', new Set(['linux', 'windows'])],
-  ['cuda11.x', new Set(['linux', 'windows'])],
-  ['cuda11.y', new Set(['linux', 'windows'])],
+  ['cuda.x', new Set(['linux', 'windows'])],
+  ['cuda.y', new Set(['linux', 'windows'])],
   ['rocm5.x', new Set(['linux'])],
   ['accnone', new Set(['linux', 'macos', 'windows'])],
 ]);
@@ -99,7 +98,7 @@ function getPreferredCuda(os) {
   if (os == 'macos') {
     return 'accnone';
   }
-  return 'cuda10.2';
+  return 'cuda11.6';
 }
 
 // Disable compute platform not supported on OS
@@ -117,8 +116,8 @@ function disableUnsupportedPlatforms(os) {
 
 // Change compute versions depending on build type
 function changeCUDAVersion(ptbuild) {
-  var cuda_element_x = document.getElementById("cuda11.x");
-  var cuda_element_y = document.getElementById("cuda11.y");
+  var cuda_element_x = document.getElementById("cuda.x");
+  var cuda_element_y = document.getElementById("cuda.y");
   var rocm_element = document.getElementById("rocm5.x");
   if (cuda_element_x == null || cuda_element_y == null) {
     console.log("Failed to find cuda11 elements");
@@ -141,13 +140,13 @@ function changeCUDAVersion(ptbuild) {
     cuda_element_x.children[0].textContent = "CUDA 11.6";
     cuda_element_y.children[0].textContent = "CUDA 11.7";
   } else if (ptbuild == "stable") {
-    rocm_element.children[0].textContent = "ROCm 5.1.1";
-    cuda_element_x.children[0].textContent = "CUDA 11.3";
-    cuda_element_y.children[0].textContent = "CUDA 11.6";
+    rocm_element.children[0].textContent = "ROCm 5.2";
+    cuda_element_x.children[0].textContent = "CUDA 11.6";
+    cuda_element_y.children[0].textContent = "CUDA 11.7";
   } else {
-    rocm_element.children[0].textContent = "ROCm 5.1.1";
-    cuda_element_x.children[0].textContent = "CUDA 11.3";
-    cuda_element_y.children[0].textContent = "CUDA 11.6";
+    rocm_element.children[0].textContent = "ROCm 5.2";
+    cuda_element_x.children[0].textContent = "CUDA 10.2";
+    cuda_element_y.children[0].textContent = "CUDA 11.1";
   }
 }
 
