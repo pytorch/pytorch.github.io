@@ -261,16 +261,14 @@ $("[data-toggle='cloud-dropdown']").on("click", function(e) {
 
 function commandMessage(key) {
   var object = {{ installMatrix }};
-  var lts_notice = "<div class='alert-secondary'><b>Note</b>: LTS is not available, please read <a href='/tba' style='font-size:100%'>this blog</a>.</div>";
 
   if (!object.hasOwnProperty(key)) {
     $("#command").html(
       "<pre> # Follow instructions at this URL: https://github.com/pytorch/pytorch#from-source </pre>"
     );
-  } else if (key.indexOf("lts") != -1) {
-    $("#command").html(lts_notice);
+  } else if (key.indexOf("lts") == 0  && key.indexOf('rocm') < 0) {
+    $("#command").html("<pre>" + object[key] + "</pre>");
   } else {
     $("#command").html("<pre>" + object[key] + "</pre>");
   }
-
 }
