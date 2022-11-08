@@ -19,4 +19,4 @@ Today, we are removing the PyTorch long-term support (LTS 1.8.2) download link f
   <img src="/assets/images/Pytorch-Enterprise-Support-Img2.png" width="100%">
 </p>
 
-Please reach out to marketing@pytorch.org with any questions.
+Please reach out to [marketing@pytorch.org](mailto:marketing@pytorch.org) with any questions.
