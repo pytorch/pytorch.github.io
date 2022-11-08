@@ -2,7 +2,7 @@
 layout: blog_detail
 title: "Introducing TorchMultimodal - a library for accelerating exploration in Multimodal AI"
 author: Kartikay Khandelwal, Ankita De
-featured-img: ""
+featured-img: "assets/images/torch-multimodal-feature-image.png"
 ---
 
 We are announcing TorchMultimodal Beta, a PyTorch domain library for training SoTA multi-task multimodal models at scale. The library provides composable building blocks (modules, transforms, loss functions) to accelerate model development, SoTA model architectures (FLAVA, MDETR, Omnivore) from published research, training and evaluation scripts, as well as notebooks for exploring these models. The library is under active development, and we’d love to hear your feedback! You can find more details on how to get started [here](https://github.com/facebookresearch/multimodal#installation).
