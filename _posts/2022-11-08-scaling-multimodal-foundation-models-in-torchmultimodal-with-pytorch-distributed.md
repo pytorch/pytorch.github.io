@@ -162,7 +162,9 @@ Figure 2 plots the maximum possible batch size per worker for each optimization.
   Figure 1.
 </p>
 
-3. Batch size: FSDP alone enables slightly higher batch sizes compared to DDP. Using FSDP + AC enables ~3x batch size compared to DDP for the 350M param model and ~5.5x for 900M param model. Even for 10B, a max batch size of ~20 which is fairly decent. This essentially enables larger global batch size using fewer GPUs which is especially useful for contrastive learning tasks.
+<ol start="3">
+  <li>Batch size: FSDP alone enables slightly higher batch sizes compared to DDP. Using FSDP + AC enables ~3x batch size compared to DDP for the 350M param model and ~5.5x for 900M param model. Even for 10B, a max batch size of ~20 which is fairly decent. This essentially enables larger global batch size using fewer GPUs which is especially useful for contrastive learning tasks.</li>
+</ol>
 
 <p align="center">
   <img src="/assets/images/scaling-multimodal-image5-graph-experiments-figure-2.png" width="100%">
