@@ -33,7 +33,7 @@ TorchMultimodal is a PyTorch domain library for training multi-task multimodal m
 
   - [Components for CLIP.](https://github.com/facebookresearch/multimodal/tree/4d2236877467ff8f56aa1935dd92d7782751b135/torchmultimodal/models/clip) A popular model published by OpenAI which has proven to be extremely effective at learning text and image representations.
 
-  - [Multimodal GPT.](https://github.com/facebookresearch/multimodal/blob/4d2236877467ff8f56aa1935dd92d7782751b135/torchmultimodal/models/gpt.py) An abstraction that extends OpenAI’s [GPT](https://cdn.openai.com/research-covers/language-unsupervised/language_understanding_paper.pdf)architecture for multimodal generation when combined with the [generation utility](https://github.com/facebookresearch/multimodal/blob/main/torchmultimodal/utils/generate.py#L33).
+  - [Multimodal GPT.](https://github.com/facebookresearch/multimodal/blob/4d2236877467ff8f56aa1935dd92d7782751b135/torchmultimodal/models/gpt.py) An abstraction that extends OpenAI’s [GPT](https://cdn.openai.com/research-covers/language-unsupervised/language_understanding_paper.pdf) architecture for multimodal generation when combined with the [generation utility](https://github.com/facebookresearch/multimodal/blob/main/torchmultimodal/utils/generate.py#L33).
 
   - [MultiHeadAttention](https://github.com/facebookresearch/multimodal/blob/main/torchmultimodal/modules/layers/attention.py#L134). A critical component for attention-based models with support for fast auto-regressive decoding.
 
