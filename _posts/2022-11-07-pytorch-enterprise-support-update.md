@@ -11,4 +11,8 @@ The program enabled Program certified service providers to develop and offer tai
 
 Today, we are removing the PyTorch long-term support (LTS 1.8.2) download link from the “Get Started” page from the “[Start Locally](https://pytorch.org/get-started/locally/)” download option in order to simplify the user experience. One can download previous versions of PyTorch starting from the first public release until the latest one. Please note that it is only supported for Python while it is being deprecated. If there are any updates to ESP/LTS, we will update future blogs.
 
+<p align="center">
+  <img src="/assets/images/Pytorch-Enterprise-Support-Img1.png" width="100%">
+</p>
+
 Please reach out to [marketing@pytorch.org](mailto:marketing@pytorch.org) with any questions.
