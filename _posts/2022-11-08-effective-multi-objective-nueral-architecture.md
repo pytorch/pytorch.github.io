@@ -1,4 +1,5 @@
 ---
+layout: blog_detail
 title: "Efficient Multi-Objective Neural Architecture Search with Ax"
 author: David Eriksson, Max Balandat
 featured-img: "assets/images/"
