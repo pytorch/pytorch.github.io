@@ -1,0 +1,6 @@
+﻿torch.subtract
+==============
+
+.. currentmodule:: torch
+
+.. autofunction:: subtract

@@ -1,0 +1,6 @@
+﻿torch.arcsinh
+=============
+
+.. currentmodule:: torch
+
+.. autofunction:: arcsinh

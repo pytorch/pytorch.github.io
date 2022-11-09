@@ -6,9 +6,9 @@ var supportedOperatingSystems = new Map([
 ]);
 
 var supportedComputePlatforms = new Map([
-  ['cuda10.2', new Set(['linux', 'windows'])],
-  ['cuda11.x', new Set(['linux', 'windows'])],
-  ['rocm4.x', new Set(['linux'])],
+  ['cuda.x', new Set(['linux', 'windows'])],
+  ['cuda.y', new Set(['linux', 'windows'])],
+  ['rocm5.x', new Set(['linux'])],
   ['accnone', new Set(['linux', 'macos', 'windows'])],
 ]);
 
@@ -22,7 +22,6 @@ var opts = {
 };
 
 var supportedCloudPlatforms = [
-  'alibaba',
   'aws',
   'google-cloud',
   'microsoft-azure',
@@ -99,7 +98,7 @@ function getPreferredCuda(os) {
   if (os == 'macos') {
     return 'accnone';
   }
-  return 'cuda10.2';
+  return 'cuda11.6';
 }
 
 // Disable compute platform not supported on OS
@@ -117,33 +116,37 @@ function disableUnsupportedPlatforms(os) {
 
 // Change compute versions depending on build type
 function changeCUDAVersion(ptbuild) {
-  var cuda_element = document.getElementById("cuda11.x");
-  var rocm_element = document.getElementById("rocm4.x");
-  if (cuda_element == null) {
-    console.log("Failed to find cuda11.x element");
+  var cuda_element_x = document.getElementById("cuda.x");
+  var cuda_element_y = document.getElementById("cuda.y");
+  var rocm_element = document.getElementById("rocm5.x");
+  if (cuda_element_x == null || cuda_element_y == null) {
+    console.log("Failed to find cuda11 elements");
     return;
   }
-  if (cuda_element.childElementCount != 1) {
-    console.log("Unexpected number of children for cuda11.x element");
+  if (cuda_element_x.childElementCount != 1 || cuda_element_y.childElementCount != 1) {
+    console.log("Unexpected number of children for cuda11 element");
     return;
   }
   if (rocm_element == null) {
-    console.log("Failed to find rocm4.x element");
+    console.log("Failed to find rocm5.x element");
     return;
   }
   if (rocm_element.childElementCount != 1) {
-    console.log("Unexpected number of children for rocm4.x element");
+    console.log("Unexpected number of children for rocm5.x element");
     return;
   }
   if (ptbuild == "preview") {
-    rocm_element.children[0].textContent = "ROCM 5.1.1 (beta)";
-    cuda_element.children[0].textContent = "CUDA 11.3";
+    rocm_element.children[0].textContent = "ROCm 5.2";
+    cuda_element_x.children[0].textContent = "CUDA 11.6";
+    cuda_element_y.children[0].textContent = "CUDA 11.7";
   } else if (ptbuild == "stable") {
-    rocm_element.children[0].textContent = "ROCM 4.5.2 (beta)";
-    cuda_element.children[0].textContent = "CUDA 11.3";
+    rocm_element.children[0].textContent = "ROCm 5.2";
+    cuda_element_x.children[0].textContent = "CUDA 11.6";
+    cuda_element_y.children[0].textContent = "CUDA 11.7";
   } else {
-    rocm_element.children[0].textContent = "ROCM 4.5.2 (beta)";
-    cuda_element.children[0].textContent = "CUDA 11.1";
+    rocm_element.children[0].textContent = "ROCm 5.2";
+    cuda_element_x.children[0].textContent = "CUDA 10.2";
+    cuda_element_y.children[0].textContent = "CUDA 11.1";
   }
 }
 
@@ -258,14 +261,13 @@ $("[data-toggle='cloud-dropdown']").on("click", function(e) {
 
 function commandMessage(key) {
   var object = {{ installMatrix }};
-  var lts_notice = "<div class='alert-secondary'><b>Note</b>: Additional support for these binaries may be provided by <a href='/enterprise-support-program' style='font-size:100%'>PyTorch Enterprise Support Program Participants</a>.</div>";
 
   if (!object.hasOwnProperty(key)) {
     $("#command").html(
       "<pre> # Follow instructions at this URL: https://github.com/pytorch/pytorch#from-source </pre>"
     );
   } else if (key.indexOf("lts") == 0  && key.indexOf('rocm') < 0) {
-    $("#command").html("<pre>" + object[key] + "</pre>" + lts_notice);
+    $("#command").html("<pre>" + object[key] + "</pre>");
   } else {
     $("#command").html("<pre>" + object[key] + "</pre>");
   }
