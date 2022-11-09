@@ -1,7 +1,7 @@
 ---
 layout: blog_detail
 title: "PyTorch Enterprise Support Program Update"
-author: Team Pytorch
+author: Team PyTorch
 featured-img: ""
 ---
 
