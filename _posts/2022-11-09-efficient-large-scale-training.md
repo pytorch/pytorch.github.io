@@ -437,23 +437,18 @@ To setup AWS\*\* \*\*ParallelCluster,
 
 3.  **SSH to Head node -** once the cluster is ready, we can connect to the Head node using the SSH protocol, pull our training code with and place the data in the shared storage specified in the cluster configuration file.
 
-        ```
+        pcluster ssh --cluster-name cluster -i your-key_pair
 
-    pcluster ssh --cluster-name cluster -i your-key_pair
-
-```
-
-
-4. **Launch the training job - **now that we have the data and training code, we can launch the slurm job for training. Here is an [example](https://github.com/lessw2020/t5_11/blob/main/hpc-cluster/modified-bert.slurm) of a slurm script to launch the job using torchrun.
+4.  **Launch the training job -** now that we have the data and training code, we can launch the slurm job for training. Here is an [example](https://github.com/lessw2020/t5_11/blob/main/hpc-cluster/modified-bert.slurm) of a slurm script to launch the job using torchrun.
 
 More details on how to set up the cluster is out of the scope of this post, however we will have a separate post on it.
 
 **What’s next?**
 
-With this post we provided a high level overview of FSDP and how it efficiently scales distributed AI training.  The flowchart included will help provide a checklist for you to review tuning options discussed such as the transformer wrapper and activation checkpointing. \
+With this post we provided a high level overview of FSDP and how it efficiently scales distributed AI training. The flowchart included will help provide a checklist for you to review tuning options discussed such as the transformer wrapper and activation checkpointing. \
 In the next posts, we will continue with the T5 model and go deeper into each of the topics above, specifically with sharding strategy and other optimizations to provide more insight and details. For now, a good reference for the sharding strategy is in our video tutorial [here](https://www.youtube.com/watch?v=a3iW6Cggccw&list=PL_lsbAsL_o2BT6aerEKgIoufVD_fodnuT&index=5):
 
-If you have questions or find an issue, please find the authors [Less](https://www.linkedin.com/in/less-wright-22b59017/),  [Hamid](https://www.linkedin.com/in/hamid-nazeri/) and [Geeta](https://www.linkedin.com/in/geetachauhan/) or open an issue on[ PyTorch github](https://github.com/pytorch/pytorch).
+If you have questions or find an issue, please find the authors [Less](https://www.linkedin.com/in/less-wright-22b59017/), [Hamid](https://www.linkedin.com/in/hamid-nazeri/) and [Geeta](https://www.linkedin.com/in/geetachauhan/) or open an issue on[ PyTorch github](https://github.com/pytorch/pytorch).
 
 **_Special thanks to:_**
 
@@ -468,8 +463,3 @@ _[Getting started with FSDP](https://pytorch.org/tutorials/intermediate/FSDP_tut
 _[Advanced tutorial on FSDP](https://pytorch.org/tutorials/intermediate/FSDP_adavnced_tutorial.html)_
 
 _[API documentation](https://pytorch.org/docs/stable/fsdp.html?highlight=fsdp#module-torch.distributed.fsdp)_
-```
-
-```
-
-```
