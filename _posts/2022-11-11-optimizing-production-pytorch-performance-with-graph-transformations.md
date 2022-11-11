@@ -81,13 +81,13 @@ Figure 3(b) describes an implementation of this optimization, which has two comp
 <img src="/assets/images/blog1-fig3a.png" width="90%">
 </p>
 
-1. **Without the optimization**
+(a). **Without the optimization**
 
 <p align="center">
 <img src="/assets/images/blog1-fig3b.png" width="90%">
 </p>
 
-2. **With the optimization**
+(b). **With the optimization**
 
 **Figure 3: Combining input sparse features**
 
@@ -103,13 +103,13 @@ We use FX to implement an optimization called horizontal fusion which dramatical
 <img src="/assets/images/blog1-fig4a.png" width="90%">
 </p>
 
-1. **Without the optimization**
+(a). **Without the optimization**
 
 <p align="center">
 <img src="/assets/images/blog1-fig4b.png" width="90%">
 </p>
 
-2. **With the optimization**
+(b). **With the optimization**
 
 **Figure 4: Horizontal fusion**
 
