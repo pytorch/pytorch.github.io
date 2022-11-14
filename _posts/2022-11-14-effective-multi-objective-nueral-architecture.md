@@ -19,7 +19,7 @@ Despite being very sample-inefficient, naïve approaches like random search and 
 
 In many NAS applications, there is a natural tradeoff between multiple metrics of interest. For instance, when deploying models on-device we may want to maximize model performance (e.g., accuracy), while simultaneously minimizing competing metrics such as power consumption, inference latency, or model size, in order to satisfy deployment constraints. In many cases, we have been able to reduce computational requirements or latency of predictions substantially by accepting a small degradation in model performance (in some cases we were able to both increase accuracy and reduce latency!). Principled methods for exploring such tradeoffs efficiently are key enablers of [Sustainable AI](https://arxiv.org/abs/2111.00364).
 
-At Meta, we have successfully used [multi-objective Bayesian NAS](https://research.facebook.com/blog/2021/07/optimizing-model-accuracy-and-latency-using-bayesian-multi-objective-neural-architecture-search/) in Ax to explore such tradeoffs. Our methodology is being used routinely for optimizing AR/VR on-device ML models. Beyond NAS applications, we have also developed a method for high-dimensional multi-objective optimization, [MORBO](https://arxiv.org/pdf/2109.10964.pdf) for high-throughput experimentation, such as optical systems for AR.
+At Meta, we have successfully used [multi-objective Bayesian NAS](https://research.facebook.com/blog/2021/07/optimizing-model-accuracy-and-latency-using-bayesian-multi-objective-neural-architecture-search/) in Ax to explore such tradeoffs. Our methodology is being used routinely for optimizing AR/VR on-device ML models. Beyond NAS applications, we have also developed a method for high-dimensional multi-objective optimization, [MORBO](https://arxiv.org/pdf/2109.10964.pdf) that can be used to optimize optical systems for augmented reality (AR).
 
 ## Fully automated Multi-Objective NAS with Ax
 
@@ -45,11 +45,11 @@ To run automated NAS with the Scheduler, the main things we need to do are:
 
 - Define a [Runner](https://github.com/facebook/Ax/blob/main/ax/core/runner.py#L21), which is responsible for sending off a model with a particular architecture to be trained on a platform of our choice (like Kubernetes, or maybe just a Docker image on our local machine). In the tutorial below, we use TorchX for handling deployment of training jobs.
 
-- Define a [Metric](https://github.com/facebook/Ax/blob/main/ax/core/metric.py#L21), which is responsible for fetching the objective metrics (such as accuracy, model size, latency) from the training job. In our tutorial, we use Tensorboard to log data, and so can use the Tensorboard metrics the come bundled with Ax.
+- Define a [Metric](https://github.com/facebook/Ax/blob/main/ax/core/metric.py#L21), which is responsible for fetching the objective metrics (such as accuracy, model size, latency) from the training job. In our tutorial, we use Tensorboard to log data, and so can use the Tensorboard metrics that come bundled with Ax.
 
 ## Tutorial
 
-In our tutorial we show how to use Ax to run multi-objective neural architecture search for a simple neural network model on the popular MNIST dataset. While the underlying methodology can be used for more complicated models and larger datasets, we opt for a tutorial that is easily runnable end-to-end on a laptop in less than an hour. In our example, we will tune the widths of two hidden layers, the learning rate, the dropout probability, the batch size, and the number of training epochs. The goal is to trade off performance (accuracy on the validation set) and model size (the number of model parameters) using [multi-objective Bayesian optimization](https://proceedings.neurips.cc/paper/2021/file/11704817e347269b7254e744b5e22dac-Paper.pdf).
+In our tutorial we show how to use Ax to run multi-objective NAS for a simple neural network model on the popular MNIST dataset. While the underlying methodology can be used for more complicated models and larger datasets, we opt for a tutorial that is easily runnable end-to-end on a laptop in less than an hour. In our example, we will tune the widths of two hidden layers, the learning rate, the dropout probability, the batch size, and the number of training epochs. The goal is to trade off performance (accuracy on the validation set) and model size (the number of model parameters) using [multi-objective Bayesian optimization](https://proceedings.neurips.cc/paper/2021/file/11704817e347269b7254e744b5e22dac-Paper.pdf).
 
 The tutorial makes use of the following PyTorch libraries:
 
@@ -57,7 +57,7 @@ The tutorial makes use of the following PyTorch libraries:
 
 - [TorchX](https://github.com/pytorch/torchx) (for running training jobs remotely / asynchronously)
 
-- [BoTorch](https://github.com/pytorch/botorch) (the Bayesian Optimization library that powers Ax’s algorithms)
+- [BoTorch](https://github.com/pytorch/botorch) (the Bayesian optimization library that powers Ax’s algorithms)
 
 The complete runnable example is available as a **[PyTorch Tutorial](https://pytorch.org/tutorials/intermediate/ax_multiobjective_nas_tutorial.html)**.
 
@@ -101,7 +101,7 @@ When evaluating a new candidate configuration, partial learning curves are typic
 
 ### High-dimensional search spaces
 
-In our tutorial, we used BO with a standard Gaussian process (GP) in order to keep the runtime low. However, BO with a standard GPs generally often only scales to 10 tunable parameters. Our new SAASBO method ([paper](https://proceedings.mlr.press/v161/eriksson21a/eriksson21a.pdf), [Ax tutorial](https://ax.dev/tutorials/saasbo.html), [BoTorch tutorial](https://botorch.org/tutorials/saasbo)) not only enables tuning hundreds of parameters, but is also more sample-efficient than standard GP models. SAASBO can easily be turned on by passing `use_saasbo=True` to `choose_generation_strategy`.
+In our tutorial, we used BO with a standard Gaussian process (GP) in order to keep the runtime low. However, these models typically scale to only about 10-20 tunable parameters. Our new SAASBO method ([paper](https://proceedings.mlr.press/v161/eriksson21a/eriksson21a.pdf), [Ax tutorial](https://ax.dev/tutorials/saasbo.html), [BoTorch tutorial](https://botorch.org/tutorials/saasbo)) not only enables tuning hundreds of parameters, but is also more sample-efficient than standard GP models. SAASBO can easily be turned on by passing `use_saasbo=True` to `choose_generation_strategy`.
 
 ## Acknowledgements
 
@@ -109,4 +109,4 @@ We thank the TorchX team (in particular Kiuk Chung and Tristan Rice) for their h
 
 ## References
 
-- [D. Eriksson, P. Chuang, S. Daulton, M. Balandat. Optimizing model accuracy and latency using Bayesian multi-objective neural architecture search. Meta Research blog, July 2021.](https://research.facebook.com/blog/2021/07/optimizing-model-accuracy-and-latency-using-bayesian-multi-objective-neural-architecture-search/)
+[D. Eriksson, P. Chuang, S. Daulton, M. Balandat. Optimizing model accuracy and latency using Bayesian multi-objective neural architecture search. Meta Research blog, July 2021.](https://research.facebook.com/blog/2021/07/optimizing-model-accuracy-and-latency-using-bayesian-multi-objective-neural-architecture-search/)
