@@ -2,7 +2,7 @@
 layout: blog_detail
 title: "Efficient Multi-Objective Neural Architecture Search with Ax"
 author: David Eriksson, Max Balandat
-featured-img: "assets/images/"
+featured-img: "/assets/images/MOO-NAS-blog-img2.png"
 ---
 
 ## tl;dr
@@ -75,6 +75,16 @@ Ax provides a number of visualizations that make it possible to analyze and unde
 
 <!-- another image  -->
 
+<style>
+
+    .cross-validation-container{
+        display:flex; 
+        flex-direction:row; 
+    }
+
+</style>
+
+<div class="cross-validation-container">
 <p align="center">
 <img src="/assets/images/MOO-NAS-blog-img3.png" width="100%">
 </p>
@@ -82,6 +92,7 @@ Ax provides a number of visualizations that make it possible to analyze and unde
 <p align="center">
 <img src="/assets/images/MOO-NAS-blog-img4.png" width="100%">
 </p>
+</div>
 
 ## Takeaways
 
