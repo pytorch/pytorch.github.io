@@ -125,19 +125,19 @@ We use FX to implement a transformation that can overlap computation with all-to
 <img src="/assets/images/blog1-fig5a.png" width="70%">
 </p>
 
-1. **Model graph**
+**(a) Model graph**
 
 <p align="center">
 <img src="/assets/images/blog1-fig5b.png" width="70%">
 </p>
 
-2. **Original execution order**
+**(b) Original execution order**
 
 <p align="center">
 <img src="/assets/images/blog1-fig5c.png" width="70%">
 </p>
 
-**(c) Optimized execution order**
+**(c)Optimized execution order**
 
 **Figure 5: Overlapping Computation with Communication**
 
