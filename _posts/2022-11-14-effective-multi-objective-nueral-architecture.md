@@ -100,7 +100,7 @@ Ax provides a number of visualizations that make it possible to analyze and unde
 
 - Using the Ax Scheduler, we were able to run the optimization automatically in a fully asynchronous fashion - this can be done locally (as done in the tutorial) or by deploying trials remotely to a cluster (simply by changing the TorchX scheduler configuration).
 
-- The state-of-the-art multi-objective Bayesian optimization algorithms available in Ax allowed us to efficiently explore the trade-offs between validation accuracy and model size.
+- The state-of-the-art multi-objective Bayesian optimization algorithms available in Ax allowed us to efficiently explore the tradeoffs between validation accuracy and model size.
 
 ## Advanced Functionality
 
@@ -112,7 +112,7 @@ When evaluating a new candidate configuration, partial learning curves are typic
 
 ### High-dimensional search spaces
 
-In our tutorial, we used Bayesian optimization with a standard Gaussian process in order to keep the runtime low. However, these models typically scale to only about 10-20 tunable parameters. Our new SAASBO method ([paper](https://proceedings.mlr.press/v161/eriksson21a/eriksson21a.pdf), [Ax tutorial](https://ax.dev/tutorials/saasbo.html), [BoTorch tutorial](https://botorch.org/tutorials/saasbo)) is very sample-efficient and enables tuning hundreds of parameters. SAASBO can easily be enabled by passing use_saasbo=True to choose_generation_strategy.
+In our tutorial, we used Bayesian optimization with a standard Gaussian process in order to keep the runtime low. However, these models typically scale to only about 10-20 tunable parameters. Our new SAASBO method ([paper](https://proceedings.mlr.press/v161/eriksson21a/eriksson21a.pdf), [Ax tutorial](https://ax.dev/tutorials/saasbo.html), [BoTorch tutorial](https://botorch.org/tutorials/saasbo)) is very sample-efficient and enables tuning hundreds of parameters. SAASBO can easily be enabled by passing **use_saasbo=True** to **choose_generation_strategy**.
 
 ## Acknowledgements
 
