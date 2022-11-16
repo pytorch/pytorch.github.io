@@ -20,7 +20,6 @@ def gen_install_matrix(versions) -> Dict[str, str]:
     rc = {}
     version_map = {
         "preview": "preview",
-        "lts": versions["latest_lts"],
         "stable": versions["latest_stable"],
     }
     for ver, ver_key in version_map.items():
