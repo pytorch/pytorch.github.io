@@ -7,7 +7,7 @@ featured-img: "/assets/images/MOO-NAS-blog-img2.png"
 
 ## tl;dr
 
-Multi-Objective Optimization in Ax enables efficient exploration of tradeoffs (e.g. between model performance and model size or latency) in Neural Architecture Search. This method has been successfully applied at Meta for a variety of products such as On-Device AI. In this post, we provide an end-to-end tutorial that allows you to try it out yourself.
+Multi-Objective Optimization in Ax enables efficient exploration of tradeoffs (e.g. between model performance and model size or latency) in Neural Architecture Search. This method has been successfully applied at Meta for a variety of products such as On-Device AI. In this post, we provide an [end-to-end](https://pytorch.org/tutorials/intermediate/ax_multiobjective_nas_tutorial.html) tutorial that allows you to try it out yourself.
 
 ## Introduction
 
@@ -19,7 +19,7 @@ Despite being very sample-inefficient, naïve approaches like random search and 
 
 In many NAS applications, there is a natural tradeoff between multiple metrics of interest. For instance, when deploying models on-device we may want to maximize model performance (e.g., accuracy), while simultaneously minimizing competing metrics such as power consumption, inference latency, or model size, in order to satisfy deployment constraints. In many cases, we have been able to reduce computational requirements or latency of predictions substantially by accepting a small degradation in model performance (in some cases we were able to both increase accuracy and reduce latency!). Principled methods for exploring such tradeoffs efficiently are key enablers of [Sustainable AI](https://arxiv.org/abs/2111.00364).
 
-At Meta, we have successfully used [multi-objective Bayesian NAS](https://research.facebook.com/blog/2021/07/optimizing-model-accuracy-and-latency-using-bayesian-multi-objective-neural-architecture-search/) in Ax to explore such tradeoffs. Our methodology is being used routinely for optimizing AR/VR on-device ML models. Beyond NAS applications, we have also developed a method for high-dimensional multi-objective optimization, [MORBO](https://arxiv.org/pdf/2109.10964.pdf) that can be used to optimize optical systems for augmented reality (AR).
+At Meta, we have successfully used [multi-objective Bayesian NAS](https://research.facebook.com/blog/2021/07/optimizing-model-accuracy-and-latency-using-bayesian-multi-objective-neural-architecture-search/) in Ax to explore such tradeoffs. Our methodology is being used routinely for optimizing AR/VR on-device ML models. Beyond NAS applications, we have also developed [MORBO](https://arxiv.org/pdf/2109.10964.pdf) which is a method for high-dimensional multi-objective optimization that can be used to optimize optical systems for augmented reality (AR).
 
 ## Fully automated Multi-Objective NAS with Ax
 
@@ -100,7 +100,7 @@ Ax provides a number of visualizations that make it possible to analyze and unde
 
 - Using the Ax Scheduler, we were able to run the optimization automatically in a fully asynchronous fashion - this can be done locally (as done in the tutorial) or by deploying trials remotely to a cluster (simply by changing the TorchX scheduler configuration).
 
-- The state-of-the-art multi-objective Bayesian optimization algorithms available in Ax allowed us to efficiently explore the trade-offs between validation accuracy and model size..
+- The state-of-the-art multi-objective Bayesian optimization algorithms available in Ax allowed us to efficiently explore the trade-offs between validation accuracy and model size.
 
 ## Advanced Functionality
 
@@ -112,7 +112,7 @@ When evaluating a new candidate configuration, partial learning curves are typic
 
 ### High-dimensional search spaces
 
-In our tutorial, we used BO with a standard Gaussian process (GP) in order to keep the runtime low. However, these models typically scale to only about 10-20 tunable parameters. Our new SAASBO method ([paper](https://proceedings.mlr.press/v161/eriksson21a/eriksson21a.pdf), [Ax tutorial](https://ax.dev/tutorials/saasbo.html), [BoTorch tutorial](https://botorch.org/tutorials/saasbo)) not only enables tuning hundreds of parameters, but is also more sample-efficient than standard GP models. SAASBO can easily be turned on by passing `use_saasbo=True` to `choose_generation_strategy`.
+In our tutorial, we used Bayesian optimization with a standard Gaussian process in order to keep the runtime low. However, these models typically scale to only about 10-20 tunable parameters. Our new SAASBO method ([paper](https://proceedings.mlr.press/v161/eriksson21a/eriksson21a.pdf), [Ax tutorial](https://ax.dev/tutorials/saasbo.html), [BoTorch tutorial](https://botorch.org/tutorials/saasbo)) is very sample-efficient and enables tuning hundreds of parameters. SAASBO can easily be enabled by passing use_saasbo=True to choose_generation_strategy.
 
 ## Acknowledgements
 
