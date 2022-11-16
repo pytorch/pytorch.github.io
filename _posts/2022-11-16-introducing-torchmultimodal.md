@@ -86,4 +86,4 @@ While this is an exciting launch, there’s a lot more to come. The library is u
 
 ## Team
 
-The primary contributors and developers of TorchMultimodal include Ankita De, Evan Smothers, Kartikay Khandelwal, Lan Gong, Laurence Rouesnel, Nahiyan Malik, Rafi Ayub and Yosua Michael Maranatha
+The primary contributors and developers of TorchMultimodal include Ankita De, Evan Smothers, Kartikay Khandelwal, Lan Gong, Laurence Rouesnel, Nahiyan Malik, Rafi Ayub and Yosua Michael Maranatha.
