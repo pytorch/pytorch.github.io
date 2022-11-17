@@ -22,7 +22,7 @@ Embedding tables are ubiquitous in recommendation systems. Section 3 will discus
 Figure 1 is a simple example adopted from [3] which illustrates using FX to transform a PyTorch program. It contains three steps: (1) capturing the graph from a program, (2) modifying the graph (in this example, all uses of RELU are replaced by GELU), and (3) generating a new program from the modified graph.
 
 <p align="center">
-<img src="/assets/images/blog1-fig1.png" width="70%">
+<img src="/assets/images/blog1-fig-1.png" width="70%">
 </p>
 
 **Figure 1: A FX example which replaces all uses of RELU by GELU in a PyTorch module.**
@@ -32,7 +32,7 @@ The FX API [4] provides many more functionalities for inspecting and transformin
 ### 2.2 Embedding Tables
 
 <p align="center">
-<img src="/assets/images/blog1-fig2.png" width="90%">
+<img src="/assets/images/blog1-fig-2.png" width="90%">
 </p>
 
 **Figure 2: Illustration of an embedding table for a sparse feature with batch size = 1**
@@ -78,13 +78,13 @@ Figure 3(b) describes an implementation of this optimization, which has two comp
 - On the GPU side: Using FX, we insert a Permute_and_Split op into the model graph to recover the indices and lengths tensors of individual features from the combined tensors, and route them to the corresponding nodes downstream.
 
 <p align="center">
-<img src="/assets/images/blog1-fig3a.png" width="90%">
+<img src="/assets/images/blog1-fig-3a.png" width="90%">
 </p>
 
 (a). **Without the optimization**
 
 <p align="center">
-<img src="/assets/images/blog1-fig3b.png" width="90%">
+<img src="/assets/images/blog1-fig-3b.png" width="90%">
 </p>
 
 (b). **With the optimization**
@@ -100,13 +100,13 @@ The main runtime cost here is the GPU kernel launch overhead. For instance, the 
 We use FX to implement an optimization called horizontal fusion which dramatically reduces the number of GPU kernel launches (in this example, the optimized number of GPU kernel launches is 5, see Figure 4(b)). Instead of doing an explicit Split, we use the Add_middle_dim op to reshape the 2D embedding tensor of shape (B, NxD) to a 3D tensor of shape (B, N, D). Then a single LayerNorm is applied to the last dimension of it. Then a single Tanh is applied to the result of the LayerNorm. At the end, we use the Remove_middle_dim op to reshape the Tanh’s result back to a 2D tensor. In addition, since Add_middle_dim and Remove_middle_dim only reshape the tensor without creating an extra copy, the amount of GPU memory consumption could be reduced as well.
 
 <p align="center">
-<img src="/assets/images/blog1-fig4a.png" width="90%">
+<img src="/assets/images/blog1-fig-4a.png" width="90%">
 </p>
 
 (a). **Without the optimization**
 
 <p align="center">
-<img src="/assets/images/blog1-fig4b.png" width="90%">
+<img src="/assets/images/blog1-fig-4b.png" width="90%">
 </p>
 
 (b). **With the optimization**
@@ -122,19 +122,19 @@ Within a training step, a GPU needs to read/write feature values from/to the emb
 We use FX to implement a transformation that can overlap computation with all-to-all communication. Figure 5(a) shows the example of a model graph which has embedding table accesses (EmbeddingAllToAll) and other ops. Without any optimization, they are sequentially executed on a GPU stream, as shown in Figure 5(b). Using FX, we break EmbeddingAllToAll into EmbeddingAllToAll_Request and EmbeddingAllToAll_Wait, and schedule independent ops in between them.
 
 <p align="center">
-<img src="/assets/images/blog1-fig5a.png" width="70%">
+<img src="/assets/images/blog1-fig-5a.png" width="70%">
 </p>
 
 **(a) Model graph**
 
 <p align="center">
-<img src="/assets/images/blog1-fig5b.png" width="70%">
+<img src="/assets/images/blog1-fig-5b.png" width="70%">
 </p>
 
 **(b) Original execution order**
 
 <p align="center">
-<img src="/assets/images/blog1-fig5c.png" width="70%">
+<img src="/assets/images/blog1-fig-5c.png" width="70%">
 </p>
 
 **(c)Optimized execution order**
