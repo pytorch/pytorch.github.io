@@ -71,7 +71,7 @@ The final results from the NAS optimization performed in the tutorial can be see
 
 ### Visualizations
 
-Ax provides a number of visualizations that make it possible to analyze and understand the results of an experiment. Here, we will focus on the performance of the Gaussian process models that model the unknown objectives, which are used to help us discover promising configurations faster. Ax makes it easy to better understand how accurate these models are and how they perform on unseen data via leave-one-out cross-validation. In the figures below, we see that the model fits look quite good - predictions are close to the actual outcomes, and predictive 95% confidence intervals cover the actual outcomes well. Additionally, we observe that the model size **(num_params)** metric is much easier to model than the validation accuracy **(val_acc)** metric.
+Ax provides a number of visualizations that make it possible to analyze and understand the results of an experiment. Here, we will focus on the performance of the Gaussian process models that model the unknown objectives, which are used to help us discover promising configurations faster. Ax makes it easy to better understand how accurate these models are and how they perform on unseen data via leave-one-out cross-validation. In the figures below, we see that the model fits look quite good - predictions are close to the actual outcomes, and predictive 95% confidence intervals cover the actual outcomes well. Additionally, we observe that the model size `(num_params)` metric is much easier to model than the validation accuracy `(val_acc)` metric.
 
 <!-- another image  -->
 
@@ -112,7 +112,7 @@ When evaluating a new candidate configuration, partial learning curves are typic
 
 ### High-dimensional search spaces
 
-In our tutorial, we used Bayesian optimization with a standard Gaussian process in order to keep the runtime low. However, these models typically scale to only about 10-20 tunable parameters. Our new SAASBO method ([paper](https://proceedings.mlr.press/v161/eriksson21a/eriksson21a.pdf), [Ax tutorial](https://ax.dev/tutorials/saasbo.html), [BoTorch tutorial](https://botorch.org/tutorials/saasbo)) is very sample-efficient and enables tuning hundreds of parameters. SAASBO can easily be enabled by passing **use_saasbo=True** to **choose_generation_strategy**.
+In our tutorial, we used Bayesian optimization with a standard Gaussian process in order to keep the runtime low. However, these models typically scale to only about 10-20 tunable parameters. Our new SAASBO method ([paper](https://proceedings.mlr.press/v161/eriksson21a/eriksson21a.pdf), [Ax tutorial](https://ax.dev/tutorials/saasbo.html), [BoTorch tutorial](https://botorch.org/tutorials/saasbo)) is very sample-efficient and enables tuning hundreds of parameters. SAASBO can easily be enabled by passing `use_saasbo=True` to `choose_generation_strategy`.
 
 ## Acknowledgements
 
