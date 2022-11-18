@@ -2,7 +2,7 @@
 layout: blog_detail
 title: "Optimizing Production PyTorch Models’ Performance with Graph Transformations"
 author: Jade Nie, CK Luk, Xiaodong Wang, Jackie (Jiaqi) Xu
-featured-img: "assets/images/blog1-3b.png"
+featured-img: "assets/images/blog1-fig-3b.png"
 ---
 
 ## 1. Introduction
