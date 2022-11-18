@@ -157,7 +157,7 @@ Figure 2 plots the maximum possible batch size per worker for each optimization.
 </p>
 
 <p align="center">
-  Figure 1.
+  Figure 1: Training throughput for different configurations
 </p>
 
 <ol start="3">
@@ -169,7 +169,7 @@ Figure 2 plots the maximum possible batch size per worker for each optimization.
 </p>
 
 <p align="center">
-  Figure 2.
+  Figure 2: Max local batchsize possible for different configurations
 </p>
 
 ## Conclusion
@@ -178,6 +178,6 @@ As the world moves towards multimodal foundation models, scaling model parameter
 
 ## References
 
-- torchmultimodal intro blog
+- [Introducing TorchMultimodal - a library for accelerating exploration in Multimodal AI](https://pytorch.org/blog/introducing-torchmultimodal/)
 - [FLAVA paper](https://deploy-preview-1186--pytorch-dot-org-preview.netlify.app/blog/introducing-torchmultimodal/)
 - [Introducing Pytorch FSDP](https://pytorch.org/blog/introducing-pytorch-fully-sharded-data-parallel-api/)
