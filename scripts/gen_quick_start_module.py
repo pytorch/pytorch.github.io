@@ -186,7 +186,7 @@ def main():
             release_matrix[osys.value] = read_matrix_for_os(osys)
 
         update_versions(versions, release_matrix, options.version)
-        write_published_versions()
+        write_published_versions(versions)
 
     template = read_quick_start_module_template()
     versions_str = json.dumps(gen_install_matrix(versions))
