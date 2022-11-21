@@ -4,7 +4,7 @@
   <generator uri="https://jekyllrb.com/" version="3.9.0">Jekyll</generator>
   <link href="https://pytorch.org/feed.xml" rel="self" type="application/atom+xml" />
   <link href="https://pytorch.org/" rel="alternate" type="text/html" />
-  <updated>2022-11-20T16:46:19-08:00</updated>
+  <updated>2022-11-21T10:12:45-08:00</updated>
   <id>https://pytorch.org/feed.xml</id>
 
   
@@ -29,6 +29,278 @@
 
   
   
+  
+    <entry>
+      <title type="html">Scaling Multimodal Foundation Models in TorchMultimodal with Pytorch Distributed</title>
+      <link href="https://pytorch.org/blog/scaling-multimodal-foundation-models-in-torchmultimodal-with-pytorch-distributed/" rel="alternate" type="text/html" title="Scaling Multimodal Foundation Models in TorchMultimodal with Pytorch Distributed" />
+      <published>2022-11-21T00:00:00-08:00</published>
+      <updated>2022-11-21T00:00:00-08:00</updated>
+      <id>https://pytorch.org/blog/scaling-multimodal-foundation-models-in-torchmultimodal-with-pytorch-distributed</id>
+      <content type="html" xml:base="https://pytorch.org/blog/scaling-multimodal-foundation-models-in-torchmultimodal-with-pytorch-distributed/">&lt;h2 id=&quot;introduction&quot;&gt;Introduction&lt;/h2&gt;
+
+&lt;p&gt;In recent years, scaling model sizes has become a promising area of research. In the field of NLP, language models have gone from hundreds of millions of parameters (BERT) to hundreds of billions of parameters (GPT-3) demonstrating significant improvements on downstream tasks. The &lt;a href=&quot;https://arxiv.org/pdf/2001.08361.pdf&quot;&gt;scaling laws&lt;/a&gt; for large scale language models have also been studied extensively in the industry. A similar trend can be observed in the vision field, with the community moving to transformer based models (like &lt;a href=&quot;https://arxiv.org/pdf/2010.11929.pdf&quot;&gt;Vision Transformer&lt;/a&gt;, &lt;a href=&quot;https://arxiv.org/pdf/2111.06377.pdf&quot;&gt;Masked Auto Encoders&lt;/a&gt;) as well. It is clear that individual modalities - text, image, video - have benefited massively from recent advancements in scale, and frameworks have quickly adapted to accommodate larger models.&lt;/p&gt;
+
+&lt;p&gt;At the same time, multimodality is becoming increasingly important in research with tasks like image-text retrieval, visual question-answering, visual dialog and text to image generation gaining traction in real world applications. Training large scale multimodal models is the natural next step and we already see several efforts in this area like &lt;a href=&quot;https://openai.com/blog/clip/&quot;&gt;CLIP&lt;/a&gt; from OpenAI, &lt;a href=&quot;https://parti.research.google/&quot;&gt;Parti&lt;/a&gt; from Google and &lt;a href=&quot;https://arxiv.org/pdf/2201.07520.pdf&quot;&gt;CM3&lt;/a&gt; from Meta.&lt;/p&gt;
+
+&lt;p&gt;In this blog, we present a case study demonstrating the scaling of &lt;a href=&quot;https://flava-model.github.io/&quot;&gt;FLAVA&lt;/a&gt; to 10B params using techniques from PyTorch Distributed. FLAVA is a vision and language foundation model, available in &lt;a href=&quot;https://github.com/facebookresearch/multimodal/tree/main/torchmultimodal/models/flava&quot;&gt;TorchMultimodal&lt;/a&gt;, which has shown competitive performance on both unimodal and multimodal benchmarks. We also give the relevant code pointers in this blog. The instructions for running an example script to scale FLAVA can be found &lt;a href=&quot;https://github.com/facebookresearch/multimodal/tree/main/examples/flava/native&quot;&gt;here&lt;/a&gt;.&lt;/p&gt;
+
+&lt;h2 id=&quot;scaling-flava-overview&quot;&gt;Scaling FLAVA Overview&lt;/h2&gt;
+
+&lt;p&gt;FLAVA is a foundation multimodal model which consists of transformer based image and text encoders followed by a transformer-based multimodal fusion module. It is pretrained on both unimodal and multimodal data with a diverse set of losses. This includes masked language, image and multimodal modeling losses that require the model to reconstruct the original input from its context (self-supervised learning). It also uses image text matching loss over positive and negative examples of aligned image-text pairs as well as CLIP style contrastive loss. In addition to multimodal tasks (like image-text retrieval), FLAVA demonstrated competitive performance on unimodal benchmarks as well (GLUE tasks for NLP and image classification for vision).&lt;/p&gt;
+
+&lt;p align=&quot;center&quot;&gt;
+  &lt;img src=&quot;/assets/images/scaling-multimodal-image1-diagram-of-multimodal-flava-new.png&quot; width=&quot;100%&quot; /&gt;
+&lt;/p&gt;
+
+&lt;p&gt;The original FLAVA model has ~350M parameters and uses ViT-B16 configurations (from the &lt;a href=&quot;https://arxiv.org/pdf/2010.11929.pdf&quot;&gt;Vision Transformer paper&lt;/a&gt;) for image and text encoders. The multimodal fusion transformer follows the unimodal encoders but with half the number of layers. We explore increasing the size of each encoder to larger ViT variants.&lt;/p&gt;
+
+&lt;p&gt;Another aspect of scaling is adding the ability to increase the batch size. FLAVA makes use of contrastive loss over in-batch negatives, which typically benefits from large batch size (as studied &lt;a href=&quot;https://openreview.net/pdf?id=U2exBrf_SJh&quot;&gt;here&lt;/a&gt;). The largest training efficiency or throughput is also generally achieved when operating near maximum possible batch sizes as determined by the amount of GPU memory available (also see the experiments section).&lt;/p&gt;
+
+&lt;p&gt;The following table displays the different model configurations we experimented with. We also determine the maximum batch size that was able to fit in memory for each configuration in the experiments section.&lt;/p&gt;
+
+&lt;table&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th&gt;Approx Model params&lt;/th&gt;
+      &lt;th&gt;Hidden size&lt;/th&gt;
+      &lt;th&gt;MLP size&lt;/th&gt;
+      &lt;th&gt;Heads&lt;/th&gt;
+      &lt;th&gt;Unimodal layers&lt;/th&gt;
+      &lt;th&gt;Multimodal layers&lt;/th&gt;
+      &lt;th&gt;Model size (fp32)&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td&gt;350M (original)&lt;/td&gt;
+      &lt;td&gt;768&lt;/td&gt;
+      &lt;td&gt;3072&lt;/td&gt;
+      &lt;td&gt;12&lt;/td&gt;
+      &lt;td&gt;12&lt;/td&gt;
+      &lt;td&gt;6&lt;/td&gt;
+      &lt;td&gt;1.33GB&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;900M&lt;/td&gt;
+      &lt;td&gt;1024&lt;/td&gt;
+      &lt;td&gt;4096&lt;/td&gt;
+      &lt;td&gt;16&lt;/td&gt;
+      &lt;td&gt;24&lt;/td&gt;
+      &lt;td&gt;12&lt;/td&gt;
+      &lt;td&gt;3.48GB&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;1.8B&lt;/td&gt;
+      &lt;td&gt;1280&lt;/td&gt;
+      &lt;td&gt;5120&lt;/td&gt;
+      &lt;td&gt;16&lt;/td&gt;
+      &lt;td&gt;32&lt;/td&gt;
+      &lt;td&gt;16&lt;/td&gt;
+      &lt;td&gt;6.66GB&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;2.7B&lt;/td&gt;
+      &lt;td&gt;1408&lt;/td&gt;
+      &lt;td&gt;6144&lt;/td&gt;
+      &lt;td&gt;16&lt;/td&gt;
+      &lt;td&gt;40&lt;/td&gt;
+      &lt;td&gt;20&lt;/td&gt;
+      &lt;td&gt;10.3GB&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;4.8B&lt;/td&gt;
+      &lt;td&gt;1664&lt;/td&gt;
+      &lt;td&gt;8192&lt;/td&gt;
+      &lt;td&gt;16&lt;/td&gt;
+      &lt;td&gt;48&lt;/td&gt;
+      &lt;td&gt;24&lt;/td&gt;
+      &lt;td&gt;18.1GB&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;10B&lt;/td&gt;
+      &lt;td&gt;2048&lt;/td&gt;
+      &lt;td&gt;10240&lt;/td&gt;
+      &lt;td&gt;16&lt;/td&gt;
+      &lt;td&gt;64&lt;/td&gt;
+      &lt;td&gt;40&lt;/td&gt;
+      &lt;td&gt;38GB&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;h2 id=&quot;optimization-overview&quot;&gt;Optimization overview&lt;/h2&gt;
+
+&lt;p&gt;PyTorch offers several native techniques to efficiently scale models. In the following sections, we go over some of these techniques and show how they can be applied to scale up a FLAVA model to 10 billion parameters.&lt;/p&gt;
+
+&lt;h2 id=&quot;distributed-data-parallel&quot;&gt;Distributed Data Parallel&lt;/h2&gt;
+
+&lt;p&gt;A common starting point for distributed training is data parallelism. Data parallelism replicates the model across each worker (GPU), and partitions the dataset across the workers. Different workers process different data partitions in parallel and synchronize their gradients (via all reduce) before model weights are updated. The figure below showcases the flow (forward, backward, and weight update steps) for processing a single example for data parallelism:&lt;/p&gt;
+
+&lt;p align=&quot;center&quot;&gt;
+  &lt;img src=&quot;/assets/images/scaling-multimodal-image2-diagram-of-standard-data-parallel-training.png&quot; width=&quot;100%&quot; /&gt;
+&lt;/p&gt;
+
+&lt;p align=&quot;center&quot;&gt;
+  Source: &lt;a href=&quot;https://engineering.fb.com/2021/07/15/open-source/fsdp/&quot;&gt;https://engineering.fb.com/2021/07/15/open-source/fsdp/&lt;/a&gt;
+&lt;/p&gt;
+
+&lt;p&gt;PyTorch provides a native API, &lt;a href=&quot;https://pytorch.org/docs/stable/generated/torch.nn.parallel.DistributedDataParallel.html&quot;&gt;DistributedDataParallel&lt;/a&gt; (DDP) to enable data parallelism which can be used as a module wrapper as showcased below. Please see PyTorch Distributed &lt;a href=&quot;https://pytorch.org/docs/stable/distributed.html#&quot;&gt;documentation&lt;/a&gt; for more details.&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class=&quot;language-Python&quot;&gt;from torchmultimodal.models.flava.model import flava_model_for_pretraining
+import torch
+import torch.distributed as dist
+
+model = flava_model_for_pretraining().cuda()
+# Initialize PyTorch Distributed process groups
+# Please see https://pytorch.org/tutorials/intermediate/dist_tuto.html for details
+dist.init_process_group(backend=”nccl”)
+# Wrap model in DDP
+model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[torch.cuda.current_device()])
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;h2 id=&quot;fully-sharded-data-parallel&quot;&gt;Fully Sharded Data Parallel&lt;/h2&gt;
+
+&lt;p&gt;GPU memory usage of a training application can roughly be broken down into model inputs, intermediate activations (needed for gradient computation), model parameters, gradients, and optimizer states. Scaling a model will typically increase each of these elements. Scaling a model with DDP can eventually result in out-of-memory issues when a single GPU’s memory becomes insufficient since it replicates the parameters, gradients, and optimizer states on all workers.&lt;/p&gt;
+
+&lt;p&gt;To reduce this replication and save GPU memory, we can shard the model parameters, gradients, and optimizer states across all workers with each worker only managing a single shard. This technique was popularized by the &lt;a href=&quot;https://arxiv.org/abs/1910.02054&quot;&gt;ZeRO-3&lt;/a&gt; approach developed by Microsoft. A PyTorch-native implementation of this approach is available as &lt;a href=&quot;https://pytorch.org/docs/stable/fsdp.html&quot;&gt;FullyShardedDataParallel&lt;/a&gt; (FSDP) API, released as a beta feature in PyTorch 1.12. During a module’s forward and backward passes, FSDP unshards the model parameters as needed for computation (using all-gather) and reshards them after computation. It synchronizes gradients using the reduce-scatter collective to ensure sharded gradients are globally averaged. The forward and backward pass flow of a model wrapped in FSDP are detailed below:&lt;/p&gt;
+
+&lt;p align=&quot;center&quot;&gt;
+  &lt;img src=&quot;/assets/images/scaling-multimodal-image3-diagram-of-fully-shared-data-parallel-training.png&quot; width=&quot;100%&quot; /&gt;
+&lt;/p&gt;
+
+&lt;p align=&quot;center&quot;&gt;
+  Source: &lt;a href=&quot;https://engineering.fb.com/2021/07/15/open-source/fsdp/&quot;&gt;https://engineering.fb.com/2021/07/15/open-source/fsdp/&lt;/a&gt;
+&lt;/p&gt;
+
+&lt;p&gt;To use FSDP, the submodules of a model need to be wrapped with the API to control when specific submodules are sharded or unsharded. FSDP provides an auto-wrapping API (see the &lt;a href=&quot;https://pytorch.org/docs/stable/fsdp.html#torch.distributed.fsdp.FullyShardedDataParallel&quot;&gt;auto_wrap_policy&lt;/a&gt; argument) that can be used out of the box as well as several &lt;a href=&quot;https://github.com/pytorch/pytorch/blob/master/torch/distributed/fsdp/wrap.py&quot;&gt;wrapping policies&lt;/a&gt; and the ability to &lt;a href=&quot;https://github.com/pytorch/pytorch/blob/75c0e3a471c19b883feca15fd4ecfabedf746691/torch/distributed/fsdp/fully_sharded_data_parallel.py#L858&quot;&gt;write your own policy&lt;/a&gt;.&lt;/p&gt;
+
+&lt;p&gt;The following example demonstrates wrapping the FLAVA model with FSDP. We specify the auto-wrapping policy as &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;transformer_auto_wrap_policy&lt;/code&gt;. This will wrap individual transformer layers (&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;TransformerEncoderLayer&lt;/code&gt;), the image transformer (&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;ImageTransformer&lt;/code&gt;), text encoder (&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;BERTTextEncoder&lt;/code&gt;) and multimodal encoder (&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;FLAVATransformerWithoutEmbeddings&lt;/code&gt;) as individual FSDP units. This uses a recursive wrapping approach for efficient memory management. For example, after an individual transformer layer’s forward or backward pass is finished, its parameters are discarded, freeing up memory thereby reducing peak memory usage.&lt;/p&gt;
+
+&lt;p&gt;FSDP also provides a number of configurable options to tune the performance of applications. For example, in our use case, we illustrate the use of the new &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;limit_all_gathers&lt;/code&gt; flag, which prevents all-gathering model parameters too early thereby alleviating memory pressure on the application. We encourage users to experiment with this flag which can potentially improve the performance of applications with high active memory usage.&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class=&quot;language-Python&quot;&gt;import torch
+from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
+from torch.distributed.fsdp.wrap import transformer_auto_wrap_policy
+from torchmultimodal.models.flava.model import flava_model_for_pretraining
+from torchmultimodal.models.flava.text_encoder import BertTextEncoder
+from torchmultimodal.models.flava.image_encoder import ImageTransformer
+from torchmultimodal.models.flava.transformer import FLAVATransformerWithoutEmbeddings
+from torchmultimodal.modules.layers.transformer import TransformerEncoderLayer
+
+model = flava_model_for_pretraining().cuda()
+dist.init_process_group(backend=”nccl”)
+
+model = FSDP(
+               model,
+               device_id=torch.cuda.current_device(),
+               auto_wrap_policy=partial(
+                   transformer_auto_wrap_policy,
+                   transformer_layer_cls={
+                       TransformerEncoderLayer,
+                       ImageTransformer,
+                       BERTTextEncoder,
+                       FLAVATransformerWithoutEmbeddings
+                   },
+               ),
+               limit_all_gathers=True,
+           )
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;h2 id=&quot;activation-checkpointing&quot;&gt;Activation Checkpointing&lt;/h2&gt;
+
+&lt;p&gt;As discussed above, intermediate activations, model parameters, gradients, and optimizer states contribute to the overall GPU memory usage. FSDP can reduce memory consumption due to the latter three but does not reduce memory consumed by activations. Memory used by activations increases with increase in batch size or number of hidden layers. Activation checkpointing is a technique to decrease this memory usage by recomputing the activations during the backward pass instead of holding them in memory for a specific checkpointed module. For example, we observed ~4x reduction in the peak active memory after forward pass by applying activation checkpointing to the 2.7B parameter model.&lt;/p&gt;
+
+&lt;p&gt;PyTorch offers a wrapper based activation checkpointing API. In particular, &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;checkpoint_wrapper&lt;/code&gt; allows users to wrap an individual module with checkpointing, and &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;apply_activation_checkpointing&lt;/code&gt; allows users to specify a policy with which to wrap modules within an overall module with checkpointing. Both these APIs can be applied to most models as they do not require any modifications to the model definition code. However, if more granular control over checkpointed segments, such as checkpointing specific functions within a module, is required, the functional &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;torch.utils.checkpoint&lt;/code&gt; &lt;a href=&quot;https://pytorch.org/docs/stable/checkpoint.html&quot;&gt;API&lt;/a&gt; can be leveraged, although this requires modification to the model code. The application of the activation checkpointing wrapper to individual FLAVA transformer layers (denoted by &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;TransformerEncoderLayer&lt;/code&gt;) is shown below. For a thorough description of activation checkpointing, please see the description in the &lt;a href=&quot;https://pytorch.org/docs/stable/checkpoint.html&quot;&gt;PyTorch documentation&lt;/a&gt;.&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class=&quot;language-Python&quot;&gt;from torchmultimodal.models.flava.model import flava_model_for_pretraining
+from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import apply_activation_checkpointing, checkpoint_wrapper, CheckpointImpl
+from torchmultimodal.modules.layers.transformer import TransformerEncoderLayer
+
+model = flava_model_for_pretraining()
+checkpoint_tformer_layers_policy = lambda submodule: isinstance(submodule, TransformerEncoderLayer)
+
+apply_activation_checkpointing(
+               model,
+               checkpoint_wrapper_fn=checkpoint_wrapper,
+               check_fn=checkpoint_tformer_layers_policy,
+           )
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Used together, wrapping FLAVA transformer layers with activation checkpointing and wrapping the overall model with FSDP as demonstrated above, we are able to scale FLAVA to 10B parameters.&lt;/p&gt;
+
+&lt;h2 id=&quot;experiments&quot;&gt;Experiments&lt;/h2&gt;
+
+&lt;p&gt;We conduct an empirical study about the impact of the different optimizations from the previous section on system performance. For all our experiments, we use a single node with 8 A100 40GB GPUs and run the pretraining for 1000 iterations. All runs also used PyTorch’s &lt;a href=&quot;https://pytorch.org/docs/stable/amp.html&quot;&gt;automatic mixed precision&lt;/a&gt; with the bfloat16 data type. &lt;a href=&quot;https://pytorch.org/docs/stable/notes/cuda.html#tensorfloat-32-tf32-on-ampere-devices&quot;&gt;TensorFloat32&lt;/a&gt; format is also enabled to improve matmul performance on the A100. We define throughput as the average number of items (text or image) processed per second (we ignore the first 100 iterations while measuring throughput to account for warmup). We leave training to convergence and its impact on downstream task metrics as an area for future study.&lt;/p&gt;
+
+&lt;p&gt;Figure 1 plots the throughput for each model configuration and optimization, both with a local batch size of 8 and then with the maximum batch size possible on 1 node. Absence of a data point for a model variant for an optimization indicates that the model could not be trained on a single node.&lt;/p&gt;
+
+&lt;p&gt;Figure 2 plots the maximum possible batch size per worker for each optimization. We observe a few things:&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;Scaling model size: DDP is only able to fit the 350M and 900M model on a node. With FSDP, due to memory savings, we are able to train ~3x bigger models compared to DDP  (i.e. the 1.8B and 2.7B variants). Combining activation checkpointing (AC) with FSDP enables training even bigger models, on the order of ~10x compared to DDP (i.e. 4.8B and 10B variants)&lt;/li&gt;
+  &lt;li&gt;Throughput:
+    &lt;ul&gt;
+      &lt;li&gt;For smaller model sizes, at a constant batch size of 8, the throughput for DDP is slightly higher than or equal to FSDP, explainable by the additional communication required by FSDP. It is lowest for FSDP and AC combined together. This is because AC re-runs checkpointed forward passes during the backwards pass, trading off additional computation for memory savings. However, in the case of the 2.7B model, FSDP + AC actually has higher throughput compared to FSDP alone. This is because the 2.7B model with FSDP is operating close to the memory limit even at batch size 8 triggering CUDA malloc retries which tend to slow down training. AC helps with reducing the memory pressure and leads to no retries.&lt;/li&gt;
+      &lt;li&gt;For DDP and FSDP + AC, the throughput increases with an increase in batch size for each model. For FSDP alone, this is true for smaller variants. However, with the 1.8B and 2.7B parameter models, we observe throughput degradation when increasing batch size. A potential reason for this, as noted above also, is that at the memory limit, PyTorch’s CUDA memory management may have to retry cudaMalloc calls and/or run expensive defragmentation steps to find free memory blocks to handle the workload’s memory requirements which can result in training slowdown.&lt;/li&gt;
+      &lt;li&gt;For larger models that can only be trained with FSDP (1.8B, 2.7B, 4.8B) the setting with highest throughput achieved is with FSDP + AC scaling to the maximum batch size. For 10B, we observe nearly equal throughput for smaller and maximum batch size. This might be counterintuitive as AC results in increased computation and maxing out batch size potentially leads to expensive defragmentation operations due to operating at CUDA memory limit. However, for these large models, the increase in batch size is large enough to mask this overhead.&lt;/li&gt;
+    &lt;/ul&gt;
+  &lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p align=&quot;center&quot;&gt;
+  &lt;img src=&quot;/assets/images/scaling-multimodal-image4-graph-experiments-figure1.png&quot; width=&quot;100%&quot; /&gt;
+&lt;/p&gt;
+
+&lt;p align=&quot;center&quot;&gt;
+  Figure 1: Training throughput for different configurations
+&lt;/p&gt;
+
+&lt;ol start=&quot;3&quot;&gt;
+  &lt;li&gt;Batch size: FSDP alone enables slightly higher batch sizes compared to DDP. Using FSDP + AC enables ~3x batch size compared to DDP for the 350M param model and ~5.5x for 900M param model. Even for 10B, a max batch size of ~20 which is fairly decent. This essentially enables larger global batch size using fewer GPUs which is especially useful for contrastive learning tasks.&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p align=&quot;center&quot;&gt;
+  &lt;img src=&quot;/assets/images/scaling-multimodal-image5-graph-experiments-figure-2.png&quot; width=&quot;100%&quot; /&gt;
+&lt;/p&gt;
+
+&lt;p align=&quot;center&quot;&gt;
+  Figure 2: Max local batchsize possible for different configurations
+&lt;/p&gt;
+
+&lt;h2 id=&quot;conclusion&quot;&gt;Conclusion&lt;/h2&gt;
+
+&lt;p&gt;As the world moves towards multimodal foundation models, scaling model parameters and efficient training is becoming an area of focus. The PyTorch ecosystem aims to accelerate innovation in this field by providing different tools to the research community, both for training and scaling multimodal models. With FLAVA, we laid out an example of scaling a model for multimodal understanding. In the future, we plan to add support for other kinds of models like the ones for multimodal generation and demonstrate their scaling factors. We also hope to automate many of these scaling and memory saving techniques (such as sharding and activation checkpointing) to reduce the amount of user experimentation needed to achieve the desired scale and maximum training throughput.&lt;/p&gt;
+
+&lt;h2 id=&quot;references&quot;&gt;References&lt;/h2&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;a href=&quot;https://pytorch.org/blog/introducing-torchmultimodal/&quot;&gt;Introducing TorchMultimodal - a library for accelerating exploration in Multimodal AI&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://deploy-preview-1186--pytorch-dot-org-preview.netlify.app/blog/introducing-torchmultimodal/&quot;&gt;FLAVA paper&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://pytorch.org/blog/introducing-pytorch-fully-sharded-data-parallel-api/&quot;&gt;Introducing Pytorch FSDP&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;</content>
+
+      
+      
+      
+      
+      
+
+      <author>
+          <name>Ankita De, Edward Wang (EcoF), Rohan Varma, Anjali Sridhar, Kartikay Khandelwal</name>
+        
+        
+      </author>
+
+      
+
+      
+
+      
+        <summary type="html">Introduction</summary>
+      
+
+      
+      
+    </entry>
   
     <entry>
       <title type="html">Optimizing Production PyTorch Models’ Performance with Graph Transformations</title>
@@ -1903,78 +2175,6 @@ int main() {
 
       
         <summary type="html">1. Meta’s AI Performance Profiling (MAIProf)</summary>
-      
-
-      
-      
-    </entry>
-  
-    <entry>
-      <title type="html">Announcing PyTorch Conference 2022</title>
-      <link href="https://pytorch.org/blog/announcing-pytorch-conference-2022/" rel="alternate" type="text/html" title="Announcing PyTorch Conference 2022" />
-      <published>2022-09-26T00:00:00-07:00</published>
-      <updated>2022-09-26T00:00:00-07:00</updated>
-      <id>https://pytorch.org/blog/announcing-pytorch-conference-2022</id>
-      <content type="html" xml:base="https://pytorch.org/blog/announcing-pytorch-conference-2022/">&lt;p&gt;We are excited to announce that the PyTorch Conference returns in-person as a satellite event to &lt;a href=&quot;https://l.workplace.com/l.php?u=https%3A%2F%2Fnips.cc%2F&amp;amp;h=AT3cdRwSEhyuNXpH2ptWjk-KxMxcceaYeTfflT6PEezDQ_zeUxRv1gjX7GhTQBgvZxFAR0wlSBwuhpipdMjUknMnhY5oJ5C4HjLNO40-12UnoeYALriwrvdxGfgigo8KYlWu_gRIQwlO-2r0wTnNft0whoSaOdVAxw&amp;amp;__tn__=-UK-R&amp;amp;c[0]=AT3z6QRLu8Uw48lKQ_P6FFq7ncHfjsfI16OGZvWO9kALatCY4sZcMjNzR7a4OiOG25RKVHpDX0TGutZHyM_R8Kl2s71Y3DEbq5QccmUVaSzCbcMUSc5Ms2zXHoeGxUlw1XirihAydPsX4Y1OmF6GRjqH8YFTNTFQRN3I8j2SFhR8LEUDxDmfnZ8Q7c2hXi0HeGc&quot;&gt;NeurlPS&lt;/a&gt; (Neural Information Processing Systems) in New Orleans on Dec. 2nd.&lt;/p&gt;
-
-&lt;p align=&quot;center&quot;&gt;
-  &lt;img src=&quot;/assets/images/pytorch-conference-2022.png&quot; width=&quot;100%&quot; /&gt;
-&lt;/p&gt;
-
-&lt;p&gt;We changed the name from PyTorch Developer Day to PyTorch Conference to signify the turning of a new chapter as we look to the future of PyTorch, encompassing the entire PyTorch Community. This conference will bring together leading researchers, academics and developers from the Machine Learning (ML) and Deep Learning (DL) communities to join a multiple set of talks and a poster session; covering new software releases on &lt;a href=&quot;https://pytorch.org/&quot;&gt;PyTorch&lt;/a&gt;, use cases in academia and industry, as well as ML/DL development and production trends.&lt;/p&gt;
-
-&lt;h3 id=&quot;event-overview&quot;&gt;EVENT OVERVIEW&lt;/h3&gt;
-
-&lt;p&gt;When: Dec 2nd, 2022 (In-Person and Virtual)&lt;/p&gt;
-
-&lt;p&gt;Where: New Orleans, Louisiana (USA) | &lt;em&gt;Virtual option as well&lt;/em&gt;&lt;/p&gt;
-
-&lt;h3 id=&quot;schedule&quot;&gt;SCHEDULE&lt;/h3&gt;
-
-&lt;p&gt;&lt;em&gt;&lt;sub&gt;All times in Central Standard.&lt;/sub&gt;&lt;/em&gt;&lt;/p&gt;
-
-&lt;p&gt;8:00-9:00 am    Registration/Check in&lt;/p&gt;
-
-&lt;p&gt;9:00-11:20 am   Keynote &amp;amp; Technical Talks&lt;/p&gt;
-
-&lt;p&gt;11:30-1:00 pm   Lunch&lt;/p&gt;
-
-&lt;p&gt;1:00-3:00 pm   Poster Session &amp;amp; Breakouts&lt;/p&gt;
-
-&lt;p&gt;3:00-4:00 pm   Community/Partner Talks&lt;/p&gt;
-
-&lt;p&gt;4:00-5:00 pm   Panel Discussion&lt;/p&gt;
-
-&lt;p&gt;&lt;em&gt;&lt;sup&gt;Agenda subject to change.&lt;/sup&gt;&lt;/em&gt;&lt;/p&gt;
-
-&lt;p&gt;All talks will be livestreamed and available to the public. The in-person event will be by invitation only as space is limited. If you’d like to apply to attend in person, please submit all requests &lt;a href=&quot;https://pytorchconference22.splashthat.com/&quot;&gt;here&lt;/a&gt;.&lt;/p&gt;
-
-&lt;h3 id=&quot;links&quot;&gt;LINKS&lt;/h3&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;&lt;a href=&quot;https://docs.google.com/forms/d/121ptOuhqhmcPev9g5Zt2Ffl-NtB_oeyFk5CWjumUVLQ/edit&quot;&gt;Submit Content for Consideration by Sept. 30th&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://www.facebook.com/events/1562940847455759&quot;&gt;Livestream event page&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://pytorchconference22.splashthat.com/&quot;&gt;Apply for an invitation to the in-person event&lt;/a&gt;&lt;/li&gt;
-&lt;/ul&gt;</content>
-
-      
-      
-      
-      
-      
-
-      <author>
-          <name>Facebook</name>
-        
-        
-      </author>
-
-      
-
-      
-
-      
-        <summary type="html">We are excited to announce that the PyTorch Conference returns in-person as a satellite event to NeurlPS (Neural Information Processing Systems) in New Orleans on Dec. 2nd.</summary>
       
 
       
