@@ -27,7 +27,7 @@ Another aspect of scaling is adding the ability to increase the batch size. FLAV
 
 The following table displays the different model configurations we experimented with. We also determine the maximum batch size that was able to fit in memory for each configuration in the experiments section.
 
-|  Approx Model params  |  Hidden size  | MLP size |  Heads  |  Unimodal Layers  |  Multimodal layers  |  Model size (fp32)  |
+|  Approx Model params  |  Hidden size  | MLP size |  Heads  |  Unimodal layers  |  Multimodal layers  |  Model size (fp32)  |
 |-----------------------|---------------|----------|---------|-------------------|---------------------|---------------------|
 |  350M (original)      |          768  |    3072  |     12  |               12  |                  6  |             1.33GB  |
 |  900M                 |         1024  |    4096  |     16  |               24  |                 12  |             3.48GB  |
