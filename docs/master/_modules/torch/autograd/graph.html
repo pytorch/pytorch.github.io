@@ -235,7 +235,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href='https://pytorch.org/docs/versions.html'>master (1.14.0a0+git81042d3 ) &#x25BC</a>
+      <a href='https://pytorch.org/docs/versions.html'>master (1.14.0a0+gitb189a74 ) &#x25BC</a>
     </div>
     
 
@@ -321,6 +321,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../../../distributed.elastic.html">torch.distributed.elastic</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../fsdp.html">torch.distributed.fsdp</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../distributed.optim.html">torch.distributed.optim</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../distributed.checkpoint.html">torch.distributed.checkpoint</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../distributions.html">torch.distributions</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../fft.html">torch.fft</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../futures.html">torch.futures</a></li>
@@ -336,6 +337,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../../../profiler.html">torch.profiler</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../nn.init.html">torch.nn.init</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../onnx.html">torch.onnx</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../onnx_diagnostics.html">torch.onnx diagnostics</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../optim.html">torch.optim</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../complex_numbers.html">Complex Numbers</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../ddp_comm_hooks.html">DDP Communication Hooks</a></li>
@@ -450,16 +452,18 @@
   <h1>Source code for torch.autograd.graph</h1><div class="highlight"><pre>
 <span></span><span class="kn">import</span> <span class="nn">torch</span>
 <span class="kn">import</span> <span class="nn">contextlib</span>
-<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">,</span> <span class="n">List</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Set</span>
 <span class="kn">from</span> <span class="nn">torch.utils.hooks</span> <span class="kn">import</span> <span class="n">RemovableHandle</span>
-
-<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;saved_tensors_hooks&quot;</span><span class="p">,</span> <span class="s2">&quot;save_on_cpu&quot;</span><span class="p">]</span>
+<span class="kn">from</span> <span class="nn">torch.utils._python_dispatch</span> <span class="kn">import</span> <span class="n">TorchDispatchMode</span>
+<span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">defaultdict</span>
+<span class="kn">import</span> <span class="nn">weakref</span>
 
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
     <span class="s2">&quot;saved_tensors_hooks&quot;</span><span class="p">,</span>
     <span class="s2">&quot;save_on_cpu&quot;</span><span class="p">,</span>
     <span class="s2">&quot;disable_saved_tensors_hooks&quot;</span><span class="p">,</span>
     <span class="s2">&quot;register_multi_grad_hook&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;allow_mutation_on_saved_tensors&quot;</span><span class="p">,</span>
 <span class="p">]</span>
 
 <div class="viewcode-block" id="saved_tensors_hooks"><a class="viewcode-back" href="../../../autograd.html#torch.autograd.graph.saved_tensors_hooks">[docs]</a><span class="k">class</span> <span class="nc">saved_tensors_hooks</span><span class="p">():</span>
@@ -720,6 +724,161 @@
         <span class="n">handles</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">t</span><span class="o">.</span><span class="n">register_hook</span><span class="p">(</span><span class="n">get_inner_hook</span><span class="p">(</span><span class="n">i</span><span class="p">)))</span>
 
     <span class="k">return</span> <span class="n">Handle</span><span class="p">(</span><span class="nb">tuple</span><span class="p">(</span><span class="n">handles</span><span class="p">))</span>
+
+
+<span class="c1"># NOTE [Allow mutation on tensors saved for backward]</span>
+<span class="c1">#</span>
+<span class="c1"># 1. Tensor gets saved for backward</span>
+<span class="c1">#    - remember the python object id and the version of the tensor</span>
+<span class="c1">#    - remember aliasing information (data_ptr of base + version)</span>
+<span class="c1">#    - save the original so we control its lifetime</span>
+<span class="c1"># 2. Any time a tensor gets in-placed</span>
+<span class="c1">#    - for each tensor aliased to it:</span>
+<span class="c1">#      - check using its object id and version to see if it has been saved</span>
+<span class="c1">#      - if it has been saved, clone it</span>
+<span class="c1">#      - delete the reference to the original</span>
+<span class="c1"># 3. during backward</span>
+<span class="c1">#    - if the clone exists, the tensor must&#39;ve been modified in-place</span>
+<span class="n">_allow_mutation_on_saved_tensors_enabled</span> <span class="o">=</span> <span class="kc">False</span>
+
+<span class="k">def</span> <span class="nf">_get_tid</span><span class="p">(</span><span class="n">t</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]:</span>
+    <span class="k">return</span> <span class="p">(</span><span class="nb">id</span><span class="p">(</span><span class="n">t</span><span class="p">),</span> <span class="n">t</span><span class="o">.</span><span class="n">data_ptr</span><span class="p">(),</span> <span class="n">t</span><span class="o">.</span><span class="n">_version</span><span class="p">)</span>
+
+<span class="k">def</span> <span class="nf">_get_sid</span><span class="p">(</span><span class="n">t</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]:</span>
+    <span class="k">return</span> <span class="p">(</span><span class="n">t</span><span class="o">.</span><span class="n">data_ptr</span><span class="p">(),</span> <span class="n">t</span><span class="o">.</span><span class="n">_version</span><span class="p">)</span>
+
+<span class="k">class</span> <span class="nc">_Handle</span><span class="p">():</span>
+    <span class="k">pass</span>
+
+<span class="k">class</span> <span class="nc">_swap_with_cloned</span><span class="p">(</span><span class="n">saved_tensors_hooks</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ctx</span><span class="p">):</span>
+        <span class="k">def</span> <span class="nf">pack_hook</span><span class="p">(</span><span class="n">t</span><span class="p">):</span>
+            <span class="n">tid</span> <span class="o">=</span> <span class="n">_get_tid</span><span class="p">(</span><span class="n">t</span><span class="p">)</span>
+            <span class="n">sid</span> <span class="o">=</span> <span class="n">_get_sid</span><span class="p">(</span><span class="n">t</span><span class="p">)</span>
+            <span class="c1"># Tensors saved for backward have an entry in _tid_to_weakhandle</span>
+            <span class="n">handle</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">_Handle</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+
+            <span class="c1"># Save aliasing information</span>
+            <span class="n">ctx</span><span class="o">.</span><span class="n">sid_to_tid</span><span class="p">[</span><span class="n">sid</span><span class="p">]</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">tid</span><span class="p">)</span>
+
+            <span class="c1"># NB: The same tensor (of the same version) can be saved multiple times</span>
+            <span class="k">if</span> <span class="n">tid</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">ctx</span><span class="o">.</span><span class="n">tid_to_weakhandle</span><span class="p">:</span>
+                <span class="n">handle</span> <span class="o">=</span> <span class="n">_Handle</span><span class="p">()</span>
+                <span class="n">ctx</span><span class="o">.</span><span class="n">tid_to_weakhandle</span><span class="p">[</span><span class="n">tid</span><span class="p">]</span> <span class="o">=</span> <span class="n">handle</span>
+                <span class="n">ctx</span><span class="o">.</span><span class="n">original</span><span class="p">[</span><span class="n">handle</span><span class="p">]</span> <span class="o">=</span> <span class="n">t</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="c1"># Store an additional strong reference to the handle</span>
+                <span class="n">handle</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">tid_to_weakhandle</span><span class="p">[</span><span class="n">tid</span><span class="p">]</span>
+            <span class="k">return</span> <span class="n">handle</span>
+
+        <span class="k">def</span> <span class="nf">unpack_hook</span><span class="p">(</span><span class="n">tup</span><span class="p">):</span>
+            <span class="n">handle</span> <span class="o">=</span> <span class="n">tup</span>
+            <span class="n">error_msg</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="s2">&quot;Trying to backward outside of the &#39;allow_mutation_on_saved_tensors&#39; context&quot;</span>
+                <span class="s2">&quot;in which the graph was originally recorded.&quot;</span><span class="p">)</span>
+            <span class="k">assert</span> <span class="n">_allow_mutation_on_saved_tensors_enabled</span><span class="p">,</span> <span class="n">error_msg</span>
+            <span class="k">if</span> <span class="n">handle</span> <span class="ow">in</span> <span class="n">ctx</span><span class="o">.</span><span class="n">cloned</span><span class="p">:</span>
+                <span class="n">res</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">cloned</span><span class="p">[</span><span class="n">handle</span><span class="p">]</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">assert</span> <span class="n">handle</span> <span class="ow">in</span> <span class="n">ctx</span><span class="o">.</span><span class="n">original</span><span class="p">,</span> <span class="n">error_msg</span>
+                <span class="n">res</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">original</span><span class="p">[</span><span class="n">handle</span><span class="p">]</span>
+            <span class="k">return</span> <span class="n">res</span>
+
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">pack_hook</span><span class="p">,</span> <span class="n">unpack_hook</span><span class="p">)</span>
+
+<span class="k">class</span> <span class="nc">_CloneArgBeforeMutateMode</span><span class="p">(</span><span class="n">TorchDispatchMode</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ctx</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">ctx</span> <span class="o">=</span> <span class="n">ctx</span>
+
+    <span class="k">def</span> <span class="nf">__torch_dispatch__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">func</span><span class="p">,</span> <span class="n">types</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="p">(),</span> <span class="n">kwargs</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="n">kwargs</span> <span class="o">=</span> <span class="n">kwargs</span> <span class="ow">or</span> <span class="p">{}</span>
+
+        <span class="k">for</span> <span class="n">idx</span><span class="p">,</span> <span class="n">arg</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">func</span><span class="o">.</span><span class="n">_schema</span><span class="o">.</span><span class="n">arguments</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">arg</span><span class="o">.</span><span class="n">alias_info</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">arg</span><span class="o">.</span><span class="n">alias_info</span><span class="o">.</span><span class="n">is_write</span><span class="p">:</span>
+                <span class="n">t</span> <span class="o">=</span> <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;out&quot;</span><span class="p">]</span> <span class="k">if</span> <span class="n">arg</span><span class="o">.</span><span class="n">is_out</span> <span class="k">else</span> <span class="n">args</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span>
+                <span class="n">tid</span> <span class="o">=</span> <span class="n">_get_tid</span><span class="p">(</span><span class="n">t</span><span class="p">)</span>
+                <span class="n">sid</span> <span class="o">=</span> <span class="n">_get_sid</span><span class="p">(</span><span class="n">t</span><span class="p">)</span>
+                <span class="n">ctx</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">ctx</span>
+                <span class="k">if</span> <span class="n">sid</span> <span class="ow">in</span> <span class="n">ctx</span><span class="o">.</span><span class="n">sid_to_tid</span><span class="p">:</span>
+                    <span class="k">for</span> <span class="n">tid</span> <span class="ow">in</span> <span class="n">ctx</span><span class="o">.</span><span class="n">sid_to_tid</span><span class="p">[</span><span class="n">sid</span><span class="p">]:</span>
+                        <span class="k">if</span> <span class="n">tid</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">ctx</span><span class="o">.</span><span class="n">tid_to_weakhandle</span><span class="p">:</span>
+                            <span class="c1"># We know that if tid is in sid_to_tid, then it must also be in</span>
+                            <span class="c1"># tid_to_weakhandle. However, it is possible for the tensor to be</span>
+                            <span class="c1"># saved at one point, but cleared by backward before it is modified</span>
+                            <span class="c1"># in-place. Consider the following example:</span>
+                            <span class="c1">#</span>
+                            <span class="c1"># &gt;&gt;&gt; a = torch.randn(2, 3, requires_grad=True).clone()</span>
+                            <span class="c1"># &gt;&gt;&gt; out = (a**2).sum()</span>
+                            <span class="c1"># &gt;&gt;&gt; out.backward()</span>
+                            <span class="c1"># &gt;&gt;&gt; a.sin_()</span>
+                            <span class="k">continue</span>
+                        <span class="n">handle</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">tid_to_weakhandle</span><span class="p">[</span><span class="n">tid</span><span class="p">]</span>
+                        <span class="k">if</span> <span class="n">handle</span> <span class="ow">in</span> <span class="n">ctx</span><span class="o">.</span><span class="n">cloned</span><span class="p">:</span>
+                            <span class="c1"># The same exact tensor has been cloned already</span>
+                            <span class="k">continue</span>
+                        <span class="n">ctx</span><span class="o">.</span><span class="n">cloned</span><span class="p">[</span><span class="n">handle</span><span class="p">]</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">original</span><span class="p">[</span><span class="n">handle</span><span class="p">]</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+                        <span class="k">del</span> <span class="n">ctx</span><span class="o">.</span><span class="n">original</span><span class="p">[</span><span class="n">handle</span><span class="p">]</span>
+
+        <span class="n">rs</span> <span class="o">=</span> <span class="n">func</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">rs</span>
+
+<span class="k">class</span> <span class="nc">_AllowMutationOnSavedContext</span><span class="p">():</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cloned</span><span class="p">:</span> <span class="n">weakref</span><span class="o">.</span><span class="n">WeakKeyDictionary</span> <span class="o">=</span> <span class="n">weakref</span><span class="o">.</span><span class="n">WeakKeyDictionary</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">original</span><span class="p">:</span> <span class="n">weakref</span><span class="o">.</span><span class="n">WeakKeyDictionary</span> <span class="o">=</span> <span class="n">weakref</span><span class="o">.</span><span class="n">WeakKeyDictionary</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">tid_to_weakhandle</span><span class="p">:</span> <span class="n">weakref</span><span class="o">.</span><span class="n">WeakValueDictionary</span> <span class="o">=</span> <span class="n">weakref</span><span class="o">.</span><span class="n">WeakValueDictionary</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sid_to_tid</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">],</span> <span class="n">Set</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]]]</span> <span class="o">=</span> <span class="n">defaultdict</span><span class="p">(</span><span class="nb">set</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">clear</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cloned</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">original</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">tid_to_weakhandle</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sid_to_tid</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+
+<span class="nd">@contextlib</span><span class="o">.</span><span class="n">contextmanager</span>
+<span class="k">def</span> <span class="nf">allow_mutation_on_saved_tensors</span><span class="p">():</span>
+    <span class="sd">&quot;&quot;&quot;Context manager under which mutating tensors saved for backward is allowed</span>
+
+<span class="sd">    Under this context manager, tensors saved for backward are cloned on mutation,</span>
+<span class="sd">    so the original version can still be used during backward. Normally, mutating a tensor</span>
+<span class="sd">    saved for backward will result in an error raised when it&#39;s used during backward.</span>
+
+<span class="sd">    To ensure the correct behavior, both the forward and backward should be run under</span>
+<span class="sd">    the same context manager.</span>
+
+<span class="sd">    returns:</span>
+<span class="sd">        An _AllowMutationOnSavedContext object storing the state managed by this</span>
+<span class="sd">        context manager. This object can be useful for debugging purposes. The state</span>
+<span class="sd">        managed by the context manager is automatically cleared upon exiting.</span>
+
+<span class="sd">    Example::</span>
+
+<span class="sd">        &gt;&gt;&gt; import torch</span>
+<span class="sd">        &gt;&gt;&gt; with torch.autograd.graph.allow_mutation_on_saved_tensors():</span>
+<span class="sd">        ...     # forward</span>
+<span class="sd">        ...     a = torch.ones(2, 3, requires_grad=True)</span>
+<span class="sd">        ...     b = a.clone()</span>
+<span class="sd">        ...     out = (b**2).sum()</span>
+<span class="sd">        ...     b.sin_()</span>
+<span class="sd">        ...     # backward</span>
+<span class="sd">        ...     out.sum().backward()</span>
+<span class="sd">        ...</span>
+<span class="sd">        tensor([[0.8415, 0.8415, 0.8415],</span>
+<span class="sd">                [0.8415, 0.8415, 0.8415]], grad_fn=&lt;SinBackward0&gt;)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">global</span> <span class="n">_allow_mutation_on_saved_tensors_enabled</span>
+
+    <span class="n">ctx</span> <span class="o">=</span> <span class="n">_AllowMutationOnSavedContext</span><span class="p">()</span>
+
+    <span class="k">with</span> <span class="n">_swap_with_cloned</span><span class="p">(</span><span class="n">ctx</span><span class="p">),</span> <span class="n">_CloneArgBeforeMutateMode</span><span class="p">(</span><span class="n">ctx</span><span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">_allow_mutation_on_saved_tensors_enabled</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;allow_mutation_on_saved_tensors contexts cannot be nested&quot;</span><span class="p">)</span>
+            <span class="n">_allow_mutation_on_saved_tensors_enabled</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="k">yield</span> <span class="n">ctx</span>
+        <span class="k">finally</span><span class="p">:</span>
+            <span class="n">ctx</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+            <span class="n">_allow_mutation_on_saved_tensors_enabled</span> <span class="o">=</span> <span class="kc">False</span>
 </pre></div>
 
              </article>
