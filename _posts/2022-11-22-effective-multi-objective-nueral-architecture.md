@@ -2,7 +2,7 @@
 layout: blog_detail
 title: "Efficient Multi-Objective Neural Architecture Search with Ax"
 author: David Eriksson, Max Balandat
-featured-img: "/assets/images/MOO-NAS-blog-img2.png"
+featured-img: "/assets/images/MOO-NAS-blog-img2-pareto_frontier_plot.png"
 ---
 
 ## tl;dr
@@ -38,7 +38,7 @@ The following illustration from the [Ax scheduler tutorial](https://ax.dev/tutor
 <!-- image goes here  -->
 
 <p align="center">
-<img src="/assets/images/MOO-NAS-blog-img1.png" width="90%">
+<img src="/assets/images/MOO-NAS-blog-img1-ax_scheduler_illustration.png" width="90%">
 </p>
 
 To run automated NAS with the Scheduler, the main things we need to do are:
@@ -66,7 +66,7 @@ The complete runnable example is available as a **[PyTorch Tutorial](https://pyt
 The final results from the NAS optimization performed in the tutorial can be seen in the tradeoff plot below. Here, each point corresponds to the result of a trial, with the color representing its iteration number, and the star indicating the reference point defined by the thresholds we imposed on the objectives. We see that our method was able to successfully explore the trade-offs between validation accuracy and number of parameters and found both large models with high validation accuracy as well as small models with lower validation accuracy. Depending on the performance requirements and model size constraints, the decision maker can now choose which model to use or analyze further.
 
 <p align="center">
-<img src="/assets/images/MOO-NAS-blog-img2.png" width="100%">
+<img src="/assets/images/MOO-NAS-blog-img2-pareto_frontier_plot.png" width="100%">
 </p>
 
 ### Visualizations
@@ -86,11 +86,11 @@ Ax provides a number of visualizations that make it possible to analyze and unde
 
 <div class="cross-validation-container">
 <p align="center">
-<img src="/assets/images/MOO-NAS-blog-img3.png" width="100%">
+<img src="/assets/images/MOO-NAS-blog-img3-cv_plot_val_acc.png" width="100%">
 </p>
 
 <p align="center">
-<img src="/assets/images/MOO-NAS-blog-img4.png" width="100%">
+<img src="/assets/images/MOO-NAS-blog-img4-cv_plot_num_params.png" width="100%">
 </p>
 </div>
 
