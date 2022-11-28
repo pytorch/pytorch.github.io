@@ -74,19 +74,18 @@ def write_published_versions(versions):
     with open(BASE_DIR / "published_versions.json", "w") as outfile:
         json.dump(versions, outfile, indent=2)
 
-def read_matrix_for_os(osys: OperatingSystem, value: str):
-    jsonfile = load_json_from_basedir(f"{osys.value}_{value}_matrix.json")
+def read_matrix_for_os(osys: OperatingSystem, channel: str):
+    jsonfile = load_json_from_basedir(f"{osys.value}_{channel}_matrix.json")
     return jsonfile["include"]
 
 def read_quick_start_module_template():
     with open(BASE_DIR / "_includes" / "quick-start-module.js") as fptr:
         return fptr.read()
 
-def get_package_type(pkg_key, os_key):
-    package_type = pkg_key
-    if pkg_key == "pip":
-        package_type = "manywheel" if os_key == OperatingSystem.LINUX.value else "wheel"
-    return package_type
+def get_package_type(pkg_key: str, os_key: OperatingSystem) -> str:
+    if pkg_key != "pip":
+        return pkg_key
+    return "manywheel" if os_key == OperatingSystem.LINUX.value else "wheel"
 
 def get_gpu_info(acc_key, instr, acc_arch_map):
     gpu_arch_type, gpu_arch_version = acc_arch_map[acc_key]
@@ -119,36 +118,22 @@ def update_versions(versions, release_matrix, release_version):
                     x for x in release_matrix[os_key]
                     if (x["package_type"], x["gpu_arch_type"], x["gpu_arch_version"]) ==
                     (package_type, gpu_arch_type, gpu_arch_version)
-                    ] or None
+                    ]
 
-                if pkg_arch_matrix is not None:
+                if pkg_arch_matrix:
                     if package_type != "libtorch":
                         instr["command"] = pkg_arch_matrix[0]["installation"]
                     else:
                         if os_key == OperatingSystem.LINUX.value:
-                            rel_entry_pre_cxx1 = next(
-                                x for x in pkg_arch_matrix
-                                if x["devtoolset"] == PRE_CXX11_ABI
-                             )
-                            rel_entry_cxx1_abi = next(
-                                x for x in pkg_arch_matrix
-                                if x["devtoolset"] == CXX11_ABI
-                                )
+                            rel_entry_dict = {x["devtoolset"]: x["installation"] for x in pkg_arch_matrix}
                             if instr["versions"] is not None:
-                                instr["versions"][LIBTORCH_DWNL_INSTR[PRE_CXX11_ABI]] = rel_entry_pre_cxx1["installation"]
-                                instr["versions"][LIBTORCH_DWNL_INSTR[CXX11_ABI]] = rel_entry_cxx1_abi["installation"]
+                                for ver in [PRE_CXX11_ABI, CXX11_ABI]:
+                                    instr["versions"][LIBTORCH_DWNL_INSTR[ver]] = rel_entry_dict[ver]
                         elif os_key == OperatingSystem.WINDOWS.value:
-                            rel_entry_release = next(
-                                x for x in pkg_arch_matrix
-                                if x["libtorch_config"] == RELEASE
-                                )
-                            rel_entry_debug = next(
-                                x for x in pkg_arch_matrix
-                                if x["libtorch_config"] == DEBUG
-                                )
+                            rel_entry_dict = {x["libtorch_config"]: x["installation"] for x in pkg_arch_matrix}
                             if instr["versions"] is not None:
-                                instr["versions"][LIBTORCH_DWNL_INSTR[RELEASE]] = rel_entry_release["installation"]
-                                instr["versions"][LIBTORCH_DWNL_INSTR[DEBUG]] = rel_entry_debug["installation"]
+                                for ver in [RELEASE, DEBUG]:
+                                     instr["versions"][LIBTORCH_DWNL_INSTR[ver]] = rel_entry_dict[ver]
 
 # This method is used for generating new quick-start-module.js
 # from the versions json object
@@ -180,7 +165,7 @@ def gen_install_matrix(versions) -> Dict[str, str]:
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--autogenerate', dest='autogenerate', action='store_true')
-    parser.set_defaults(autogenerate=False)
+    parser.set_defaults(autogenerate=True)
 
     options = parser.parse_args()
     versions = read_published_versions()
