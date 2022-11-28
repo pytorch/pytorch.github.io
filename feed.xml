@@ -4,7 +4,7 @@
   <generator uri="https://jekyllrb.com/" version="3.9.0">Jekyll</generator>
   <link href="https://pytorch.org/feed.xml" rel="self" type="application/atom+xml" />
   <link href="https://pytorch.org/" rel="alternate" type="text/html" />
-  <updated>2022-11-28T08:39:00-08:00</updated>
+  <updated>2022-11-28T14:31:23-08:00</updated>
   <id>https://pytorch.org/feed.xml</id>
 
   
@@ -29,6 +29,239 @@
 
   
   
+  
+    <entry>
+      <title type="html">Optimizing Production PyTorch Models’ Performance with Graph Transformations</title>
+      <link href="https://pytorch.org/blog/optimizing-production-pytorch-performance-with-graph-transformations/" rel="alternate" type="text/html" title="Optimizing Production PyTorch Models’ Performance with Graph Transformations" />
+      <published>2022-11-28T00:00:00-08:00</published>
+      <updated>2022-11-28T00:00:00-08:00</updated>
+      <id>https://pytorch.org/blog/optimizing-production-pytorch-performance-with-graph-transformations</id>
+      <content type="html" xml:base="https://pytorch.org/blog/optimizing-production-pytorch-performance-with-graph-transformations/">&lt;h2 id=&quot;1-introduction&quot;&gt;1. Introduction&lt;/h2&gt;
+
+&lt;p&gt;PyTorch supports two execution modes [1]: eager mode and graph mode. In eager mode, operators in a model are immediately executed as they are encountered. In contrast, in graph mode, operators are first synthesized into a graph, which will then be compiled and executed as a whole. Eager mode is easier to use, more suitable for ML researchers, and hence is the default mode of execution. On the other hand, graph mode typically delivers higher performance and hence is heavily used in production.&lt;/p&gt;
+
+&lt;p&gt;Specifically, graph mode enables operator fusion [2], wherein one operator is merged with another to reduce/localize memory reads as well as total kernel launch overhead. Fusion can be horizontal—taking a single operation (e.g., BatchNorm) that is independently applied to many operands and merging those operands into an array; and vertical—merging a kernel with another kernel that consumes the output of the first kernel (e.g., Convolution followed by ReLU).&lt;/p&gt;
+
+&lt;p&gt;Torch.FX [3, 4] (abbreviated as FX) is a publicly available toolkit as part of the PyTorch package that supports graph mode execution. In particular, it (1) captures the graph from a PyTorch program and (2) allows developers to write transformations on the captured graph. It is used inside Meta to optimize the training throughput of production models. By introducing a number of FX-based optimizations developed at Meta, we demonstrate the approach of using graph transformation to optimize PyTorch’s performance for production.&lt;/p&gt;
+
+&lt;h2 id=&quot;2-background&quot;&gt;2. Background&lt;/h2&gt;
+
+&lt;p&gt;Embedding tables are ubiquitous in recommendation systems. Section 3 will discuss three FX transformations that optimize accesses to embedding tables. In this section, we provide some background on FX (Section 2.1) and embedding tables (Section 2.2).&lt;/p&gt;
+
+&lt;h3 id=&quot;21-fx&quot;&gt;2.1 FX&lt;/h3&gt;
+
+&lt;p&gt;Figure 1 is a simple example adopted from [3] which illustrates using FX to transform a PyTorch program. It contains three steps: (1) capturing the graph from a program, (2) modifying the graph (in this example, all uses of RELU are replaced by GELU), and (3) generating a new program from the modified graph.&lt;/p&gt;
+
+&lt;p align=&quot;center&quot;&gt;
+&lt;img src=&quot;/assets/images/blog1-fig-1.png&quot; width=&quot;70%&quot; /&gt;
+&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Figure 1: A FX example which replaces all uses of RELU by GELU in a PyTorch module.&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;The FX API [4] provides many more functionalities for inspecting and transforming PyTorch program graphs.&lt;/p&gt;
+
+&lt;h3 id=&quot;22-embedding-tables&quot;&gt;2.2 Embedding Tables&lt;/h3&gt;
+
+&lt;p align=&quot;center&quot;&gt;
+&lt;img src=&quot;/assets/images/blog1-fig-2.png&quot; width=&quot;90%&quot; /&gt;
+&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Figure 2: Illustration of an embedding table for a sparse feature with batch size = 1&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;In a recommendation system, sparse features (e.g., User ID, Story ID) are represented by embedding tables. An embedding table E is an HxD matrix, where H is the hash size, D is the embedding dimension. Each row of E is a vector of floats. Feature hashing [5] is used to map a sparse feature to a list of indices to E, say [S&lt;sub&gt;1&lt;/sub&gt;,S&lt;sub&gt;2&lt;/sub&gt;, …, S&lt;sub&gt;k&lt;/sub&gt;], where 0&amp;lt;=S&lt;sub&gt;i&lt;/sub&gt;&amp;lt;H. Its output value is computed as f(E[S&lt;sub&gt;1&lt;/sub&gt;], E[S&lt;sub&gt;2&lt;/sub&gt;], …, E[S&lt;sub&gt;k&lt;/sub&gt;]), where E[S&lt;sub&gt;i&lt;/sub&gt;] is the vector at row S&lt;sub&gt;i&lt;/sub&gt;, and f is called the pooling function, which is typically one of the following functions: sum, average, maximum. See Figure 2 for an illustration.&lt;/p&gt;
+
+&lt;p&gt;To fully utilize the GPU, sparse features are usually processed in a batch. Each entity in a batch has its own list of indices. If a batch has B entities, a naive representation has B lists of indices. A more compact representation is to combine the B lists of indices into a single list of indices and add a list of the lengths of indices (one length for each entity in the batch). For example, if a batch has 3 entities whose lists of indices are as follows:&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;Entity 1: indices = [10, 20]&lt;/li&gt;
+  &lt;li&gt;Entity 2: indices = [5, 9, 77, 81]&lt;/li&gt;
+  &lt;li&gt;Entity 3: indices = [15, 20, 45]&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;Then the indices and lengths for the entire batch will be:&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;Indices = [10, 20, 5, 9, 77, 81, 15, 20, 45]&lt;/li&gt;
+  &lt;li&gt;Lengths = [2, 4, 3]&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;And the output of the embedding table lookup for the whole batch is a BxD matrix.&lt;/p&gt;
+
+&lt;h2 id=&quot;3-three-fx-transformations&quot;&gt;3. Three FX Transformations&lt;/h2&gt;
+
+&lt;p&gt;We have developed three FX transformations that accelerate accesses to embedding tables. Section 3.1 discusses a transformation that combines multiple small input tensors into a single big tensor; Section 3.2 a transformation that fuses multiple, parallel compute chains into a single compute chain; and Section 3.3 a transformation that overlaps communication with computation.&lt;/p&gt;
+
+&lt;h3 id=&quot;31-combining-input-sparse-features&quot;&gt;3.1 Combining Input Sparse Features&lt;/h3&gt;
+
+&lt;p&gt;Recall that an input sparse feature in a batch is represented by two lists: a list of indices and a list of B lengths, where B is the batch size. In PyTorch, these two lists are implemented as two tensors. When a PyTorch model is run on a GPU, embedding tables are commonly stored in the GPU memory (which is closer to the GPU and has much higher read/write bandwidth than the CPU memory). To use an input sparse feature, its two tensors need to be first copied from CPU to GPU. Nevertheless, per host-to-device memory copying requires a kernel launch, which is relatively expensive compared to the actual data transfer time. If a model uses many input sparse features, this copying could become a performance bottleneck (e.g., 1000 input sparse features would require copying 2000 tensors from host to device).&lt;/p&gt;
+
+&lt;p&gt;An optimization that reduces the number of host-to-device memcpy is to combine multiple input sparse features before sending them to the device. For instance, given the following three input features:&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;Feature_A: indices = [106, 211, 7], lengths = [2, 1]&lt;/li&gt;
+  &lt;li&gt;Feature_B: indices = [52, 498, 616, 870, 1013], lengths = [3, 2]&lt;/li&gt;
+  &lt;li&gt;Feature_C: indices = [2011, 19, 351, 790], lengths = [1, 3]&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;The combined form is:&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;Features_A_B_C: indices = [106, 211, 7, 52, 498, 616, 870, 1013, 2011, 19, 351, 790], lengths = [2, 1, 3, 2, 1, 3]&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;So, instead of copying 3x2=6 tensors from host to device, we only need to copy 2 tensors.&lt;/p&gt;
+
+&lt;p&gt;Figure 3(b) describes an implementation of this optimization, which has two components:&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;On the CPU side: The input pipeline is modified to combine all the indices of sparse features into a single tensor and similarly all the lengths into another tensor. Then the two tensors are copied to the GPU.&lt;/li&gt;
+  &lt;li&gt;On the GPU side: Using FX, we insert a Permute_and_Split op into the model graph to recover the indices and lengths tensors of individual features from the combined tensors, and route them to the corresponding nodes downstream.&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p align=&quot;center&quot;&gt;
+&lt;img src=&quot;/assets/images/blog1-fig-3a.png&quot; width=&quot;90%&quot; /&gt;
+&lt;/p&gt;
+
+&lt;p&gt;(a). &lt;strong&gt;Without the optimization&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p align=&quot;center&quot;&gt;
+&lt;img src=&quot;/assets/images/blog1-fig-3b.png&quot; width=&quot;90%&quot; /&gt;
+&lt;/p&gt;
+
+&lt;p&gt;(b). &lt;strong&gt;With the optimization&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Figure 3: Combining input sparse features&lt;/strong&gt;&lt;/p&gt;
+
+&lt;h3 id=&quot;32-horizontal-fusion-of-computation-chains-started-with-accesses-to-embedding-tables&quot;&gt;3.2 Horizontal fusion of computation chains started with accesses to embedding tables&lt;/h3&gt;
+
+&lt;p&gt;In a production model, it is fairly common to have 10s of embedding tables residing on each GPU. For performance reasons, lookups to these tables are grouped together so that their outputs are concatenated in a single big tensor (see the red part in Figure 4(a)). To apply computations to individual feature outputs, a Split op is used to divide the big tensors into N smaller tensors (where N is the number of features) and then the desired computations are applied to each tensor. This is shown in Figure 4(a), where the computation applied to each feature output O is Tanh(LayerNorm(O)). All the computation results are concatenated back to a big tensor, which is then passed to downstream ops (Op1 in Figure 4(a)).&lt;/p&gt;
+
+&lt;p&gt;The main runtime cost here is the GPU kernel launch overhead. For instance, the number of GPU kernel launches in Figure 4(a) is 2*N + 3 (each oval in the figure is a GPU kernel). This could become a performance issue because execution times of LayerNorm and Tanh on the GPU are short compared to their kernel launch times. In addition, the Split op may create an extra copy of the embedding output tensor, consuming additional GPU memory.&lt;/p&gt;
+
+&lt;p&gt;We use FX to implement an optimization called horizontal fusion which dramatically reduces the number of GPU kernel launches (in this example, the optimized number of GPU kernel launches is 5, see Figure 4(b)). Instead of doing an explicit Split, we use the Add_middle_dim op to reshape the 2D embedding tensor of shape (B, NxD) to a 3D tensor of shape (B, N, D). Then a single LayerNorm is applied to the last dimension of it. Then a single Tanh is applied to the result of the LayerNorm. At the end, we use the Remove_middle_dim op to reshape the Tanh’s result back to a 2D tensor. In addition, since Add_middle_dim and Remove_middle_dim only reshape the tensor without creating an extra copy, the amount of GPU memory consumption could be reduced as well.&lt;/p&gt;
+
+&lt;p align=&quot;center&quot;&gt;
+&lt;img src=&quot;/assets/images/blog1-fig-4a.png&quot; width=&quot;90%&quot; /&gt;
+&lt;/p&gt;
+
+&lt;p&gt;(a). &lt;strong&gt;Without the optimization&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p align=&quot;center&quot;&gt;
+&lt;img src=&quot;/assets/images/blog1-fig-4b.png&quot; width=&quot;90%&quot; /&gt;
+&lt;/p&gt;
+
+&lt;p&gt;(b). &lt;strong&gt;With the optimization&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Figure 4: Horizontal fusion&lt;/strong&gt;&lt;/p&gt;
+
+&lt;h3 id=&quot;33-overlapping-computation-with-communication&quot;&gt;3.3 Overlapping Computation with Communication&lt;/h3&gt;
+
+&lt;p&gt;Training of a production recommendation model is typically done on a distributed GPU system. Since the capacity of the device memory per GPU is not big enough to hold all the embedding tables in the model, they need to be distributed among the GPUs.&lt;/p&gt;
+
+&lt;p&gt;Within a training step, a GPU needs to read/write feature values from/to the embedding tables on the other GPUs. This is known as all-to-all communication [6] and can be a major performance bottleneck.&lt;/p&gt;
+
+&lt;p&gt;We use FX to implement a transformation that can overlap computation with all-to-all communication. Figure 5(a) shows the example of a model graph which has embedding table accesses (EmbeddingAllToAll) and other ops. Without any optimization, they are sequentially executed on a GPU stream, as shown in Figure 5(b). Using FX, we break EmbeddingAllToAll into EmbeddingAllToAll_Request and EmbeddingAllToAll_Wait, and schedule independent ops in between them.&lt;/p&gt;
+
+&lt;p align=&quot;center&quot;&gt;
+&lt;img src=&quot;/assets/images/blog1-fig-5a.png&quot; width=&quot;70%&quot; /&gt;
+&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;(a) Model graph&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p align=&quot;center&quot;&gt;
+&lt;img src=&quot;/assets/images/blog1-fig-5b.png&quot; width=&quot;70%&quot; /&gt;
+&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;(b) Original execution order&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p align=&quot;center&quot;&gt;
+&lt;img src=&quot;/assets/images/blog1-fig-5c.png&quot; width=&quot;70%&quot; /&gt;
+&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;(c)Optimized execution order&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Figure 5: Overlapping Computation with Communication&lt;/strong&gt;&lt;/p&gt;
+
+&lt;h3 id=&quot;34-summary&quot;&gt;3.4 Summary&lt;/h3&gt;
+
+&lt;p&gt;Table 1 summarizes the optimizations discussed in this section and the corresponding performance bottlenecks addressed.&lt;/p&gt;
+
+&lt;table&gt;
+  &lt;tr&gt;
+   &lt;td&gt;&lt;strong&gt;Optimization&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;Performance Bottleneck Addressed&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;Combining Input Sparse Features
+   &lt;/td&gt;
+   &lt;td&gt;Host-to-device memory copy
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;Horizontal fusion
+   &lt;/td&gt;
+   &lt;td&gt;GPU kernel launch overhead
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;Overlapping Computation with Communication
+   &lt;/td&gt;
+   &lt;td&gt;Embedding all-to-all access time
+   &lt;/td&gt;
+  &lt;/tr&gt;
+&lt;/table&gt;
+
+&lt;p&gt;&lt;strong&gt;Table 1: Summary of the optimizations and the performance bottlenecks addressed&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;We have also developed other FX transformations which are not discussed in this section due to space limitations.&lt;/p&gt;
+
+&lt;p&gt;To discover which models would benefit from these transformations, we analyzed the performance data collected by MAIProf [7] from the models that run at Meta’s data centers. Altogether, these transformations provide up to 2-3x of speedups compared to eager mode on a set of production models.&lt;/p&gt;
+
+&lt;h2 id=&quot;4-concluding-remarks&quot;&gt;4. Concluding Remarks&lt;/h2&gt;
+
+&lt;p&gt;The graph mode in PyTorch is preferred over the eager mode for production use for performance reasons. FX is a powerful tool for capturing and optimizing the graph of a PyTorch program. We demonstrate three FX transformations that are used to optimize production recommendation models inside Meta. We hope that this blog can motivate other PyTorch model developers to use graph transformations to boost their models’ performance.&lt;/p&gt;
+
+&lt;p&gt;References&lt;/p&gt;
+
+&lt;p&gt;[1] &lt;a href=&quot;https://pytorch.org/features/&quot;&gt;End-to-end Machine Learning Framework&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;[2] &lt;a href=&quot;https://arxiv.org/abs/2108.13342&quot;&gt;DNNFusion: Accelerating Deep Neural Networks Execution with Advanced Operator Fusion&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;[3] &lt;a href=&quot;https://arxiv.org/pdf/2112.08429.pdf&quot;&gt;Torch.FX: Practical Program Capture and Transformation for Deep Learning In Python&lt;/a&gt;, MLSys 2022.&lt;/p&gt;
+
+&lt;p&gt;[4] &lt;a href=&quot;https://pytorch.org/docs/stable/fx.html&quot;&gt;Torch.fx—PyTorch 1.12 documentation&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;[5] &lt;a href=&quot;https://alex.smola.org/papers/2009/Weinbergeretal09.pdf&quot;&gt;Feature Hashing for Large Scale Multitask Learning&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;[6] &lt;a href=&quot;https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/&quot;&gt;NVIDIA Collective Communication Library Documentation&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;[7] &lt;a href=&quot;https://pytorch.org/blog/performance-debugging-of-production-pytorch-models-at-meta/&quot;&gt;Performance Debugging of Production PyTorch Models at Meta&lt;/a&gt;&lt;/p&gt;</content>
+
+      
+      
+      
+      
+      
+
+      <author>
+          <name>Jade Nie, CK Luk, Xiaodong Wang, Jackie (Jiaqi) Xu</name>
+        
+        
+      </author>
+
+      
+
+      
+
+      
+        <summary type="html">1. Introduction</summary>
+      
+
+      
+      
+    </entry>
   
     <entry>
       <title type="html">Efficient Multi-Objective Neural Architecture Search with Ax</title>
@@ -2014,154 +2247,6 @@ int main() {
 
       <author>
           <name>Dhruv Matani, Suraj Subramanian</name>
-        
-        
-      </author>
-
-      
-
-      
-
-      
-        <summary type="html">Introduction</summary>
-      
-
-      
-      
-    </entry>
-  
-    <entry>
-      <title type="html">Scaling PyTorch models on Cloud TPUs with FSDP</title>
-      <link href="https://pytorch.org/blog/scaling-pytorch-models-on-cloud-tpus-with-fsdp/" rel="alternate" type="text/html" title="Scaling PyTorch models on Cloud TPUs with FSDP" />
-      <published>2022-10-13T00:00:00-07:00</published>
-      <updated>2022-10-13T00:00:00-07:00</updated>
-      <id>https://pytorch.org/blog/scaling-pytorch-models-on-cloud-tpus-with-fsdp</id>
-      <content type="html" xml:base="https://pytorch.org/blog/scaling-pytorch-models-on-cloud-tpus-with-fsdp/">&lt;h2 id=&quot;introduction&quot;&gt;Introduction&lt;/h2&gt;
-
-&lt;p&gt;The research community has witnessed a lot of successes with large models across NLP, computer vision, and other domains in recent years. Many of these successes were enabled by Cloud TPUs – which are powerful hardware for distributed training. To support TPUs in PyTorch, the PyTorch/XLA library provides a backend for XLA devices (most notably TPUs) and lays the groundwork for scaling large PyTorch models on TPUs.&lt;/p&gt;
-
-&lt;p&gt;However, most existing modeling scaling tools in the PyTorch ecosystem assume GPU (or CPU) devices, often depend on specific features in CUDA, and do not work directly on TPUs. The lack of scaling tools makes it challenging to build large models that cannot fit into the memory of a single TPU chip.&lt;/p&gt;
-
-&lt;p&gt;To support model scaling on TPUs, we implemented the widely-adopted &lt;a href=&quot;https://engineering.fb.com/2021/07/15/open-source/fsdp/&quot;&gt;Fully Sharded Data Parallel (FSDP)&lt;/a&gt; algorithm for XLA devices as part of the PyTorch/XLA 1.12 release. We provide an FSDP interface with a similar high-level design to the CUDA-based PyTorch FSDP class while also handling several restrictions in XLA (see Design Notes below for more details). This FSDP interface allowed us to easily build models with e.g. 10B+ parameters on TPUs and has enabled many research explorations.&lt;/p&gt;
-
-&lt;h2 id=&quot;using-fully-sharded-data-parallel-fsdp-in-pytorchxla&quot;&gt;Using Fully Sharded Data Parallel (FSDP) in PyTorch/XLA&lt;/h2&gt;
-
-&lt;p&gt;We provide a wrapper class &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;XlaFullyShardedDataParallel&lt;/code&gt; over a given PyTorch model to shard its parameters across data-parallel workers. An example usage is as follows:&lt;/p&gt;
-
-&lt;div class=&quot;language-python highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;kn&quot;&gt;import&lt;/span&gt; &lt;span class=&quot;nn&quot;&gt;torch&lt;/span&gt;
-&lt;span class=&quot;kn&quot;&gt;import&lt;/span&gt; &lt;span class=&quot;nn&quot;&gt;torch_xla.core.xla_model&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;as&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;xm&lt;/span&gt;
-&lt;span class=&quot;kn&quot;&gt;from&lt;/span&gt; &lt;span class=&quot;nn&quot;&gt;torch_xla.distributed.fsdp&lt;/span&gt; &lt;span class=&quot;kn&quot;&gt;import&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;XlaFullyShardedDataParallel&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;as&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;FSDP&lt;/span&gt;
-
-&lt;span class=&quot;n&quot;&gt;model&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;FSDP&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;my_module&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
-&lt;span class=&quot;n&quot;&gt;optim&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;torch&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;optim&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Adam&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;model&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;parameters&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(),&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;lr&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;mf&quot;&gt;0.0001&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
-&lt;span class=&quot;n&quot;&gt;output&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;model&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;x&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;y&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
-&lt;span class=&quot;n&quot;&gt;loss&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;output&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;sum&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt;
-&lt;span class=&quot;n&quot;&gt;loss&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;backward&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt;
-&lt;span class=&quot;n&quot;&gt;optim&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;step&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt;
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;Wrapping an &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;nn.Module&lt;/code&gt; instance with &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;XlaFullyShardedDataParallel&lt;/code&gt; enables the &lt;a href=&quot;https://arxiv.org/abs/1910.02054&quot;&gt;ZeRO-2&lt;/a&gt; algorithm on it, where its gradients and the optimizer states are sharded for the entire training process. During its forward and backward passes, the full parameters of the wrapped module are first reconstructed from their corresponding shards for computation.&lt;/p&gt;
-
-&lt;p&gt;&lt;strong&gt;Nested FSDP&lt;/strong&gt; wrapping can be used to further save memory. This allows the model to store only the full parameters of one individual layer at any given time. For nested FSDP, one should first wrap its individual submodules with an inner FSDP before wrapping the base model with an outer FSDP. This allows the model to store only the full parameters of one individual layer at any given time. And having an outer wrapper ensures to handle any leftover parameters, corresponding to the &lt;a href=&quot;https://arxiv.org/abs/1910.02054&quot;&gt;ZeRO-3&lt;/a&gt; algorithm. Nested FSDP wrapping can be applied at any depth of submodules and there can be more than 2 layers of nesting.&lt;/p&gt;
-
-&lt;p&gt;&lt;strong&gt;Model checkpoint saving and loading&lt;/strong&gt; for models and optimizers can be done like before by saving and loading their &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;.state_dict()&lt;/code&gt;. Meanwhile, each training process should save its own checkpoint file of the sharded model parameters and optimizer states, and load the checkpoint file for the corresponding rank when resuming (regardless of ZeRO-2 or ZeRO-3, i.e. nested wrapping or not). A command line tool and a Python interface are provided to consolidate the sharded model checkpoint files together into a full/unshareded model checkpoint file.&lt;/p&gt;
-
-&lt;p&gt;&lt;a href=&quot;https://spell.ml/blog/gradient-checkpointing-pytorch-YGypLBAAACEAefHs&quot;&gt;&lt;strong&gt;Gradient checkpointing&lt;/strong&gt;&lt;/a&gt; (also referred to as “activation checkpointing” or “rematerialization”) is another common technique for model scaling and can be used in conjunction with FSDP. We provide &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;checkpoint_module&lt;/code&gt;, a wrapper function over a given &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;nn.Module&lt;/code&gt; instance for gradient checkpointing (based on &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;torch_xla.utils.checkpoint.checkpoint&lt;/code&gt;).&lt;/p&gt;
-
-&lt;p&gt;The MNIST and ImageNet examples below provide illustrative usages of (plain or nested) FSDP, saving and consolidation of model checkpoints, as well as gradient checkpointing.&lt;/p&gt;
-
-&lt;h2 id=&quot;starting-examples-of-fsdp-in-pytorchxla&quot;&gt;Starting examples of FSDP in PyTorch/XLA&lt;/h2&gt;
-
-&lt;h3 id=&quot;training-mnist-and-imagenet-with-fsdp&quot;&gt;Training MNIST and ImageNet with FSDP&lt;/h3&gt;
-
-&lt;p&gt;MNIST and ImageNet classification can often be used as starting points to build more complicated deep learning models. We provide the following FSDP examples on these two datasets:&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;MNIST: &lt;a href=&quot;https://github.com/pytorch/xla/blob/master/test/test_train_mp_mnist_fsdp_with_ckpt.py&quot;&gt;test/test_train_mp_mnist_fsdp_with_ckpt.py&lt;/a&gt; (it also illustrates checkpoint saving and consolidation)&lt;/li&gt;
-  &lt;li&gt;ImageNet: &lt;a href=&quot;https://github.com/pytorch/xla/blob/master/test/test_train_mp_imagenet_fsdp.py&quot;&gt;test/test_train_mp_imagenet_fsdp.py&lt;/a&gt;&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;A comparison of them with the vanilla data-parallel examples of &lt;a href=&quot;https://github.com/pytorch/xla/blob/master/test/test_train_mp_mnist.py&quot;&gt;MNIST&lt;/a&gt; and &lt;a href=&quot;https://github.com/pytorch/xla/blob/master/test/test_train_mp_imagenet.py&quot;&gt;ImageNet&lt;/a&gt; illustrates how to adapt a training script to use FSDP. A major distinction to keep in mind is that when stepping the optimizer on an FSDP-wrapped model, one should directly call &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;optimizer.step()&lt;/code&gt; instead of &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;xm.optimizer_step(optimizer)&lt;/code&gt;. The latter reduces the gradients across ranks, which is not what we need in FSDP, where the gradients are already reduced and sharded (from a reduce-scatter op in its backward pass).&lt;/p&gt;
-
-&lt;h4 id=&quot;installation&quot;&gt;Installation&lt;/h4&gt;
-
-&lt;p&gt;FSDP is available from the PyTorch/XLA 1.12 and newer nightly releases. Please refer to &lt;a href=&quot;https://github.com/pytorch/xla#-available-images-and-wheels&quot;&gt;https://github.com/pytorch/xla#-available-images-and-wheels&lt;/a&gt; for a guide on installation as well as Cloud TPU allocation. Then clone PyTorch/XLA repo on a TPU VM as follows&lt;/p&gt;
-
-&lt;div class=&quot;language-python highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;n&quot;&gt;mkdir&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;p&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;~/&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;pytorch&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;amp;&amp;amp;&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;cd&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;~/&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;pytorch&lt;/span&gt;
-&lt;span class=&quot;n&quot;&gt;git&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;clone&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;--&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;recursive&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;https&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;//&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;github&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;com&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;/&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;pytorch&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;/&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;xla&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;git&lt;/span&gt;
-&lt;span class=&quot;n&quot;&gt;cd&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;~/&lt;/span&gt;
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;h4 id=&quot;train-mnist-on-v3-8-tpu&quot;&gt;Train MNIST on v3-8 TPU&lt;/h4&gt;
-
-&lt;p&gt;It gets around 98.9 accuracy for 2 epochs:&lt;/p&gt;
-
-&lt;div class=&quot;language-python highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;n&quot;&gt;python3&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;~/&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;pytorch&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;/&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;xla&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;/&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;test&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;/&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;test_train_mp_mnist_fsdp_with_ckpt&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;py&lt;/span&gt; \
-  &lt;span class=&quot;o&quot;&gt;--&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;batch_size&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;16&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;--&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;drop_last&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;--&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;num_epochs&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;2&lt;/span&gt; \
-  &lt;span class=&quot;o&quot;&gt;--&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;use_nested_fsdp&lt;/span&gt;
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;The script above automatically tests consolidation of the sharded model checkpoints at the end. You can also manually consolidate the sharded checkpoint files via&lt;/p&gt;
-
-&lt;div class=&quot;language-python highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;n&quot;&gt;python3&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;m&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;torch_xla&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;distributed&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;fsdp&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;consolidate_sharded_ckpts&lt;/span&gt; \
-  &lt;span class=&quot;o&quot;&gt;--&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;ckpt_prefix&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;/&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;tmp&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;/&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;mnist&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;fsdp&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;/&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;final_ckpt&lt;/span&gt; \
-  &lt;span class=&quot;o&quot;&gt;--&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;ckpt_suffix&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&quot;_rank-*-of-*.pth&quot;&lt;/span&gt;
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;h4 id=&quot;train-imagenet-with-resnet-50-on-v3-8-tpu&quot;&gt;Train ImageNet with ResNet-50 on v3-8 TPU&lt;/h4&gt;
-
-&lt;p&gt;It gets around 75.9 accuracy for 100 epochs, same as what one would get without using FSDP; download and preprocess the &lt;a href=&quot;https://github.com/pytorch/examples/tree/master/imagenet#requirements&quot;&gt;ImageNet-1k&lt;/a&gt; dataset to &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;/datasets/imagenet-1k&lt;/code&gt;:&lt;/p&gt;
-
-&lt;div class=&quot;language-python highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;n&quot;&gt;python3&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;~/&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;pytorch&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;/&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;xla&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;/&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;test&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;/&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;test_train_mp_imagenet_fsdp&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;py&lt;/span&gt; \
-  &lt;span class=&quot;o&quot;&gt;--&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;datadir&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;/&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;datasets&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;/&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;imagenet&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;k&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;--&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;drop_last&lt;/span&gt; \
-  &lt;span class=&quot;o&quot;&gt;--&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;model&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;resnet50&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;--&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;test_set_batch_size&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;64&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;--&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;eval_interval&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;10&lt;/span&gt; \
-  &lt;span class=&quot;o&quot;&gt;--&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;lr&lt;/span&gt; &lt;span class=&quot;mf&quot;&gt;0.4&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;--&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;batch_size&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;128&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;--&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;num_warmup_epochs&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;5&lt;/span&gt; \
-  &lt;span class=&quot;o&quot;&gt;--&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;lr_scheduler_divide_every_n_epochs&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;30&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;--&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;lr_scheduler_divisor&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;10&lt;/span&gt; \
-  &lt;span class=&quot;o&quot;&gt;--&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;num_epochs&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;100&lt;/span&gt; \
-  &lt;span class=&quot;o&quot;&gt;--&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;use_nested_fsdp&lt;/span&gt;
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;You can also explore other options in these two examples, such as &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;--use_gradient_checkpointing&lt;/code&gt; to apply gradient checkpointing (i.e. activation checkpointing) on the ResNet blocks, or &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;--compute_dtype bfloat16&lt;/code&gt; to perform forward and backward passes in bfloat16 precision.&lt;/p&gt;
-
-&lt;h3 id=&quot;examples-on-large-scale-models&quot;&gt;Examples on large-scale models&lt;/h3&gt;
-
-&lt;p&gt;When building large models on TPUs, we often need to be aware of the memory constraints (e.g. 16 GB per core in TPU v3 and 32 GB per chip in TPU v4). For large models that cannot fit into a single TPU memory or the host CPU memory, one should use nested FSDP to implement the ZeRO-3 algorithm interleave submodule construction with inner FSDP wrapping, so that the full model never needs to be stored in memory during construction.&lt;/p&gt;
-
-&lt;p&gt;We illustrate these cases in &lt;a href=&quot;https://github.com/ronghanghu/ptxla_scaling_examples&quot;&gt;https://github.com/ronghanghu/ptxla_scaling_examples&lt;/a&gt;, which provides examples of training a Vision Transformer (ViT) model with 10B+ parameters on a TPU v3 pod (with 128 cores) as well as other cases.&lt;/p&gt;
-
-&lt;h3 id=&quot;design-notes&quot;&gt;Design Notes&lt;/h3&gt;
-
-&lt;p&gt;One might wonder why we need to develop a separate FSDP class in PyTorch/XLA instead of directly reusing &lt;a href=&quot;https://pytorch.org/docs/stable/fsdp.html&quot;&gt;PyTorch’s FSDP class&lt;/a&gt; or extending it to the XLA backend. The main motivation behind a separate FSDP class in PyTorch/XLA is that the native PyTorch’s FSDP class heavily relies on CUDA features that are not supported by XLA devices, while XLA also has several unique characteristics that need special handling. These distinctions require a different implementation of FSDP that would be much easier to build in a separate class.&lt;/p&gt;
-
-&lt;h4 id=&quot;changes-in-api-calls&quot;&gt;Changes in API calls&lt;/h4&gt;
-&lt;p&gt;One prominent distinction is that the native PyTorch FSDP is built upon separate CUDA streams for asynchronous execution in eager mode, while PyTorch/XLA runs in lazy mode and also does not support streams. In addition, TPU requires that all devices homogeneously run the same program. As a result, in the PyTorch/XLA FSDP implementation, CUDA calls and per-process heterogeneity need to be replaced by XLA APIs and alternative homogeneous implementations.&lt;/p&gt;
-
-&lt;h4 id=&quot;tensor-storage-handling&quot;&gt;Tensor Storage Handling&lt;/h4&gt;
-
-&lt;p&gt;Another prominent distinction is how to free a tensor’s storage, which is much harder in XLA than in CUDA. To implement ZeRO-3, one needs to free the storage of full parameters after a module’s forward pass, so that the next module can reuse this memory buffer for subsequent computation. PyTorch’s FSPD accomplishes this on CUDA by freeing the actual storage of a parameter &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;p&lt;/code&gt; via &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;p.data.storage().resize_(0)&lt;/code&gt;. However, XLA tensors do not have this &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;.storage()&lt;/code&gt; handle given that the XLA HLO IRs are completely functional and do not provide any ops to deallocate a tensor or resize its storage. Below the PyTorch interface, only the XLA compiler can decide when to free a TPU device memory corresponding to an XLA tensor, and a prerequisite is that the memory can only be released when the tensor object gets deallocated in Python – which cannot happen in FSDP because these parameter tensors are referenced as module attributes and also saved by PyTorch autograd for the backward pass.&lt;/p&gt;
-
-&lt;p&gt;Our solution to this issue is to split a tensor’s value properties from its autograd Variable properties, and to free a &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;nn.Parameter&lt;/code&gt; tensor by setting its &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;.data&lt;/code&gt; attribute to a dummy scalar of size 1. This way the actual data tensor for the full parameter gets dereferenced in Python so that XLA can recycle its memory for other computation, while autograd can still trace the base &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;nn.Parameter&lt;/code&gt; as a weak reference to the parameter data. To get this to work, one also needs to handle views over the parameters as views in PyTorch also hold references to its actual data (this required fixing a shape-related issue with views in PyTorch/XLA).&lt;/p&gt;
-
-&lt;h4 id=&quot;working-with-xla-compiler&quot;&gt;Working with XLA compiler&lt;/h4&gt;
-
-&lt;p&gt;The solution above should be enough to free full parameters if the XLA compiler faithfully preserves the operations and their execution order in our PyTorch program. But there is another problem – XLA attempts to optimize the program to speed up its execution by applying common subexpression elimination (CSE) to the HLO IRs. In a naive implementation of FSDP, the XLA compiler typically eliminates the 2nd all-gather in the backward pass to reconstruct the full parameters when it sees that it is a repeated computation from the forward pass, and directly holds and reuses the full parameters we want to free up after the forward pass. To guard against this undesired compiler behavior, we introduced the &lt;a href=&quot;https://www.tensorflow.org/xla/operation_semantics#optimizationbarrier&quot;&gt;optimization barrier op&lt;/a&gt; into PyTorch/XLA and used it to stop eliminating the 2nd all-gather. This optimization barrier is also applied to a similar case of gradient checkpointing to prevent CSE between forward and backward passes that could eliminate the rematerialization.&lt;/p&gt;
-
-&lt;p&gt;In the future, if the distinctions between CUDA and XLA become not as prominent as mentioned above, it could be worth considering a merge of the PyTorch/XLA FSDP with the native PyTorch FSDP to have a unified interface.&lt;/p&gt;
-
-&lt;h2 id=&quot;acknowledgments&quot;&gt;Acknowledgments&lt;/h2&gt;
-
-&lt;p&gt;Thanks to Junmin Hao from AWS for reviewing the PyTorch/XLA FSDP pull request. Thanks to Brian Hirsh from the Meta PyTorch team for support on the PyTorch core issues. Thanks to Isaack Karanja, Will Cromar, and Blake Hechtman from Google for support on GCP, XLA, and TPU issues.&lt;/p&gt;
-
-&lt;p&gt;Thanks to Piotr Dollar, Wan-Yen Lo, Alex Berg, Ryan Mark, Kaiming He, Xinlei Chen, Saining Xie, Shoubhik Debnath, Min Xu, and Vaibhav Aggarwal from Meta FAIR for various TPU-related discussions.&lt;/p&gt;</content>
-
-      
-      
-      
-      
-      
-
-      <author>
-          <name>Ronghang Hu, Vaibhav Singh, Jack Cao, Milad Mohammadi, Yeounoh Chung, Shauheen Zahirazami, Ross Girshick</name>
         
         
       </author>
