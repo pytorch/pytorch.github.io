@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
 """
 Generates quick start module for https://pytorch.org/get-started/locally/ page
-
 If called from update-quick-start-module.yml workflow (--autogenerate parameter set)
 Will output new quick-start-module.js, and new published_version.json file
 based on the current release matrix.
-
 If called standalone will generate quick-start-module.js from existing
 published_version.json file
 """
@@ -125,7 +123,10 @@ def update_versions(versions, release_matrix, release_version):
                         instr["command"] = pkg_arch_matrix[0]["installation"]
                     else:
                         if os_key == OperatingSystem.LINUX.value:
-                            rel_entry_dict = {x["devtoolset"]: x["installation"] for x in pkg_arch_matrix}
+                            rel_entry_dict = {
+                                x["devtoolset"]: x["installation"] for x in pkg_arch_matrix
+                                if x["libtorch_variant"] == "shared-with-deps"
+                                }
                             if instr["versions"] is not None:
                                 for ver in [PRE_CXX11_ABI, CXX11_ABI]:
                                     instr["versions"][LIBTORCH_DWNL_INSTR[ver]] = rel_entry_dict[ver]
@@ -165,7 +166,7 @@ def gen_install_matrix(versions) -> Dict[str, str]:
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--autogenerate', dest='autogenerate', action='store_true')
-    parser.set_defaults(autogenerate=True)
+    parser.set_defaults(autogenerate=False)
 
     options = parser.parse_args()
     versions = read_published_versions()
