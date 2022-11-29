@@ -194,9 +194,9 @@ function selectedOption(option, selection, category) {
   commandMessage(buildMatcher());
   if (category === "os") {
     disableUnsupportedPlatforms(opts.os);
-    changeAccNoneName(opts.os);
     display(opts.os, 'installation', 'os');
   }
+  changeAccNoneName(opts.os);
 }
 
 function display(selection, id, category) {
