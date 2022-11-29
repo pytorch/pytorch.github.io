@@ -15,9 +15,10 @@ We are excited to announce that the PyTorch Conference returns in-person as a sa
 
 **What**: The PyTorch Conference brings together leading academics, researchers and developers from the Machine Learning community to learn more about software releases on PyTorch, ways PyTorch is being used in academia and industry, development in trends, and more.
 
-Join us for technical talks, project deep dives, and a poster exhibition with the opportunity to meet the authors to learn more about their PyTorch projects and network with the machine learning community. There will also be a virtual option for those who can’t join in-person. More information will be shared soon.
+Watch the livestream on December 2 starting 7:00am PST here:
 
-For more information please visit our [Facebook Event page](https://fb.me/e/29RoWnqBX) for virtual livestream information or [https://pytorchconference22.splashthat.com](https://pytorchconference22.splashthat.com) for full details.
+1. [Facebook Event Page](https://fb.me/e/29RoWnqBX)
+2. [YouTube/PyTorch](https://www.youtube.com/@PyTorch)
 
 **FAQs**
 
