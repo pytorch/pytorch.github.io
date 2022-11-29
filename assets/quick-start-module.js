@@ -5,12 +5,14 @@ var supportedOperatingSystems = new Map([
   ['win', 'windows'],
 ]);
 
-var supportedComputePlatforms = new Map([
-  ['cuda.x', new Set(['linux', 'windows'])],
-  ['cuda.y', new Set(['linux', 'windows'])],
-  ['rocm5.x', new Set(['linux'])],
-  ['accnone', new Set(['linux', 'macos', 'windows'])],
+var archInfoMap = new Map([
+  ['cuda', {title: "CUDA", platforms: new Set(['linux', 'windows'])}],
+  ['rocm', {title: "ROCm", platforms: new Set(['linux'])}],
+  ['accnone', {title: "CPU", platforms: new Set(['linux', 'macos', 'windows'])}]
 ]);
+
+let version_map={"nightly": {"accnone": ["cpu", ""], "cuda.x": ["cuda", "11.6"], "cuda.y": ["cuda", "11.7"], "rocm5.x": ["rocm", "5.2"]}, "release": {"accnone": ["cpu", ""], "cuda.x": ["cuda", "11.6"], "cuda.y": ["cuda", "11.7"], "rocm5.x": ["rocm", "5.2"]}}
+let stable_version="Stable (1.13.0)";
 
 var default_selected_os = getAnchorSelectedOS() || getDefaultSelectedOS();
 var opts = {
@@ -98,57 +100,43 @@ function getPreferredCuda(os) {
   if (os == 'macos') {
     return 'accnone';
   }
-  return 'cuda11.6';
+  return 'cuda.x';
 }
 
 // Disable compute platform not supported on OS
 function disableUnsupportedPlatforms(os) {
-  supportedComputePlatforms.forEach( (oses, platform, arr) => {
-    var element = document.getElementById(platform);
-    if (element == null) {
-      console.log("Failed to find element for platform " + platform);
+  for (const [arch_key, info] of archInfoMap) {
+    var elems = document.querySelectorAll('[id^="'+arch_key+'"]');
+    if (elems == null) {
+      console.log("Failed to find element for architecture " + arch_key);
       return;
     }
-    var supported = oses.has(os);
-    element.style.textDecoration = supported ? "" : "line-through";
-  });
+    for (var i=0; i < elems.length;i++) {
+      var supported = info.platforms.has(os);
+      elems[i].style.textDecoration = supported ? "" : "line-through";
+    }
+  }
 }
 
 // Change compute versions depending on build type
-function changeCUDAVersion(ptbuild) {
-  var cuda_element_x = document.getElementById("cuda.x");
-  var cuda_element_y = document.getElementById("cuda.y");
-  var rocm_element = document.getElementById("rocm5.x");
-  if (cuda_element_x == null || cuda_element_y == null) {
-    console.log("Failed to find cuda11 elements");
-    return;
+function changeVersion(ptbuild) {
+
+  if(ptbuild == "preview")
+    archMap = version_map.nightly
+  else
+    archMap = version_map.release
+
+  for (const [arch_key, info] of archInfoMap) {
+    var elems = document.querySelectorAll('[id^="'+arch_key+'"]');
+    for (var i=0; i < elems.length;i++) {
+      elems[i].children[0].textContent = info.title + " " + archMap[elems[i].id][1]
+    }
   }
-  if (cuda_element_x.childElementCount != 1 || cuda_element_y.childElementCount != 1) {
-    console.log("Unexpected number of children for cuda11 element");
-    return;
-  }
-  if (rocm_element == null) {
-    console.log("Failed to find rocm5.x element");
-    return;
-  }
-  if (rocm_element.childElementCount != 1) {
-    console.log("Unexpected number of children for rocm5.x element");
-    return;
-  }
-  if (ptbuild == "preview") {
-    rocm_element.children[0].textContent = "ROCm 5.2";
-    cuda_element_x.children[0].textContent = "CUDA 11.6";
-    cuda_element_y.children[0].textContent = "CUDA 11.7";
-  } else if (ptbuild == "stable") {
-    rocm_element.children[0].textContent = "ROCm 5.2";
-    cuda_element_x.children[0].textContent = "CUDA 11.6";
-    cuda_element_y.children[0].textContent = "CUDA 11.7";
-  } else {
-    rocm_element.children[0].textContent = "ROCm 5.2";
-    cuda_element_x.children[0].textContent = "CUDA 10.2";
-    cuda_element_y.children[0].textContent = "CUDA 11.1";
-  }
+  var stable_element = document.getElementById("stable");
+  stable_element.children[0].textContent = stable_version;
 }
+
+
 
 // Change accnone name depending on OS type
 function changeAccNoneName(osname) {
@@ -201,14 +189,14 @@ function selectedOption(option, selection, category) {
       }
     }
   } else if (category == "ptbuild") {
-    changeCUDAVersion(opts.ptbuild);
+    changeVersion(opts.ptbuild);
   }
   commandMessage(buildMatcher());
   if (category === "os") {
     disableUnsupportedPlatforms(opts.os);
-    changeAccNoneName(opts.os);
     display(opts.os, 'installation', 'os');
   }
+  changeAccNoneName(opts.os);
 }
 
 function display(selection, id, category) {
@@ -272,4 +260,7 @@ function commandMessage(key) {
     $("#command").html("<pre>" + object[key] + "</pre>");
   }
 }
+
+// Set cuda version right away
+changeVersion("stable")
 

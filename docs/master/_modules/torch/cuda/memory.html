@@ -235,7 +235,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href='https://pytorch.org/docs/versions.html'>master (1.14.0a0+git7f4b4d2 ) &#x25BC</a>
+      <a href='https://pytorch.org/docs/versions.html'>master (1.14.0a0+git943acd4 ) &#x25BC</a>
     </div>
     
 
@@ -323,6 +323,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../../../distributed.optim.html">torch.distributed.optim</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../distributed.checkpoint.html">torch.distributed.checkpoint</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../distributions.html">torch.distributions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../_dynamo.html">torch._dynamo</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../fft.html">torch.fft</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../futures.html">torch.futures</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../fx.html">torch.fx</a></li>
@@ -452,11 +453,13 @@
   <h1>Source code for torch.cuda.memory</h1><div class="highlight"><pre>
 <span></span><span class="kn">import</span> <span class="nn">collections</span>
 <span class="kn">import</span> <span class="nn">contextlib</span>
+<span class="kn">import</span> <span class="nn">ctypes</span>
 <span class="kn">import</span> <span class="nn">warnings</span>
 <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">Union</span><span class="p">,</span> <span class="n">Tuple</span>
 
 <span class="kn">import</span> <span class="nn">torch</span>
 <span class="kn">from</span> <span class="nn">.</span> <span class="kn">import</span> <span class="n">is_initialized</span><span class="p">,</span> <span class="n">_get_device_index</span><span class="p">,</span> <span class="n">_lazy_init</span>
+<span class="kn">from</span> <span class="nn">._utils</span> <span class="kn">import</span> <span class="n">_dummy_type</span>
 
 <span class="kn">from</span> <span class="nn">._memory_viz</span> <span class="kn">import</span> <span class="n">segments</span> <span class="k">as</span> <span class="n">_segments</span><span class="p">,</span> <span class="n">memory</span> <span class="k">as</span> <span class="n">_memory</span>
 
@@ -468,7 +471,13 @@
            <span class="s2">&quot;reset_peak_memory_stats&quot;</span><span class="p">,</span> <span class="s2">&quot;reset_max_memory_allocated&quot;</span><span class="p">,</span> <span class="s2">&quot;reset_max_memory_cached&quot;</span><span class="p">,</span>
            <span class="s2">&quot;memory_allocated&quot;</span><span class="p">,</span> <span class="s2">&quot;max_memory_allocated&quot;</span><span class="p">,</span> <span class="s2">&quot;memory_reserved&quot;</span><span class="p">,</span> <span class="s2">&quot;max_memory_reserved&quot;</span><span class="p">,</span>
            <span class="s2">&quot;memory_cached&quot;</span><span class="p">,</span> <span class="s2">&quot;max_memory_cached&quot;</span><span class="p">,</span> <span class="s2">&quot;memory_snapshot&quot;</span><span class="p">,</span> <span class="s2">&quot;memory_summary&quot;</span><span class="p">,</span> <span class="s2">&quot;list_gpu_processes&quot;</span><span class="p">,</span>
-           <span class="s2">&quot;mem_get_info&quot;</span><span class="p">,</span> <span class="s2">&quot;get_allocator_backend&quot;</span><span class="p">]</span>
+           <span class="s2">&quot;mem_get_info&quot;</span><span class="p">,</span> <span class="s2">&quot;get_allocator_backend&quot;</span><span class="p">,</span> <span class="s2">&quot;CUDAPluggableAllocator&quot;</span><span class="p">,</span> <span class="s2">&quot;change_current_allocator&quot;</span><span class="p">]</span>
+
+
+<span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="p">,</span> <span class="s1">&#39;_cuda_CUDAAllocator&#39;</span><span class="p">):</span>
+    <span class="c1"># Define dummy base classes</span>
+    <span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">[</span><span class="s1">&#39;_cuda_CUDAAllocator&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">_dummy_type</span><span class="p">(</span><span class="s1">&#39;_cuda_CUDAAllocator&#39;</span><span class="p">)</span>
+
 
 <span class="k">def</span> <span class="nf">_host_allocator</span><span class="p">():</span>
     <span class="n">_lazy_init</span><span class="p">()</span>
@@ -1103,6 +1112,69 @@
 <span class="sd">        See :ref:`cuda-memory-management` for details on choosing the allocator backend.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">_cuda_getAllocatorBackend</span><span class="p">()</span></div>
+
+<span class="k">class</span> <span class="nc">_CUDAAllocator</span><span class="p">:</span>
+    <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Wrapper over internal CUDA memory allocators.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">allocator</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">_cuda_CUDAAllocator</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_allocator</span> <span class="o">=</span> <span class="n">allocator</span>
+
+    <span class="k">def</span> <span class="nf">allocator</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_allocator</span>
+
+
+<div class="viewcode-block" id="CUDAPluggableAllocator"><a class="viewcode-back" href="../../../generated/torch.cuda.CUDAPluggableAllocator.html#torch.cuda.CUDAPluggableAllocator">[docs]</a><span class="k">class</span> <span class="nc">CUDAPluggableAllocator</span><span class="p">(</span><span class="n">_CUDAAllocator</span><span class="p">):</span>
+    <span class="sa">r</span><span class="sd">&quot;&quot;&quot;CUDA memory allocator loaded from a so file.</span>
+
+<span class="sd">    Memory allocators are compiled in .so files and loaded dynamically using ctypes.</span>
+<span class="sd">    To change the active allocator use the :func:`torch.memory.cuda.change_current_allocator`</span>
+<span class="sd">    function.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        path_to_so_file(str): Path in the filesystem to the `.so` file containing</span>
+<span class="sd">            the allocator functions</span>
+<span class="sd">        alloc_fn_name(str): Name of the function to perform the memory allocation</span>
+<span class="sd">            in the so file. The signature must be:</span>
+<span class="sd">            void* alloc_fn_name(ssize_t size, int device, cudaStream_t stream);</span>
+<span class="sd">        free_fn_name(str): Name of the function to perform the memory release</span>
+<span class="sd">            in the so file. The signature must be:</span>
+<span class="sd">            void free_fn_name(void* ptr, size_t size, cudaStream_t stream);</span>
+
+<span class="sd">    .. warning::</span>
+<span class="sd">        This is currently supported only in unix OSs</span>
+
+<span class="sd">    .. note::</span>
+<span class="sd">        See :ref:`cuda-memory-management` for details on creating and using a custom allocator</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path_to_so_file</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">alloc_fn_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">free_fn_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+        <span class="n">allocator</span> <span class="o">=</span> <span class="n">ctypes</span><span class="o">.</span><span class="n">CDLL</span><span class="p">(</span><span class="n">path_to_so_file</span><span class="p">)</span>
+        <span class="n">alloc_fn</span> <span class="o">=</span> <span class="n">ctypes</span><span class="o">.</span><span class="n">cast</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="n">allocator</span><span class="p">,</span> <span class="n">alloc_fn_name</span><span class="p">),</span> <span class="n">ctypes</span><span class="o">.</span><span class="n">c_void_p</span><span class="p">)</span><span class="o">.</span><span class="n">value</span>
+        <span class="n">free_fn</span> <span class="o">=</span> <span class="n">ctypes</span><span class="o">.</span><span class="n">cast</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="n">allocator</span><span class="p">,</span> <span class="n">free_fn_name</span><span class="p">),</span> <span class="n">ctypes</span><span class="o">.</span><span class="n">c_void_p</span><span class="p">)</span><span class="o">.</span><span class="n">value</span>
+        <span class="k">assert</span> <span class="n">alloc_fn</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+        <span class="k">assert</span> <span class="n">free_fn</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_allocator</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">_cuda_customAllocator</span><span class="p">(</span><span class="n">alloc_fn</span><span class="p">,</span> <span class="n">free_fn</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="change_current_allocator"><a class="viewcode-back" href="../../../generated/torch.cuda.change_current_allocator.html#torch.cuda.change_current_allocator">[docs]</a><span class="k">def</span> <span class="nf">change_current_allocator</span><span class="p">(</span><span class="n">allocator</span><span class="p">:</span> <span class="n">_CUDAAllocator</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Changes the currently used memory allocator to be the one provided.</span>
+<span class="sd">    If the current allocator has already been used/initialized, this function will error.</span>
+
+
+<span class="sd">    Args:</span>
+<span class="sd">        allocator (torch.cuda.memory._CUDAAllocator): allocator to be set as the active one.</span>
+<span class="sd">    .. note::</span>
+<span class="sd">        See :ref:`cuda-memory-management` for details on creating and using a custom allocator</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">_cuda_changeCurrentAllocator</span><span class="p">(</span><span class="n">allocator</span><span class="o">.</span><span class="n">allocator</span><span class="p">())</span></div>
+
+
+<span class="k">def</span> <span class="nf">_get_current_allocator</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">_CUDAAllocator</span><span class="p">:</span>
+    <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Returns the allocator being currently used.</span>
+
+<span class="sd">    .. note::</span>
+<span class="sd">        See :ref:`cuda-memory-management` for details on creating and using a custom allocator</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">_CUDAAllocator</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">_cuda_getAllocator</span><span class="p">())</span>
 </pre></div>
 
              </article>
