@@ -2,7 +2,7 @@
 category: event
 title: PyTorch Conference – Dec 2nd 2022
 date: December 2, 2022
-header-image: assets/images/pytorch_conference–dec_2nd_2022.gif
+header-image: assets/images/pytorch_conference–dec_2nd_2022_new.gif
 ---
 
 Join us for our flagship conference experience. Apply Now to attend in person.
