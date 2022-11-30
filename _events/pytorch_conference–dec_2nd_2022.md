@@ -14,13 +14,8 @@ header-image: assets/images/pytorch_conference–dec_2nd_2022_new.gif
 
 Watch the livestream on December 2 starting 7:00am PST here:
 
-<ol>
-<li font-size="16px"><a href="https://fb.me/e/29RoWnqBX">Facebook Event Page</a></li>
-<li font-size="14px"><a href="https://www.youtube.com/@PyTorch">YouTube/PyTorch</a></li>
-</ol>
-
-1. [Facebook Event Page](https://fb.me/e/29RoWnqBX)
-2. [YouTube/PyTorch](https://www.youtube.com/@PyTorch)
+1. <font size="2">[Facebook Event Page](https://fb.me/e/29RoWnqBX)</font>
+2. <font size="3">[YouTube/PyTorch](https://www.youtube.com/@PyTorch)</font>
 
 **FAQs**
 
