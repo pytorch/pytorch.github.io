@@ -40,7 +40,7 @@ Continued investigation into the factors limiting scaling efficiency uncovered t
 </p>
 
 <p align="center">
-  <img src="" width="100%">
+  <img src="/assets/images/scaling-pytorch-fsdp-image2-tflops_per_second.png" width="100%">
 </p>
 
 <p align="center">
