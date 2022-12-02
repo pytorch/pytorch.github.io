@@ -770,25 +770,6 @@ PT Conf Slide Deck: TBD
     padding-left: 10px;
 }
 
-   body{
-      font-family: Verdana;
-   }
-   p{
-      font-family: Verdana;
-   }
-
-   h2, h1, h3{
-      font-family: Verdana;
-   }
-
-   li{
-      font-family: Verdana;
-   }
-
-   a{
-      font-family: Verdana;
-   }
-
    ul{
       margin: 1.5rem 0 1.5rem 0;
    }
