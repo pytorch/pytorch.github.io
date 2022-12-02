@@ -477,17 +477,15 @@ After all, we can’t claim we’re created a breadth-first unless **YOUR** mode
   <code class="language-plaintext highlighter-rouge">model = torch.compile(model)</code> While the speedups are primarily observed during training, you can also use it for inference if your model runs faster than eager mode.
 
   <div class="highlight"><pre class="highlight"><code>import torch
+  
+def train(model, dataloader):
+model = torch.compile(model)
+for batch in dataloader:
+run_epoch(model, batch)
 
-  def train(model, dataloader):
-  model = torch.compile(model)
-  for batch in dataloader:
-  run_epoch(model, batch)
-
-  def infer(model, input):
-  model = torch.compile(model)
-  return model(\*\*input)</code></pre></div>
-
-  </li>
+def infer(model, input):
+model = torch.compile(model)
+return model(\*\*input)</code></pre></div></li>
 
   <li><b>Why should I use PT2.0 instead of PT 1.X? </b><br>
   See answer to Question (2)
