@@ -269,7 +269,7 @@ This is in early stages of development. Catch the talk on Export Path at the PyT
 
 ### Debugging Issues
 
-A compiled mode is opaque and and hard to debug. You will have questions such as:
+A compiled mode is opaque and hard to debug. You will have questions such as:
 
 - why is my program crashing in compiled mode?
 - is compiled mode as accurate as eager mode?
@@ -464,7 +464,7 @@ After all, we can’t claim we’re created a breadth-first unless **YOUR** mode
     <div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>pip3 install numpy --pre torch torchvision torchaudio --force-reinstall --extra-index-url https://download.pytorch.org/whl/nightly/cpu</code></pre></div></div>
   </li>
 
-  <li><b>Is 2.0 code backwards-compatible with 1.X? </b><br>
+  <li><b>Is 2.0 code backwards-compatible with 1.X?</b><br>
   Yes, using 2.0 will not require you to modify your PyTorch workflows. A single line of code <code class="language-plaintext highlighter-rouge">model = torch.compile(model)</code> can optimize your model to use the 2.0 stack, and smoothly run with the rest of your PyTorch code. This is completely opt-in, and you are not required to use the new compiler.
   </li>
 
@@ -497,7 +497,7 @@ return model(\*\*input)</code></pre></div></li>
   That said, even with static-shaped workloads, we’re still building Compiled mode and there might be bugs. Disable Compiled mode for parts of your code that are crashing, and raise an <a href="https://github.com/pytorch/pytorch/issues" target="_blank">issue</a> (if it isn’t raised already).
   </li>
 
-  <li><b>What is my code doing differently when running PyTorch 2.0? </b>
+  <li><b>What is my code doing differently when running PyTorch 2.0?</b>
   Out of the box, PyTorch 2.0 is the same as PyTorch 1.x, your models run in eager-mode i.e. every line of Python is executed one after the other. <br>
 
   In 2.0, if you wrap your model in <code>model = torch.compile(model)</code>, your model goes through 3 steps before execution: <br><br>
@@ -524,8 +524,8 @@ return model(\*\*input)</code></pre></div></li>
     </ul>
   </li>
 
-  <li><b> What compiler backends does 2.0 currently support?</b><br>
-    <p>The default backend the most complete backend is <a href="https://github.com/pytorch/pytorch/tree/master/torch/_inductor" target="_blank">TorchInductor</a>, but TorchDynamo has a growing list of backends that can be found by calling <code class="language-plaintext highlighter-rouge">torchdynamo.list_backends().</code>
+  <li><b> What compiler backends does 2.0 currently support?</b>
+    <p>The default and the most complete backend is <a href="https://github.com/pytorch/pytorch/tree/master/torch/_inductor" target="_blank">TorchInductor</a>, but TorchDynamo has a growing list of backends that can be found by calling <code class="language-plaintext highlighter-rouge">torchdynamo.list_backends().</code>
     </p>
   </li>
 
