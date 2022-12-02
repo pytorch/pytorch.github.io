@@ -162,7 +162,6 @@ backend: Union[str, Callable] = "inductor",
 # advanced backend options go here as kwargs
 **kwargs
 ) -> torch._dynamo.NNOptimizedModule
-
 ```
 
 - **mode** specifies what the compiler should be optimizing while compiling.
