@@ -434,7 +434,7 @@ docker run --gpus all -it ghcr.io/pytorch/pytorch-nightly:latest /bin/bash
 
 ## Getting Started
 
-Please read Mark Saroufim’s [full blog post]() where he walks you through a tutorial and real models for you to try PyTorch 2.0 today.
+Please read Mark Saroufim’s [full blog post](/blog/Accelerating-Hugging-Face-and-TIMM-models/) where he walks you through a tutorial and real models for you to try PyTorch 2.0 today.
 
 Our goal with PyTorch was to build a breadth-first compiler that would speed up the vast majority of actual models people run in open source. The Hugging Face Hub ended up being an extremely valuable benchmarking tool for us, ensuring that any optimization we work on actually helps accelerate models people want to run.
 
@@ -529,8 +529,8 @@ In 2.0, if you wrap your model in `model = torch.compile(model)`, your model goe
 
 <li> <b>What new components does PT2.0 add to PT?</b> <br>
 <ul>
-  <li><strong>TorchDynamo</strong> generates FX Graphs from Python bytecode. It maintains the eager-mode capabilities using <a href="https://github.com/pytorch/torchdynamo/blob/main/documentation/GuardsOverviewPt1.md#caching-and-guards-overview" target="_blank">guards</a> to ensure the generated graphs are valid (<a href="https://dev-discuss.pytorch.org/t/torchdynamo-an-experiment-in-dynamic-python-bytecode-transformation/361" target="_blank">read more</a>)</li>
-  <li><strong>AOTAutograd</strong> to generate the backward graph corresponding to the forward graph captured by TorchDynamo <a href="https://dev-discuss.pytorch.org/t/tracing-with-primitives-update-2/645" target="_blank">read more</a> </li>
+  <li><strong>TorchDynamo</strong> generates FX Graphs from Python bytecode. It maintains the eager-mode capabilities using <a href="https://pytorch.org/docs/master/dynamo/guards-overview.html#caching-and-guards-overview" target="_blank">guards</a> to ensure the generated graphs are valid (<a href="https://dev-discuss.pytorch.org/t/torchdynamo-an-experiment-in-dynamic-python-bytecode-transformation/361" target="_blank">read more</a>)</li>
+  <li><strong>AOTAutograd</strong> to generate the backward graph corresponding to the forward graph captured by TorchDynamo (<a href="https://dev-discuss.pytorch.org/t/tracing-with-primitives-update-2/645" target="_blank">read more</a>)</li>
   <li><strong>AOTAutograd</strong> to generate the backward graph corresponding to the forward graph captured by TorchDynamo (<a href="https://dev-discuss.pytorch.org/t/torchdynamo-update-6-training-support-with-aotautograd/570" target="_blank">read more</a>)</li>
   <li><strong>PrimTorch</strong> to decompose complicated PyTorch operations into simpler and more elementary ops (<a href="https://dev-discuss.pytorch.org/t/tracing-with-primitives-update-2/645" target="_blank">read more</a>).</li>
   <li><strong>[Backend]</strong> Backends integrate with TorchDynamo to compile the graph into IR that can run on accelerators. For example, <strong>TorchInductor</strong> compiles the graph to either <strong>Triton</strong> for GPU execution or <strong>OpenMP</strong> for CPU execution (<a href="https://dev-discuss.pytorch.org/t/torchinductor-a-pytorch-native-compiler-with-define-by-run-ir-and-symbolic-shapes/747" target="_blank">read more</a>).</li>
@@ -547,11 +547,11 @@ In 2.0, if you wrap your model in `model = torch.compile(model)`, your model goe
 </li>
 
 <li> <b> How can I learn more about PT2.0 developments?</b>
-<p>The most likely reason for performance hits is too many graph breaks. For instance, something innocuous as a print statement in your model’s forward triggers a graph break. We have ways to diagnose these - read more<a href="https://github.com/pytorch/torchdynamo/blob/main/documentation/FAQ.md#why-am-i-not-seeing-speedups" target="_blank"> here</a>.</p>
+<p>The most likely reason for performance hits is too many graph breaks. For instance, something innocuous as a print statement in your model’s forward triggers a graph break. We have ways to diagnose these - read more<a href=" https://pytorch.org/docs/master/dynamo/faq.html#why-is-my-code-crashing" target="_blank"> here</a>.</p>
 </li>
 
 <li> <b>Help my code is running slower with 2.0’s Compiled Model</b>
-<p>The most likely reason for performance hits is too many graph breaks. For instance, something innocuous as a print statement in your model’s forward triggers a graph break. We have ways to diagnose these - read more<a href="https://github.com/pytorch/torchdynamo/blob/main/documentation/FAQ.md#why-am-i-not-seeing-speedups" target="_blank"> here</a>.</p>
+<p>The most likely reason for performance hits is too many graph breaks. For instance, something innocuous as a print statement in your model’s forward triggers a graph break. We have ways to diagnose these - read more<a href="https://pytorch.org/docs/master/dynamo/faq.html#why-am-i-not-seeing-speedups" target="_blank"> here</a>.</p>
 </li>
 
 <li> <b> My previously-running code is crashing with 2.0! How do I debug it?</b>
@@ -560,7 +560,6 @@ In 2.0, if you wrap your model in `model = torch.compile(model)`, your model goe
 
 </ol>
 
-Here are some techniques to triage where your code might be failing, and printing helpful logs: [https://github.com/pytorch/torchdynamo/blob/main/documentation/FAQ.md#why-is-my-code-crashing](https://github.com/pytorch/torchdynamo/blob/main/documentation/FAQ.md#why-is-my-code-crashing)
 
 ## Ask the Engineers: 2.0 Live Q&A Series
 
