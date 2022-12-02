@@ -1252,3 +1252,4 @@ e.g.,
 <script page-id="previous-versions" src="{{ site.baseurl }}/assets/menu-tab-selection.js"></script>
 <script src="{{ site.baseurl }}/assets/quick-start-module.js"></script>
 <script src="{{ site.baseurl }}/assets/show-screencast.js"></script>
+<script src="{{ site.baseurl }}/assets/get-started-sidebar.js"></script>

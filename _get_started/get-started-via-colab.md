@@ -45,3 +45,4 @@ Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu 
 <script page-id="get-started-via-colab" src="{{ site.baseurl }}/assets/menu-tab-selection.js"></script>
 <script src="{{ site.baseurl }}/assets/quick-start-module.js"></script>
 <script src="{{ site.baseurl }}/assets/show-screencast.js"></script>
+<script src="{{ site.baseurl }}/assets/get-started-sidebar.js"></script>
