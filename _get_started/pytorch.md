@@ -774,4 +774,8 @@ PT Conf Slide Deck: TBD
       margin: 1.5rem 0 1.5rem 0;
    }
 
+   .pytorch-2 {
+     font-family: Verdana;
+   }
+
 </style>
