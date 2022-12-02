@@ -4,7 +4,7 @@ title: Start Locally
 permalink: /get-started/locally/
 background-class: get-started-background
 body-class: get-started
-order: 1
+order: 0
 published: true
 get-started-locally: true
 redirect_from: "/get-started/"
