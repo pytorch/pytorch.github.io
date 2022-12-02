@@ -774,8 +774,29 @@ PT Conf Slide Deck: TBD
       margin: 1.5rem 0 1.5rem 0;
    }
 
-   .pytorch-2 {
+   .pytorch-2 .article-wrapper article.pytorch-article p {
      font-family: Verdana;
    }
+
+   .pytorch-2 .article-wrapper article.pytorch-article h2 {
+     font-family: Verdana;
+   }
+
+   .pytorch-2 .article-wrapper article.pytorch-article ul li{
+     font-family: Verdana;
+   }
+
+   .pytorch-2 .article-wrapper article.pytorch-article ul li{
+     font-family: Verdana;
+   }
+
+   .pytorch-2 .article-wrapper article.pytorch-article li {
+     font-family: Verdana;
+   }
+
+   .pytorch-2 .article-wrapper article.pytorch-article h3 {
+     font-family: Verdana;
+   }
+
 
 </style>
