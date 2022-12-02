@@ -445,11 +445,11 @@ After all, we can’t claim we’re created a breadth-first unless **YOUR** mode
 <h2 id="faqs" style="text-transform: none">FAQs<a class="anchorjs-link " href="#faqs" aria-label="Anchor" data-anchorjs-icon="" style="font: 1em / 1 anchorjs-icons; padding-left: 0.375em;"></a></h2>
 
 <ol>
-<li> <b> What is PT 2.0?</b> <br>
+<li><b>What is PT 2.0?</b><br>
 2.0 is the latest PyTorch version. PyTorch 2.0 offers the same eager-mode development experience, while adding a compiled mode via torch.compile. This compiled mode has the potential to speedup your models during training and inference.
 </li>
 
-<li> <b>Why 2.0 instead of 1.14? </b> <br>
+<li><b>Why 2.0 instead of 1.14? </b><br>
 PyTorch 2.0 is what 1.14 would have been. We were releasing substantial new features that we believe change how you meaningfully use PyTorch, so we are calling it 2.0 instead.
 </li>
 
@@ -462,29 +462,29 @@ PyTorch 2.0 is what 1.14 would have been. We were releasing substantial new feat
 
     <div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>pip3 install numpy --pre torch[dynamo] torchvision torchaudio --force-reinstall --extra-index-url https://download.pytorch.org/whl/nightly/cu117
 
-</code></pre></div> </div>
+</code></pre></div</div>
 
     <p>CUDA 11.6</p>
 
     <div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>pip3 install numpy --pre torch[dynamo] torchvision torchaudio --force-reinstall --extra-index-url https://download.pytorch.org/whl/nightly/cu116
 
-</code></pre></div> </div>
+</code></pre></div></div>
 
     <p>CPU</p>
 
     <div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>pip3 install numpy --pre torch torchvision torchaudio --force-reinstall --extra-index-url https://download.pytorch.org/whl/nightly/cpu
 
-</code></pre></div> </div> </li>
+</code></pre></div></div></li>
 
-<li> <b>Is 2.0 code backwards-compatible with 1.X? </b> <br> 
+<li<b>Is 2.0 code backwards-compatible with 1.X? </b><br>
  Yes, using 2.0 will not require you to modify your PyTorch workflows. A single line of code <code class="language-plaintext highlighter-rouge">model = torch.compile(model)</code> can optimize your model to use the 2.0 stack, and smoothly run with the rest of your PyTorch code. This is completely opt-in, and you are not required to use the new compiler.
 </li>
 
-<li><b>Is 2.0 enabled by default?</b> <br>
+<li><b>Is 2.0 enabled by default?</b><br>
 No, you must explicitly enable 2.0 in your PyTorch code by optimizing your model with a single function call.
 </li>
 
-<li> <b>How do I migrate my PT1.X code to PT2.0?</b> <br>
+<li><b>How do I migrate my PT1.X code to PT2.0?</b><br>
 Your code should be working as-is without the need for any migrations. If you want to use the new Compiled mode feature introduced in 2.0, then you can start by optimizing your model with one line:
 <code class="language-plaintext highlighter-rouge">model = torch.compile(model)</code> While the speedups are primarily observed during training, you can also use it for inference if your model runs faster than eager mode.
 
@@ -502,18 +502,18 @@ return model(\*\*input)
 
 </li>
 
-<li> <b> Why should I use PT2.0 instead of PT 1.X? </b> <br> 
+<li><b>Why should I use PT2.0 instead of PT 1.X? </b><br>
 See answer to Question (2)
 </li>
 
-<li> <b> Are there any applications where I should NOT use PT 2.0?</b> <br>
+<li><b>Are there any applications where I should NOT use PT 2.0?</b><br>
 The current release of PT 2.0 is still experimental and in the nightlies. Dynamic shapes support in torch.compile is still early, and you should not be using it yet, and wait until the Stable 2.0 release lands in March 2023.
 
 That said, even with static-shaped workloads, we’re still building Compiled mode and there might be bugs. Disable Compiled mode for parts of your code that are crashing, and raise an <a href="https://github.com/pytorch/pytorch/issues" target="_blank">issue</a> (if it isn’t raised already).
 
 </li>
 
-<li> <b> What is my code doing differently when running PyTorch 2.0? </b>
+<li><b>What is my code doing differently when running PyTorch 2.0? </b>
 Out of the box, PyTorch 2.0 is the same as PyTorch 1.x, your models run in eager-mode i.e. every line of Python is executed one after the other. <br>
 
 In 2.0, if you wrap your model in `model = torch.compile(model)`, your model goes through 3 steps before execution: <br>
@@ -527,7 +527,7 @@ In 2.0, if you wrap your model in `model = torch.compile(model)`, your model goe
 
 </li>
 
-<li> <b>What new components does PT2.0 add to PT?</b> <br>
+<li><b>What new components does PT2.0 add to PT?</b><br>
 <ul>
   <li><strong>TorchDynamo</strong> generates FX Graphs from Python bytecode. It maintains the eager-mode capabilities using <a href="https://pytorch.org/docs/master/dynamo/guards-overview.html#caching-and-guards-overview" target="_blank">guards</a> to ensure the generated graphs are valid (<a href="https://dev-discuss.pytorch.org/t/torchdynamo-an-experiment-in-dynamic-python-bytecode-transformation/361" target="_blank">read more</a>)</li>
   <li><strong>AOTAutograd</strong> to generate the backward graph corresponding to the forward graph captured by TorchDynamo (<a href="https://dev-discuss.pytorch.org/t/tracing-with-primitives-update-2/645" target="_blank">read more</a>)</li>
@@ -547,15 +547,16 @@ In 2.0, if you wrap your model in `model = torch.compile(model)`, your model goe
 </li>
 
 <li> <b> How can I learn more about PT2.0 developments?</b>
-<p>The most likely reason for performance hits is too many graph breaks. For instance, something innocuous as a print statement in your model’s forward triggers a graph break. We have ways to diagnose these - read more<a href=" https://pytorch.org/docs/master/dynamo/faq.html#why-is-my-code-crashing" target="_blank"> here</a>.</p>
+<p>The most likely reason for performance hits is too many graph breaks. For instance, something innocuous as a print statement in your model’s forward triggers a graph break. We have ways to diagnose these - read more <a href="https://github.com/pytorch/torchdynamo/blob/main/documentation/FAQ.md#why-am-i-not-seeing-speedups" target="_blank">here</a>.</p>
+<p>The most likely reason for performance hits is too many graph breaks. For instance, something innocuous as a print statement in your model’s forward triggers a graph break. We have ways to diagnose these - read more <a href=" https://pytorch.org/docs/master/dynamo/faq.html#why-is-my-code-crashing" target="_blank">here</a>.</p>
 </li>
 
 <li> <b>Help my code is running slower with 2.0’s Compiled Model</b>
-<p>The most likely reason for performance hits is too many graph breaks. For instance, something innocuous as a print statement in your model’s forward triggers a graph break. We have ways to diagnose these - read more<a href="https://pytorch.org/docs/master/dynamo/faq.html#why-am-i-not-seeing-speedups" target="_blank"> here</a>.</p>
+<p>The most likely reason for performance hits is too many graph breaks. For instance, something innocuous as a print statement in your model’s forward triggers a graph break. We have ways to diagnose these - read more <a href="https://pytorch.org/docs/master/dynamo/faq.html#why-am-i-not-seeing-speedups" target="_blank">here</a>.</p>
 </li>
 
 <li> <b> My previously-running code is crashing with 2.0! How do I debug it?</b>
-<p>Here are some techniques to triage where your code might be failing, and printing helpful logs:<a href="https://github.com/pytorch/torchdynamo/blob/main/documentation/FAQ.md#why-is-my-code-crashing" target="_blank"> https://github.com/pytorch/torchdynamo/blob/main/documentation/FAQ.md#why-is-my-code-crashing</a></p>
+<p>Here are some techniques to triage where your code might be failing, and printing helpful logs: <a href="https://github.com/pytorch/torchdynamo/blob/main/documentation/FAQ.md#why-is-my-code-crashing" target="_blank">https://github.com/pytorch/torchdynamo/blob/main/documentation/FAQ.md#why-is-my-code-crashing</a></p>
 </li>
 
 </ol>
@@ -669,56 +670,3 @@ We will be hosting a series of live Q&A sessions for the community to have deepe
 </ul>
 
 <script src="{{ site.baseurl }}/assets/get-started-sidebar.js"></script>
-<style type="text/css" rel="stylesheet">
-   
-   table,td{
-      border: 1px solid #A0A0A1;
-      padding: 10px;
-   }
-
-   article.pytorch-article table tr td:first-of-type {
-    padding-left: 10px;
-}
-
-   ul{
-      margin: 1.5rem 0 1.5rem 0;
-   }
-
-   .pytorch-2 .article-wrapper article.pytorch-article p {
-     font-family: Verdana;
-     word-break: break-word;
-   }
-
-   .pytorch-2 .article-wrapper article.pytorch-article a {
-     font-family: Verdana;
-     word-break: break-word;
-   }
-
-   .pytorch-2 .article-wrapper article.pytorch-article h2 {
-     font-family: Verdana;
-   }
-
-   .pytorch-2 .article-wrapper article.pytorch-article ul li{
-     font-family: Verdana;
-   }
-
-   .pytorch-2 .article-wrapper article.pytorch-article ul li{
-     font-family: Verdana;
-   }
-
-   .pytorch-2 .article-wrapper article.pytorch-article li {
-     font-family: Verdana;
-   }
-
-   .pytorch-2 .article-wrapper article.pytorch-article h3 {
-     font-family: Verdana;
-   }
-
-  .pytorch-2 .article-wrapper article.pytorch-article .QnATable {
-    @media screen and (max-width: 418px) {
-      max-width: 95vw;
-    }
-  }
-
-
-</style>
