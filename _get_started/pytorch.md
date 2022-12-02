@@ -2,6 +2,7 @@
 layout: get_started
 title: PyTorch 2.0
 permalink: /get-started/pytorch-2.0/
+featured-img: "assets/images/featured-img-pytorch-2.png"
 background-class: get-started-background
 body-class: get-started
 order: 2
@@ -308,9 +309,9 @@ In summary, torch.distributed’s two main distributed wrappers work well in com
 Both `DistributedDataParallel` (DDP) and `FullyShardedDataParallel` (FSDP) work in compiled mode and provide improved performance and memory utilization relative to eager mode, with some caveats and limitations.
 
 <p>
-<center> <u> Speedups in FP32 precision</u></center>
+<center> <u>Speedups in AMP Precision</u></center>
 <img src="/assets/images/pytorch-2.0-img9.png" width="90%">
-<center><u> Left: speedups for FSDP in Compiled mode over eager mode (FP32 precision).<br>
+<center><u>Left: speedups for FSDP in Compiled mode over eager mode (AMP precision).<br>
 Right: FSDP in Compiled mode takes substantially lesser memory than in eager mode</u></center>
 </p>
 
@@ -456,23 +457,9 @@ After all, we can’t claim we’re created a breadth-first unless **YOUR** mode
     <p><b>How do I install 2.0? Any additional requirements?</b></p>
     <p>Install the latest nightlies:</p>
     <p>CUDA 11.7</p>
-    <div class="language-plaintext highlighter-rouge">
-      <div class="highlight">
-        <pre class="highlight">
-          <code>pip3 install numpy --pre torch[dynamo] torchvision torchaudio --force-reinstall --extra-index-url https://download.pytorch.org/whl/nightly/cu117
-          </code>
-        </pre>
-      </div>
-    </div>
+    <div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>pip3 install numpy --pre torch[dynamo] torchvision torchaudio --force-reinstall --extra-index-url https://download.pytorch.org/whl/nightly/cu117</code></pre></div></div>
     <p>CUDA 11.6</p>
-    <div class="language-plaintext highlighter-rouge">
-      <div class="highlight">
-        <pre class="highlight">
-          <code>pip3 install numpy --pre torch[dynamo] torchvision torchaudio --force-reinstall --extra-index-url https://download.pytorch.org/whl/nightly/cu116
-          </code>
-        </pre>
-      </div>
-    </div>
+    <div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>pip3 install numpy --pre torch[dynamo] torchvision torchaudio --force-reinstall --extra-index-url https://download.pytorch.org/whl/nightly/cu116</code></pre></div></div>
     <p>CPU</p>
     <div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>pip3 install numpy --pre torch torchvision torchaudio --force-reinstall --extra-index-url https://download.pytorch.org/whl/nightly/cpu</code></pre></div></div>
   </li>
@@ -489,23 +476,16 @@ After all, we can’t claim we’re created a breadth-first unless **YOUR** mode
   Your code should be working as-is without the need for any migrations. If you want to use the new Compiled mode feature introduced in 2.0, then you can start by optimizing your model with one line:
   <code class="language-plaintext highlighter-rouge">model = torch.compile(model)</code> While the speedups are primarily observed during training, you can also use it for inference if your model runs faster than eager mode.
 
-  <div class="highlight">
-  <pre class="highlight">
-  <code>import torch
+  <div class="highlight"><pre class="highlight"><code>import torch
+  
+def train(model, dataloader):
+model = torch.compile(model)
+for batch in dataloader:
+run_epoch(model, batch)
 
-      def train(model, dataloader):
-      model = torch.compile(model)
-      for batch in dataloader:
-      run_epoch(model, batch)
-
-      def infer(model, input):
-      model = torch.compile(model)
-      return model(\*\*input)
-  </code>
-  </pre>
-  </div>
-
-  </li>
+def infer(model, input):
+model = torch.compile(model)
+return model(\*\*input)</code></pre></div></li>
 
   <li><b>Why should I use PT2.0 instead of PT 1.X? </b><br>
   See answer to Question (2)
@@ -554,7 +534,7 @@ After all, we can’t claim we’re created a breadth-first unless **YOUR** mode
   </li>
 
   <li><b> How can I learn more about PT2.0 developments?</b>
-    <p>The most likely reason for performance hits is too many graph breaks. For instance, something innocuous as a print statement in your model’s forward triggers a graph break. We have ways to diagnose these - read more <a href="https://github.com/pytorch/torchdynamo/blob/main/documentation/FAQ.md#why-am-i-not-seeing-speedups" target="_blank">here</a>.</p>
+    <p>The most likely reason for performance hits is too many graph breaks. For instance, something innocuous as a print statement in your model’s forward triggers a graph break. We have ways to diagnose these - read more <a href="https://pytorch.org/docs/master/dynamo/faq.html#why-am-i-not-seeing-speedups" target="_blank">here</a>.</p>
     <p>The most likely reason for performance hits is too many graph breaks. For instance, something innocuous as a print statement in your model’s forward triggers a graph break. We have ways to diagnose these - read more <a href=" https://pytorch.org/docs/master/dynamo/faq.html#why-is-my-code-crashing" target="_blank">here</a>.</p>
   </li>
 
