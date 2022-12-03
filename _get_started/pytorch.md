@@ -197,7 +197,7 @@ out.sum().backward()
 optimizer.step()
 ```
 
-The first time you run the `optimized_model(x)`, it compiles the model.. Hence, it takes longer to run. Subsequent runs are fast.
+The first time you run the `compiled_model(x)`, it compiles the model. Hence, it takes longer to run. Subsequent runs are fast.
 
 ### Modes
 
