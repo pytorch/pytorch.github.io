@@ -5,7 +5,7 @@ author: Mark Saroufim
 featured-img: "assets/images/pytorch-2.0-feature-img.png"
 ---
 
-`torch.compile()` makes it easy to experiment with different compiler backends to make PyTorch code faster with a single line decorator `torch.compile()`. It works either directly over an nn.Module as a drop-in replacement for torch.jit.script() but without requiring you to make any source code changes. We expect this one line code change to provide you with between 30%-2x training time speedups on the vast majority of models that you’re already running.
+`torch.compile()` makes it easy to experiment with different compiler backends to make PyTorch code faster with a single line decorator `torch.compile()`. It works either directly over an nn.Module as a drop-in replacement for `torch.jit.script()` but without requiring you to make any source code changes. We expect this one line code change to provide you with between 30%-2x training time speedups on the vast majority of models that you’re already running.
 
 ```python
 
@@ -82,7 +82,7 @@ import torch
        a = torch.sin(x).cuda()
        b = torch.sin(y).cuda()
        return a + b
-   new_fn = torch.compile("inductor")(fn)
+   new_fn = torch.compile(fn, backend="inductor")
    input_tensor = torch.randn(10000).to(device="cuda:0")
    a = new_fn()
 ```
@@ -133,7 +133,7 @@ As a next step let’s try a real model like resnet50 from the PyTorch hub.
 ```python
 import torch
    model = torch.hub.load('pytorch/vision:v0.10.0', 'resnet18', pretrained=True)
-   opt_model = torch.compile("inductor",model)
+   opt_model = torch.compile(model, backend="inductor")
    model(torch.randn(1,3,64,64))
 
 ```
@@ -173,7 +173,7 @@ Similarly let’s try out a TIMM example
 import timm
    import torch
    model = timm.create_model('resnext101_32x8d', pretrained=True, num_classes=2)
-   opt_model = torch.compile(model, "inductor")
+   opt_model = torch.compile(model, backend="inductor")
    opt_model(torch.randn(64,3,7,7))
 ```
 
