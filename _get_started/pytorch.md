@@ -153,15 +153,15 @@ compiled_model = torch.compile(model)
 
 This `compiled_model` holds a reference to your model and compiles the `forward` function to a more optimized version. When compiling the model, we give a few knobs to adjust it:
 
-```
+```python
 def torch.compile(model: Callable,
-*,
-mode: Optional[str] = "default",
-dynamic: bool = False,
-fullgraph:bool = False,
-backend: Union[str, Callable] = "inductor",
-# advanced backend options go here as kwargs
-**kwargs
+  *,
+  mode: Optional[str] = "default",
+  dynamic: bool = False,
+  fullgraph:bool = False,
+  backend: Union[str, Callable] = "inductor",
+  # advanced backend options go here as kwargs
+  **kwargs
 ) -> torch._dynamo.NNOptimizedModule
 ```
 
