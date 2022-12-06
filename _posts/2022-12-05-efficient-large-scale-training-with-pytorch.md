@@ -443,5 +443,14 @@ _[API documentation](https://pytorch.org/docs/stable/fsdp.html?highlight=fsdp#mo
     td{
         border: 1px solid black;
     }
+    
+    article.pytorch-article table tr td:first-of-type{
+        padding: 0.3125rem;
+    }
+
+    article.pytorch-article table td {
+    padding: 0.3125rem;
+    }
+}
 
 </style>
