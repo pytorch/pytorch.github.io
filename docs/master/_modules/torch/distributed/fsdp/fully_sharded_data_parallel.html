@@ -235,7 +235,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href='https://pytorch.org/docs/versions.html'>master (1.14.0a0+gitf628f2e ) &#x25BC</a>
+      <a href='https://pytorch.org/docs/versions.html'>master (1.14.0a0+git876b702 ) &#x25BC</a>
     </div>
     
 
@@ -497,7 +497,6 @@
     <span class="n">_get_param_to_fqns</span><span class="p">,</span>
     <span class="n">FSDP_PREFIX</span><span class="p">,</span>
     <span class="n">FSDP_WRAPPED_MODULE</span><span class="p">,</span>
-    <span class="n">HandleTrainingState</span><span class="p">,</span>
     <span class="n">TrainingState</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span> <span class="nn">torch.distributed.fsdp._dynamo_utils</span> <span class="kn">import</span> <span class="n">_annotate_modules_for_dynamo</span>
@@ -519,9 +518,7 @@
     <span class="n">_post_forward_reshard</span><span class="p">,</span>
     <span class="n">_pre_forward</span><span class="p">,</span>
     <span class="n">_pre_forward_unshard</span><span class="p">,</span>
-    <span class="n">_reshard</span><span class="p">,</span>
     <span class="n">_root_pre_forward</span><span class="p">,</span>
-    <span class="n">_should_free_in_backward</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span> <span class="nn">torch.distributed.fsdp._wrap_utils</span> <span class="kn">import</span> <span class="n">_auto_wrap</span>
 <span class="kn">from</span> <span class="nn">torch.distributed.fsdp.api</span> <span class="kn">import</span> <span class="p">(</span>
@@ -1404,135 +1401,6 @@
                 <span class="n">param_name</span> <span class="o">=</span> <span class="n">param_name</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="n">FSDP_PREFIX</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
             <span class="k">yield</span> <span class="p">(</span><span class="n">param_name</span><span class="p">,</span> <span class="n">param</span><span class="p">)</span></div>
 
-    <span class="nd">@torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">()</span>
-    <span class="k">def</span> <span class="nf">_wait_for_post_backward</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="sd">&quot;&quot;&quot;Wait for post-backward to finish. Only called on root instance.&quot;&quot;&quot;</span>
-        <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_root</span><span class="p">,</span> <span class="s2">&quot;_wait_for_post_backward can only be called on root.&quot;</span>
-        <span class="c1"># Root&#39;s training state might be backward_pre or backward_post depending on</span>
-        <span class="c1"># if root parameter&#39;s post backward hook was called. The post-backward hook</span>
-        <span class="c1"># may not have been called if gradient was not computed for this param/FSDP</span>
-        <span class="c1"># module.</span>
-
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sync_gradients</span><span class="p">:</span>
-            <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">current_stream</span><span class="p">()</span><span class="o">.</span><span class="n">wait_stream</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_streams</span><span class="p">[</span><span class="s2">&quot;post_backward&quot;</span><span class="p">])</span>
-            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">cpu_offload</span><span class="o">.</span><span class="n">offload_params</span><span class="p">:</span>
-                <span class="c1"># We need to wait for the non-blocking GPU -&gt;</span>
-                <span class="c1"># CPU grad transfers to finish. We need to do this for GPU -&gt; CPU</span>
-                <span class="c1"># copies because when grad is on CPU, it won&#39;t wait for any CUDA</span>
-                <span class="c1"># stream to finish GPU -&gt; CPU copies unless we explicitly block the</span>
-                <span class="c1"># host-side with synchronize().</span>
-                <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">current_stream</span><span class="p">()</span><span class="o">.</span><span class="n">synchronize</span><span class="p">()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_exec_order_data</span><span class="o">.</span><span class="n">next_iter</span><span class="p">()</span>
-
-        <span class="c1"># A backward pass is done, clean up below.</span>
-        <span class="k">def</span> <span class="nf">_catch_all_reshard</span><span class="p">(</span><span class="n">fsdp_module</span><span class="p">:</span> <span class="n">FullyShardedDataParallel</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">            Reshards full parameters that may have not been resharded in</span>
-<span class="sd">            post_backward_hook. This can happen when an FSDP module&#39;s output</span>
-<span class="sd">            is used in forward so its pre-backward fires unsharding the param,</span>
-<span class="sd">            but post-backward does not fire since the output was not ultimately</span>
-<span class="sd">            used in loss computation so FSDP parameter did not get a gradient.</span>
-<span class="sd">            &quot;&quot;&quot;</span>
-            <span class="c1"># Note that we wrap resharding logic in a try-catch as a defensive</span>
-            <span class="c1"># approach, as if an error is thrown, we are in the backwards pass,</span>
-            <span class="c1"># and autograd would not print out much useful info about the actual</span>
-            <span class="c1"># error hit.</span>
-            <span class="k">try</span><span class="p">:</span>
-                <span class="n">free_unsharded_flat_params</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">bool</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
-                <span class="n">handles_to_reshard</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">FlatParamHandle</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
-                <span class="k">for</span> <span class="n">handle</span> <span class="ow">in</span> <span class="n">fsdp_module</span><span class="o">.</span><span class="n">_handles</span><span class="p">:</span>
-                    <span class="c1"># TODO: This already-resharded check is brittle:</span>
-                    <span class="c1"># https://github.com/pytorch/pytorch/issues/83956</span>
-                    <span class="n">already_resharded</span> <span class="o">=</span> <span class="p">(</span>
-                        <span class="n">handle</span><span class="o">.</span><span class="n">flat_param</span><span class="o">.</span><span class="n">data_ptr</span><span class="p">()</span>
-                        <span class="o">==</span> <span class="n">handle</span><span class="o">.</span><span class="n">flat_param</span><span class="o">.</span><span class="n">_local_shard</span><span class="o">.</span><span class="n">data_ptr</span><span class="p">()</span>
-                    <span class="p">)</span>
-                    <span class="k">if</span> <span class="n">already_resharded</span><span class="p">:</span>
-                        <span class="k">continue</span>
-                    <span class="n">free_unsharded_flat_params</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-                        <span class="n">_should_free_in_backward</span><span class="p">(</span><span class="n">fsdp_module</span><span class="p">,</span> <span class="n">handle</span><span class="p">)</span>
-                    <span class="p">)</span>
-                    <span class="n">handles_to_reshard</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">handle</span><span class="p">)</span>
-                <span class="n">_reshard</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">handles_to_reshard</span><span class="p">,</span> <span class="n">free_unsharded_flat_params</span><span class="p">)</span>
-            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-                <span class="n">p_assert</span><span class="p">(</span>
-                    <span class="kc">False</span><span class="p">,</span>
-                    <span class="sa">f</span><span class="s2">&quot;Got exception while resharding module </span><span class="si">{</span><span class="n">fsdp_module</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
-                    <span class="n">raise_assertion_error</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-                <span class="p">)</span>
-                <span class="k">raise</span> <span class="n">e</span>
-
-        <span class="k">def</span> <span class="nf">_finalize_params</span><span class="p">(</span><span class="n">fsdp_module</span><span class="p">:</span> <span class="n">FullyShardedDataParallel</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="sd">&quot;&quot;&quot;Helper used below on all fsdp modules.&quot;&quot;&quot;</span>
-            <span class="k">for</span> <span class="n">handle</span> <span class="ow">in</span> <span class="n">fsdp_module</span><span class="o">.</span><span class="n">_handles</span><span class="p">:</span>
-                <span class="n">p</span> <span class="o">=</span> <span class="n">handle</span><span class="o">.</span><span class="n">flat_param</span>
-                <span class="k">if</span> <span class="n">p</span><span class="o">.</span><span class="n">requires_grad</span><span class="p">:</span>
-                    <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="s2">&quot;_post_backward_hook_state&quot;</span><span class="p">):</span>
-                        <span class="n">p_assert</span><span class="p">(</span>
-                            <span class="nb">len</span><span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">_post_backward_hook_state</span><span class="p">)</span> <span class="o">==</span> <span class="mi">2</span><span class="p">,</span>  <span class="c1"># type: ignore[attr-defined]</span>
-                            <span class="s2">&quot;p._post_backward_hook_state fields are not valid.&quot;</span><span class="p">,</span>
-                        <span class="p">)</span>
-                        <span class="n">p</span><span class="o">.</span><span class="n">_post_backward_hook_state</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">remove</span><span class="p">()</span>  <span class="c1"># type: ignore[attr-defined]</span>
-                        <span class="nb">delattr</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="s2">&quot;_post_backward_hook_state&quot;</span><span class="p">)</span>
-                    <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sync_gradients</span><span class="p">:</span>
-                        <span class="c1"># Preserve the gradient accumulation state if not</span>
-                        <span class="c1"># synchronizing gradients: `p.grad` remains the</span>
-                        <span class="c1"># unsharded gradient accumulated from prior `no_sync()`</span>
-                        <span class="c1"># iterations, and `p._saved_grad_shard` remains the</span>
-                        <span class="c1"># sharded gradient from the last synchronized iteration</span>
-                        <span class="k">continue</span>
-                    <span class="n">handle</span><span class="o">.</span><span class="n">prepare_gradient_for_optim</span><span class="p">()</span>
-                    <span class="n">p_assert</span><span class="p">(</span>
-                        <span class="nb">hasattr</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="s2">&quot;_post_backward_called&quot;</span><span class="p">),</span>
-                        <span class="s2">&quot;Expected flag _post_backward_called to be set on param.&quot;</span><span class="p">,</span>
-                    <span class="p">)</span>
-                    <span class="c1"># Reset _post_backward_called in preparation for the next iteration.</span>
-                    <span class="n">p</span><span class="o">.</span><span class="n">_post_backward_called</span> <span class="o">=</span> <span class="kc">False</span>
-
-        <span class="c1"># Update root and nested FSDP&#39;s hooks and flags.</span>
-        <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">fsdp_modules</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>  <span class="c1"># includes self</span>
-            <span class="n">_catch_all_reshard</span><span class="p">(</span><span class="n">m</span><span class="p">)</span>
-            <span class="n">_finalize_params</span><span class="p">(</span><span class="n">m</span><span class="p">)</span>
-            <span class="n">m</span><span class="o">.</span><span class="n">_ran_pre_backward_hook</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
-            <span class="n">m</span><span class="o">.</span><span class="n">training_state</span> <span class="o">=</span> <span class="n">TrainingState</span><span class="o">.</span><span class="n">IDLE</span>
-            <span class="k">for</span> <span class="n">handle</span> <span class="ow">in</span> <span class="n">m</span><span class="o">.</span><span class="n">_handles</span><span class="p">:</span>
-                <span class="n">handle</span><span class="o">.</span><span class="n">_training_state</span> <span class="o">=</span> <span class="n">HandleTrainingState</span><span class="o">.</span><span class="n">IDLE</span>
-            <span class="n">m</span><span class="o">.</span><span class="n">_handles_prefetched</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
-            <span class="k">if</span> <span class="n">m</span><span class="o">.</span><span class="n">_is_root</span><span class="p">:</span>
-                <span class="c1"># reset this flag for cases like &quot;one forward pass + multiple backward passes&quot;</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_post_backward_callback_queued</span> <span class="o">=</span> <span class="kc">False</span>
-
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_use_param_exec_order_policy</span><span class="p">()</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_param_exec_order_prep_stage</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_param_exec_order_policy_second_iter_init</span><span class="p">()</span>
-
-    <span class="k">def</span> <span class="nf">_param_exec_order_policy_second_iter_init</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_param_exec_order_prep_stage</span> <span class="o">=</span> <span class="kc">False</span>
-        <span class="c1"># Let the parameters in self._fsdp_params_exec_order ordered based on</span>
-        <span class="c1"># the execution order in the forward pass.</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_fsdp_params_exec_order</span><span class="o">.</span><span class="n">reverse</span><span class="p">()</span>
-        <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">modules</span><span class="p">():</span>
-            <span class="k">if</span> <span class="n">m</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">self</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">m</span><span class="p">,</span> <span class="n">FullyShardedDataParallel</span><span class="p">):</span>
-                <span class="k">assert</span> <span class="nb">hasattr</span><span class="p">(</span>
-                    <span class="n">m</span><span class="p">,</span> <span class="s2">&quot;_param_exec_order_policy&quot;</span>
-                <span class="p">),</span> <span class="s2">&quot;Non-root FSDP modules should also have _param_exec_order_policy attribute&quot;</span>
-                <span class="k">assert</span> <span class="nb">hasattr</span><span class="p">(</span>
-                    <span class="n">m</span><span class="p">,</span> <span class="s2">&quot;_param_exec_order_prep_stage&quot;</span>
-                <span class="p">),</span> <span class="s2">&quot;Non-root FSDP modules should also have _param_exec_order_prep_stage attribute&quot;</span>
-                <span class="n">m</span><span class="o">.</span><span class="n">_param_exec_order_prep_stage</span> <span class="o">=</span> <span class="kc">False</span>
-        <span class="c1"># TODO (linjianma): Construct a fsdp_wrap_map whose keys are all children modules with a FSDP wrap,</span>
-        <span class="c1"># and values are its FSDP wraps. These children FSDP wraps will be detached from the root FSDP module</span>
-        <span class="c1"># and will be used to schedule the parameters (rebuild_full_params and reshard).</span>
-        <span class="c1"># TODO (linjianma): Remove all internal FSDP wraps from the root FSDP module.</span>
-        <span class="c1"># TODO (linjianma): Based on self._fsdp_params_exec_order, get the information</span>
-        <span class="c1"># needed to patch the forward() function of each key in the fsdp_wrap_map. The rules are as follows:</span>
-        <span class="c1"># 1: Before each forward(), rebuild_full_params of all parameters that are currently sharded and</span>
-        <span class="c1"># will be used in the forward, and reshard all parameters that are currently full and will not be</span>
-        <span class="c1"># used in the next forward()</span>
-        <span class="c1"># 2: After each forward(), reshard all parameters just used in the forward, and rebuild_full_params of</span>
-        <span class="c1"># all parameters that will be used next.</span>
-        <span class="c1"># TODO (linjianma): Patch the forward of each model in the keys</span>
-        <span class="c1"># of fsdp_wrap_map based on the information above.</span>
-
     <span class="k">def</span> <span class="nf">_assert_state</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">TrainingState</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="n">TrainingState</span><span class="p">]])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="sd">&quot;&quot;&quot;Assert we are in the given state.&quot;&quot;&quot;</span>
         <span class="c1"># Since assert can be turned off and this error checking</span>
@@ -1609,12 +1477,21 @@
 <span class="sd">        Returns:</span>
 <span class="sd">            Total norm of the parameters (viewed as a single vector).</span>
 
-<span class="sd">        .. note:: This is analogous to ``torch.nn.utils.clip_grad_norm_`` but</span>
-<span class="sd">            handles the partitioning and multiple devices per rank under the</span>
-<span class="sd">            hood. The default torch util is not applicable here, because each</span>
-<span class="sd">            rank only has a partial view of all the grads in the model, so</span>
-<span class="sd">            calling it for FSDP models would lead to different scaling being</span>
-<span class="sd">            applied per subset of model parameters.</span>
+<span class="sd">        .. note:: If every FSDP instance uses ``NO_SHARD``, meaning that no</span>
+<span class="sd">            gradients are sharded across ranks, then you may directly use</span>
+<span class="sd">            :func:`torch.nn.utils.clip_grad_norm_`.</span>
+
+<span class="sd">        .. note:: If at least some FSDP instance uses a sharded strategy (i.e.</span>
+<span class="sd">            one other than ``NO_SHARD``), then you should use this method</span>
+<span class="sd">            instead of :func:`torch.nn.utils.clip_grad_norm_` since this method</span>
+<span class="sd">            handles the fact that gradients are sharded across ranks.</span>
+
+<span class="sd">        .. note:: The total norm returned will have the &quot;largest&quot; dtype across</span>
+<span class="sd">            all parameters/gradients as defined by PyTorch&#39;s type promotion</span>
+<span class="sd">            semantics. For example, if *all* parameters/gradients use a low</span>
+<span class="sd">            precision dtype, then the returned norm&#39;s dtype will be that low</span>
+<span class="sd">            precision dtype, but if there exists at least one parameter/</span>
+<span class="sd">            gradient using FP32, then the returned norm&#39;s dtype will be FP32.</span>
 
 <span class="sd">        .. warning:: This needs to be called on all ranks since it uses</span>
 <span class="sd">            collective communications.</span>
@@ -1663,6 +1540,7 @@
                 <span class="n">nonsharded_params</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">param</span><span class="p">)</span>
                 <span class="k">if</span> <span class="n">param</span><span class="o">.</span><span class="n">grad</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                     <span class="n">grads</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">param</span><span class="o">.</span><span class="n">grad</span><span class="p">)</span>
+        <span class="c1"># Compute local norms (forced to be in FP32)</span>
         <span class="n">local_sharded_norm</span> <span class="o">=</span> <span class="n">_get_grad_norm</span><span class="p">(</span><span class="n">sharded_params</span><span class="p">,</span> <span class="n">norm_type</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">compute_device</span>
         <span class="p">)</span>
@@ -1691,8 +1569,14 @@
         <span class="c1"># `if clip_coef &lt; 1`</span>
         <span class="n">clip_coef_clamped</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">clamp</span><span class="p">(</span><span class="n">clip_coef</span><span class="p">,</span> <span class="nb">max</span><span class="o">=</span><span class="mf">1.0</span><span class="p">)</span>
         <span class="k">for</span> <span class="n">grad</span> <span class="ow">in</span> <span class="n">grads</span><span class="p">:</span>
-            <span class="n">grad</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">mul_</span><span class="p">(</span><span class="n">clip_coef_clamped</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">grad</span><span class="o">.</span><span class="n">device</span><span class="p">))</span>
-        <span class="k">return</span> <span class="n">total_norm</span></div>
+            <span class="n">grad</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">mul_</span><span class="p">(</span><span class="n">clip_coef_clamped</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">grad</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">grad</span><span class="o">.</span><span class="n">dtype</span><span class="p">))</span>
+        <span class="c1"># Use the &quot;largest&quot; dtype by type promotion semantics to use the same</span>
+        <span class="c1"># dtype as if we did not force local norm computation to be in FP32</span>
+        <span class="n">total_norm_dtype</span> <span class="o">=</span> <span class="n">functools</span><span class="o">.</span><span class="n">reduce</span><span class="p">(</span>
+            <span class="k">lambda</span> <span class="n">dtype1</span><span class="p">,</span> <span class="n">dtype2</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">promote_types</span><span class="p">(</span><span class="n">dtype1</span><span class="p">,</span> <span class="n">dtype2</span><span class="p">),</span>
+            <span class="p">[</span><span class="n">grad</span><span class="o">.</span><span class="n">dtype</span> <span class="k">for</span> <span class="n">grad</span> <span class="ow">in</span> <span class="n">grads</span><span class="p">],</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">total_norm</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">total_norm_dtype</span><span class="p">)</span></div>
 
     <span class="nd">@staticmethod</span>
     <span class="k">def</span> <span class="nf">_warn_optim_input</span><span class="p">(</span><span class="n">optim_input</span><span class="p">):</span>
@@ -2294,7 +2178,9 @@
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
     <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Returns the gradient norm of parameters ``param`` s, where the gradients</span>
-<span class="sd">    are viewed as a single vector.</span>
+<span class="sd">    are viewed as a single vector. The returned norm is in FP32 even if</span>
+<span class="sd">    parameters/gradients are in a low precision. This is because the downstream</span>
+<span class="sd">    use of this return value is a reduction across ranks.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">params_with_grad</span> <span class="o">=</span> <span class="p">[</span><span class="n">param</span> <span class="k">for</span> <span class="n">param</span> <span class="ow">in</span> <span class="n">params</span> <span class="k">if</span> <span class="n">param</span><span class="o">.</span><span class="n">grad</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">]</span>
     <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">params_with_grad</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
@@ -2317,7 +2203,6 @@
         <span class="n">norm_type</span><span class="p">,</span>
         <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span>
     <span class="p">)</span>
-    <span class="n">grad_norm</span> <span class="o">=</span> <span class="n">grad_norm</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">grads</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">grad_norm</span>
 
 
