@@ -152,6 +152,12 @@ _During the backward pass, another `all_gather` is used to load the parameters a
 
 _Finally, each rank passes the summed gradients through the optimizer states and updates the weights to complete the mini-batch._
 
+With the model now distributed across the entire set of available GPUs, the logical question is how data moves through the model given this sharding of model parameters.
+
+This is accomplished by FSDP coordinating with all GPUs to effectively share (communicate) the respective parts of the model.  The model is decomposed into FSDP units and parameters within each unit are flattened and then sharded across all GPUs.  Within each FSDP unit, GPU’s are assigned interleaving ownership of individual model parameters.
+
+By interleaving, we mean the following - assuming 2 gpus with an id of 1 and 2, the FSDP unit ownership pattern would be [12121212],  rather than a contiguous chunk of [111222].
+
 During training, an `all_gather` is initiated and the locally owned model parameters within a FSDP unit are shared by the owner GPU with the other non-owners, when they need it, on a ‘just in time’ type basis. FSDP prefetches parameters to overlap `all_gather` communication with computation. 
 
 When those requested parameters arrive, the GPU uses the delivered parameters, in combination with the parameters it already owns, to create a fully populated FSDP unit. Thus there is a moment where each GPU hits peak memory usage while holding a fully populated FSDP unit.
