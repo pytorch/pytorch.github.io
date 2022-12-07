@@ -78,7 +78,7 @@ _"With just one line of code to add, PyTorch 2.0 gives a speedup between 1.5x an
 
 _“It just works out of the box with majority of TIMM models for inference and train workloads with no code changes”_
 
-**Luca Antiga** the **CTO of [Lightning AI](http://grid.ai/)** and one of the **primary maintainers of PyTorch Lightning**
+**Luca Antiga** the **CTO of Lightning AI** and one of the **primary maintainers of PyTorch Lightning**
 
 _“PyTorch 2.0 embodies the future of deep learning frameworks. The possibility to capture a PyTorch program with effectively no user intervention and get massive on-device speedups and program manipulation out of the box unlocks a whole new dimension for AI developers.”_
 
@@ -524,7 +524,7 @@ def infer(model, input):
     </ul>
   </li>
 
-  <li><b> What compiler backends does 2.0 currently support?</b>
+  <li><b>What compiler backends does 2.0 currently support?</b>
     <p>The default and the most complete backend is <a href="https://github.com/pytorch/pytorch/tree/master/torch/_inductor" target="_blank">TorchInductor</a>, but TorchDynamo has a growing list of backends that can be found by calling <code class="language-plaintext highlighter-rouge">torchdynamo.list_backends().</code>
     </p>
   </li>
@@ -533,8 +533,8 @@ def infer(model, input):
     <p>DDP and FSDP in Compiled mode  can run up to 15% faster than Eager-Mode in FP32 and up to 80% faster in AMP precision. PT2.0 does some extra optimization to ensure DDP’s communication-computation overlap works well with Dynamo’s partial graph creation. Ensure you run DDP with static_graph=False. More details <a href="https://dev-discuss.pytorch.org/t/torchdynamo-update-9-making-ddp-work-with-torchdynamo/860" target="_blank">here</a>.</p>
   </li>
 
-  <li><b>Help my code is running slower with 2.0’s Compiled Mode!</b>
-    <p>The most likely reason for performance hits is too many graph breaks. For instance, something innocuous as a print statement in your model’s forward triggers a graph break. We have ways to diagnose these - read more <a href="https://pytorch.org/docs/master/dynamo/faq.html#why-am-i-not-seeing-speedups" target="_blank">here</a>.</p>
+  <li><b>How can I learn more about PT2.0 developments?</b>
+    <p>The <a href="http://dev-discuss.pytorch.org/" target="_blank">PyTorch Developers forum</a> is the best place to learn about 2.0 components directly from the developers who build them.</p>
   </li>
 
   <li><b>My previously-running code is crashing with 2.0’s Compiled Mode! How do I debug it?</b>
@@ -547,7 +547,7 @@ def infer(model, input):
 
 We will be hosting a series of live Q&A sessions for the community to have deeper questions and dialogue with the experts. Please check back to see the full calendar of topics throughout the year. If you are unable to attend: 1) They will be recorded for future viewing and 2) You can attend our Dev Infra Office Hours every Friday at 10 AM PST @ [https://github.com/pytorch/pytorch/wiki/Dev-Infra-Office-Hours](https://github.com/pytorch/pytorch/wiki/Dev-Infra-Office-Hours)
 
-Please click here to see dates, times, descriptions and links 
+Please click [here](https://pytorchconference22.splashthat.com/) to see dates, times, descriptions and links 
 
 Disclaimer: Please do not share your personal information, last name, company when joining the live sessions and submitting questions
 
@@ -573,17 +573,21 @@ Disclaimer: Please do not share your personal information, last name, company wh
   <tr>
    <td><b>A deep dive on TorchInductor and PT 2.0 Backend Integration</b></td>
    <td>Natalia Gimelshein, Bin Bao and Sherlock Huang<br>
-   <a href="https://www.linkedin.com/in/natalia-gimelshein-8347a480/">LinkedIn Natalia Gimelshein</a> | 
-   <a href="https://www.linkedin.com/in/sherlock-baihan-huang-07787a59/">LinkedIn Sherlock Huang</a>
+   Natalia Gimelshein<br>
+   <a href="https://www.linkedin.com/in/natalia-gimelshein-8347a480/">LinkedIn</a><br>
+   Sherlock Huang<br>
+   <a href="https://www.linkedin.com/in/sherlock-baihan-huang-07787a59/">LinkedIn</a>
    </td>
   </tr>
   <tr>
    <td><b>Extend PyTorch without C++ and functorch: JAX-like composable function transforms for PyTorch</b></td>
    <td>Anjali Chourdia and Samantha Andow<br>
-   <a href="https://www.linkedin.com/in/anjali-chourdia/">LinkedIn Anjali Chourdia</a> |
-   <a href="https://twitter.com/AChourdia">Twitter Anjali Chourdia</a> | 
-   <a href="https://www.linkedin.com/in/samantha-andow-1b6965a7/">LinkedIn Samantha Andow</a> |
-   <a href="https://twitter.com/_samdow">Twitter Samantha Andow</a> | 
+   Anjali Chourdia<br>
+   <a href="https://www.linkedin.com/in/anjali-chourdia/">LinkedIn</a> |
+   <a href="https://twitter.com/AChourdia">Twitter</a><br>
+   Samantha Andow<br>
+   <a href="https://www.linkedin.com/in/samantha-andow-1b6965a7/">LinkedIn</a> |
+   <a href="https://twitter.com/_samdow">Twitter</a>
    </td>
   </tr>
   <tr>
@@ -605,38 +609,46 @@ Disclaimer: Please do not share your personal information, last name, company wh
   <tr>
    <td><b>How and why contribute code and tutorials to PyTorch</b></td>
    <td>Zain Rizvi, Svetlana Karslioglu and Carl Parker<br>
-   <a href="https://linkedin.com/in/zainrizvi">LinkedIn Zain Rizvi</a> |
-   <a href="https://twitter.com/zainrzv">Twitter Zain Rizvi</a> | 
-   <a href="https://www.linkedin.com/in/svetlana-karslioglu">LinkedIn Svetlana Karslioglu</a> |
-   <a href="https://twitter.com/laignas">Twitter Svetlana Karslioglu</a>
+   Zain Rizvi<br>
+   <a href="https://linkedin.com/in/zainrizvi">LinkedIn</a> |
+   <a href="https://twitter.com/zainrzv">Twitter</a><br>
+   Svetlana Karslioglu<br>
+   <a href="https://www.linkedin.com/in/svetlana-karslioglu">LinkedIn</a> |
+   <a href="https://twitter.com/laignas">Twitter</a>
    </td>
   </tr>
   <tr>
    <td><b>Dynamic Shapes and Calculating Maximum Batch Size</b></td>
    <td>Edward Yang and Elias Ellison<br>
-   <a href="https://twitter.com/ezyang">Twitter Edward Yang</a>
+   Edward Yang<br>
+   <a href="https://twitter.com/ezyang">Twitter</a>
    </td>
   </tr>
   <tr>
    <td><b>PyTorch 2.0 Export: Sound Whole Graph Capture for PyTorch</b></td>
    <td>Michael Suo and Yanan Cao<br>
-   <a href="https://www.linkedin.com/in/yanan-cao-65836020/">LinkedIn Yanan Cao</a>
+   Yanan Cao<br>
+   <a href="https://www.linkedin.com/in/yanan-cao-65836020/">LinkedIn</a>
    </td>
   </tr>
   <tr>
    <td><b>2-D Parallelism using DistributedTensor and PyTorch DistributedTensor</b></td>
    <td>Wanchao Liang and Alisson Gusatti Azzolini<br>
-   <a href="https://www.linkedin.com/in/wanchaol/">LinkedIn Wanchao Liang</a> |
-   <a href="https://twitter.com/wanchao_">Twitter Wanchao Liang</a> | 
-   <a href="https://www.linkedin.com/in/alissonazzolini/">Alisson Gusatti Azzolini</a>
+   Wanchao Liang<br>
+   <a href="https://www.linkedin.com/in/wanchaol/">LinkedIn</a> |
+   <a href="https://twitter.com/wanchao_">Twitter</a><br>
+   Alisson Gusatti Azzolini<br>
+   <a href="https://www.linkedin.com/in/alissonazzolini/">LinkedIn</a>
    </td>
   </tr>
   <tr>
    <td><b>TorchRec and FSDP in Production</b></td>
    <td>Dennis van der Staay, Andrew Gu and Rohan Varma<br>
-   <a href="https://www.linkedin.com/in/staay/">LinkedIn Dennis van der Staay</a> |
-   <a href="https://www.linkedin.com/in/varmarohan/">LinkedIn Rohan Varma</a> |
-   <a href="https://twitter.com/rvarm1">Twitter Rohan Varma</a>
+   Dennis van der Staay<br>
+   <a href="https://www.linkedin.com/in/staay/">LinkedIn</a><br>
+   Rohan Varma<br>
+   <a href="https://www.linkedin.com/in/varmarohan/">LinkedIn</a> |
+   <a href="https://twitter.com/rvarm1">Twitter</a>
    </td>
   </tr>
   <tr>
@@ -660,8 +672,9 @@ Disclaimer: Please do not share your personal information, last name, company wh
    <a href="https://medium.com/pytorch/bettertransformer-out-of-the-box-performance-for-huggingface-transformers-3fbe27d50ab2" target="_blank">Blog 1</a><br>
    <a href="https://github.com/pytorch/serve" target="_blank">Github</a></td>
    <td>Hamid Shojanazeri and Mark Saroufim<br>
-   <a href="https://www.linkedin.com/in/marksaroufim/">LinkedIn Mark Saroufim</a> |
-   <a href="https://twitter.com/marksaroufim">Twitter Mark Saroufim</a>
+   Mark Saroufim<br>
+   <a href="https://www.linkedin.com/in/marksaroufim/">LinkedIn</a> |
+   <a href="https://twitter.com/marksaroufim">Twitter</a>
    </td>
   </tr>
   <tr>
