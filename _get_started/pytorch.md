@@ -78,7 +78,7 @@ _"With just one line of code to add, PyTorch 2.0 gives a speedup between 1.5x an
 
 _“It just works out of the box with majority of TIMM models for inference and train workloads with no code changes”_
 
-**Luca Antiga** the **CTO of grid.ai** and one of the **primary maintainers of PyTorch Lightning**
+**Luca Antiga** the **CTO of [Lightning AI](http://grid.ai/)** and one of the **primary maintainers of PyTorch Lightning**
 
 _“PyTorch 2.0 embodies the future of deep learning frameworks. The possibility to capture a PyTorch program with effectively no user intervention and get massive on-device speedups and program manipulation out of the box unlocks a whole new dimension for AI developers.”_
 
@@ -533,11 +533,11 @@ def infer(model, input):
     <p>DDP and FSDP in Compiled mode  can run up to 15% faster than Eager-Mode in FP32 and up to 80% faster in AMP precision. PT2.0 does some extra optimization to ensure DDP’s communication-computation overlap works well with Dynamo’s partial graph creation. Ensure you run DDP with static_graph=False. More details <a href="https://dev-discuss.pytorch.org/t/torchdynamo-update-9-making-ddp-work-with-torchdynamo/860" target="_blank">here</a>.</p>
   </li>
 
-  <li><b>Help my code is running slower with 2.0’s Compiled Model</b>
+  <li><b>Help my code is running slower with 2.0’s Compiled Mode!</b>
     <p>The most likely reason for performance hits is too many graph breaks. For instance, something innocuous as a print statement in your model’s forward triggers a graph break. We have ways to diagnose these - read more <a href="https://pytorch.org/docs/master/dynamo/faq.html#why-am-i-not-seeing-speedups" target="_blank">here</a>.</p>
   </li>
 
-  <li> <b> My previously-running code is crashing with 2.0! How do I debug it?</b>
+  <li><b>My previously-running code is crashing with 2.0’s Compiled Mode! How do I debug it?</b>
     <p>Here are some techniques to triage where your code might be failing, and printing helpful logs: <a href="https://pytorch.org/docs/master/dynamo/faq.html#why-is-my-code-crashing" target="_blank">https://pytorch.org/docs/master/dynamo/faq.html#why-is-my-code-crashing</a>
     </p>
   </li>
@@ -547,97 +547,128 @@ def infer(model, input):
 
 We will be hosting a series of live Q&A sessions for the community to have deeper questions and dialogue with the experts. Please check back to see the full calendar of topics throughout the year. If you are unable to attend: 1) They will be recorded for future viewing and 2) You can attend our Dev Infra Office Hours every Friday at 10 AM PST @ [https://github.com/pytorch/pytorch/wiki/Dev-Infra-Office-Hours](https://github.com/pytorch/pytorch/wiki/Dev-Infra-Office-Hours)
 
-**Note: Schedules, topics and links are subject to change, so please check back often.**
+Please click here to see dates, times, descriptions and links 
+
+Disclaimer: Please do not share your personal information, last name, company when joining the live sessions and submitting questions
 
 <table style="min-width: 350px" class="QnATable">
   <tr>
-   <td style="min-width:130px"><b>TOPIC</b></td>
-   <td style="min-width:80px"><b>HOST</b></td>
-   <td style="min-width:120px"><b>DATE | TIME</b></td>
+   <td style="width:50%"><b>TOPIC</b></td>
+   <td style="width:50%"><b>HOST</b></td>
   </tr>
   <tr>
    <td><b>The new developer experience of using 2.0 (install, setup, clone an example, run with 2.0)</b></td>
-   <td>Suraj Subramanian</td>
-   <td>12/13/22 | 10 AM PST</td>
+   <td>Suraj Subramanian<br>
+   <a href="https://www.linkedin.com/in/surajsubramanian/">LinkedIn</a> | 
+   <a href="https://twitter.com/subramen">Twitter</a>
+   </td>
   </tr>
   <tr>
    <td><b>PT2 Profiling and Debugging</b></td>
-   <td>Bert Maher</td>
-   <td>12/15/11 | 10 AM PST</td>
+   <td>Bert Maher<br>
+   <a href="https://www.linkedin.com/in/bertrand-maher/">LinkedIn</a> | 
+   <a href="https://twitter.com/tensorbert">Twitter</a>
+   </td>
   </tr>
   <tr>
    <td><b>A deep dive on TorchInductor and PT 2.0 Backend Integration</b></td>
-   <td>Natalia Gimelshein, Bin Bao and Sherlock Huang</td>
-   <td>1/10/23 | 10 AM PST</td>
+   <td>Natalia Gimelshein, Bin Bao and Sherlock Huang<br>
+   <a href="https://www.linkedin.com/in/natalia-gimelshein-8347a480/">LinkedIn Natalia Gimelshein</a> | 
+   <a href="https://www.linkedin.com/in/sherlock-baihan-huang-07787a59/">LinkedIn Sherlock Huang</a>
+   </td>
   </tr>
   <tr>
    <td><b>Extend PyTorch without C++ and functorch: JAX-like composable function transforms for PyTorch</b></td>
-   <td>Anjali Chourdia and Samantha Andow</td>
-   <td>1/5/23 | 9 AM PST</td>
+   <td>Anjali Chourdia and Samantha Andow<br>
+   <a href="https://www.linkedin.com/in/anjali-chourdia/">LinkedIn Anjali Chourdia</a> |
+   <a href="https://twitter.com/AChourdia">Twitter Anjali Chourdia</a> | 
+   <a href="https://www.linkedin.com/in/samantha-andow-1b6965a7/">LinkedIn Samantha Andow</a> |
+   <a href="https://twitter.com/_samdow">Twitter Samantha Andow</a> | 
+   </td>
   </tr>
   <tr>
    <td><b>A deep dive on TorchDynamo</b></td>
-   <td>Michael Voznesensky</td>
-   <td>12/19/22 | 1 PM PST</td>
+   <td>Michael Voznesensky<br>
+   <a href="https://www.linkedin.com/in/michael-voznesensky-70459624/">LinkedIn</a>
+   </td>
   </tr>
   <tr>
    <td><b>Rethinking data loading with TorchData:Datapipes and Dataloader2</b></td>
-   <td>Kevin Tse</td>
-   <td>2/1/23 | 11 AM PST</td>
+   <td>Kevin Tse<br>
+   <a href="https://www.linkedin.com/in/kevin-tse-35051367/">LinkedIn</a>
+   </td>
   </tr>
   <tr>
    <td><b>Composable training (+ torcheval, torchsnapshot)</b></td>
    <td>Ananth Subramaniam</td>
-   <td>TBD</td>
   </tr>
   <tr>
    <td><b>How and why contribute code and tutorials to PyTorch</b></td>
-   <td>Zain Rizvi, Svetlana Karslioglu and Carl Parker</td>
-   <td>12/15/22 | 2 PM PST</td>
+   <td>Zain Rizvi, Svetlana Karslioglu and Carl Parker<br>
+   <a href="https://linkedin.com/in/zainrizvi">LinkedIn Zain Rizvi</a> |
+   <a href="https://twitter.com/zainrzv">Twitter Zain Rizvi</a> | 
+   <a href="https://www.linkedin.com/in/svetlana-karslioglu">LinkedIn Svetlana Karslioglu</a> |
+   <a href="https://twitter.com/laignas">Twitter Svetlana Karslioglu</a>
+   </td>
   </tr>
   <tr>
    <td><b>Dynamic Shapes and Calculating Maximum Batch Size</b></td>
-   <td>Edward Yang and Elias Ellison</td>
-   <td>2/7/23 | 1 PM PST</td>
+   <td>Edward Yang and Elias Ellison<br>
+   <a href="https://twitter.com/ezyang">Twitter Edward Yang</a>
+   </td>
   </tr>
   <tr>
    <td><b>PyTorch 2.0 Export: Sound Whole Graph Capture for PyTorch</b></td>
-   <td>Michael Suo and Yanan Cao</td>
-   <td>12/21/22 | 2 PM PST</td>
+   <td>Michael Suo and Yanan Cao<br>
+   <a href="https://www.linkedin.com/in/yanan-cao-65836020/">LinkedIn Yanan Cao</a>
+   </td>
   </tr>
   <tr>
    <td><b>2-D Parallelism using DistributedTensor and PyTorch DistributedTensor</b></td>
-   <td>Wanchao Liang and Alisson Gusatti Azzolini</td>
-   <td>2/15/23 | 10 AM PST</td>
+   <td>Wanchao Liang and Alisson Gusatti Azzolini<br>
+   <a href="https://www.linkedin.com/in/wanchaol/">LinkedIn Wanchao Liang</a> |
+   <a href="https://twitter.com/wanchao_">Twitter Wanchao Liang</a> | 
+   <a href="https://www.linkedin.com/in/alissonazzolini/">Alisson Gusatti Azzolini</a>
+   </td>
   </tr>
   <tr>
    <td><b>TorchRec and FSDP in Production</b></td>
-   <td>Dennis van der Staay, Andrew Gu and Rohan Varma</td>
-   <td>12/21/22 | 10 AM PST</td>
+   <td>Dennis van der Staay, Andrew Gu and Rohan Varma<br>
+   <a href="https://www.linkedin.com/in/staay/">LinkedIn Dennis van der Staay</a> |
+   <a href="https://www.linkedin.com/in/varmarohan/">LinkedIn Rohan Varma</a> |
+   <a href="https://twitter.com/rvarm1">Twitter Rohan Varma</a>
+   </td>
   </tr>
   <tr>
    <td><b>The Future of PyTorch On-Device</b></td>
-   <td>Raziel Alvarez Guevara</td>
-   <td>2/8/23 | 10 AM PST</td>
+   <td>Raziel Alvarez Guevara<br>
+   <a href="https://www.linkedin.com/in/razielalvarez/">LinkedIn</a> |
+   <a href="https://twitter.com/razielag">Twitter</a>
+   </td>
   </tr>
   <tr>
    <td><b>TorchMultiModal</b><br>
    <a href="https://pytorch.org/blog/introducing-torchmultimodal/" target="_blank">Intro Blog</a><br>
    <a href="https://pytorch.org/blog/scaling-multimodal-foundation-models-in-torchmultimodal-with-pytorch-distributed/" target="_blank">Scaling Blog</a></td>
-   <td>Kartikay Khandelwal</td>
-   <td>2/23/23 | 10 AM PST</td>
+   <td>Kartikay Khandelwal<br>
+   <a href="https://www.linkedin.com/in/kartikaykhandelwal/">LinkedIn</a> |
+   <a href="https://twitter.com/kakemeister">Twitter</a>
+   </td>
   </tr>
   <tr>
    <td><b>BetterTransformers (+ integration with Hugging Face), Model Serving and Optimizations</b><br>
    <a href="https://medium.com/pytorch/bettertransformer-out-of-the-box-performance-for-huggingface-transformers-3fbe27d50ab2" target="_blank">Blog 1</a><br>
    <a href="https://github.com/pytorch/serve" target="_blank">Github</a></td>
-   <td>Hamid Shojanazeri and Mark Saroufim</td>
-   <td>1/10/23 | 1 PM PST</td>
+   <td>Hamid Shojanazeri and Mark Saroufim<br>
+   <a href="https://www.linkedin.com/in/marksaroufim/">LinkedIn Mark Saroufim</a> |
+   <a href="https://twitter.com/marksaroufim">Twitter Mark Saroufim</a>
+   </td>
   </tr>
   <tr>
    <td><b>PT2 and Distributed</b></td>
-   <td>Will Constable</td>
-   <td>1/24/23 | 2 PM PST</td>
+   <td>Will Constable<br>
+   <a href="https://www.linkedin.com/in/will-constable-969a53b/">LinkedIn</a>
+   </td>
   </tr>
 </table>
 
