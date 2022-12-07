@@ -78,7 +78,7 @@ _"With just one line of code to add, PyTorch 2.0 gives a speedup between 1.5x an
 
 _“It just works out of the box with majority of TIMM models for inference and train workloads with no code changes”_
 
-**Luca Antiga** the **CTO of Lightning.ai**
+**Luca Antiga** the **CTO of Lightning AI**
 
 _“PyTorch 2.0 embodies the future of deep learning frameworks. The possibility to capture a PyTorch program with effectively no user intervention and get massive on-device speedups and program manipulation out of the box unlocks a whole new dimension for AI developers.”_
 
