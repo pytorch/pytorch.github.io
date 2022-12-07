@@ -30,11 +30,8 @@ DEFAULT = "default"
 ENABLE = "enable"
 DISABLE = "disable"
 
-# Mapping json to release matrix is here for now
-# TBD drive the mapping via:
-#  1. Scanning release matrix and picking 2 latest cuda versions and 1 latest rocm
-#  2. Possibility to override the scanning algorithm with arguments passed from workflow
-acc_arch_ver_map = {
+# Mapping json to release matrix default values
+acc_arch_ver_default = {
     "nightly": {
         "accnone": ("cpu", ""),
         "cuda.x": ("cuda", "11.6"),
@@ -48,6 +45,11 @@ acc_arch_ver_map = {
         "rocm5.x": ("rocm", "5.2")
         }
     }
+
+# Initialize arch version to default values
+# these default values will be overwritten by
+# extracted values from the release marix
+acc_arch_ver_map = acc_arch_ver_default
 
 LIBTORCH_DWNL_INSTR = {
         PRE_CXX11_ABI: "Download here (Pre-cxx11 ABI):",
@@ -163,6 +165,25 @@ def gen_install_matrix(versions) -> Dict[str, str]:
                     result[key] = "<br />".join(lines)
     return result
 
+# This method is used for extracting two latest verisons of cuda and
+# last verion of rocm. It will modify the acc_arch_ver_map object used
+# to update getting started page.
+def extract_arch_ver_map(release_matrix):
+    for chan in ("nightly", "release"):
+        cuda_ver_list = {
+            x["desired_cuda"]: x["gpu_arch_version"] for x in release_matrix[chan]["linux"]
+            if x["gpu_arch_type"] == "cuda"
+        }
+        rocm_ver_list = {
+            x["desired_cuda"]: x["gpu_arch_version"] for x in release_matrix[chan]["linux"]
+            if x["gpu_arch_type"] == "rocm"
+        }
+        cuda_list = sorted(cuda_ver_list.values())[-2:]
+        for cuda_ver, label in zip(cuda_list, ["cuda.x", "cuda.y"]):
+            acc_arch_ver_map[chan][label] = ("cuda", cuda_ver)
+        acc_arch_ver_map[chan]["rocm5.x"] = ("rocm", max(rocm_ver_list.values()))
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--autogenerate', dest='autogenerate', action='store_true')
@@ -178,6 +199,7 @@ def main():
             for osys in OperatingSystem:
                 release_matrix[val][osys.value] = read_matrix_for_os(osys, val)
 
+        extract_arch_ver_map(release_matrix)
         for val in ("nightly", "release"):
             update_versions(versions, release_matrix[val], val)
 
