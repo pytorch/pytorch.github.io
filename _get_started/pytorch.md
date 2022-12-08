@@ -451,20 +451,22 @@ After all, we can’t claim we’re created a breadth-first unless **YOUR** mode
 2. **Why 2.0 instead of 1.14?**  
 PyTorch 2.0 is what 1.14 would have been. We were releasing substantial new features that we believe change how you meaningfully use PyTorch, so we are calling it 2.0 instead.
 
-3. **How do I install 2.0? Any additional requirements?**  
-Install the latest nightlies:  
-CUDA 11.7  
-```
-pip3 install numpy --pre torch[dynamo] torchvision torchaudio --force-reinstall --extra-index-url https://download.pytorch.org/whl/nightly/cu117
-```  
-CUDA 11.6  
-```
-pip3 install numpy --pre torch[dynamo] torchvision torchaudio --force-reinstall --extra-index-url https://download.pytorch.org/whl/nightly/cu116
-```  
-CPU  
-```
-pip3 install numpy --pre torch torchvision torchaudio --force-reinstall --extra-index-url https://download.pytorch.org/whl/nightly/cpu
-```  
+3. **How do I install 2.0? Any additional requirements?**
+
+    Install the latest nightlies:
+
+    CUDA 11.7<br>
+    ```
+    pip3 install numpy --pre torch[dynamo] torchvision torchaudio --force-reinstall --extra-index-url https://download.pytorch.org/whl/nightly/cu117
+    ```  
+    CUDA 11.6  
+    ```
+    pip3 install numpy --pre torch[dynamo] torchvision torchaudio --force-reinstall --extra-index-url https://download.pytorch.org/whl/nightly/cu116
+    ```  
+    CPU  
+    ```
+    pip3 install numpy --pre torch torchvision torchaudio --force-reinstall --extra-index-url https://download.pytorch.org/whl/nightly/cpu
+    ```  
 
 4. **Is 2.0 code backwards-compatible with 1.X?**  
 Yes, using 2.0 will not require you to modify your PyTorch workflows. A single line of code `model = torch.compile(model)` can optimize your model to use the 2.0 stack, and smoothly run with the rest of your PyTorch code. This is completely opt-in, and you are not required to use the new compiler.
@@ -472,9 +474,9 @@ Yes, using 2.0 will not require you to modify your PyTorch workflows. A single l
 5. **Is 2.0 enabled by default?**  
 2.0 is the name of the release. torch.compile is the feature released in 2.0, and you need to explicitly use torch.compile.
 
-6. **How do I migrate my PT1.X code to PT2.0?**
+6. **How do I migrate my PT1.X code to PT2.0?**  
 Your code should be working as-is without the need for any migrations. If you want to use the new Compiled mode feature introduced in 2.0, then you can start by optimizing your model with one line: `model = torch.compile(model)`.  
-While the speedups are primarily observed during training, you can also use it for inference if your model runs faster than eager mode.  
+While the speedups are primarily observed during training, you can also use it for inference if your model runs faster than eager mode.
     ```python
     import torch
       
@@ -489,7 +491,7 @@ While the speedups are primarily observed during training, you can also use it f
     ```
 
 7. **Why should I use PT2.0 instead of PT 1.X?**  
-See answer to Question (2)
+See answer to Question (2).
 
 8. **Are there any applications where I should NOT use PT 2.0?**  
 The current release of PT 2.0 is still experimental and in the nightlies. Dynamic shapes support in torch.compile is still early, and you should not be using it yet, and wait until the Stable 2.0 release lands in March 2023.  
@@ -525,11 +527,11 @@ Here are some techniques to triage where your code might be failing, and printin
 
 ## Ask the Engineers: 2.0 Live Q&A Series
 
-We will be hosting a series of live Q&A sessions for the community to have deeper questions and dialogue with the experts. Please check back to see the full calendar of topics throughout the year. If you are unable to attend: 1) They will be recorded for future viewing and 2) You can attend our Dev Infra Office Hours every Friday at 10 AM PST @ [https://github.com/pytorch/pytorch/wiki/Dev-Infra-Office-Hours](https://github.com/pytorch/pytorch/wiki/Dev-Infra-Office-Hours)
+We will be hosting a series of live Q&A sessions for the community to have deeper questions and dialogue with the experts. Please check back to see the full calendar of topics throughout the year. If you are unable to attend: 1) They will be recorded for future viewing and 2) You can attend our Dev Infra Office Hours every Friday at 10 AM PST @ [https://github.com/pytorch/pytorch/wiki/Dev-Infra-Office-Hours](https://github.com/pytorch/pytorch/wiki/Dev-Infra-Office-Hours).
 
-Please click [here](https://pytorchconference22.splashthat.com/) to see dates, times, descriptions and links 
+Please click [here](https://pytorchconference22.splashthat.com/) to see dates, times, descriptions and links.  
 
-Disclaimer: Please do not share your personal information, last name, company when joining the live sessions and submitting questions
+Disclaimer: Please do not share your personal information, last name, company when joining the live sessions and submitting questions.  
 
 <table style="min-width: 350px" class="QnATable">
   <tr>
@@ -667,11 +669,9 @@ Disclaimer: Please do not share your personal information, last name, company wh
 
 ## Watch the Talks from PyTorch Conference
 
-<ul class="list" style="padding-left: 1rem;">
-  <li><a href="https://www.youtube.com/watch?v=vbtGZL7IrAw" target="_blank">TorchDynamo</a></li>
-  <li><a href="https://www.youtube.com/watch?v=vbtGZL7IrAw" target="_blank">TorchInductor</a></li>
-  <li><a href="https://www.youtube.com/watch?v=vbtGZL7IrAw" target="_blank">Dynamic Shapes</a></li>
-  <li><a href="https://www.youtube.com/watch?v=vbtGZL7IrAw" target="_blank">Export Path</a></li>
-</ul>
+- [TorchDynamo](https://www.youtube.com/watch?v=vbtGZL7IrAw)
+- [TorchInductor](https://www.youtube.com/watch?v=vbtGZL7IrAw)
+- [Dynamic Shapes](https://www.youtube.com/watch?v=vbtGZL7IrAw)
+- [Export Path](https://www.youtube.com/watch?v=vbtGZL7IrAw)
 
 <script src="{{ site.baseurl }}/assets/get-started-sidebar.js"></script>
