@@ -169,19 +169,20 @@ def gen_install_matrix(versions) -> Dict[str, str]:
 # last verion of rocm. It will modify the acc_arch_ver_map object used
 # to update getting started page.
 def extract_arch_ver_map(release_matrix):
+    def gen_ver_list(chan, gpu_arch_type):
+        return {
+            x["desired_cuda"]: x["gpu_arch_version"]
+            for x in release_matrix[chan]["linux"]
+            if x["gpu_arch_type"] == gpu_arch_type
+        }
+
     for chan in ("nightly", "release"):
-        cuda_ver_list = {
-            x["desired_cuda"]: x["gpu_arch_version"] for x in release_matrix[chan]["linux"]
-            if x["gpu_arch_type"] == "cuda"
-        }
-        rocm_ver_list = {
-            x["desired_cuda"]: x["gpu_arch_version"] for x in release_matrix[chan]["linux"]
-            if x["gpu_arch_type"] == "rocm"
-        }
+        cuda_ver_list = gen_ver_list(chan, "cuda")
+        rocm_ver_list = gen_ver_list(chan, "rocm")
         cuda_list = sorted(cuda_ver_list.values())[-2:]
+        acc_arch_ver_map[chan]["rocm5.x"] = ("rocm", max(rocm_ver_list.values()))
         for cuda_ver, label in zip(cuda_list, ["cuda.x", "cuda.y"]):
             acc_arch_ver_map[chan][label] = ("cuda", cuda_ver)
-        acc_arch_ver_map[chan]["rocm5.x"] = ("rocm", max(rocm_ver_list.values()))
 
 
 def main():
