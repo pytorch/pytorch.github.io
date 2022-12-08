@@ -469,7 +469,7 @@ After all, we can’t claim we’re created a breadth-first unless **YOUR** mode
   </li>
 
   <li><b>Is 2.0 enabled by default?</b><br>
-  No, you must explicitly enable 2.0 in your PyTorch code by optimizing your model with a single function call.
+  2.0 is the name of the release. torch.compile is the feature released in 2.0, and you need to explicitly use torch.compile.
   </li>
 
   <li><b>How do I migrate my PT1.X code to PT2.0?</b><br>
@@ -492,7 +492,7 @@ def infer(model, input):
   </li>
 
   <li><b>Are there any applications where I should NOT use PT 2.0?</b><br>
-  The current release of PT 2.0 is still experimental and in the nightlies. Dynamic shapes support in torch.compile is still early, and you should not be using it yet, and wait until the Stable 2.0 release lands in March 2023.
+  The current release of PT 2.0 is still experimental and in the nightlies. Dynamic shapes support in torch.compile is still early, and you should not be using it yet, and wait until the Stable 2.0 release lands in March 2023.<br>
 
   That said, even with static-shaped workloads, we’re still building Compiled mode and there might be bugs. Disable Compiled mode for parts of your code that are crashing, and raise an <a href="https://github.com/pytorch/pytorch/issues" target="_blank">issue</a> (if it isn’t raised already).
   </li>
@@ -535,6 +535,11 @@ def infer(model, input):
 
   <li><b>How can I learn more about PT2.0 developments?</b>
     <p>The <a href="http://dev-discuss.pytorch.org/" target="_blank">PyTorch Developers forum</a> is the best place to learn about 2.0 components directly from the developers who build them.</p>
+  </li>
+
+  <li><b>Help my code is running slower with 2.0’s Compiled Mode!</b>
+    <p>The most likely reason for performance hits is too many graph breaks. For instance, something innocuous as a print statement in your model’s forward triggers a graph break. We have ways to diagnose these  - read more <a href="https://github.com/pytorch/torchdynamo/blob/main/documentation/FAQ.md#why-am-i-not-seeing-speedups" target="_blank">here</a>.
+    </p>
   </li>
 
   <li><b>My previously-running code is crashing with 2.0’s Compiled Mode! How do I debug it?</b>
