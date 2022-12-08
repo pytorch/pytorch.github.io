@@ -538,7 +538,7 @@ def infer(model, input):
   </li>
 
   <li><b>Help my code is running slower with 2.0’s Compiled Mode!</b>
-    <p>The most likely reason for performance hits is too many graph breaks. For instance, something innocuous as a print statement in your model’s forward triggers a graph break. We have ways to diagnose these  - read more <a href="https://github.com/pytorch/torchdynamo/blob/main/documentation/FAQ.md#why-am-i-not-seeing-speedups" target="_blank">here</a>.
+    <p>The most likely reason for performance hits is too many graph breaks. For instance, something innocuous as a print statement in your model’s forward triggers a graph break. We have ways to diagnose these  - read more <a href="https://pytorch.org/docs/master/dynamo/faq.html#why-am-i-not-seeing-speedups" target="_blank">here</a>.
     </p>
   </li>
 
