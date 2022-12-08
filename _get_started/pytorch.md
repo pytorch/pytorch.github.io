@@ -491,7 +491,6 @@ While the speedups are primarily observed during training, you can also use it f
 7. **Why should I use PT2.0 instead of PT 1.X?**  
 See answer to Question (2)
 
-
 8. **Are there any applications where I should NOT use PT 2.0?**  
 The current release of PT 2.0 is still experimental and in the nightlies. Dynamic shapes support in torch.compile is still early, and you should not be using it yet, and wait until the Stable 2.0 release lands in March 2023.  
 That said, even with static-shaped workloads, we’re still building Compiled mode and there might be bugs. Disable Compiled mode for parts of your code that are crashing, and raise an [issue](https://github.com/pytorch/pytorch/issues) (if it isn’t raised already).
@@ -522,7 +521,7 @@ The [PyTorch Developers forum](http://dev-discuss.pytorch.org/) is the best plac
 The most likely reason for performance hits is too many graph breaks. For instance, something innocuous as a print statement in your model’s forward triggers a graph break. We have ways to diagnose these  - read more [here](https://pytorch.org/docs/master/dynamo/faq.html#why-am-i-not-seeing-speedups).  
 
 15. **My previously-running code is crashing with 2.0’s Compiled Mode! How do I debug it?**  
-Here are some techniques to triage where your code might be failing, and printing helpful logs: [https://pytorch.org/docs/master/dynamo/faq.html#why-is-my-code-crashing](https://pytorch.org/docs/master/dynamo/faq.html#why-is-my-code-crashing). 
+Here are some techniques to triage where your code might be failing, and printing helpful logs: [https://pytorch.org/docs/master/dynamo/faq.html#why-is-my-code-crashing](https://pytorch.org/docs/master/dynamo/faq.html#why-is-my-code-crashing).  
 
 ## Ask the Engineers: 2.0 Live Q&A Series
 
