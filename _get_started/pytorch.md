@@ -271,9 +271,9 @@ This is in early stages of development. Catch the talk on Export Path at the PyT
 
 A compiled mode is opaque and hard to debug. You will have questions such as:
 
-- why is my program crashing in compiled mode?
-- is compiled mode as accurate as eager mode?
-- why am I not seeing speedups?
+- Why is my program crashing in compiled mode?
+- Is compiled mode as accurate as eager mode?
+- Why am I not seeing speedups?
 
 If compiled mode produces an error or a crash or diverging results from eager mode (beyond machine precision limits), it is very unlikely that it is your code’s fault. However, understanding what piece of code is the reason for the bug is useful.
 
@@ -320,12 +320,6 @@ Right: FSDP in Compiled mode takes substantially lesser memory than in eager mod
 <img src="/assets/images/pytorch-2.0-img11.png" width="50%">
 </div>
 
-External launcher scripts and wrappers that simply apply DDP under the hood generally should work out of the box. Hugging Face Accelerate, Lightning, torchrun, and Ray Train have all been tested and verified working. DeepSpeed and Horovod have not been tested and we expect to enable them soon.
-
-Manual gradient checkpointing (i.e. `torch.utils.checkpoint*` ) is in the works, and expected to be enabled in the near future. There is ongoing work to enable it, and this is partially mitigated by AOTAutograd’s min-cut partitioner, which recomputes some values in the `backward` call to reduce peak memory usage. This is evident from the memory compression results shown in the graph with FSDP in compiled mode.
-
-Other experimental distributed subsystems, such as DistributedTensor and PiPPy, have not yet been tested with TorchDynamo.
-
 ### DistributedDataParallel (DDP)
 
 DDP relies on overlapping AllReduce communications with backwards computation, and grouping smaller per-layer AllReduce operations into ‘buckets’ for greater efficiency. AOTAutograd functions compiled by TorchDynamo prevent communication overlap, when combined naively with DDP, but performance is recovered by compiling separate subgraphs for each ‘bucket’ and allowing communication ops to happen outside and in-between the subgraphs. DDP support in compiled mode also currently requires `static_graph=True` and `find_unused_parameters=True`, but these shouldn’t be a long term requirement. See [this post](https://dev-discuss.pytorch.org/t/torchdynamo-update-9-making-ddp-work-with-torchdynamo/860) for more details on the approach and results for DDP + TorchDynamo.
@@ -350,7 +344,8 @@ In graphical form, the PT2 stack looks like:
 
 Starting in the middle of the diagram, AOTAutograd dynamically captures autograd logic in an ahead-of-time fashion, producing a graph of forward and backwards operators in FX graph format.
 
-We provide a set of hardened decompositions (i.e. operator implementations written in terms of other operators) that can be leveraged to **reduce** the number of operators a backend is required to implement. We also **simplify** the semantics of PyTorch operators by selectively rewriting complicated PyTorch logic including mutations and views via a process called _functionalization_, as well as guaranteeing operator metadata information such as shape propagation formulas. This work is actively in progress; our goal is to provide a _primitive_ and _stable_ set of ~250 operators with simplified semantics, called _PrimTorch,_ that vendors can leverage (i.e. opt-in to) in order to simplify their integrations.
+We provide a set of hardened decompositions (i.e. operator implementations written in terms of other operators) that can be leveraged to **reduce** the number of operators a backend is required to implement. We also **simplify** the semantics of PyTorch operators by selectively rewriting complicated PyTorch logic including mutations and views via a process called _functionalization_, as well as guaranteeing operator metadata information such as shape propagation formulas. This work is actively in progress; our goal is to provide a _primitive_ and _stable_ set of ~250 operators with simplified semantics, called _PrimTorch,_ that vendors can leverage (i.e. opt-in to) in order to simplify their integrations.  
+After reducing and simplifying the operator set, backends may choose to integrate at the Dynamo (i.e. the middle layer, immediately after AOTAutograd) or Inductor (the lower layer).  We describe some considerations in making this choice below, as well as future work around mixtures of backends.
 
 **Dynamo Backend**
 
