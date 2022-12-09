@@ -1,7 +1,7 @@
 ---
 layout: blog_detail
 title: "Scaling PyTorch FSDP for Training Foundation Models on IBM Cloud"
-author:  Less Wright, Hamid Shojanazeri, Geeta Chauhan
+author:  Less Wright, Hamid Shojanazeri, Geeta Chauhan, IBM Research*
 featured-img: "/assets/images/scaling-pytorch-fsdp-image1-IBM_scaling_FSDP_visual.png"
 ---
 
@@ -32,19 +32,19 @@ To achieve better efficiency, the PyTorch distributed team introduced a new cont
 Continued investigation into the factors limiting scaling efficiency uncovered that the rate limiter was creating a recurring pipeline bubble of GPU idle time. This was due to the rate limiter using a block and flush approach for the allocation and release of each set of memory buffers. By waiting for the entire block to complete before initiating a new all_gather, the GPU was idling at the start of each block, while waiting for the new set of all_gather parameters to arrive. This bubble was alleviated by moving to a sliding window approach. Upon the completion of a single all_gather step and its computation (rather than a block of them), the memory is freed and the next all_gather is immediately issued in a much more uniform manner.  This improvement eliminated the pipeline bubble and boosted the scaling efficiencies to >90% (at 32 nodes).
 
 <p align="center">
-  <img src="/assets/images/scaling-pytorch-fsdp-image1-IBM_scaling_FSDP_visual.png" width="100%">
+<img src="/assets/images/scaling-pytorch-fsdp-image1-IBM_scaling_FSDP_visual.png" width="100%">
 </p>
 
 <p align="center">
-  Figure 1: Scaling of T5-XL (3B) and T5-XXL (11B) from 1 node to 64 nodes
+Figure 1: Scaling of T5-XL (3B) and T5-XXL (11B) from 1 node to 64 nodes
 </p>
 
 <p align="center">
-  <img src="/assets/images/scaling-pytorch-fsdp-image2-tflops_per_second.png" width="100%">
+<img src="/assets/images/scaling-pytorch-fsdp-image2-tflops_per_second.png" width="100%">
 </p>
 
 <p align="center">
-  Figure 2: TFLOPs/sec usage for T5-XL(3B) and T5-XXL (11B) as we increase number of nodes
+Figure 2: TFLOPs/sec usage for T5-XL(3B) and T5-XXL (11B) as we increase number of nodes
 </p>
 
 ## IBM Cloud AI System and Middleware
@@ -54,7 +54,11 @@ The AI infrastructure used for this work is a large-scale AI system on IBM Cloud
 The IBM Cloud AI System has been production-ready since May of 2022 and is configured with the OpenShift container platform to run AI workloads. We also built a software stack for production AI workloads that provide end-to-end tools for training workloads. The middleware leverages Ray for pre and post processing workloads and PyTorch for training of models. We also integrate a Kubernetes native scheduler, MCAD, that manages multiple jobs with job queuing, gang scheduling, prioritization, and quota management. A multi-NIC CNI discovers all available network interfaces and handles them as a single NIC pool enabling optimized use of the network interfaces in Kubernetes. Finally, CodeFlare CLI supports a single pane for observability of the full stack using a desktop CLI (e.g., GPU utilization, application metrics like loss, gradient norm).
 
 <p align="center">
-  Figure 3: Foundation Model Middleware Stack
+  <img src="/assets/images/scaling-pytorch-fsdp-image3-cli-and-dashboard.png">
+</p>
+
+<p align="center">
+Figure 3: Foundation Model Middleware Stack
 </p>
 
 ### Conclusion and Future Work
@@ -67,7 +71,11 @@ We plan on continuing to investigate scaling with decoder only models and increa
 
 ## Acknowledgements
 
-This blog was possible because of contributions from both PyTorch Distributed and IBM Research teams. From the PyTorch Distributed team, we would like to thank Less Wright, Hamid Shojanazeri, Geeta Chauhan, Shen Li, Rohan Varma, Yanli Zhao, Andrew Gu, Anjali Sridhar, Chien-Chin Huang, and Bernard Nguyen. From the IBM Research team, we would like to thank Linsong Chu, Sophia Wen, Lixiang (Eric) Luo, Marquita Ellis, Davis Wertheimer, Supriyo Chakraborty, Raghu Ganti, Mudhakar Srivatsa, Seetharami Seelam, Carlos Costa, Abhishek Malvankar, Diana Arroyo, Alaa Youssef, Nick Mitchell.
+This blog was possible because of contributions from both PyTorch Distributed and IBM Research teams.
+
+From the PyTorch Distributed team, we would like to thank Less Wright, Hamid Shojanazeri, Geeta Chauhan, Shen Li, Rohan Varma, Yanli Zhao, Andrew Gu, Anjali Sridhar, Chien-Chin Huang, and Bernard Nguyen.
+
+*From the IBM Research team, we would like to thank Linsong Chu, Sophia Wen, Lixiang (Eric) Luo, Marquita Ellis, Davis Wertheimer, Supriyo Chakraborty, Raghu Ganti, Mudhakar Srivatsa, Seetharami Seelam, Carlos Costa, Abhishek Malvankar, Diana Arroyo, Alaa Youssef, Nick Mitchell
 
 ## Appendix
 
