@@ -54,7 +54,7 @@ The AI infrastructure used for this work is a large-scale AI system on IBM Cloud
 The IBM Cloud AI System has been production-ready since May of 2022 and is configured with the OpenShift container platform to run AI workloads. We also built a software stack for production AI workloads that provide end-to-end tools for training workloads. The middleware leverages Ray for pre and post processing workloads and PyTorch for training of models. We also integrate a Kubernetes native scheduler, MCAD, that manages multiple jobs with job queuing, gang scheduling, prioritization, and quota management. A multi-NIC CNI discovers all available network interfaces and handles them as a single NIC pool enabling optimized use of the network interfaces in Kubernetes. Finally, CodeFlare CLI supports a single pane for observability of the full stack using a desktop CLI (e.g., GPU utilization, application metrics like loss, gradient norm).
 
 <p align="center">
-  <img src="/assets/images/scaling-pytorch-fsdp-image3-cli-and-dashboard.png">
+  <img src="/assets/images/scaling-pytorch-fsdp-image3-cli-and-dashboard.png" width="100%">
 </p>
 
 <p align="center">
