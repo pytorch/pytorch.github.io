@@ -32,7 +32,7 @@ To achieve better efficiency, the PyTorch distributed team introduced a new cont
 Continued investigation into the factors limiting scaling efficiency uncovered that the rate limiter was creating a recurring pipeline bubble of GPU idle time. This was due to the rate limiter using a block and flush approach for the allocation and release of each set of memory buffers. By waiting for the entire block to complete before initiating a new all_gather, the GPU was idling at the start of each block, while waiting for the new set of all_gather parameters to arrive. This bubble was alleviated by moving to a sliding window approach. Upon the completion of a single all_gather step and its computation (rather than a block of them), the memory is freed and the next all_gather is immediately issued in a much more uniform manner.  This improvement eliminated the pipeline bubble and boosted the scaling efficiencies to >90% (at 32 nodes).
 
 <p align="center">
-<img src="/assets/images/scaling-pytorch-fsdp-image1-IBM_scaling_FSDP_visual.png" width="100%">
+<img src="/assets/images/scaling-pytorch-fsdp-image1-IBM_scaling_FSDP_visual_new.png" width="100%">
 </p>
 
 <p align="center">
@@ -40,7 +40,7 @@ Figure 1: Scaling of T5-XL (3B) and T5-XXL (11B) from 1 node to 64 nodes
 </p>
 
 <p align="center">
-<img src="/assets/images/scaling-pytorch-fsdp-image2-tflops_per_second.png" width="100%">
+<img src="/assets/images/scaling-pytorch-fsdp-image2-tflops_per_second_new.png" width="100%">
 </p>
 
 <p align="center">
