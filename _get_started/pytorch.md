@@ -395,7 +395,7 @@ It’s rare to get both performance and convenience, but this is why the core te
 For GPU (newer generation GPUs will see drastically better performance)
 
 ```
-pip3 install numpy --pre torch[dynamo] --force-reinstall --extra-index-url https://download.pytorch.org/whl/nightly/cu117
+pip3 install numpy --pre torch --force-reinstall --extra-index-url https://download.pytorch.org/whl/nightly/cu117
 ```
 
 For CPU
@@ -452,11 +452,11 @@ PyTorch 2.0 is what 1.14 would have been. We were releasing substantial new feat
 
     CUDA 11.7<br>
     ```
-    pip3 install numpy --pre torch[dynamo] torchvision torchaudio --force-reinstall --extra-index-url https://download.pytorch.org/whl/nightly/cu117
+    pip3 install numpy --pre torch torchvision torchaudio --force-reinstall --extra-index-url https://download.pytorch.org/whl/nightly/cu117
     ```  
     CUDA 11.6  
     ```
-    pip3 install numpy --pre torch[dynamo] torchvision torchaudio --force-reinstall --extra-index-url https://download.pytorch.org/whl/nightly/cu116
+    pip3 install numpy --pre torch torchvision torchaudio --force-reinstall --extra-index-url https://download.pytorch.org/whl/nightly/cu116
     ```  
     CPU  
     ```

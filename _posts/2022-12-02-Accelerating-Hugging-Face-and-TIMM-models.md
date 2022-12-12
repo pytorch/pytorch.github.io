@@ -32,7 +32,7 @@ This tutorial will show you exactly how to replicate those speedups so you can b
 For GPU (newer generation GPUs will see drastically better performance)
 
 ```
-pip3 install numpy --pre torch[dynamo] --force-reinstall --extra-index-url https://download.pytorch.org/whl/nightly/cu117
+pip3 install numpy --pre torch --force-reinstall --extra-index-url https://download.pytorch.org/whl/nightly/cu117
 
 ```
 
@@ -78,16 +78,16 @@ by step. Please note that you’re likely to see more significant speedups the n
 
 ```python
 import torch
-   def fn(x, y):
-       a = torch.sin(x).cuda()
-       b = torch.sin(y).cuda()
-       return a + b
-   new_fn = torch.compile(fn, backend="inductor")
-   input_tensor = torch.randn(10000).to(device="cuda:0")
-   a = new_fn()
+def fn(x, y):
+    a = torch.sin(x).cuda()
+    b = torch.sin(y).cuda()
+    return a + b
+new_fn = torch.compile(fn, backend="inductor")
+input_tensor = torch.randn(10000).to(device="cuda:0")
+a = new_fn()
 ```
 
-This example won’t actually run faster but it’s a good educational.
+This example won’t actually run faster but it’s educational.
 
 example that features `torch.cos()` and `torch.sin()` which are examples of pointwise ops as in they operate element by element on a vector. A more famous pointwise op you might actually want to use would be something like `torch.relu()`.
 
@@ -110,17 +110,17 @@ TORCHINDUCTOR_TRACE=1 python trig.py
 ```python
 
 @pointwise(size_hints=[16384], filename=__file__, meta={'signature': {0: '*fp32', 1: '*fp32', 2: 'i32'}, 'device': 0, 'constants': {}, 'configs': [instance_descriptor(divisible_by_16=(0, 1, 2), equal_to_1=())]})
-   @triton.jit
-   def kernel(in_ptr0, out_ptr0, xnumel, XBLOCK : tl.constexpr):
-       xnumel = 10000
-       xoffset = tl.program_id(0) * XBLOCK
-       xindex = xoffset + tl.reshape(tl.arange(0, XBLOCK), [XBLOCK])
-       xmask = xindex < xnumel
-       x0 = xindex
-       tmp0 = tl.load(in_ptr0 + (x0), xmask)
-       tmp1 = tl.sin(tmp0)
-       tmp2 = tl.sin(tmp1)
-       tl.store(out_ptr0 + (x0 + tl.zeros([XBLOCK], tl.int32)), tmp2, xmask)
+@triton.jit
+def kernel(in_ptr0, out_ptr0, xnumel, XBLOCK : tl.constexpr):
+    xnumel = 10000
+    xoffset = tl.program_id(0) * XBLOCK
+    xindex = xoffset + tl.reshape(tl.arange(0, XBLOCK), [XBLOCK])
+    xmask = xindex < xnumel
+    x0 = xindex
+    tmp0 = tl.load(in_ptr0 + (x0), xmask)
+    tmp1 = tl.sin(tmp0)
+    tmp2 = tl.sin(tmp1)
+    tl.store(out_ptr0 + (x0 + tl.zeros([XBLOCK], tl.int32)), tmp2, xmask)
 
 ```
 
@@ -132,9 +132,9 @@ As a next step let’s try a real model like resnet50 from the PyTorch hub.
 
 ```python
 import torch
-   model = torch.hub.load('pytorch/vision:v0.10.0', 'resnet18', pretrained=True)
-   opt_model = torch.compile(model, backend="inductor")
-   model(torch.randn(1,3,64,64))
+model = torch.hub.load('pytorch/vision:v0.10.0', 'resnet18', pretrained=True)
+opt_model = torch.compile(model, backend="inductor")
+model(torch.randn(1,3,64,64))
 
 ```
 
@@ -152,14 +152,14 @@ So we’re going to directly download a pretrained model from the Hugging Face h
 ```python
 
 import torch
-   from transformers import BertTokenizer, BertModel
-   # Copy pasted from here https://huggingface.co/bert-base-uncased
-   tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-   model = BertModel.from_pretrained("bert-base-uncased").to(device="cuda:0")
-   model = torch.compile(model) # This is the only line of code that we changed
-   text = "Replace me by any text you'd like."
-   encoded_input = tokenizer(text, return_tensors='pt').to(device="cuda:0")
-   output = model(**encoded_input)
+from transformers import BertTokenizer, BertModel
+# Copy pasted from here https://huggingface.co/bert-base-uncased
+tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+model = BertModel.from_pretrained("bert-base-uncased").to(device="cuda:0")
+model = torch.compile(model) # This is the only line of code that we changed
+text = "Replace me by any text you'd like."
+encoded_input = tokenizer(text, return_tensors='pt').to(device="cuda:0")
+output = model(**encoded_input)
 
 ```
 
@@ -171,10 +171,10 @@ Similarly let’s try out a TIMM example
 
 ```python
 import timm
-   import torch
-   model = timm.create_model('resnext101_32x8d', pretrained=True, num_classes=2)
-   opt_model = torch.compile(model, backend="inductor")
-   opt_model(torch.randn(64,3,7,7))
+import torch
+model = timm.create_model('resnext101_32x8d', pretrained=True, num_classes=2)
+opt_model = torch.compile(model, backend="inductor")
+opt_model(torch.randn(64,3,7,7))
 ```
 
 Our goal with PyTorch was to build a breadth-first compiler that would speed up the vast majority of actual models people run in open source. The Hugging Face Hub ended up being an extremely valuable benchmarking tool for us, ensuring that any optimization we work on actually helps accelerate models people want to run.
