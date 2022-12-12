@@ -1,7 +1,7 @@
 ---
 layout: blog_detail
 title: "Scaling PyTorch FSDP for Training Foundation Models on IBM Cloud"
-author:  Less Wright, Hamid Shojanazeri, Geeta Chauhan, IBM Research*
+author:  Linsong Chu, Less Wright, Hamid Nazeri, Sophia Wen, Raghu Ganti, Geeta Chauhan
 featured-img: "/assets/images/scaling-pytorch-fsdp-image1-IBM_scaling_FSDP_visual.png"
 ---
 
