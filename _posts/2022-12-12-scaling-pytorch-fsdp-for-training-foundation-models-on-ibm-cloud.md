@@ -2,7 +2,7 @@
 layout: blog_detail
 title: "Scaling PyTorch FSDP for Training Foundation Models on IBM Cloud"
 author:  Linsong Chu, Less Wright, Hamid Nazeri, Sophia Wen, Raghu Ganti, Geeta Chauhan
-featured-img: "/assets/images/scaling-pytorch-fsdp-image1-IBM_scaling_FSDP_visual.png"
+featured-img: "/assets/images/scaling-pytorch-fsdp-image1-IBM_scaling_FSDP_visual_new.png"
 ---
 
 Large model training using a cloud native approach is of growing interest for many enterprises given the emergence and success of [foundation models](https://research.ibm.com/blog/what-are-foundation-models). Some AI practitioners may assume that the only way they can achieve high GPU utilization for distributed training jobs is to run them on HPC systems, such as those inter-connected with Infiniband and may not consider Ethernet connected systems. We demonstrate how the latest distributed training technique, Fully Sharded Data Parallel (FSDP) from PyTorch, successfully scales to models of size 10B+ parameters using commodity Ethernet networking in IBM Cloud.
