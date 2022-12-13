@@ -235,7 +235,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href='https://pytorch.org/docs/versions.html'>master (1.14.0a0+git876b702 ) &#x25BC</a>
+      <a href='https://pytorch.org/docs/versions.html'>master (2.0.0a0+git9eccfed ) &#x25BC</a>
     </div>
     
 
@@ -487,7 +487,6 @@
 <span class="kn">import</span> <span class="nn">torch</span>
 <span class="kn">import</span> <span class="nn">torch.distributed</span> <span class="k">as</span> <span class="nn">dist</span>
 <span class="kn">import</span> <span class="nn">torch.nn</span> <span class="k">as</span> <span class="nn">nn</span>
-<span class="kn">from</span> <span class="nn">torch.distributed</span> <span class="kn">import</span> <span class="n">ProcessGroup</span>
 <span class="kn">from</span> <span class="nn">torch.distributed.algorithms._checkpoint.checkpoint_wrapper</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">_CHECKPOINT_WRAPPED_MODULE</span><span class="p">,</span>
     <span class="n">ActivationWrapper</span><span class="p">,</span>
@@ -511,6 +510,8 @@
     <span class="n">_init_process_group_state</span><span class="p">,</span>
     <span class="n">_init_runtime_state</span><span class="p">,</span>
     <span class="n">_init_state_dict_state</span><span class="p">,</span>
+    <span class="n">HYBRID_SHARDING_STRATEGIES</span><span class="p">,</span>
+    <span class="n">ProcessGroupType</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span> <span class="nn">torch.distributed.fsdp._runtime_utils</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">_lazy_init</span><span class="p">,</span>
@@ -652,8 +653,12 @@
 <span class="sd">    Args:</span>
 <span class="sd">        module (nn.Module):</span>
 <span class="sd">            This is the module to be wrapped with FSDP.</span>
-<span class="sd">        process_group (Optional[ProcessGroup]):</span>
-<span class="sd">            This is the process group used for collective communications.</span>
+<span class="sd">        process_group: Optional[Union[ProcessGroup, Tuple[ProcessGroup, ProcessGroup]]]</span>
+<span class="sd">            This is the process group used for collective communications and</span>
+<span class="sd">            the one over which the model is sharded. For hybrid sharding strategies such as</span>
+<span class="sd">            ``ShardingStrategy.HYBRID_SHARD`` users can</span>
+<span class="sd">            pass in a tuple of process groups representing the groups to shard and replicate across,</span>
+<span class="sd">            respectively.</span>
 <span class="sd">        sharding_strategy (Optional[ShardingStrategy]):</span>
 <span class="sd">            This configures the sharding strategy used by FSDP, which may trade</span>
 <span class="sd">            off memory saving and communication overhead. See</span>
@@ -777,7 +782,7 @@
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">module</span><span class="p">:</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">,</span>
-        <span class="n">process_group</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">ProcessGroup</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">process_group</span><span class="p">:</span> <span class="n">ProcessGroupType</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">sharding_strategy</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">ShardingStrategy</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">cpu_offload</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">CPUOffload</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">auto_wrap_policy</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">Callable</span><span class="p">,</span> <span class="n">_FSDPPolicy</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -798,6 +803,12 @@
         <span class="c1"># Add module annotations for Dynamo support (see function for details)</span>
         <span class="n">_annotate_modules_for_dynamo</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ignored_modules</span><span class="p">,</span> <span class="n">use_orig_params</span><span class="p">)</span>
 
+        <span class="c1"># Initializes self.process_group, along with rank and world size. This will</span>
+        <span class="c1"># also set another attribute, _inter_node_pg, to control the process group</span>
+        <span class="c1"># over which sharding occurs, if sharding_strategy is {HYBRID_SHARD, _HYBRID_SHARD_ZERO2}.</span>
+        <span class="c1"># Note that this is done before auto_wrapping, so that child FSDP modules simply pick up</span>
+        <span class="c1"># the same process group state as the root FSDP module.</span>
+        <span class="n">_init_process_group_state</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">process_group</span><span class="p">,</span> <span class="n">sharding_strategy</span><span class="p">,</span> <span class="n">auto_wrap_policy</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">auto_wrap_policy</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">auto_wrap_kwargs</span> <span class="o">=</span> <span class="p">{</span>
                 <span class="s2">&quot;module&quot;</span><span class="p">:</span> <span class="n">module</span><span class="p">,</span>
@@ -820,9 +831,14 @@
                 <span class="s2">&quot;limit_all_gathers&quot;</span><span class="p">:</span> <span class="n">limit_all_gathers</span><span class="p">,</span>
                 <span class="s2">&quot;use_orig_params&quot;</span><span class="p">:</span> <span class="n">use_orig_params</span><span class="p">,</span>
             <span class="p">}</span>
+            <span class="k">if</span> <span class="n">sharding_strategy</span> <span class="ow">in</span> <span class="n">HYBRID_SHARDING_STRATEGIES</span><span class="p">:</span>
+                <span class="c1"># Share root process groups with children to maintain</span>
+                <span class="c1"># the invariant that all FSDP modules will have the same</span>
+                <span class="c1"># process groups.</span>
+                <span class="n">fsdp_kwargs</span><span class="p">[</span><span class="s2">&quot;process_group&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">process_group</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_inter_node_pg</span><span class="p">)</span>
+
             <span class="n">_auto_wrap</span><span class="p">(</span><span class="n">auto_wrap_kwargs</span><span class="p">,</span> <span class="n">fsdp_kwargs</span><span class="p">,</span> <span class="n">FullyShardedDataParallel</span><span class="p">)</span>
 
-        <span class="n">_init_process_group_state</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">process_group</span><span class="p">)</span>
         <span class="n">backward_prefetch_limit</span> <span class="o">=</span> <span class="mi">1</span>
         <span class="n">forward_prefetch_limit</span> <span class="o">=</span> <span class="mi">1</span>
         <span class="n">_init_core_state</span><span class="p">(</span>
@@ -1148,12 +1164,12 @@
         <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">autograd</span><span class="o">.</span><span class="n">profiler</span><span class="o">.</span><span class="n">record_function</span><span class="p">(</span>
             <span class="s2">&quot;FullyShardedDataParallel.forward&quot;</span>
         <span class="p">):</span>
-            <span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span> <span class="o">=</span> <span class="n">_root_pre_forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="bp">self</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">)</span>
             <span class="n">unused</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="n">_root_pre_forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="bp">self</span><span class="p">,</span> <span class="n">unused</span><span class="p">)</span>
             <span class="n">unshard_fn</span> <span class="o">=</span> <span class="n">functools</span><span class="o">.</span><span class="n">partial</span><span class="p">(</span><span class="n">_pre_forward_unshard</span><span class="p">,</span> <span class="bp">self</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_handles</span><span class="p">)</span>
             <span class="n">reshard_fn</span> <span class="o">=</span> <span class="n">functools</span><span class="o">.</span><span class="n">partial</span><span class="p">(</span><span class="n">_post_forward_reshard</span><span class="p">,</span> <span class="bp">self</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_handles</span><span class="p">)</span>
-            <span class="n">_pre_forward</span><span class="p">(</span>
-                <span class="bp">self</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_handles</span><span class="p">,</span> <span class="n">unshard_fn</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fsdp_wrapped_module</span><span class="p">,</span> <span class="n">unused</span>
+            <span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span> <span class="o">=</span> <span class="n">_pre_forward</span><span class="p">(</span>
+                <span class="bp">self</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_handles</span><span class="p">,</span> <span class="n">unshard_fn</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fsdp_wrapped_module</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span>
             <span class="p">)</span>
             <span class="k">for</span> <span class="n">handle</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_handles</span><span class="p">:</span>
                 <span class="n">p_assert</span><span class="p">(</span>
