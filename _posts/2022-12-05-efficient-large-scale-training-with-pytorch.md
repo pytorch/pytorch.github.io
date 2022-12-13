@@ -22,7 +22,7 @@ As a preview of some of the optimizations discussed in this series, we show the 
 <i> *T5 3B Performance measured on AWS A100 and A10 servers. Original with no optimizations and Tuned with the applied optimization </i>
 
 <p align="center">
-<img src="/assets/images/tweet_1_visual.png" width="90%">
+<img src="/assets/images/efficient_large_scale_training_2.png" width="90%">
 </p>
 
 <i> *T5 11B Performance measured on A100 servers. Original with no optimizations and Tuned with the applied optimization </i>
@@ -123,31 +123,31 @@ A key point is that this efficiency also allows for AI models that are larger th
 As discussed in a previous [blog post](https://medium.com/pytorch/pytorch-data-parallel-best-practices-on-google-cloud-6c8da2be180d), with DDP the largest model that we could train on 32, A100 gpus with 40 GB memory (4 nodes) was up to 3B parameters, and batch size of 128, with the help of activation checkpointing. By contrast, using FSDP we were able to train up to 81B model size, combining activation checkpointing, along with activation and parameter offloading. In another [experiment](https://medium.com/pytorch/training-a-1-trillion-parameter-model-with-pytorch-fully-sharded-data-parallel-on-aws-3ac13aa96cff), we benchmarked a 1T parameter model with FSDP using 512 gpus.
 
 <p align="center">
-<img src="/assets/images/tweet_1_visual.png" width="90%">
+<img src="/assets/images/largeblog_index_3.png" width="90%">
 </p>
 
 For intuition on the parameter level workings of FSDP, below we show an animation detailing how the model parameters are sharded and communicated assuming a two GPU scenario and a simple 8 parameter model:
 
 <p align="center">
-<img src="/assets/images/tweet_1_visual.png" width="90%">
+<img src="/assets/images/largeblog_index_4.gif" width="90%">
 </p>
 
 _Above - the animations walk through the steps involved with the initial sharding of the model amongst ranks, and we start the `all_gathers` and forward pass_
 
 <p align="center">
-<img src="/assets/images/tweet_1_visual.png" width="90%">
+<img src="/assets/images/largeblog_index_5.gif" width="90%">
 </p>
 
 _We continue through the model with the forward pass. After each FSDP unit completes, non-locally owned params are dropped to free memory, and optionally activations can be checkpointed. This continues until we finish the forward pass and compute the loss._
 
 <p align="center">
-<img src="/assets/images/tweet_1_visual.png" width="90%">
+<img src="/assets/images/largeblog_index_6.gif" width="90%">
 </p>
 
 _During the backward pass, another `all_gather` is used to load the parameters and the gradients are computed. These gradients are then `reduce_scattered` so that the local owners of each param can aggregate and prepare to update the weights._
 
 <p align="center">
-<img src="/assets/images/tweet_1_visual.png" width="90%">
+<img src="/assets/images/largeblog_index_7.gif" width="90%">
 </p>
 
 _Finally, each rank passes the summed gradients through the optimizer states and updates the weights to complete the mini-batch._
@@ -172,7 +172,7 @@ This eliminates much of the memory redundancy present in DDP, but imposes the co
 There are four main performance improvements we will cover - the transformer wrapper, activation checkpointing, mixed precision, and selecting the proper sharding strategy. The flowchart below will help as a checklist for tuning options that we will discuss in this post.
 
 <p align="center">
-<img src="/assets/images/tweet_1_visual.png" width="90%">
+<img src="/assets/images/largeblog_index_8.png" width="90%">
 </p>
 
 **Wrapping policy - _for transformers, use Transformer wrapping policy_**
@@ -236,7 +236,7 @@ Running this wrapped model, we can see some substantial performance gains.We can
 Thus, we’ve increased our training throughput by over 200% (2.19x) due to providing greater model info to FSDP! The transformer wrapping policy results in more fine-grained and balanced FSDP units each holding a layer class, which leads to a more effective communication-computation overlap.
 
 <p align="center">
-<img src="/assets/images/tweet_2_wrapper.png" width="90%">
+<img src="/assets/images/largeblog_index_9.png" width="90%">
 </p>
 
 _Above: Graphical comparison of TFlops based on wrapper type_
@@ -252,15 +252,15 @@ FSDP supports a flexible mixed precision policy that gives you granular control 
 By way of comparison, we can show a 77% speed improvement when comparing fully tuned BFloat16 vs FP32 on an 8B DeepVit model.
 
 <p align="center">
-<img src="/assets/images/tweet_2_wrapper.png" width="90%">
+<img src="/assets/images/largeblog_index_10.png" width="90%">
 </p>
 
 We have obtained even greater acceleration using BFloat16 in fine-tuning a 3B HuggingFace T5 model as shown in the figures below. We observed that because of the lower precision the validation loss of BFloat16 is slightly behind in the first few epochs, but it is able to catch up and results in the same final accuracy as FP32.
 
-<div style="display: flex; flex-direction: row;">
-<img src="/assets/images/tweet_2_wrapper.png" width="50%">
-<img src="/assets/images/tweet_2_wrapper.png" width="50%">
-</div>
+<p align="center">
+<img src="/assets/images/largeblog_index_10a.png" width="90%">
+</p>
+
 
 To use mixed precision, we create a policy with our desired data types, and pass it in during the FSDP initialization.
 
@@ -306,11 +306,11 @@ AnyPrecision enables pure BF16 training by maintaining an extra buffer that trac
  
 As a comparison of the throughput gains available with pure BF16 training using AnyPrecision, we ran experiments using FSDP with the T5 11B model with regular FP32 training, Mixed Precision training with BF16, and pure BF16 training using the AnyPrecision optimizer on 3 nodes with A100 gpus as mentioned previously. 
 
-As shown above, training with AnyPrecision and pure BF16 resulted in 2x the throughput vs Mixed Precision, and over 20x improvement vs FP32.
-
 <p>
-<img src="/assets/images/tweet_2_wrapper.png" width="90%">
+<img src="/assets/images/largeblog_index_11.png" width="90%">
 </p>
+
+As shown above, training with AnyPrecision and pure BF16 resulted in 2x the throughput vs Mixed Precision, and over 20x improvement vs FP32.
 
 The potential tradeoff is the impact on final accuracy - in the cases we tested, the accuracy was equal or better than FP32 due to a regularization effect from the slightly reduced precision, but your results may vary. 
  
@@ -319,7 +319,7 @@ AnyPrecision optimizer is available for you to test with [here](https://github.c
 **Activation checkpointing - _increasing throughput by trading compute for memory_**
 
 <p>
-<img src="/assets/images/tweet_2_wrapper.png" width="90%">
+<img src="/assets/images/largeblog_index_12.png" width="90%">
 </p>
 
 **FSDP supports activation checkpointing once the model has been sharded**, and makes it easy to implement. The graph above shows ~4x throughput improvement using activation checkpointing.
@@ -374,7 +374,7 @@ Here, we’ll focus specifically on AWS parallel cluster and provide an overview
 <p>AWS ParallelCluster is an open source, cluster management tool that makes it easy for you to deploy and manage High Performance Computing (HPC) clusters on AWS.  AWS ParallelCluster uses yaml configuration files to provision all the necessary resources. It also supports multiple instance types, job submission queues, shared file systems like <a href="https://aws.amazon.com/efs/?trk=3c5ce89c-8865-47a3-bec3-f6820351aa6d&sc_channel=ps&sc_campaign=acquisition&sc_medium=ACQ-P|PS-GO|Non-Brand|Desktop|SU|Storage|Solution|US|EN|DSA&ef_id=Cj0KCQjwuaiXBhCCARIsAKZLt3l6dtldpE152xuxTMa3mbUbaqtTXwsBdfDRIzCL8cw3NO5DO_y1vOgaAj1pEALw_wcB:G:s&s_kwcid=AL!4422!3!579408162404!!!g!!">Amazon EFS</a> (NFS) or <a href="https://aws.amazon.com/fsx/lustre/?refid=3c5ce89c-8865-47a3-bec3-f6820351aa6d" target="_blank">Amazon FSx for Lustre</a>, and job schedulers like AWS Batch and Slurm.</p>
 
 <p>
-<img src="/assets/images/tweet_2_wrapper.png" width="90%">
+<img src="/assets/images/largeblog_index_13.png" width="90%">
 </p>
 
 **Workflow on Clusters**
