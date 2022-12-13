@@ -129,13 +129,14 @@ As discussed in a previous [blog post](https://medium.com/pytorch/pytorch-data-p
 For intuition on the parameter level workings of FSDP, below we show an animation detailing how the model parameters are sharded and communicated assuming a two GPU scenario and a simple 8 parameter model:
 
 <p align="center">
-<img src="/assets/images/largeblog_index_4.gif" width="90%">
+<img src="/assets/images/largeblog_index_5.gif" width="90%">
 </p>
+
 
 _Above - the animations walk through the steps involved with the initial sharding of the model amongst ranks, and we start the `all_gathers` and forward pass_
 
 <p align="center">
-<img src="/assets/images/largeblog_index_5.gif" width="90%">
+<img src="/assets/images/largeblog_index_6.gif" width="90%">
 </p>
 
 _We continue through the model with the forward pass. After each FSDP unit completes, non-locally owned params are dropped to free memory, and optionally activations can be checkpointed. This continues until we finish the forward pass and compute the loss._
