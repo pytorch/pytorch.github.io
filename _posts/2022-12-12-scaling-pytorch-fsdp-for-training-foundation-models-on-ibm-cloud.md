@@ -1,7 +1,7 @@
 ---
 layout: blog_detail
 title: "Scaling PyTorch FSDP for Training Foundation Models on IBM Cloud"
-author:  Linsong Chu, Less Wright, Hamid Nazeri, Sophia Wen, Raghu Ganti, Geeta Chauhan
+author:  Linsong Chu, Less Wright, Hamid Shojanazeri, Sophia Wen, Raghu Ganti, Geeta Chauhan
 featured-img: "/assets/images/scaling-pytorch-fsdp-image1-IBM_scaling_FSDP_visual_new.png"
 ---
 
@@ -75,12 +75,15 @@ This blog was possible because of contributions from both PyTorch Distributed an
 
 From the PyTorch Distributed team, we would like to thank Less Wright, Hamid Shojanazeri, Geeta Chauhan, Shen Li, Rohan Varma, Yanli Zhao, Andrew Gu, Anjali Sridhar, Chien-Chin Huang, and Bernard Nguyen.
 
-*From the IBM Research team, we would like to thank Linsong Chu, Sophia Wen, Lixiang (Eric) Luo, Marquita Ellis, Davis Wertheimer, Supriyo Chakraborty, Raghu Ganti, Mudhakar Srivatsa, Seetharami Seelam, Carlos Costa, Abhishek Malvankar, Diana Arroyo, Alaa Youssef, Nick Mitchell
+From the IBM Research team, we would like to thank Linsong Chu, Sophia Wen, Lixiang (Eric) Luo, Marquita Ellis, Davis Wertheimer, Supriyo Chakraborty, Raghu Ganti, Mudhakar Srivatsa, Seetharami Seelam, Carlos Costa, Abhishek Malvankar, Diana Arroyo, Alaa Youssef, Nick Mitchell
 
 ## Appendix
 
 #### Teraflop computation
 
-The T5-XXL (11B) architecture has two types of T5 blocks, one is an encoder and the second is a decoder. Following the approach of Megatron-LM, where each matrix multiplication requires  FLOPs, where the first matrix is of size  and the second is . The encoder block consists of self-attention and feed forward layers, whereas the decoder block consists of self-attention, cross-attention, and feed forward layers.
+The T5-XXL (11B) architecture has two types of T5 blocks, one is an encoder and the second is a decoder. Following the approach of Megatron-LM, where each matrix multiplication requires 2m×k×n FLOPs, where the first matrix is of size m×k and the second is k×n. The encoder block consists of self-attention and feed forward layers, whereas the decoder block consists of self-attention, cross-attention, and feed forward layers.
 
-The attention (both self and cross) block consists of QKV projection, requires operations, attention matrix computation requiring  operations, attention over values needs  computations, and post-attention linear projection requires operations. Finally, the feed forward layer requires operations. The total for an encoder block is, whereas for a decoder block, it comes to. With a total of 24 encoder and 24 decoder blocks and 2 forward pass (as we discard the activations) and one backward pass (equivalent to two forward passes), the final FLOPs computation comes to be , where B is the batch size per GPU, s is sequence length, h is hidden state size, V is vocabulary size. We repeat a similar computation for T5-XL (3B) architecture, which is slightly different.
+The attention (both self and cross) block consists of a QKV projection, which requires 6Bsh<sup>2</sup> operations, an attention matrix computation requiring 2Bs<sup>2</sup>h operations, an attention over values which needs 2Bs<sup>2</sup>h computations, and the post-attention linear projection requires 2Bsh<sup>2</sup> operations. Finally, the feed forward layer requires 15Bsh<sup>2</sup> operations. 
+
+The total for an encoder block is 23Bsh<sup>2</sup>+4Bs<sup>2</sup>h, whereas for a decoder block, it comes to 31Bsh<sup>2</sup>+8Bs<sup>2</sup>h. With a total of 24 encoder and 24 decoder blocks and 2 forward passes (as we discard the activations) and one backward pass (equivalent to two forward passes), the final FLOPs computation comes to be 96×(54Bsh<sup>2</sup>+ 12Bs<sup>2</sup>h) + 6BshV. Here, B is the batch size per GPU, s is sequence length, h is hidden state size, and V is vocabulary size. 
+We repeat a similar computation for T5-XL (3B) architecture, which is slightly different.
