@@ -16,13 +16,13 @@ In this series of blog posts, we will explain multiple performance optimizations
 As a preview of some of the optimizations discussed in this series, we show the before and after performance scaled in Flops below (Note that these results can vary based on your server resources and model architecture). 
 
 <p align="center">
-<img src="/assets/images/tweet_1_visual.png" width="90%">
+<img src="/assets/images/largeblog_index_1.png" width="90%">
 </p>
 
 <i> *T5 3B Performance measured on AWS A100 and A10 servers. Original with no optimizations and Tuned with the applied optimization </i>
 
 <p align="center">
-<img src="/assets/images/efficient_large_scale_training_2.png" width="90%">
+<img src="/assets/images/largeblog_index_2.png" width="90%">
 </p>
 
 <i> *T5 11B Performance measured on A100 servers. Original with no optimizations and Tuned with the applied optimization </i>
@@ -142,7 +142,7 @@ _Above - the animations walk through the steps involved with the initial shardin
 _We continue through the model with the forward pass. After each FSDP unit completes, non-locally owned params are dropped to free memory, and optionally activations can be checkpointed. This continues until we finish the forward pass and compute the loss._
 
 <p align="center">
-<img src="/assets/images/largeblog_index_6.gif" width="70%">
+<img src="/assets/images/largeblog_index_6.5.gif" width="70%">
 </p>
 
 _During the backward pass, another `all_gather` is used to load the parameters and the gradients are computed. These gradients are then `reduce_scattered` so that the local owners of each param can aggregate and prepare to update the weights._
