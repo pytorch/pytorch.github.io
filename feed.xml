@@ -4,7 +4,7 @@
   <generator uri="https://jekyllrb.com/" version="3.9.0">Jekyll</generator>
   <link href="https://pytorch.org/feed.xml" rel="self" type="application/atom+xml" />
   <link href="https://pytorch.org/" rel="alternate" type="text/html" />
-  <updated>2022-12-14T16:44:46-08:00</updated>
+  <updated>2022-12-15T12:12:06-08:00</updated>
   <id>https://pytorch.org/feed.xml</id>
 
   
@@ -29,6 +29,119 @@
 
   
   
+  
+    <entry>
+      <title type="html">Scaling PyTorch FSDP for Training Foundation Models on IBM Cloud</title>
+      <link href="https://pytorch.org/blog/scaling-pytorch-fsdp-for-training-foundation-models-on-ibm-cloud/" rel="alternate" type="text/html" title="Scaling PyTorch FSDP for Training Foundation Models on IBM Cloud" />
+      <published>2022-12-15T00:00:00-08:00</published>
+      <updated>2022-12-15T00:00:00-08:00</updated>
+      <id>https://pytorch.org/blog/scaling-pytorch-fsdp-for-training-foundation-models-on-ibm-cloud</id>
+      <content type="html" xml:base="https://pytorch.org/blog/scaling-pytorch-fsdp-for-training-foundation-models-on-ibm-cloud/">&lt;p&gt;Large model training using a cloud native approach is of growing interest for many enterprises given the emergence and success of &lt;a href=&quot;https://research.ibm.com/blog/what-are-foundation-models&quot;&gt;foundation models&lt;/a&gt;. Some AI practitioners may assume that the only way they can achieve high GPU utilization for distributed training jobs is to run them on HPC systems, such as those inter-connected with Infiniband and may not consider Ethernet connected systems. We demonstrate how the latest distributed training technique, Fully Sharded Data Parallel (FSDP) from PyTorch, successfully scales to models of size 10B+ parameters using commodity Ethernet networking in IBM Cloud.&lt;/p&gt;
+
+&lt;h2 id=&quot;pytorch-fsdp-scaling&quot;&gt;PyTorch FSDP Scaling&lt;/h2&gt;
+
+&lt;p&gt;As models get larger, the standard techniques for data parallel training work only if the GPU can hold a full replica of the model, along with its training state (optimizer, activations, etc.). However, GPU memory increases have not kept up with the model size increases and new techniques for training such models have emerged (e.g., Fully Sharded Data Parallel, &lt;a href=&quot;https://www.deepspeed.ai/&quot;&gt;DeepSpeed&lt;/a&gt;), which allow us to efficiently distribute the model and data over multiple GPUs during training. In this blog post, we demonstrate a path to achieve remarkable scaling of model training to 64 nodes (512 GPUs) using PyTorch native FSDP APIs as we increase model sizes to 11B.&lt;/p&gt;
+
+&lt;h3 id=&quot;what-is-fully-sharded-data-parallel&quot;&gt;What is Fully Sharded Data Parallel?&lt;/h3&gt;
+
+&lt;p&gt;FSDP extends the distributed data parallel training (DDP) approach by sharding model parameters, gradient and optimizer states into K FSDP units, determined by using a wrapping policy. FSDP achieves large model training efficiency in terms of resources and performance by significantly reducing the memory footprint on each GPU and overlapping computation and communication.&lt;/p&gt;
+
+&lt;p&gt;Resource efficiency is achieved with memory footprint reduction by having all GPUs own a portion of each FSDP unit. To process a given FSDP unit, all GPUs share their locally owned portion via all_gather communication calls.&lt;/p&gt;
+
+&lt;p&gt;Performance efficiency is accomplished by overlapping all_gather communication calls for upcoming FSDP units with computation of the current FSDP unit. Once the current FSDP unit has been processed, the non-locally owned parameters are dropped, freeing memory for the upcoming FSDP units.  This process achieves training efficiency by the overlap of computation and communication, while also reducing the peak memory needed by each GPU.&lt;/p&gt;
+
+&lt;p&gt;In what follows, we demonstrate how FSDP allows us to keep hundreds of GPUs highly utilized throughout a distributed training job, while running over standard Ethernet networking (system description towards the end of the blog). We chose the T5 architecture for our experiments and leveraged the code from the &lt;a href=&quot;https://github.com/pytorch/workshops/tree/master/FSDP_Workshop&quot;&gt;FSDP workshop&lt;/a&gt;. In each of our experiments, we start with a single node experiment to create a baseline and report the metric seconds/iteration normalized by the batch size as well as compute the teraflops based on the &lt;a href=&quot;https://cs.stanford.edu/~matei/papers/2021/sc_megatron_lm.pdf&quot;&gt;Megatron-LM paper&lt;/a&gt; (see Appendix for details of teraflop computation for T5). Our experiments aim to maximize the batch size (while avoiding cudaMalloc retries) to take full advantage of overlap in computation and communications, as discussed below. Scaling is defined as the ratio of the seconds/iteration normalized by batch size for N nodes versus a single node, representing how well we can utilize the additional GPUs as more nodes are added.&lt;/p&gt;
+
+&lt;h3 id=&quot;experimental-results&quot;&gt;Experimental Results&lt;/h3&gt;
+
+&lt;p&gt;Our first set of experiments using the T5-3B configuration (mixed precision with BF16, activation checkpointing, and transformer wrapping policy) demonstrated scaling efficiency of 95% as we increased the number of GPUs from 8 to 512 (1 to 64 nodes, respectively). We achieved these results without any modifications to the existing FSDP APIs. We observed that, for this scale, over Ethernet based network, there is sufficient bandwidth to enable continuous overlap of communication and computation.&lt;/p&gt;
+
+&lt;p&gt;However, when we increased the T5 model size to 11B, the scaling efficiency declined substantially to 20%. The PyTorch profiler shows that overlap of communication and computation was very limited. Further investigation into the network bandwidth usage revealed that the poor overlap is being caused by latency in the communication of individual packets and not the bandwidth required (in fact, our peak bandwidth utilization is 1/4th of that available). This led us to hypothesize that if we can increase the compute time by increasing the batch size, we can better overlap communication and computation. However, given we are already at maximum GPU memory allocation, we must identify opportunities to rebalance the memory allocation to allow for increase in batch size. We identified that the model state was being allocated a lot more memory than was needed. The primary function of these reservations is to have pre-reserved memory ready to aggressively send/receive tensors during the communication periods and too few buffers can result in increased wait times, whereas too many buffers result in smaller batch sizes.&lt;/p&gt;
+
+&lt;p&gt;To achieve better efficiency, the PyTorch distributed team introduced a new control knob, the rate_limiter which controls how much memory is allocated for send/receive of tensors, alleviating the memory pressure and providing room for higher batch sizes.  In our case, the rate_limiter could increase the batch size from 20 to 50, thus increasing compute time by 2.5x and allowing for much greater overlap of communication and computation. With this fix, we increased the scaling efficiency to &amp;gt;75% (at 32 nodes)!&lt;/p&gt;
+
+&lt;p&gt;Continued investigation into the factors limiting scaling efficiency uncovered that the rate limiter was creating a recurring pipeline bubble of GPU idle time. This was due to the rate limiter using a block and flush approach for the allocation and release of each set of memory buffers. By waiting for the entire block to complete before initiating a new all_gather, the GPU was idling at the start of each block, while waiting for the new set of all_gather parameters to arrive. This bubble was alleviated by moving to a sliding window approach. Upon the completion of a single all_gather step and its computation (rather than a block of them), the memory is freed and the next all_gather is immediately issued in a much more uniform manner.  This improvement eliminated the pipeline bubble and boosted the scaling efficiencies to &amp;gt;90% (at 32 nodes).&lt;/p&gt;
+
+&lt;p align=&quot;center&quot;&gt;
+&lt;img src=&quot;/assets/images/scaling-pytorch-fsdp-image1-IBM_scaling_FSDP_visual_new.png&quot; width=&quot;100%&quot; /&gt;
+&lt;/p&gt;
+
+&lt;p align=&quot;center&quot;&gt;
+Figure 1: Scaling of T5-XL (3B) and T5-XXL (11B) from 1 node to 64 nodes
+&lt;/p&gt;
+
+&lt;p align=&quot;center&quot;&gt;
+&lt;img src=&quot;/assets/images/scaling-pytorch-fsdp-image2-tflops_per_second_new.png&quot; width=&quot;100%&quot; /&gt;
+&lt;/p&gt;
+
+&lt;p align=&quot;center&quot;&gt;
+Figure 2: TFLOPs/sec usage for T5-XL(3B) and T5-XXL (11B) as we increase number of nodes
+&lt;/p&gt;
+
+&lt;h2 id=&quot;ibm-cloud-ai-system-and-middleware&quot;&gt;IBM Cloud AI System and Middleware&lt;/h2&gt;
+
+&lt;p&gt;The AI infrastructure used for this work is a large-scale AI system on IBM Cloud consisting of nearly 200 nodes, each node with 8 NVIDIA A100 80GB cards, 96 vCPUs, and 1.2TB CPU RAM. The GPU cards within a node are connected via NVLink with a card-to-card bandwidth of 600GBps. Nodes are connected by 2 x 100Gbps Ethernet links with SRIOV based TCP/IP stack, providing a usable bandwidth of 120Gbps.&lt;/p&gt;
+
+&lt;p&gt;The IBM Cloud AI System has been production-ready since May of 2022 and is configured with the OpenShift container platform to run AI workloads. We also built a software stack for production AI workloads that provide end-to-end tools for training workloads. The middleware leverages Ray for pre and post processing workloads and PyTorch for training of models. We also integrate a Kubernetes native scheduler, MCAD, that manages multiple jobs with job queuing, gang scheduling, prioritization, and quota management. A multi-NIC CNI discovers all available network interfaces and handles them as a single NIC pool enabling optimized use of the network interfaces in Kubernetes. Finally, CodeFlare CLI supports a single pane for observability of the full stack using a desktop CLI (e.g., GPU utilization, application metrics like loss, gradient norm).&lt;/p&gt;
+
+&lt;p align=&quot;center&quot;&gt;
+  &lt;img src=&quot;/assets/images/scaling-pytorch-fsdp-image3-cli-and-dashboard.png&quot; width=&quot;100%&quot; /&gt;
+&lt;/p&gt;
+
+&lt;p align=&quot;center&quot;&gt;
+Figure 3: Foundation Model Middleware Stack
+&lt;/p&gt;
+
+&lt;h3 id=&quot;conclusion-and-future-work&quot;&gt;Conclusion and Future Work&lt;/h3&gt;
+
+&lt;p&gt;In conclusion, we demonstrated how we can achieve remarkable scaling of FSDP APIs over non-InfiniBand networks. We identified the bottleneck that had limited scaling to less than 20% efficiency for 11B parameter model training.  After identifying the issue, we were able to correct this with a new rate limiter control to ensure a more optimal balance of reserved memory and communication overlap relative to compute time. With this improvement, we were able to achieve 90% scaling efficiency (a 4.5x improvement), at 256 GPUs and 80% at 512 GPUs for training of the 11B parameter model. In addition, the 3B parameter model scales extremely well with 95% efficiency even as we increase the number of GPUs to 512.&lt;/p&gt;
+
+&lt;p&gt;This is a first in the industry to achieve such scaling efficiencies for up to 11B parameter models using Kubernetes with vanilla Ethernet and PyTorch native FSDP API’s. This improvement enables users to train huge models on a Hybrid Cloud platform in a cost efficient and sustainable manner.&lt;/p&gt;
+
+&lt;p&gt;We plan on continuing to investigate scaling with decoder only models and increasing the size of these models to 100B+ parameters. From a system design perspective, we are exploring capabilities such as RoCE and GDR that can improve latencies of communications over Ethernet networks.&lt;/p&gt;
+
+&lt;h2 id=&quot;acknowledgements&quot;&gt;Acknowledgements&lt;/h2&gt;
+
+&lt;p&gt;This blog was possible because of contributions from both PyTorch Distributed and IBM Research teams.&lt;/p&gt;
+
+&lt;p&gt;From the PyTorch Distributed team, we would like to thank Less Wright, Hamid Shojanazeri, Geeta Chauhan, Shen Li, Rohan Varma, Yanli Zhao, Andrew Gu, Anjali Sridhar, Chien-Chin Huang, and Bernard Nguyen.&lt;/p&gt;
+
+&lt;p&gt;From the IBM Research team, we would like to thank Linsong Chu, Sophia Wen, Lixiang (Eric) Luo, Marquita Ellis, Davis Wertheimer, Supriyo Chakraborty, Raghu Ganti, Mudhakar Srivatsa, Seetharami Seelam, Carlos Costa, Abhishek Malvankar, Diana Arroyo, Alaa Youssef, Nick Mitchell.&lt;/p&gt;
+
+&lt;h2 id=&quot;appendix&quot;&gt;Appendix&lt;/h2&gt;
+
+&lt;h4 id=&quot;teraflop-computation&quot;&gt;Teraflop computation&lt;/h4&gt;
+
+&lt;p&gt;The T5-XXL (11B) architecture has two types of T5 blocks, one is an encoder and the second is a decoder. Following the approach of Megatron-LM, where each matrix multiplication requires 2m×k×n FLOPs, where the first matrix is of size m×k and the second is k×n. The encoder block consists of self-attention and feed forward layers, whereas the decoder block consists of self-attention, cross-attention, and feed forward layers.&lt;/p&gt;
+
+&lt;p&gt;The attention (both self and cross) block consists of a QKV projection, which requires 6Bsh&lt;sup&gt;2&lt;/sup&gt; operations, an attention matrix computation requiring 2Bs&lt;sup&gt;2&lt;/sup&gt;h operations, an attention over values which needs 2Bs&lt;sup&gt;2&lt;/sup&gt;h computations, and the post-attention linear projection requires 2Bsh&lt;sup&gt;2&lt;/sup&gt; operations. Finally, the feed forward layer requires 15Bsh&lt;sup&gt;2&lt;/sup&gt; operations.&lt;/p&gt;
+
+&lt;p&gt;The total for an encoder block is 23Bsh&lt;sup&gt;2&lt;/sup&gt;+4Bs&lt;sup&gt;2&lt;/sup&gt;h, whereas for a decoder block, it comes to 31Bsh&lt;sup&gt;2&lt;/sup&gt;+8Bs&lt;sup&gt;2&lt;/sup&gt;h. With a total of 24 encoder and 24 decoder blocks and 2 forward passes (as we discard the activations) and one backward pass (equivalent to two forward passes), the final FLOPs computation comes to be 96×(54Bsh&lt;sup&gt;2&lt;/sup&gt;+ 12Bs&lt;sup&gt;2&lt;/sup&gt;h) + 6BshV. Here, B is the batch size per GPU, s is sequence length, h is hidden state size, and V is vocabulary size. 
+We repeat a similar computation for T5-XL (3B) architecture, which is slightly different.&lt;/p&gt;</content>
+
+      
+      
+      
+      
+      
+
+      <author>
+          <name>Linsong Chu, Less Wright, Hamid Shojanazeri, Sophia Wen, Raghu Ganti, Geeta Chauhan</name>
+        
+        
+      </author>
+
+      
+
+      
+
+      
+        <summary type="html">Large model training using a cloud native approach is of growing interest for many enterprises given the emergence and success of foundation models. Some AI practitioners may assume that the only way they can achieve high GPU utilization for distributed training jobs is to run them on HPC systems, such as those inter-connected with Infiniband and may not consider Ethernet connected systems. We demonstrate how the latest distributed training technique, Fully Sharded Data Parallel (FSDP) from PyTorch, successfully scales to models of size 10B+ parameters using commodity Ethernet networking in IBM Cloud.</summary>
+      
+
+      
+      
+    </entry>
   
     <entry>
       <title type="html">Accelerating Hugging Face and TIMM models with PyTorch 2.0</title>
@@ -1503,486 +1616,6 @@ Learn more with our &lt;a href=&quot;https://pytorch.org/tutorials/recipes/profi
 
       
         <summary type="html">We are excited to announce the release of PyTorch® 1.13 (release note)! This includes Stable versions of BetterTransformer. We deprecated CUDA 10.2 and 11.3 and completed migration of CUDA 11.6 and 11.7. Beta includes improved support for Apple M1 chips and functorch, a library that offers composable vmap (vectorization) and autodiff transforms, being included in-tree with the PyTorch release. This release is composed of over 3,749 commits and 467 contributors since 1.12.1. We want to sincerely thank our dedicated community for your contributions.</summary>
-      
-
-      
-      
-    </entry>
-  
-    <entry>
-      <title type="html">New Library Updates in PyTorch 1.13</title>
-      <link href="https://pytorch.org/blog/new-library-updates-in-pytorch-1.13/" rel="alternate" type="text/html" title="New Library Updates in PyTorch 1.13" />
-      <published>2022-10-28T00:00:00-07:00</published>
-      <updated>2022-10-28T00:00:00-07:00</updated>
-      <id>https://pytorch.org/blog/new-library-updates-in-pytorch-1.13</id>
-      <content type="html" xml:base="https://pytorch.org/blog/new-library-updates-in-pytorch-1.13/">&lt;h2 id=&quot;summary&quot;&gt;Summary&lt;/h2&gt;
-
-&lt;p&gt;We are bringing a number of improvements to the current PyTorch libraries, alongside the PyTorch 1.13 &lt;a href=&quot;https://github.com/pytorch/pytorch/releases&quot;&gt;release&lt;/a&gt;. These updates demonstrate our focus on developing common and extensible APIs across all domains to make it easier for our community to build ecosystem projects on PyTorch.&lt;/p&gt;
-
-&lt;p&gt;Along with &lt;strong&gt;1.13&lt;/strong&gt;, we are releasing updates to the PyTorch Libraries, please find them below.&lt;/p&gt;
-
-&lt;h3 id=&quot;torchaudio&quot;&gt;TorchAudio&lt;/h3&gt;
-
-&lt;h4 id=&quot;beta-hybrid-demucs-model-and-pipeline&quot;&gt;(Beta) Hybrid Demucs Model and Pipeline&lt;/h4&gt;
-
-&lt;p&gt;Hybrid Demucs is a music source separation model that uses both spectrogram and time domain features. It has demonstrated state-of-the-art performance in the Sony&lt;sup&gt;®&lt;/sup&gt; Music DeMixing Challenge. (citation: &lt;a href=&quot;https://arxiv.org/abs/2111.03600&quot;&gt;https://arxiv.org/abs/2111.03600&lt;/a&gt;)&lt;/p&gt;
-
-&lt;p&gt;The TorchAudio v0.13 release includes the following features&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;MUSDB_HQ Dataset, which is used in Hybrid Demucs training (&lt;a href=&quot;https://pytorch.org/audio/0.13.0/generated/torchaudio.datasets.MUSDB_HQ.html#torchaudio.datasets.MUSDB_HQ&quot;&gt;docs&lt;/a&gt;)&lt;/li&gt;
-  &lt;li&gt;Hybrid Demucs model architecture (&lt;a href=&quot;https://pytorch.org/audio/0.13.0/generated/torchaudio.models.HDemucs.html#torchaudio.models.HDemucs&quot;&gt;docs&lt;/a&gt;)&lt;/li&gt;
-  &lt;li&gt;Three factory functions suitable for different sample rate ranges&lt;/li&gt;
-  &lt;li&gt;Pre-trained pipelines (&lt;a href=&quot;https://pytorch.org/audio/0.13.0/pipelines.html#id46&quot;&gt;docs&lt;/a&gt;)&lt;/li&gt;
-  &lt;li&gt;SDR Results of pre-trained pipelines on MUSDB_HQ test set&lt;/li&gt;
-  &lt;li&gt;Tutorial that steps through music source separation using the pretrained pipeline (&lt;a href=&quot;https://pytorch.org/audio/0.13.0/tutorials/hybrid_demucs_tutorial.html&quot;&gt;docs&lt;/a&gt;)&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;table&gt;
-  &lt;thead&gt;
-    &lt;tr&gt;
-      &lt;th&gt;Pipeline&lt;/th&gt;
-      &lt;th&gt;All&lt;/th&gt;
-      &lt;th&gt;Drums&lt;/th&gt;
-      &lt;th&gt;Bass&lt;/th&gt;
-      &lt;th&gt;Other&lt;/th&gt;
-      &lt;th&gt;Vocals&lt;/th&gt;
-    &lt;/tr&gt;
-  &lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;em&gt;HDEMUCS_HIGH_MUSDB*&lt;/em&gt;&lt;/td&gt;
-      &lt;td&gt;6.42&lt;/td&gt;
-      &lt;td&gt;7.76&lt;/td&gt;
-      &lt;td&gt;6.51&lt;/td&gt;
-      &lt;td&gt;4.47&lt;/td&gt;
-      &lt;td&gt;6.93&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;&lt;em&gt;HDEMUCS_HIGH_MUSDB_PLUS**&lt;/em&gt;&lt;/td&gt;
-      &lt;td&gt;9.37&lt;/td&gt;
-      &lt;td&gt;11.38&lt;/td&gt;
-      &lt;td&gt;10.53&lt;/td&gt;
-      &lt;td&gt;7.24&lt;/td&gt;
-      &lt;td&gt;8.32&lt;/td&gt;
-    &lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-
-&lt;p&gt;&lt;small&gt;* Trained on the training data of MUSDB-HQ dataset.&lt;br /&gt;** Trained on both training and test sets of MUSDB-HQ and 150 extra songs from an internal database that were specifically produced for Meta.&lt;/small&gt;&lt;/p&gt;
-
-&lt;div class=&quot;language-python highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;kn&quot;&gt;from&lt;/span&gt; &lt;span class=&quot;nn&quot;&gt;torchaudio.pipelines&lt;/span&gt; &lt;span class=&quot;kn&quot;&gt;import&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;HDEMUCS_HIGH_MUSDB_PLUS&lt;/span&gt;
-
-&lt;span class=&quot;n&quot;&gt;bundle&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;HDEMUCS_HIGH_MUSDB_PLUS&lt;/span&gt;
-&lt;span class=&quot;n&quot;&gt;model&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;bundle&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;get_model&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt;
-&lt;span class=&quot;n&quot;&gt;sources_list&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;model&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;sources&lt;/span&gt;
-
-&lt;span class=&quot;n&quot;&gt;mixture&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;samplerate&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;torchaudio&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;load&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;err&quot;&gt;“&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;song&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;wav&lt;/span&gt;&lt;span class=&quot;err&quot;&gt;”&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
-&lt;span class=&quot;n&quot;&gt;sources&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;model&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;mixture&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
-&lt;span class=&quot;n&quot;&gt;audios&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;dict&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;zip&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;sources_list&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;sources&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;Special thanks to Alexandre Defossez for the guidance.&lt;/p&gt;
-
-&lt;h4 id=&quot;beta-datasets-and-metadata-mode-for-superb-benchmark&quot;&gt;(Beta) Datasets and Metadata Mode for SUPERB Benchmark&lt;/h4&gt;
-
-&lt;p&gt;TorchAudio adds support for various audio-related datasets used in downstream tasks for benchmarking self-supervised learning models. With the addition of several new datasets, there is now support for the downstream tasks in version 1 of the &lt;a href=&quot;https://superbbenchmark.org/&quot;&gt;SUPERB benchmark&lt;/a&gt;, which can be found in the &lt;a href=&quot;https://github.com/s3prl/s3prl/blob/master/s3prl/downstream/docs/superb.md&quot;&gt;s3prl repository&lt;/a&gt;.&lt;/p&gt;
-
-&lt;p&gt;For these datasets, we also add metadata support through a &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;get_metadata&lt;/code&gt; function, enabling faster dataset iteration or preprocessing without the need to load waveforms. The function returns the same features as &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;__getitem__&lt;/code&gt;, except it returns the relative waveform path rather than the loaded waveform.&lt;/p&gt;
-
-&lt;p&gt;Datasets with metadata functionality&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;LIBRISPEECH (&lt;a href=&quot;https://pytorch.org/audio/0.13.0/generated/torchaudio.datasets.LIBRISPEECH.html#torchaudio.datasets.LIBRISPEECH&quot;&gt;docs&lt;/a&gt;)&lt;/li&gt;
-  &lt;li&gt;LibriMix (&lt;a href=&quot;https://pytorch.org/audio/0.13.0/generated/torchaudio.datasets.LibriMix.html#torchaudio.datasets.LibriMix&quot;&gt;docs&lt;/a&gt;)&lt;/li&gt;
-  &lt;li&gt;QUESST14 (&lt;a href=&quot;https://pytorch.org/audio/0.13.0/generated/torchaudio.datasets.QUESST14.html#torchaudio.datasets.QUESST14&quot;&gt;docs&lt;/a&gt;)&lt;/li&gt;
-  &lt;li&gt;SPEECHCOMMANDS (&lt;a href=&quot;https://pytorch.org/audio/0.13.0/generated/torchaudio.datasets.SPEECHCOMMANDS.html#torchaudio.datasets.SPEECHCOMMANDS&quot;&gt;docs&lt;/a&gt;)&lt;/li&gt;
-  &lt;li&gt;(new) FluentSpeechCommands (&lt;a href=&quot;https://pytorch.org/audio/0.13.0/generated/torchaudio.datasets.FluentSpeechCommands.html#torchaudio.datasets.FluentSpeechCommands&quot;&gt;docs&lt;/a&gt;)&lt;/li&gt;
-  &lt;li&gt;(new) Snips (&lt;a href=&quot;https://pytorch.org/audio/0.13.0/generated/torchaudio.datasets.Snips.html#torchaudio.datasets.Snips&quot;&gt;docs&lt;/a&gt;)&lt;/li&gt;
-  &lt;li&gt;(new) IEMOCAP (&lt;a href=&quot;https://pytorch.org/audio/0.13.0/generated/torchaudio.datasets.IEMOCAP.html#torchaudio.datasets.IEMOCAP&quot;&gt;docs&lt;/a&gt;)&lt;/li&gt;
-  &lt;li&gt;(new) VoxCeleb1 (&lt;a href=&quot;https://pytorch.org/audio/0.13.0/generated/torchaudio.datasets.VoxCeleb1Identification.html#torchaudio.datasets.VoxCeleb1Identification&quot;&gt;Identification&lt;/a&gt;, &lt;a href=&quot;https://pytorch.org/audio/0.13.0/generated/torchaudio.datasets.VoxCeleb1Verification.html#torchaudio.datasets.VoxCeleb1Verification&quot;&gt;Verification&lt;/a&gt;)&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;h4 id=&quot;beta-custom-language-model-support-in-ctc-beam-search-decoding&quot;&gt;(Beta) Custom Language Model support in CTC Beam Search Decoding&lt;/h4&gt;
-
-&lt;p&gt;TorchAudio released a CTC beam search decoder in release 0.12, with KenLM language model support. This release, there is added functionality for creating custom Python language models that are compatible with the decoder, using the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;torchaudio.models.decoder.CTCDecoderLM&lt;/code&gt; wrapper.&lt;/p&gt;
-
-&lt;p&gt;For more information on using a custom language model, please refer to the &lt;a href=&quot;https://pytorch.org/audio/0.13.0/generated/torchaudio.models.decoder.CTCDecoder.html#ctcdecoderlm&quot;&gt;documentation&lt;/a&gt; and &lt;a href=&quot;https://pytorch.org/audio/0.13.0/tutorials/asr_inference_with_ctc_decoder_tutorial.html#custom-language-model&quot;&gt;tutorial&lt;/a&gt;.&lt;/p&gt;
-
-&lt;h4 id=&quot;beta-streamwriter&quot;&gt;(Beta) StreamWriter&lt;/h4&gt;
-
-&lt;p&gt;torchaudio.io.StreamWriter is a class for encoding media including audio and video. This can handle a wide variety of codecs, chunk-by-chunk encoding and GPU encoding.&lt;/p&gt;
-
-&lt;div class=&quot;language-python highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;n&quot;&gt;writer&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;StreamWriter&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;example.mp4&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
-&lt;span class=&quot;n&quot;&gt;writer&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;add_audio_stream&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;
-    &lt;span class=&quot;n&quot;&gt;sample_rate&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;16_000&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
-    &lt;span class=&quot;n&quot;&gt;num_channels&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;2&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
-&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
-&lt;span class=&quot;n&quot;&gt;writer&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;add_video_stream&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;
-    &lt;span class=&quot;n&quot;&gt;frame_rate&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;30&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
-    &lt;span class=&quot;n&quot;&gt;height&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;96&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
-    &lt;span class=&quot;n&quot;&gt;width&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;128&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
-    &lt;span class=&quot;nb&quot;&gt;format&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;rgb24&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
-&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
-&lt;span class=&quot;k&quot;&gt;with&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;writer&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;open&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;():&lt;/span&gt;
-    &lt;span class=&quot;n&quot;&gt;writer&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;write_audio_chunk&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;audio&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
-    &lt;span class=&quot;n&quot;&gt;writer&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;write_video_chunk&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;video&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;For more information, refer to &lt;a href=&quot;https://pytorch.org/audio/0.13.0/generated/torchaudio.io.StreamWriter.html&quot;&gt;the documentation&lt;/a&gt; and the following tutorials&lt;/p&gt;
-&lt;ul&gt;
-  &lt;li&gt;&lt;a href=&quot;https://pytorch.org/audio/0.13.0/tutorials/streamwriter_basic_tutorial.html&quot;&gt;StreamWriter Basic Usage&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://pytorch.org/audio/0.13.0/tutorials/streamwriter_advanced.html&quot;&gt;StreamWriter Advanced Usage&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://pytorch.org/audio/0.13.0/hw_acceleration_tutorial.html&quot;&gt;Hardware-Accelerated Video Decoding and Encoding&lt;/a&gt;&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;h3 id=&quot;torchdata&quot;&gt;TorchData&lt;/h3&gt;
-
-&lt;p&gt;For a complete list of changes and new features, please visit &lt;a href=&quot;https://github.com/pytorch/data/releases&quot;&gt;our repository’s 0.5.0 release note&lt;/a&gt;.&lt;/p&gt;
-
-&lt;h4 id=&quot;prototype-dataloader2&quot;&gt;(Prototype) DataLoader2&lt;/h4&gt;
-
-&lt;p&gt;&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;DataLoader2&lt;/code&gt; was introduced in the last release to execute &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;DataPipe&lt;/code&gt; graph, with support for dynamic sharding for multi-process/distributed data loading, multiple backend ReadingServices, and &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;DataPipe&lt;/code&gt; graph in-place modification (e.g. shuffle control).&lt;/p&gt;
-
-&lt;p&gt;In this release, we further consolidated the API for &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;DataLoader2&lt;/code&gt; and a &lt;a href=&quot;https://pytorch.org/data/0.5/dataloader2.html&quot;&gt;detailed documentation is now available here&lt;/a&gt;. We continue to welcome early adopters and feedback, as well as potential contributors. If you are interested in trying it out, we encourage you to install the nightly version of TorchData.&lt;/p&gt;
-
-&lt;h4 id=&quot;beta-data-loading-from-cloud-service-providers&quot;&gt;(Beta) Data Loading from Cloud Service Providers&lt;/h4&gt;
-
-&lt;p&gt;We extended our support to load data from additional cloud storage providers via DataPipes, now covering AWS, Google Cloud Storage, and Azure. A &lt;a href=&quot;https://pytorch.org/data/0.5/tutorial.html#working-with-cloud-storage-providers&quot;&gt;tutorial is also available&lt;/a&gt;. We are open to feedback and feature requests.&lt;/p&gt;
-
-&lt;p&gt;We also performed a simple benchmark, comparing the performance of data loading from AWS S3 and attached volume on an AWS EC2 instance. The results are &lt;a href=&quot;https://github.com/pytorch/data/blob/gh/NivekT/100/head/benchmarks/cloud/aws_s3_results.md&quot;&gt;visible here&lt;/a&gt;.&lt;/p&gt;
-
-&lt;h3 id=&quot;torchdeploy-beta&quot;&gt;torch::deploy (Beta)&lt;/h3&gt;
-
-&lt;p&gt;torch::deploy is now in Beta! torch::deploy is a C++ library for Linux based operating systems that allows you to run multiple Python interpreters in a single process. You can run your existing eager PyTorch models without any changes for production inference use cases. Highlights include:&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;Existing models work out of the box–no need to modify your python code to support tracing.&lt;/li&gt;
-  &lt;li&gt;Full support for your existing Python environment including C extensions.&lt;/li&gt;
-  &lt;li&gt;No need to cross process boundaries to load balance in multi-GPU serving environments.&lt;/li&gt;
-  &lt;li&gt;Model weight can be shared between multiple Python interpreters.&lt;/li&gt;
-  &lt;li&gt;A vastly improved installation and setup process.&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;pre&gt;&lt;code class=&quot;language-Python&quot;&gt;torch::deploy::InterpreterManager manager(4);
-
-// access one of the 4 interpreters
-auto I = manager.acquireOne();
-
-// run infer from your_model.py
-I.global(&quot;your_model&quot;, &quot;infer&quot;)({at::randn({10, 240, 320})});
-&lt;/code&gt;&lt;/pre&gt;
-
-&lt;p&gt;Learn more &lt;a href=&quot;https://github.com/pytorch/multipy&quot;&gt;here&lt;/a&gt;.&lt;/p&gt;
-
-&lt;h4 id=&quot;beta-cudarocmcpu-backends&quot;&gt;(Beta) CUDA/ROCm/CPU Backends&lt;/h4&gt;
-
-&lt;p&gt;torch::deploy now links against standard PyTorch Python distributions so all accelerators that PyTorch core supports such as CUDA and AMD/HIP work out of the box.&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;Can install any device variant of PyTorch via pip/conda like normal.&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://pytorch.org/get-started/locally/&quot;&gt;https://pytorch.org/get-started/locally/&lt;/a&gt;&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;h4 id=&quot;prototype-aarch64arm64-support&quot;&gt;(Prototype) aarch64/arm64 support&lt;/h4&gt;
-
-&lt;p&gt;torch::deploy now has basic support for aarch64 Linux systems.&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;We’re looking to gather feedback on it and learn more about arm use cases for eager PyTorch models.&lt;/li&gt;
-  &lt;li&gt;Learn more / share your use case at &lt;a href=&quot;https://github.com/pytorch/multipy/issues/64&quot;&gt;https://github.com/pytorch/multipy/issues/64&lt;/a&gt;&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;h3 id=&quot;torcheval&quot;&gt;TorchEval&lt;/h3&gt;
-
-&lt;h4 id=&quot;prototype-introducing-native-metrics-support-for-pytorch&quot;&gt;(Prototype) Introducing Native Metrics Support for PyTorch&lt;/h4&gt;
-
-&lt;p&gt;TorchEval is a library built for users who want highly performant implementations of common metrics to evaluate machine learning models. It also provides an easy to use interface for building custom metrics with the same toolkit. Building your metrics with TorchEval makes running distributed training loops with &lt;a href=&quot;https://pytorch.org/docs/stable/distributed.html&quot;&gt;torch.distributed&lt;/a&gt; a breeze.&lt;/p&gt;
-
-&lt;p&gt;Learn more with our &lt;a href=&quot;https://pytorch.org/torcheval&quot;&gt;docs&lt;/a&gt;, see our &lt;a href=&quot;https://pytorch.org/torcheval/metric_example.html&quot;&gt;examples&lt;/a&gt;, or check out our &lt;a href=&quot;http://github.com/pytorch/torcheval&quot;&gt;GitHub repo&lt;/a&gt;.&lt;/p&gt;
-
-&lt;h3 id=&quot;torchmultimodal-release-beta&quot;&gt;TorchMultimodal Release (Beta)&lt;/h3&gt;
-
-&lt;p&gt;Please watch for upcoming blogs in early November that will introduce TorchMultimodal, a PyTorch domain library for training SoTA multi-task multimodal models at scale, in more details; in the meantime, play around with the library and models through our &lt;a href=&quot;https://pytorch.org/tutorials/beginner/flava_finetuning_tutorial.html&quot;&gt;tutorial&lt;/a&gt;.&lt;/p&gt;
-
-&lt;h3 id=&quot;torchrec&quot;&gt;TorchRec&lt;/h3&gt;
-
-&lt;h4 id=&quot;prototype-simplified-optimizer-fusion-apis&quot;&gt;(Prototype) Simplified Optimizer Fusion APIs&lt;/h4&gt;
-
-&lt;p&gt;We’ve provided a simplified and more intuitive API for setting fused optimizer settings via apply_optimizer_in_backward. This new approach enables the ability to specify optimizer settings on a per-parameter basis and sharded modules will configure &lt;a href=&quot;https://github.com/pytorch/FBGEMM/blob/main/fbgemm_gpu/fbgemm_gpu/split_table_batched_embeddings_ops.py#L181&quot;&gt;FBGEMM’s TableBatchedEmbedding modules accordingly&lt;/a&gt;. Additionally, this now let’s TorchRec’s planner account for optimizer memory usage. This should alleviate reports of sharding jobs OOMing after using Adam using a plan generated from planner.&lt;/p&gt;
-
-&lt;h4 id=&quot;prototype-simplified-sharding-apis&quot;&gt;(Prototype) Simplified Sharding APIs&lt;/h4&gt;
-
-&lt;p&gt;We’re introducing the shard API, which now allows you to shard only the embedding modules within a model, and provides an alternative to the current main entry point - DistributedModelParallel. This lets you have a finer grained control over the rest of the model, which can be useful for customized parallelization logic, and inference use cases (which may not require any parallelization on the dense layers). We’re also introducing construct_module_sharding_plan, providing a simpler interface to the TorchRec sharder.&lt;/p&gt;
-
-&lt;h4 id=&quot;beta-quantized-comms&quot;&gt;(Beta) Quantized Comms&lt;/h4&gt;
-
-&lt;p&gt;Applying &lt;a href=&quot;https://dlp-kdd.github.io/assets/pdf/a11-yang.pdf&quot;&gt;quantization or mixed precision&lt;/a&gt; to tensors in a collective call during model parallel training greatly improves training efficiency, with little to no effect on model quality. TorchRec now integrates with the &lt;a href=&quot;https://github.com/pytorch/FBGEMM/blob/main/fbgemm_gpu/fbgemm_gpu/quantize_comm.py&quot;&gt;quantized comms library provided by FBGEMM GPU&lt;/a&gt; and provides an interface to construct encoders and decoders (codecs) that surround the all_to_all, and reduce_scatter collective calls in the output_dist of a sharded module. We also allow you to construct your own codecs to apply to your sharded module. The codces provided by FBGEMM allow FP16, BF16, FP8, and INT8 compressions, and you may use different quantizations for the forward pass and backward pass.&lt;/p&gt;
-
-&lt;h3 id=&quot;torchsnapshot-beta&quot;&gt;TorchSnapshot (Beta)&lt;/h3&gt;
-
-&lt;p&gt;Along with PyTorch 1.13, we are releasing the beta version of TorchSnapshot, which is a performant, memory-efficient checkpointing library for PyTorch applications, designed with large, complex distributed workloads in mind. Highlights include:&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;Performance: TorchSnapshot provides a fast checkpointing implementation employing various optimizations, including zero-copy serialization for most tensor types, overlapped device-to-host copy and storage I/O, parallelized storage I/O&lt;/li&gt;
-  &lt;li&gt;Memory Use: TorchSnapshot’s memory usage adapts to the host’s available resources, greatly reducing the chance of out-of-memory issues when saving and loading checkpoints&lt;/li&gt;
-  &lt;li&gt;Usability: Simple APIs that are consistent between distributed and non-distributed workloads&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;Learn more with our &lt;a href=&quot;https://pytorch.org/torchsnapshot/main/getting_started.html&quot;&gt;tutorial&lt;/a&gt;.&lt;/p&gt;
-
-&lt;h3 id=&quot;torchvision&quot;&gt;TorchVision&lt;/h3&gt;
-
-&lt;p&gt;We are happy to introduce torchvision v0.14 &lt;a href=&quot;https://github.com/pytorch/vision/releases&quot;&gt;(release note)&lt;/a&gt;. This version introduces a new &lt;a href=&quot;https://pytorch.org/blog/easily-list-and-initialize-models-with-new-apis-in-torchvision/&quot;&gt;model registration API&lt;/a&gt; to help users retrieving and listing models and weights. It also includes new image and video classification models such as MViT, S3D, Swin Transformer V2, and MaxViT. Last but not least, we also have new primitives and augmentation such as PolynomicalLR scheduler and SimpleCopyPaste.&lt;/p&gt;
-
-&lt;h4 id=&quot;beta-model-registration-api&quot;&gt;(Beta) Model Registration API&lt;/h4&gt;
-
-&lt;p&gt;Following up on the &lt;a href=&quot;https://pytorch.org/blog/introducing-torchvision-new-multi-weight-support-api/&quot;&gt;multi-weight support API&lt;/a&gt; that was released on the previous version, we have added a new &lt;a href=&quot;https://pytorch.org/blog/easily-list-and-initialize-models-with-new-apis-in-torchvision/&quot;&gt;model registration API&lt;/a&gt; to help users retrieve models and weights. There are now 4 new methods under the torchvision.models module: get_model, get_model_weights, get_weight, and list_models. Here are examples of how we can use them:&lt;/p&gt;
-
-&lt;pre&gt;&lt;code class=&quot;language-Python&quot;&gt;import torchvision
-from torchvision.models import get_model, get_model_weights, list_models
-
-
-max_params = 5000000
-
-tiny_models = []
-for model_name in list_models(module=torchvision.models):
-    weights_enum = get_model_weights(model_name)
-    if len([w for w in weights_enum if w.meta[&quot;num_params&quot;] &amp;lt;= max_params]) &amp;gt; 0:
-        tiny_models.append(model_name)
-
-print(tiny_models)
-# ['mnasnet0_5', 'mnasnet0_75', 'mnasnet1_0', 'mobilenet_v2', ...]
-
-model = get_model(tiny_models[0], weights=&quot;DEFAULT&quot;)
-print(sum(x.numel() for x in model.state_dict().values()))
-# 2239188
-&lt;/code&gt;&lt;/pre&gt;
-
-&lt;h4 id=&quot;beta-new-video-classification-models&quot;&gt;(Beta) New Video Classification Models&lt;/h4&gt;
-
-&lt;p&gt;We added two new video classification models, MViT and S3D. MViT is a state of the art video classification transformer model which has 80.757% accuracy on the Kinetics400 dataset, while S3D is a relatively small model with good accuracy for its size. These models can be used as follows:&lt;/p&gt;
-
-&lt;pre&gt;&lt;code class=&quot;language-Python&quot;&gt;import torch
-from torchvision.models.video import *
-
-video = torch.rand(3, 32, 800, 600)
-model = mvit_v2_s(weights=&quot;DEFAULT&quot;)
-# model = s3d(weights=&quot;DEFAULT&quot;)
-model.eval()
-prediction = model(images)
-&lt;/code&gt;&lt;/pre&gt;
-
-&lt;p&gt;Here is the table showing the accuracy of the new video classification models tested in the Kinetics400 dataset.&lt;/p&gt;
-
-&lt;table&gt;
-  &lt;thead&gt;
-    &lt;tr&gt;
-      &lt;th&gt;&lt;strong&gt;Model&lt;/strong&gt;&lt;/th&gt;
-      &lt;th&gt;&lt;strong&gt;Acc@1&lt;/strong&gt;&lt;/th&gt;
-      &lt;th&gt;&lt;strong&gt;Acc@5&lt;/strong&gt;&lt;/th&gt;
-    &lt;/tr&gt;
-  &lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;
-      &lt;td&gt;mvit_v1_b&lt;/td&gt;
-      &lt;td&gt;81.474&lt;/td&gt;
-      &lt;td&gt;95.776&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;mvit_v2_s&lt;/td&gt;
-      &lt;td&gt;83.196&lt;/td&gt;
-      &lt;td&gt;96.36&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;s3d&lt;/td&gt;
-      &lt;td&gt;83.582&lt;/td&gt;
-      &lt;td&gt;96.64&lt;/td&gt;
-    &lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-
-&lt;p&gt;We would like to thank Haoqi Fan, Yanghao Li, Christoph Feichtenhofer and Wan-Yen Lo for their work on &lt;a href=&quot;https://github.com/facebookresearch/pytorchvideo/&quot;&gt;PyTorchVideo&lt;/a&gt; and their support during the development of the MViT model. We would like to thank Sophia Zhi for her contribution implementing the S3D model in torchvision.&lt;/p&gt;
-
-&lt;h4 id=&quot;stable-new-architecture-and-model-variants&quot;&gt;(Stable) New Architecture and Model Variants&lt;/h4&gt;
-
-&lt;p&gt;For Classification Models, we’ve added the Swin Transformer V2 architecture along with pre-trained weights for its tiny/small/base variants. In addition, we have added support for the MaxViT transformer. Here is an example on how to use the models:&lt;/p&gt;
-
-&lt;pre&gt;&lt;code class=&quot;language-Python&quot;&gt;import torch
-from torchvision.models import *
-
-image = torch.rand(1, 3, 224, 224)
-model = swin_v2_t(weights=&quot;DEFAULT&quot;).eval()
-# model = maxvit_t(weights=&quot;DEFAULT&quot;).eval()
-prediction = model(image)
-&lt;/code&gt;&lt;/pre&gt;
-
-&lt;p&gt;Here is the table showing the accuracy of the models tested on ImageNet1K dataset.&lt;/p&gt;
-
-&lt;table&gt;
-  &lt;thead&gt;
-    &lt;tr&gt;
-      &lt;th&gt;&lt;strong&gt;Model&lt;/strong&gt;&lt;/th&gt;
-      &lt;th&gt;&lt;strong&gt;Acc@1&lt;/strong&gt;&lt;/th&gt;
-      &lt;th&gt;&lt;strong&gt;Acc@1 change over V1&lt;/strong&gt;&lt;/th&gt;
-      &lt;th&gt;&lt;strong&gt;Acc@5&lt;/strong&gt;&lt;/th&gt;
-      &lt;th&gt;&lt;strong&gt;Acc@5 change over V1&lt;/strong&gt;&lt;/th&gt;
-    &lt;/tr&gt;
-  &lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;
-      &lt;td&gt;swin_v2_t&lt;/td&gt;
-      &lt;td&gt;82.072&lt;/td&gt;
-      &lt;td&gt;+ 0.598&lt;/td&gt;
-      &lt;td&gt;96.132&lt;/td&gt;
-      &lt;td&gt;+ 0.356&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;swin_v2_s&lt;/td&gt;
-      &lt;td&gt;83.712&lt;/td&gt;
-      &lt;td&gt;+ 0.516&lt;/td&gt;
-      &lt;td&gt;96.816&lt;/td&gt;
-      &lt;td&gt;+ 0.456&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;swin_v2_b&lt;/td&gt;
-      &lt;td&gt;84.112&lt;/td&gt;
-      &lt;td&gt;+ 0.530&lt;/td&gt;
-      &lt;td&gt;96.864&lt;/td&gt;
-      &lt;td&gt;+ 0.224&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td&gt;maxvit_t&lt;/td&gt;
-      &lt;td&gt;83.700&lt;/td&gt;
-      &lt;td&gt;-&lt;/td&gt;
-      &lt;td&gt;96.722&lt;/td&gt;
-      &lt;td&gt;-&lt;/td&gt;
-    &lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-
-&lt;p&gt;We would like to thank &lt;a href=&quot;https://github.com/ain-soph&quot;&gt;Ren Pang&lt;/a&gt; and &lt;a href=&quot;https://github.com/TeodorPoncu&quot;&gt;Teodor Poncu&lt;/a&gt; for contributing the 2 models to torchvision.&lt;/p&gt;
-
-&lt;h3 id=&quot;stable-new-primitives--augmentations&quot;&gt;(Stable) New Primitives &amp;amp; Augmentations&lt;/h3&gt;
-
-&lt;p&gt;In this release we’ve added the &lt;a href=&quot;https://arxiv.org/abs/2012.07177&quot;&gt;SimpleCopyPaste&lt;/a&gt; augmentation in our reference scripts and we up-streamed the PolynomialLR scheduler to PyTorch Core. We would like to thank &lt;a href=&quot;https://github.com/lezwon&quot;&gt;Lezwon Castelino&lt;/a&gt; and &lt;a href=&quot;https://github.com/federicopozzi33&quot;&gt;Federico Pozzi&lt;/a&gt; for their contributions. We are continuing our efforts to modernize TorchVision by adding more SoTA primitives, Augmentations and architectures with the help of our community. If you are interested in contributing, have a look at the following &lt;a href=&quot;https://github.com/pytorch/vision/issues/6323&quot;&gt;issue&lt;/a&gt;.&lt;/p&gt;
-
-&lt;h3 id=&quot;torch-tensorrt&quot;&gt;Torch-TensorRT&lt;/h3&gt;
-
-&lt;h4 id=&quot;prototype-tensorrt-with-fx2trt-frontend&quot;&gt;(Prototype) TensorRT with FX2TRT frontend&lt;/h4&gt;
-
-&lt;p&gt;Torch-TensorRT is the PyTorch integration for TensorRT, providing high performance inference on NVIDIA GPUs. Torch-TRT allows for optimizing models directly in PyTorch for deployment providing up to 6x performance improvement.&lt;/p&gt;
-
-&lt;p&gt;Torch-TRT is an AoT compiler which ingests an nn.Module or TorchScript module, optimizes compatible subgraphs in TensorRT &amp;amp; leaves the rest to run in PyTorch. This gives users the performance of TensorRT, but the usability and familiarity of Torch.&lt;/p&gt;
-
-&lt;p&gt;Torch-TensorRT is part of the PyTorch ecosystem, and was released as v1.0 in November ‘21. There are currently two distinct front-ends: Torchscript &amp;amp; FX. Each provides the same value proposition and underlying operation with the primary difference being the input &amp;amp; output formats (TS vs FX / Python).&lt;/p&gt;
-
-&lt;p&gt;The Torchscript front-end was included in v1.0 and should be considered stable. The FX front-end is first released in v1.2 and should be considered a Beta.&lt;/p&gt;
-
-&lt;p&gt;Relevant Links:&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;&lt;a href=&quot;https://github.com/pytorch/TensorRT&quot;&gt;Github&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://pytorch.org/TensorRT/&quot;&gt;Documentation&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://pytorch.org/TensorRT/getting_started/getting_started_with_python_api.html&quot;&gt;Generic (TS) getting started guide&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://pytorch.org/TensorRT/tutorials/getting_started_with_fx_path.html&quot;&gt;FX getting started guide&lt;/a&gt;&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;h4 id=&quot;stable--introducing-torch-tensorrt&quot;&gt;(Stable)  Introducing Torch-TensorRT&lt;/h4&gt;
-
-&lt;p&gt;Torch-TensorRT is an integration for PyTorch that leverages inference optimizations of TensorRT on NVIDIA GPUs. It takes advantage of TensorRT optimizations, such as FP16 and INT8 reduced precision, graph optimization, operation fusion, etc. while offering a fallback to native PyTorch when TensorRT does not support the model subgraphs. Currently, there are two frontend paths existing in the library that help to convert a PyTorch model to tensorRT engine. One path is through Torch Script (TS) and the other is through FX frontend. That being said, the models are traced by either TS or FX into their IR graph and then converted to TensorRT from it.&lt;/p&gt;
-
-&lt;p&gt;Learn more with our &lt;a href=&quot;https://pytorch.org/TensorRT/&quot;&gt;tutorial&lt;/a&gt;.&lt;/p&gt;
-
-&lt;h3 id=&quot;torchx&quot;&gt;TorchX&lt;/h3&gt;
-
-&lt;p&gt;TorchX 0.3 updates include a new list API, experiment tracking, elastic training and improved scheduler support. There’s also a new Multi-Objective NAS &lt;a href=&quot;https://pytorch.org/tutorials/intermediate/ax_multiobjective_nas_tutorial.html&quot;&gt;tutorial&lt;/a&gt; using TorchX + Ax.&lt;/p&gt;
-
-&lt;h4 id=&quot;prototype-list&quot;&gt;(Prototype) List&lt;/h4&gt;
-
-&lt;p&gt;The newly added list command and API allows you to list recently launched jobs and their statuses for a given scheduler directly from within TorchX.&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;This removes the need for using secondary tools to list the jobs.&lt;/li&gt;
-  &lt;li&gt;Full programmatic access to recent jobs for integration with custom tools.&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;pre&gt;&lt;code class=&quot;language-Python&quot;&gt;$ torchx list -s kubernetes
-APP HANDLE                                                       APP STATUS
------------------------------------------------            -----------------
-kubernetes://torchx/default:train-f2nx4459p5crr   SUCCEEDED
-&lt;/code&gt;&lt;/pre&gt;
-
-&lt;p&gt;Learn more with our &lt;a href=&quot;https://pytorch.org/torchx/main/schedulers.html#torchx.schedulers.Scheduler.list&quot;&gt;documentation&lt;/a&gt;.&lt;/p&gt;
-
-&lt;h4 id=&quot;prototype-tracker&quot;&gt;(Prototype) Tracker&lt;/h4&gt;
-
-&lt;p&gt;TorchX Tracker is a new prototype library that provides a flexible and customizable experiment and artifact tracking interface. This allows you to track inputs and outputs for jobs across multiple steps to make it easier to use TorchX with pipelines and other external systems.&lt;/p&gt;
-
-&lt;pre&gt;&lt;code class=&quot;language-Python&quot;&gt;from torchx import tracker
-
-app_run = tracker.app_run_from_env()
-app_run.add_metadata(lr=lr, gamma=gamma) # hyper parameters
-app_run.add_artifact(&quot;model&quot;, &quot;storage://path/mnist_cnn.pt&quot;) # logs / checkpoints
-app_run.add_source(parent_run_id, &quot;model&quot;) # lineage
-&lt;/code&gt;&lt;/pre&gt;
-
-&lt;p&gt;Example:&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;&lt;a href=&quot;https://github.com/pytorch/torchx/tree/main/torchx/examples/apps/tracker&quot;&gt;https://github.com/pytorch/torchx/tree/main/torchx/examples/apps/tracker&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://pytorch.org/torchx/main/tracker.html&quot;&gt;https://pytorch.org/torchx/main/tracker.html&lt;/a&gt;&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;h4 id=&quot;prototype-elastic-training-and-autoscaling&quot;&gt;(Prototype) Elastic Training and Autoscaling&lt;/h4&gt;
-
-&lt;p&gt;Elasticity on Ray and Kubernetes – automatic scale up of distributed training jobs when using a supported scheduler. Learn more with our &lt;a href=&quot;https://pytorch.org/torchx/main/components/distributed.html&quot;&gt;documentation&lt;/a&gt;.&lt;/p&gt;
-
-&lt;h4 id=&quot;prototype-scheduler-improvements-ibm-spectrum-lsf&quot;&gt;(Prototype) Scheduler Improvements: IBM® Spectrum LSF&lt;/h4&gt;
-
-&lt;p&gt;Added prototype support for the IBM Spectrum LSF scheduler.&lt;/p&gt;
-
-&lt;h4 id=&quot;beta-aws-batch-scheduler&quot;&gt;(Beta) AWS Batch Scheduler&lt;/h4&gt;
-
-&lt;p&gt;The AWS Batch scheduler integration is now in beta.&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;log fetching and listing jobs is now supported.&lt;/li&gt;
-  &lt;li&gt;Added configs for job priorities and queue policies&lt;/li&gt;
-  &lt;li&gt;Easily access job UI via ui_url
-&lt;a href=&quot;https://pytorch.org/torchx/main/schedulers/aws_batch.html&quot;&gt;https://pytorch.org/torchx/main/schedulers/aws_batch.html&lt;/a&gt;&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;h4 id=&quot;prototype-anyprecision-optimizer&quot;&gt;(Prototype) AnyPrecision Optimizer&lt;/h4&gt;
-
-&lt;p&gt;Drop in replacement for AdamW optimizer that reduces GPU memory, enables two main features:&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;Ability to successfully train the entire model pipeline in full BFloat16.
-Kahan summation ensures precision.  This can improve training throughput, especially on huge models, by reduced memory and increased computation speed.&lt;/li&gt;
-  &lt;li&gt;Ability to change the variance state to BFloat16.  This can reduce overall memory required for model training with additional speed improvements.&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;Find more information &lt;a href=&quot;https://github.com/pytorch/torchdistx/pull/52&quot;&gt;here&lt;/a&gt;.&lt;/p&gt;</content>
-
-      
-      
-      
-      
-      
-
-      <author>
-          <name>Team PyTorch</name>
-        
-        
-      </author>
-
-      
-
-      
-
-      
-        <summary type="html">Summary</summary>
       
 
       
