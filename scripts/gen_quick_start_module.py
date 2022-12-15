@@ -29,6 +29,7 @@ RELEASE = "release"
 DEFAULT = "default"
 ENABLE = "enable"
 DISABLE = "disable"
+MACOS = "macos"
 
 # Mapping json to release matrix default values
 acc_arch_ver_default = {
@@ -56,6 +57,7 @@ LIBTORCH_DWNL_INSTR = {
         CXX11_ABI: "Download here (cxx11 ABI):",
         RELEASE: "Download here (Release version):",
         DEBUG: "Download here (Debug version):",
+        MACOS: "Download default libtorch here (ROCm and CUDA not supported):",
     }
 
 def load_json_from_basedir(filename: str):
@@ -137,6 +139,13 @@ def update_versions(versions, release_matrix, release_version):
                             if instr["versions"] is not None:
                                 for ver in [RELEASE, DEBUG]:
                                      instr["versions"][LIBTORCH_DWNL_INSTR[ver]] = rel_entry_dict[ver]
+                        elif os_key == OperatingSystem.MACOS.value:
+                            rel_entry_dict = {
+                                x["devtoolset"]: x["installation"] for x in pkg_arch_matrix
+                                if x["libtorch_variant"] == "shared-with-deps"
+                                }
+                            if instr["versions"] is not None:
+                                instr["versions"][LIBTORCH_DWNL_INSTR[MACOS]] = list(rel_entry_dict.values())[0]
 
 # This method is used for generating new quick-start-module.js
 # from the versions json object
