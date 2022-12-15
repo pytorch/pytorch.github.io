@@ -307,7 +307,7 @@ AnyPrecision enables pure BF16 training by maintaining an extra buffer that trac
  
 As a comparison of the throughput gains available with pure BF16 training using AnyPrecision, we ran experiments using FSDP with the T5 11B model with regular FP32 training, Mixed Precision training with BF16, and pure BF16 training using the AnyPrecision optimizer on 3 nodes with A100 gpus as mentioned previously. 
 
-<p>
+<p style="text-align:center">
 <img src="/assets/images/largeblog_index_11.png" width="70%">
 </p>
 
@@ -319,7 +319,7 @@ AnyPrecision optimizer is available for you to test with [here](https://github.c
 
 **Activation checkpointing - _increasing throughput by trading compute for memory_**
 
-<p>
+<p style="text-align:center">
 <img src="/assets/images/largeblog_index_12.png" width="70%">
 </p>
 
@@ -374,7 +374,7 @@ Here, we’ll focus specifically on AWS parallel cluster and provide an overview
 
 <p>AWS ParallelCluster is an open source, cluster management tool that makes it easy for you to deploy and manage High Performance Computing (HPC) clusters on AWS.  AWS ParallelCluster uses yaml configuration files to provision all the necessary resources. It also supports multiple instance types, job submission queues, shared file systems like <a href="https://aws.amazon.com/efs/?trk=3c5ce89c-8865-47a3-bec3-f6820351aa6d&sc_channel=ps&sc_campaign=acquisition&sc_medium=ACQ-P|PS-GO|Non-Brand|Desktop|SU|Storage|Solution|US|EN|DSA&ef_id=Cj0KCQjwuaiXBhCCARIsAKZLt3l6dtldpE152xuxTMa3mbUbaqtTXwsBdfDRIzCL8cw3NO5DO_y1vOgaAj1pEALw_wcB:G:s&s_kwcid=AL!4422!3!579408162404!!!g!!">Amazon EFS</a> (NFS) or <a href="https://aws.amazon.com/fsx/lustre/?refid=3c5ce89c-8865-47a3-bec3-f6820351aa6d" target="_blank">Amazon FSx for Lustre</a>, and job schedulers like AWS Batch and Slurm.</p>
 
-<p>
+<p style="text-align:center">
 <img src="/assets/images/largeblog_index_13.png" width="70%">
 </p>
 
