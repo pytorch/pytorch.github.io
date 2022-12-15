@@ -57,7 +57,7 @@ LIBTORCH_DWNL_INSTR = {
         CXX11_ABI: "Download here (cxx11 ABI):",
         RELEASE: "Download here (Release version):",
         DEBUG: "Download here (Debug version):",
-        MACOS: "Download default libtorch here (ROCm and CUDA not supported):",
+        MACOS: "Download default libtorch here (ROCm and CUDA are not supported):",
     }
 
 def load_json_from_basedir(filename: str):
