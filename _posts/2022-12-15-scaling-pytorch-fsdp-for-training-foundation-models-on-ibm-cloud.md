@@ -75,7 +75,7 @@ This blog was possible because of contributions from both PyTorch Distributed an
 
 From the PyTorch Distributed team, we would like to thank Less Wright, Hamid Shojanazeri, Geeta Chauhan, Shen Li, Rohan Varma, Yanli Zhao, Andrew Gu, Anjali Sridhar, Chien-Chin Huang, and Bernard Nguyen.
 
-From the IBM Research team, we would like to thank Linsong Chu, Sophia Wen, Lixiang (Eric) Luo, Marquita Ellis, Davis Wertheimer, Supriyo Chakraborty, Raghu Ganti, Mudhakar Srivatsa, Seetharami Seelam, Carlos Costa, Abhishek Malvankar, Diana Arroyo, Alaa Youssef, Nick Mitchell
+From the IBM Research team, we would like to thank Linsong Chu, Sophia Wen, Lixiang (Eric) Luo, Marquita Ellis, Davis Wertheimer, Supriyo Chakraborty, Raghu Ganti, Mudhakar Srivatsa, Seetharami Seelam, Carlos Costa, Abhishek Malvankar, Diana Arroyo, Alaa Youssef, Nick Mitchell.
 
 ## Appendix
 
