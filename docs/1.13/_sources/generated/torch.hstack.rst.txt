@@ -1,0 +1,6 @@
+﻿torch.hstack
+============
+
+.. currentmodule:: torch
+
+.. autofunction:: hstack

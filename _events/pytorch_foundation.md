@@ -1,10 +1,10 @@
 ---
 category: event
 title: 'Webinar: PyTorch, a Foundation for Open Source AI/ML'
-date: September 15, 2022
-header-image: assets/images/WebinarPytorchEvent.png
+date: September 28, 2022
+header-image: assets/images/Event-Webinar-PyTorch-a-foundation-for-open-source.png
 ---
-**Date:** Thursday, September 15, 2022 at 8am PT
+**Date:** Thursday, September 28, 2022 at 7:30am PT
 
 Join us for a conversation between Soumith Chintala and Ibrahim Haddad about the creation of PyTorch Foundation. Over 150,000 developers and 18,000 organizations work with PyTorch today. In this conversation you will learn about: 
 
@@ -14,4 +14,4 @@ Join us for a conversation between Soumith Chintala and Ibrahim Haddad about the
 
 - Next steps for the project under the PyTorch Foundation
 
-[Register here](https://zoom.platform.linuxfoundation.org/webinar/register?project=tlf&id=UVsH4MuQzlvL5PdgwB5ovyqwPO2ApfMUiHLxbA0tHAeLZ9H4NQCB9B36fzLGwVUlZZRbVicX38avt1%2BgRyk%3D&logo=thelinuxfoundation-color.svg&zoomID=98644189429)
+[Register here](https://www.linuxfoundation.org/webinars/pytorch-a-foundation-for-open-source-ai-ml?hsLang=en)
