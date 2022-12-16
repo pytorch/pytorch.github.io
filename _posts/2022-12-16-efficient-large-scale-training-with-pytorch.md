@@ -2,7 +2,7 @@
 layout: blog_detail
 title: "Efficient Large-Scale Training with Pytorch FSDP and AWS"
 author: Less Wright, Hamid Shojanazeri, Geeta Chauhan
-featured-img: ""
+featured-img: "assets/images/largeblog_index_1.png"
 ---
 
 Cutting-edge AI models are becoming extremely large. The cost and overhead of training these models is increasing rapidly, and involves large amounts of engineering and guesswork to find the right training regime. FSDP reduces these costs significantly by enabling you to train much larger models with the same amount of resources. FSDP lowers the memory footprint on your GPUs, and is usable via a lightweight configuration that requires substantially less effort, typically with just a few lines of code.
