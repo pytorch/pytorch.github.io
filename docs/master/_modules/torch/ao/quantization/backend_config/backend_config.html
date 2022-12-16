@@ -235,7 +235,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href='https://pytorch.org/docs/versions.html'>master (1.14.0a0+git4648baa ) &#x25BC</a>
+      <a href='https://pytorch.org/docs/versions.html'>master (2.0.0a0+gitd19791e ) &#x25BC</a>
     </div>
     
 
@@ -307,6 +307,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../../../../../dynamo/deep-dive.html">TorchDynamo Deeper Dive</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../../dynamo/troubleshooting.html">TorchDynamo Troubleshooting</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../../dynamo/faq.html">Frequently Asked Questions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../ir.html">IRs</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Language Bindings</span></p>
 <ul>
@@ -492,6 +493,7 @@
 
 <span class="c1"># BackendPatternConfig dict keys</span>
 <span class="n">PATTERN_DICT_KEY</span> <span class="o">=</span> <span class="s2">&quot;pattern&quot;</span>
+<span class="n">PATTERN_COMPLEX_FORMAT_DICT_KEY</span> <span class="o">=</span> <span class="s2">&quot;pattern_complex_format&quot;</span>
 <span class="n">OBSERVATION_TYPE_DICT_KEY</span> <span class="o">=</span> <span class="s2">&quot;observation_type&quot;</span>
 <span class="n">DTYPE_CONFIGS_DICT_KEY</span> <span class="o">=</span> <span class="s2">&quot;dtype_configs&quot;</span>
 <span class="n">ROOT_MODULE_DICT_KEY</span> <span class="o">=</span> <span class="s2">&quot;root_module&quot;</span>
@@ -704,7 +706,7 @@
 <span class="sd">            weight_dtype=torch.qint8,</span>
 <span class="sd">            bias_dtype=torch.float)</span>
 
-<span class="sd">        def fuse_conv2d_relu(is_qat, relu, conv):</span>
+<span class="sd">        def fuse_conv2d_relu(is_qat, conv, relu):</span>
 <span class="sd">            return torch.ao.nn.intrinsic.ConvReLU2d(conv, relu)</span>
 
 <span class="sd">        # For quantizing Linear</span>
@@ -716,7 +718,7 @@
 <span class="sd">            .set_reference_quantized_module(torch.ao.nn.quantized.reference.Linear)</span>
 
 <span class="sd">        # For fusing Conv2d + ReLU into ConvReLU2d</span>
-<span class="sd">        conv_relu_config = BackendPatternConfig((torch.nn.ReLU, torch.nn.Conv2d)) \</span>
+<span class="sd">        conv_relu_config = BackendPatternConfig((torch.nn.Conv2d, torch.nn.ReLU)) \</span>
 <span class="sd">            .set_observation_type(ObservationType.OUTPUT_USE_DIFFERENT_OBSERVER_AS_INPUT) \</span>
 <span class="sd">            .add_dtype_config(weighted_int8_dtype_config) \</span>
 <span class="sd">            .set_fused_module(torch.ao.nn.intrinsic.ConvReLU2d) \</span>
@@ -738,7 +740,11 @@
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="n">name</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">configs</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="n">Pattern</span><span class="p">,</span> <span class="n">BackendPatternConfig</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="c1"># Store all BackendPatternConfigs in a map to handle duplicates</span>
+        <span class="c1"># Note: the key in this map uses the complex reversed tuple format.</span>
+        <span class="c1"># This is intended only for internal use; users who wish to access</span>
+        <span class="c1"># the original patterns should go through `self.configs` instead.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_pattern_complex_format_to_config</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="n">Pattern</span><span class="p">,</span> <span class="n">BackendPatternConfig</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
 
 <div class="viewcode-block" id="BackendConfig.set_name"><a class="viewcode-back" href="../../../../../generated/torch.ao.quantization.backend_config.BackendConfig.html#torch.ao.quantization.backend_config.BackendConfig.set_name">[docs]</a>    <span class="k">def</span> <span class="nf">set_name</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">BackendConfig</span><span class="p">:</span>
         <span class="sd">&quot;&quot;&quot;</span>
@@ -752,7 +758,10 @@
 <span class="sd">        Set the config for an pattern that can be run on the target backend.</span>
 <span class="sd">        This overrides any existing config for the given pattern.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">configs</span><span class="p">[</span><span class="n">config</span><span class="o">.</span><span class="n">pattern</span><span class="p">]</span> <span class="o">=</span> <span class="n">config</span>
+        <span class="c1"># Avoid circular dependencies</span>
+        <span class="n">pattern_complex_format</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">ao</span><span class="o">.</span><span class="n">quantization</span><span class="o">.</span><span class="n">backend_config</span><span class="o">.</span><span class="n">utils</span> \
+            <span class="o">.</span><span class="n">_get_pattern_in_reversed_nested_tuple_format</span><span class="p">(</span><span class="n">config</span><span class="p">)</span>  <span class="c1"># type: ignore[attr-defined]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_pattern_complex_format_to_config</span><span class="p">[</span><span class="n">pattern_complex_format</span><span class="p">]</span> <span class="o">=</span> <span class="n">config</span>
         <span class="k">return</span> <span class="bp">self</span></div>
 
 <div class="viewcode-block" id="BackendConfig.set_backend_pattern_configs"><a class="viewcode-back" href="../../../../../generated/torch.ao.quantization.backend_config.BackendConfig.html#torch.ao.quantization.backend_config.BackendConfig.set_backend_pattern_configs">[docs]</a>    <span class="k">def</span> <span class="nf">set_backend_pattern_configs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">configs</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">BackendPatternConfig</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">BackendConfig</span><span class="p">:</span>
@@ -763,6 +772,13 @@
         <span class="k">for</span> <span class="n">conf</span> <span class="ow">in</span> <span class="n">configs</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">set_backend_pattern_config</span><span class="p">(</span><span class="n">conf</span><span class="p">)</span>
         <span class="k">return</span> <span class="bp">self</span></div>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">configs</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">BackendPatternConfig</span><span class="p">]:</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Return a copy of the list of configs set in this `BackendConfig`.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_pattern_complex_format_to_config</span><span class="o">.</span><span class="n">values</span><span class="p">())</span>
 
 <div class="viewcode-block" id="BackendConfig.from_dict"><a class="viewcode-back" href="../../../../../generated/torch.ao.quantization.backend_config.BackendConfig.html#torch.ao.quantization.backend_config.BackendConfig.from_dict">[docs]</a>    <span class="nd">@classmethod</span>
     <span class="k">def</span> <span class="nf">from_dict</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">backend_config_dict</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">BackendConfig</span><span class="p">:</span>
@@ -791,7 +807,7 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="p">{</span>
             <span class="n">NAME_DICT_KEY</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
-            <span class="n">CONFIGS_DICT_KEY</span><span class="p">:</span> <span class="p">[</span><span class="n">c</span><span class="o">.</span><span class="n">to_dict</span><span class="p">()</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">configs</span><span class="o">.</span><span class="n">values</span><span class="p">()],</span>
+            <span class="n">CONFIGS_DICT_KEY</span><span class="p">:</span> <span class="p">[</span><span class="n">c</span><span class="o">.</span><span class="n">to_dict</span><span class="p">()</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">configs</span><span class="p">],</span>
         <span class="p">}</span></div></div>
 
 
@@ -801,8 +817,8 @@
 <span class="sd">    For a detailed example usage, see :class:`~torch.ao.quantization.backend_config.BackendConfig`.</span>
 
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">pattern</span><span class="p">:</span> <span class="n">Pattern</span><span class="p">):</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">pattern</span> <span class="o">=</span> <span class="n">pattern</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">pattern</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Pattern</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">pattern</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Pattern</span><span class="p">]</span> <span class="o">=</span> <span class="n">pattern</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">observation_type</span> <span class="o">=</span> <span class="n">ObservationType</span><span class="o">.</span><span class="n">OUTPUT_USE_DIFFERENT_OBSERVER_AS_INPUT</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">dtype_configs</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">DTypeConfig</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">root_module</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Type</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span>
@@ -817,6 +833,20 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_num_tensor_args_to_observation_type</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">ObservationType</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_input_type_to_index</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_input_output_observed</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">bool</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_pattern_complex_format</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Pattern</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+
+<div class="viewcode-block" id="BackendPatternConfig.set_pattern"><a class="viewcode-back" href="../../../../../generated/torch.ao.quantization.backend_config.BackendPatternConfig.html#torch.ao.quantization.backend_config.BackendPatternConfig.set_pattern">[docs]</a>    <span class="k">def</span> <span class="nf">set_pattern</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">pattern</span><span class="p">:</span> <span class="n">Pattern</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">BackendPatternConfig</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Set the pattern to configure.</span>
+
+<span class="sd">        The pattern can be a float module, functional operator, pytorch operator, or a tuple</span>
+<span class="sd">        combination of the above. Tuple patterns are treated as sequential patterns, and</span>
+<span class="sd">        currently only tuples of 2 or 3 elements are supported.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pattern_complex_format</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Only one of &#39;pattern&#39; or &#39;pattern_complex_format&#39; can be set&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">pattern</span> <span class="o">=</span> <span class="n">pattern</span>
+        <span class="k">return</span> <span class="bp">self</span></div>
 
 <div class="viewcode-block" id="BackendPatternConfig.set_observation_type"><a class="viewcode-back" href="../../../../../generated/torch.ao.quantization.backend_config.BackendPatternConfig.html#torch.ao.quantization.backend_config.BackendPatternConfig.set_observation_type">[docs]</a>    <span class="k">def</span> <span class="nf">set_observation_type</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">observation_type</span><span class="p">:</span> <span class="n">ObservationType</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">BackendPatternConfig</span><span class="p">:</span>
         <span class="sd">&quot;&quot;&quot;</span>
@@ -884,9 +914,13 @@
 <span class="sd">        Set the function that specifies how to fuse the pattern for this pattern.</span>
 
 <span class="sd">        The first argument of this function should be `is_qat`, and the rest of the arguments</span>
-<span class="sd">        should be the items in the tuple pattern, e.g. (`torch.nn.ReLU`, `torch.nn.Linear`)</span>
-<span class="sd">        will have a function with three arguments, `is_qat`, `relu`, and `linear`.</span>
-<span class="sd">        The return value of this function should be the resulting fused module.</span>
+<span class="sd">        should be the items in the tuple pattern. The return value of this function should be</span>
+<span class="sd">        the resulting fused module.</span>
+
+<span class="sd">        For example, the fuser method for the pattern `(torch.nn.Linear, torch.nn.ReLU)` can be:</span>
+
+<span class="sd">            def fuse_linear_relu(is_qat, linear, relu):</span>
+<span class="sd">                return torch.ao.nn.intrinsic.LinearReLU(linear, relu)</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">fuser_method</span> <span class="o">=</span> <span class="n">fuser_method</span>
         <span class="k">return</span> <span class="bp">self</span></div>
@@ -912,6 +946,18 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_input_output_observed</span> <span class="o">=</span> <span class="n">input_output_observed</span>
         <span class="k">return</span> <span class="bp">self</span>
 
+    <span class="k">def</span> <span class="nf">_set_pattern_complex_format</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">pattern</span><span class="p">:</span> <span class="n">Pattern</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">BackendPatternConfig</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Set the pattern to configure, using the reversed nested tuple format.</span>
+
+<span class="sd">        See the BackendConfig README for more detail:</span>
+<span class="sd">        https://github.com/pytorch/pytorch/blob/master/torch/ao/quantization/backend_config/README.md#advanced-pattern-specification</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">pattern</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Only one of &#39;pattern&#39; or &#39;pattern_complex_format&#39; can be set&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_pattern_complex_format</span> <span class="o">=</span> <span class="n">pattern</span>
+        <span class="k">return</span> <span class="bp">self</span>
+
 <div class="viewcode-block" id="BackendPatternConfig.from_dict"><a class="viewcode-back" href="../../../../../generated/torch.ao.quantization.backend_config.BackendPatternConfig.html#torch.ao.quantization.backend_config.BackendPatternConfig.from_dict">[docs]</a>    <span class="nd">@classmethod</span>
     <span class="k">def</span> <span class="nf">from_dict</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">backend_pattern_config_dict</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">BackendPatternConfig</span><span class="p">:</span>
         <span class="sd">&quot;&quot;&quot;</span>
@@ -927,6 +973,7 @@
 <span class="sd">            implementation for this pattern&#39;s root module.</span>
 <span class="sd">            &quot;fused_module&quot;: a :class:`torch.nn.Module` that represents the fused implementation for this pattern</span>
 <span class="sd">            &quot;fuser_method&quot;: a function that specifies how to fuse the pattern for this pattern</span>
+<span class="sd">            &quot;pattern_complex_format&quot;: the pattern specified in the reversed nested tuple format (deprecated)</span>
 
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">def</span> <span class="nf">_get_dtype_config</span><span class="p">(</span><span class="n">obj</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DTypeConfig</span><span class="p">:</span>
@@ -940,9 +987,9 @@
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Expected a list of DTypeConfigs in backend_pattern_config_dict[</span><span class="se">\&quot;</span><span class="si">%s</span><span class="se">\&quot;</span><span class="s2">], got &#39;</span><span class="si">%s</span><span class="s2">&#39;&quot;</span> <span class="o">%</span>
                              <span class="p">(</span><span class="n">DTYPE_CONFIGS_DICT_KEY</span><span class="p">,</span> <span class="nb">type</span><span class="p">(</span><span class="n">obj</span><span class="p">)))</span>
 
-        <span class="k">if</span> <span class="n">PATTERN_DICT_KEY</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">backend_pattern_config_dict</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;backend_pattern_config_dict must contain &#39;</span><span class="si">%s</span><span class="s2">&#39;&quot;</span> <span class="o">%</span> <span class="n">PATTERN_DICT_KEY</span><span class="p">)</span>
-        <span class="n">conf</span> <span class="o">=</span> <span class="bp">cls</span><span class="p">(</span><span class="n">backend_pattern_config_dict</span><span class="p">[</span><span class="n">PATTERN_DICT_KEY</span><span class="p">])</span>
+        <span class="n">conf</span> <span class="o">=</span> <span class="bp">cls</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">PATTERN_DICT_KEY</span> <span class="ow">in</span> <span class="n">backend_pattern_config_dict</span><span class="p">:</span>
+            <span class="n">conf</span><span class="o">.</span><span class="n">set_pattern</span><span class="p">(</span><span class="n">backend_pattern_config_dict</span><span class="p">[</span><span class="n">PATTERN_DICT_KEY</span><span class="p">])</span>
         <span class="k">if</span> <span class="n">OBSERVATION_TYPE_DICT_KEY</span> <span class="ow">in</span> <span class="n">backend_pattern_config_dict</span><span class="p">:</span>
             <span class="n">conf</span><span class="o">.</span><span class="n">set_observation_type</span><span class="p">(</span><span class="n">backend_pattern_config_dict</span><span class="p">[</span><span class="n">OBSERVATION_TYPE_DICT_KEY</span><span class="p">])</span>
         <span class="k">for</span> <span class="n">d</span> <span class="ow">in</span> <span class="n">backend_pattern_config_dict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">DTYPE_CONFIGS_DICT_KEY</span><span class="p">,</span> <span class="p">[]):</span>
@@ -958,6 +1005,8 @@
             <span class="n">backend_pattern_config_dict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">NUM_TENSOR_ARGS_TO_OBSERVATION_TYPE_DICT_KEY</span><span class="p">,</span> <span class="p">{}))</span>
         <span class="n">conf</span><span class="o">.</span><span class="n">_set_input_type_to_index</span><span class="p">(</span><span class="n">backend_pattern_config_dict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">INPUT_TYPE_TO_INDEX_DICT_KEY</span><span class="p">,</span> <span class="p">{}))</span>
         <span class="n">conf</span><span class="o">.</span><span class="n">_set_input_output_observed</span><span class="p">(</span><span class="n">backend_pattern_config_dict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">INPUT_OUTPUT_OBSERVED_DICT_KEY</span><span class="p">,</span> <span class="kc">None</span><span class="p">))</span>
+        <span class="k">if</span> <span class="n">PATTERN_COMPLEX_FORMAT_DICT_KEY</span> <span class="ow">in</span> <span class="n">backend_pattern_config_dict</span><span class="p">:</span>
+            <span class="n">conf</span><span class="o">.</span><span class="n">_set_pattern_complex_format</span><span class="p">(</span><span class="n">backend_pattern_config_dict</span><span class="p">[</span><span class="n">PATTERN_COMPLEX_FORMAT_DICT_KEY</span><span class="p">])</span>
         <span class="k">return</span> <span class="n">conf</span></div>
 
 <div class="viewcode-block" id="BackendPatternConfig.to_dict"><a class="viewcode-back" href="../../../../../generated/torch.ao.quantization.backend_config.BackendPatternConfig.html#torch.ao.quantization.backend_config.BackendPatternConfig.to_dict">[docs]</a>    <span class="k">def</span> <span class="nf">to_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
@@ -966,10 +1015,11 @@
 <span class="sd">        :func:`~torch.ao.quantization.backend_config.BackendPatternConfig.from_dict`.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">backend_pattern_config_dict</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
-            <span class="n">PATTERN_DICT_KEY</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">pattern</span><span class="p">,</span>
             <span class="n">OBSERVATION_TYPE_DICT_KEY</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">observation_type</span><span class="p">,</span>
             <span class="n">DTYPE_CONFIGS_DICT_KEY</span><span class="p">:</span> <span class="p">[</span><span class="n">c</span><span class="o">.</span><span class="n">to_dict</span><span class="p">()</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">dtype_configs</span><span class="p">],</span>
         <span class="p">}</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">pattern</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">backend_pattern_config_dict</span><span class="p">[</span><span class="n">PATTERN_DICT_KEY</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">pattern</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">root_module</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">backend_pattern_config_dict</span><span class="p">[</span><span class="n">ROOT_MODULE_DICT_KEY</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">root_module</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">qat_module</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
@@ -990,6 +1040,8 @@
             <span class="n">backend_pattern_config_dict</span><span class="p">[</span><span class="n">INPUT_TYPE_TO_INDEX_DICT_KEY</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_input_type_to_index</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_input_output_observed</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">backend_pattern_config_dict</span><span class="p">[</span><span class="n">INPUT_OUTPUT_OBSERVED_DICT_KEY</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_input_output_observed</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pattern_complex_format</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">backend_pattern_config_dict</span><span class="p">[</span><span class="n">PATTERN_COMPLEX_FORMAT_DICT_KEY</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pattern_complex_format</span>
         <span class="k">return</span> <span class="n">backend_pattern_config_dict</span></div></div>
 </pre></div>
 

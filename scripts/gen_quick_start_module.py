@@ -29,12 +29,10 @@ RELEASE = "release"
 DEFAULT = "default"
 ENABLE = "enable"
 DISABLE = "disable"
+MACOS = "macos"
 
-# Mapping json to release matrix is here for now
-# TBD drive the mapping via:
-#  1. Scanning release matrix and picking 2 latest cuda versions and 1 latest rocm
-#  2. Possibility to override the scanning algorithm with arguments passed from workflow
-acc_arch_ver_map = {
+# Mapping json to release matrix default values
+acc_arch_ver_default = {
     "nightly": {
         "accnone": ("cpu", ""),
         "cuda.x": ("cuda", "11.6"),
@@ -49,11 +47,17 @@ acc_arch_ver_map = {
         }
     }
 
+# Initialize arch version to default values
+# these default values will be overwritten by
+# extracted values from the release marix
+acc_arch_ver_map = acc_arch_ver_default
+
 LIBTORCH_DWNL_INSTR = {
         PRE_CXX11_ABI: "Download here (Pre-cxx11 ABI):",
         CXX11_ABI: "Download here (cxx11 ABI):",
         RELEASE: "Download here (Release version):",
         DEBUG: "Download here (Debug version):",
+        MACOS: "Download default libtorch here (ROCm and CUDA are not supported):",
     }
 
 def load_json_from_basedir(filename: str):
@@ -135,6 +139,13 @@ def update_versions(versions, release_matrix, release_version):
                             if instr["versions"] is not None:
                                 for ver in [RELEASE, DEBUG]:
                                      instr["versions"][LIBTORCH_DWNL_INSTR[ver]] = rel_entry_dict[ver]
+                        elif os_key == OperatingSystem.MACOS.value:
+                            rel_entry_dict = {
+                                x["devtoolset"]: x["installation"] for x in pkg_arch_matrix
+                                if x["libtorch_variant"] == "shared-with-deps"
+                                }
+                            if instr["versions"] is not None:
+                                instr["versions"][LIBTORCH_DWNL_INSTR[MACOS]] = list(rel_entry_dict.values())[0]
 
 # This method is used for generating new quick-start-module.js
 # from the versions json object
@@ -163,6 +174,26 @@ def gen_install_matrix(versions) -> Dict[str, str]:
                     result[key] = "<br />".join(lines)
     return result
 
+# This method is used for extracting two latest verisons of cuda and
+# last verion of rocm. It will modify the acc_arch_ver_map object used
+# to update getting started page.
+def extract_arch_ver_map(release_matrix):
+    def gen_ver_list(chan, gpu_arch_type):
+        return {
+            x["desired_cuda"]: x["gpu_arch_version"]
+            for x in release_matrix[chan]["linux"]
+            if x["gpu_arch_type"] == gpu_arch_type
+        }
+
+    for chan in ("nightly", "release"):
+        cuda_ver_list = gen_ver_list(chan, "cuda")
+        rocm_ver_list = gen_ver_list(chan, "rocm")
+        cuda_list = sorted(cuda_ver_list.values())[-2:]
+        acc_arch_ver_map[chan]["rocm5.x"] = ("rocm", max(rocm_ver_list.values()))
+        for cuda_ver, label in zip(cuda_list, ["cuda.x", "cuda.y"]):
+            acc_arch_ver_map[chan][label] = ("cuda", cuda_ver)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--autogenerate', dest='autogenerate', action='store_true')
@@ -178,6 +209,7 @@ def main():
             for osys in OperatingSystem:
                 release_matrix[val][osys.value] = read_matrix_for_os(osys, val)
 
+        extract_arch_ver_map(release_matrix)
         for val in ("nightly", "release"):
             update_versions(versions, release_matrix[val], val)
 
