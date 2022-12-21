@@ -22,10 +22,8 @@ Meta AI researchers are working to overcome this challenge so that AI systems wi
 
 <p>
 <img src="/assets/images/Tuning-flow-chart.png" width="90%">
+<center><i>Fig1. Overall flow of Torchserve performance tuning</i> </center>
 </p>
-
-_Fig1. Overall flow of Torchserve performance tuning_
-
 
 Once you have trained your model, it needs to be integrated into a larger system to have a full-fledged application, we use the term “model serving” to refer to this integration. Basically model serving is making your trained model available to run inferences and subsequent use of the model. 
 
