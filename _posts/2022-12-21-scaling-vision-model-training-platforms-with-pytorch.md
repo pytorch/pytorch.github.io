@@ -138,7 +138,7 @@ We have demonstrated the use of PyTorch with FairScale’s FullyShardedDataParal
 
 [1] [Masked Autoencoders Are Scalable Vision Learners](https://arxiv.org/abs/2111.06377)
 
-[2] [Revisiting Weakly Supervised Pre-Training of Visual Perception Models](https://l.workplace.com/l.php?u=https%3A%2F%2Farxiv.org%2Fabs%2F2201.08371&h=AT2DDe6JH5qy52QK0IowTnRags2RT2ndcwkYv6MwZmCtatcYt-9gU4v3C2RP6eXqoI5s18fsezSgpZRoHw0EdpaUKKwMaYr2ToD4HfJg1X-rInJFEdEvuhRplNzhTDUwmKNX92nFsGY8cq7xy9a88croCsg7MTVxDf_evQ)
+[2] [Revisiting Weakly Supervised Pre-Training of Visual Perception Models](https://arxiv.org/abs/2201.08371)
 
 [3] [An Image is Worth 16x16 Words: Transformers for Image Recognition at Scale](https://arxiv.org/abs/2010.11929v2)
 
