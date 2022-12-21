@@ -1,13 +1,13 @@
 ---
 layout: blog_detail
-title: "Torchserve Perfromance Tuning for Sketch Animator "
-author:  Hamid Shojanazeri,Geeta Chauhan,Mark Saroufim,Jesse Smith
+title: "Torchserve Performance Tuning, Animated Drawings Case-Study"
+author:  Hamid Shojanazeri, Geeta Chauhan, Mark Saroufim, Jesse Smith
 featured-img: "assets/images/sketch_animator.png"
 ---
 
 ## Serving models in production 
 
-In this post we discuss performance tuning of Torchserve for serving your models in production. One of the biggest challenges in the life cycle of a ML project is deploying models in production.  This requires a reliable serving solution along with solutions that address the MLOps needs. A robust serving solution needs to provide support for multi model serving, model versioning, metric logging, monitoring and scaling to serve the peak traffic. In this post, we will have an overview of Torchserve and how to tune its performance for production use-cases. We discuss the Animated Drawings app from Meta that can turn your human figure sketches to animations and how it could serve the peak traffic with Torchserve. The Animated Drawing’s workflow is below.
+In this post we discuss performance tuning of Torchserve for serving your models in production. One of the biggest challenges in the life cycle of a ML project is deploying models in production.  This requires a reliable serving solution along with solutions that address the MLOps needs. A robust serving solution needs to provide support for multi model serving, model versioning, metric logging, monitoring and scaling to serve the peak traffic. In this post, we will have an overview of Torchserve and how to tune its performance for production use-cases. We discuss the [Animated Drawings app](https://ai.facebook.com/blog/using-ai-to-bring-childrens-drawings-to-life/) from Meta that can turn your human figure sketches to animations and how it could serve the peak traffic with Torchserve. The Animated Drawing’s workflow is below.
 
 <p>
 <img src="/assets/images/sketch_animator.png" width="90%">
@@ -24,6 +24,8 @@ Meta AI researchers are working to overcome this challenge so that AI systems wi
 <img src="/assets/images/Tuning-flow-chart.png" width="90%">
 </p>
 
+_Fig1. Overall flow of Torchserve performance tuning_
+
 
 Once you have trained your model, it needs to be integrated into a larger system to have a full-fledged application, we use the term “model serving” to refer to this integration. Basically model serving is making your trained model available to run inferences and subsequent use of the model. 
 
@@ -31,7 +33,9 @@ Torchserve is the Pytorch preferred solution for serving models in production. I
 
 Torchserve supports multi model serving and versioning for AB test, dynamic batching, logging and metrics. It exposes four APIs for [inference](https://github.com/pytorch/serve/blob/master/docs/inference_api.md), [explanations](https://github.com/pytorch/serve/blob/master/docs/inference_api.md#explanations-api), [management](https://github.com/pytorch/serve/blob/master/docs/management_api.md) and [metrics](https://github.com/pytorch/serve/blob/master/docs/metrics_api.md). 
 
-[Inference](https://github.com/pytorch/serve/blob/master/docs/inference_api.md) API is listening on port 8080 and accessible through localhost by default, this can be configured in [Torchserve configuration](https://github.com/pytorch/serve/blob/master/docs/configuration.md) and enable getting predictions from the model. [Explanation](https://github.com/pytorch/serve/blob/master/docs/inference_api.md#explanations-api) API uses  Captum under the hood to provide explanations of the model that is being served and listens to the port 8080 as well.
+[Inference](https://github.com/pytorch/serve/blob/master/docs/inference_api.md) API is listening on port 8080 and accessible through localhost by default, this can be configured in [Torchserve configuration](https://github.com/pytorch/serve/blob/master/docs/configuration.md) and enable getting predictions from the model. 
+
+[Explanation](https://github.com/pytorch/serve/blob/master/docs/inference_api.md#explanations-api) API uses  Captum under the hood to provide explanations of the model that is being served and listens to the port 8080 as well.
 
 [Management](https://github.com/pytorch/serve/blob/master/docs/management_api.md#management-api) API allows to register or unregister and describe a model. It also enables users to  scale up or down the number of workers that serve the model. 
 
@@ -49,18 +53,17 @@ Other advanced settings such as the length of the queue for the received request
 3. [Package your model](https://github.com/pytorch/serve/tree/master/examples/Huggingface_Transformers#create-model-archive-eager-mode) artifacts (trained model checkpoint and all other necessary files for loading and running your model) and the handler into a “.mar” file using [Torcharchive](https://github.com/pytorch/serve#store-a-model) and place it in the model store.
 4. [Start serving your model](https://github.com/pytorch/serve#start-torchserve-to-serve-the-model).
 5. [Run inference](https://github.com/pytorch/serve#get-predictions-from-a-model).
-
 We will discuss model handlers and metrics in more detail here.
 
 ## Model handlers
 
-Torchserve uses a handler in the backend to load the models, preprocess the received data, run inference and post-process the response. Handler in torchserve is a python script that all the model initialization, preprocessing, inference and post processing logic goes into.
+Torchserve uses a handler in the backend to load the models, preprocess the received data, run inference and post-process the response. Handler in torchserve is a **python script** that all the model initialization, preprocessing, inference and post processing logic goes into.
 
 Torchserve provides an out of the box handler for a number of applications like image classification, segmentation, object detection and text classification. It also supports custom handlers, in case your use case is not supported in default handlers. 
 
 It provides a great flexibility in custom handlers, this potentially make Torchserve as **multi-framework** serving tool. Custom handlers let you define your custom logic to initialize a model that can be used also to load models from other frameworks such as ONNX.
 
-Torchserve **handler** is made of four main **functions**, **initialize**, **preprocess**, **inference** and **postprocess** that each return a list. The code snippet below shows an example of a custom handler.** Custom handlers inherit** from **BaseHandler** in Torchserve and can **overwrite** any of the **main** **functions**.  Here is an example of the handler used for loading the [Detectron2](https://github.com/facebookresearch/detectron2) model for figure detection, this model has been [exported to Torchscript](https://github.com/fairinternal/sketch_rig/blob/jesse/d2_mar_creation_files/torchserve_d2/a_weights_to_ts/export_model.py) and uses model.half() to run the inference with FP16, details are explained in another [section]() in this post.
+Torchserve **handler** is made of four main **functions**, **initialize**, **preprocess**, **inference** and **postprocess** that each return a list. The code snippet below shows an example of a custom handler.**Custom handlers inherit** from **BaseHandler** in Torchserve and can **overwrite** any of the **main** **functions**.  Here is an example of the handler used for loading the [Detectron2](https://github.com/facebookresearch/detectron2) model for figure detection, this model has been [exported to Torchscript](https://github.com/fairinternal/sketch_rig/blob/jesse/d2_mar_creation_files/torchserve_d2/a_weights_to_ts/export_model.py) and uses model.half() to run the inference with FP16, details are explained in another [section]() in this post.
 
 ```python
 
@@ -155,7 +158,7 @@ To get the best performance out of your model while serving it with Torchserve, 
 * **Deciding** the **hardware** for model deployment can be closely related to the latency and throughput budget and cost per inference. Depending on the size of model and application it can vary, for some models like computer vision models it has been historically not affordable to run in production on CPU.  However, by having optimizations such [IPEX](https://github.com/pytorch/serve/blob/c87bfec8916d340de5de5810b14a016049b0e395/examples/intel_extension_for_pytorch/README.md) as recently added to Torchserve this has been much more affordable and cost beneficial and you can learn more in this investigative [case study](https://pytorch.org/tutorials/intermediate/torchserve_with_ipex.html) 
 * **Workers** in Torchserve are Python processes that provide parallelism, setting the number of workers should be done carefully. By default Torchserve launch number of workers equal to VCPUs or available GPUs on the host, this can add a considerable amount of time to the Torchserve start. 
 
-    Torchserve exposes a [config property](https://github.com/pytorch/serve/blob/c87bfec8916d340de5de5810b14a016049b0e395/docs/configuration.md#config-model) to set the number of workers. To provide an **efficient parallelism** through **multiple workers** and avoiding them to compete over resources, as a baseline we **recommend** following setting on** **CPU and GPU:
+    Torchserve exposes a [config property](https://github.com/pytorch/serve/blob/c87bfec8916d340de5de5810b14a016049b0e395/docs/configuration.md#config-model) to set the number of workers. To provide an **efficient parallelism** through **multiple workers** and avoiding them to compete over resources, as a baseline we **recommend** following setting on CPU and GPU:
 
 
     **CPU** : In the handler,  `torch.set_num_threads(1) `then set the number of workers to `num physical cores / 2. `But the the best threading configurations can be achieved by leveraging the Intel CPU launcher script.
@@ -185,7 +188,7 @@ pip install -r requirements-ab.txt
 apt-get install apache2-utils
 ```
 
-To **get the “mar” file **for the Animated Drawings model follow the steps [here](https://github.com/fairinternal/sketch_rig/tree/jesse/d2_mar_creation_files/torchserve_d2). 
+To **get the “mar” file** for the Animated Drawings model follow the steps [here](https://github.com/fairinternal/sketch_rig/tree/jesse/d2_mar_creation_files/torchserve_d2). 
 
 Model level settings can be configured in a yaml file similar to 
 
@@ -215,16 +218,16 @@ Model_name:
 
 ```
 
-This yaml file will be referenced in the benchmark_config_template.yaml file that includes other settings for generating reports, this can optionally work with AWS cloud watch for logs as well.
+This yaml file will be referenced in the [benchmark_config_template](https://github.com/pytorch/serve/blob/master/benchmarks/benchmark_config_template.yaml#L12).yaml file that includes other settings for generating reports, this can optionally work with AWS cloud watch for logs as well.
 
 ```
 python benchmarks/auto_benchmark.py --input benchmark_config_template.yaml
 ```
 
-Running the **benchmarks**, results will be written in “csv” file that can be found in `"/tmp/benchmark/ab_report.csv"` and full report `“/tmp/ts_benchmark/report.md”`. It will include items such as Torchserve average latency, model P99 latency, throughput, number of **concurrency**, **model P99 **latency, **throughput**. We look at these numbers specifically in **combination** with** batch size**, the used **device, number of workers **and if any **model optimization** has been done. 
+Running the **benchmarks**, results will be written in “csv” file that can be found in “_ /tmp/benchmark/ab_report.csv_” and full report “/tmp/ts_benchmark/report.md".It will include items such as Torchserve average latency, model P99 latency, throughput, number of concurrency, number of requests, handler time, and some other metrics. Here we focus on some of the important ones that we track to tune the performance which are, **concurrency**, **model P99** latency, **throughput**. We look at these numbers specifically in **combination** with **batch size**, the used **device, number of workers** and if any **model optimization** has been done.
 
 
-The** latency SLA **for this model has been set to **100 ms, **this is real-time application and as we discussed earlier, latency is more of a concern and **throughput** ideally should be as high as possible while it does **not** **violate** the **latency SLA. **
+The **latency SLA** for this model has been set to **100 ms,** this is real-time application and as we discussed earlier, latency is more of a concern and **throughput** ideally should be as high as possible while it does **not violate** the **latency SLA.**
 
 Through searching the space, over different batch sizes (1-32), number of workers (1-16) and devices (CPU,GPU), we have run a set of experiments that summarized the best ones in the table below.
 
@@ -401,11 +404,9 @@ There could be other optimization done by Torchscripting the model and using  [o
 
 We found both on CPU and GPU , setting **number of workers=1 **worked the best in this case. 
 
-
-
-* Moving the model to GPU, using **number of workers = 1**, and **batch size = 1 **increased the **Throughput ~12x compared **to** CPU and latency ~13x.**
-* Moving the model to GPU, using **model.half()**, **number of workers = 1**, and **batch size = 8** yielded **best** results in terms of **Throughput** and tolerable latency. **Throughput **increased** ~25x compared **to** CPU with latency still meeting the SLA (94.4ms).**
-
+* Moving the model to GPU, using **number of workers = 1**, and **batch size = 1** increased the **Throughput ~12x compared** to **CPU and latency ~13x.**
+* Moving the model to GPU, using **model.half()**, **number of workers = 1**, and **batch size = 8** yielded **best** results in terms of **Throughput** and tolerable latency. **Throughput** increased **~25x compared** to **CPU with latency still meeting the SLA (94.4ms).**
+ 
 _Note: if you are running the benchmark suite, make sure you are setting a proper `batch_delay` and set the concurrency of the request to a number proportional to your batch size. Concurrency here means the number of concurrent requests being sent to the server._
 
 ## Conclusion
@@ -413,7 +414,6 @@ _Note: if you are running the benchmark suite, make sure you are setting a prope
 In this post, we have discussed the considerations and knobs that Torchserve expose to tune the performance in production. We have discussed the Torchserve benchmark suite as a means to tune the performance and get insights on possible choices for model optimizations, hardware choice and cost in general. We used Animated Drawings app which uses Detectron2’s Mask-RCNN model as a case-study to showcase the performance tuning with benchmark suite. 
 
 For more details on Performance tuning in Torchserve please refer to our documentation [here](https://github.com/pytorch/serve/blob/master/docs/performance_guide.md).
-
 Also feel free to open a ticket on [Torchserve repo](https://github.com/pytorch/serve/issues) for any further questions and feedback. 
 
 ### Acknowledgement
@@ -427,13 +427,24 @@ We would like to thank Somya Jain (Meta) Christopher Gustave (Meta) for their gr
         border: 1px solid black;
     }
     
-    article.pytorch-article table tr td:first-of-type{
+    /* article.pytorch-article table tr td:first-of-type{
         padding: 0.3125rem;
     }
 
     article.pytorch-article table td {
     padding: 0.3125rem;
+    } */
+
+   li a:focus, li a:hover, li a:active{
+    cursor: pointer;
+    text-decoration: underline;
     }
+
+    ol a:hover, ol a:active{
+    cursor: pointer;
+    text-decoration: underline;
+    }
+
 }
 
 </style>
