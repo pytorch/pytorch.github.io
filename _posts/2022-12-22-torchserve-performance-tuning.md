@@ -46,11 +46,11 @@ Other advanced settings such as the length of the queue for the received request
 
 **Steps to serve your model with Torchserve**
 
-1. [Install Torchserve, model archiver](https://github.com/pytorch/serve#install-torchserve-and-torch-model-archiver) and its requirements.
+1. [Install Torchserve, model archiver](https://github.com/pytorch/serve/blob/master/docs/getting_started.md#install-torchserve-and-torch-model-archiver) and its requirements.
 2. Choose a default handler that fits your task (e.g image classification, etc) or author a [custom handler](https://github.com/pytorch/serve/blob/master/docs/custom_service.md#custom-handlers).
-3. [Package your model](https://github.com/pytorch/serve/tree/master/examples/Huggingface_Transformers#create-model-archive-eager-mode) artifacts (trained model checkpoint and all other necessary files for loading and running your model) and the handler into a “.mar” file using [Torcharchive](https://github.com/pytorch/serve#store-a-model) and place it in the model store.
-4. [Start serving your model](https://github.com/pytorch/serve#start-torchserve-to-serve-the-model).
-5. [Run inference](https://github.com/pytorch/serve#get-predictions-from-a-model).
+3. [Package your model](https://github.com/pytorch/serve/tree/master/examples/Huggingface_Transformers#create-model-archive-eager-mode) artifacts (trained model checkpoint and all other necessary files for loading and running your model) and the handler into a “.mar” file using [Torcharchive](https://github.com/pytorch/serve/blob/master/model-archiver/README.md) and place it in the model store.
+4. [Start serving your model](https://github.com/pytorch/serve/blob/master/docs/getting_started.md).
+5. [Run inference](https://github.com/pytorch/serve/blob/master/docs/getting_started.md#get-predictions-from-a-model).
 We will discuss model handlers and metrics in more detail here.
 
 ## Model handlers
@@ -61,7 +61,7 @@ Torchserve provides an out of the box handler for a number of applications like 
 
 It provides a great flexibility in custom handlers, this potentially make Torchserve as **multi-framework** serving tool. Custom handlers let you define your custom logic to initialize a model that can be used also to load models from other frameworks such as ONNX.
 
-Torchserve **handler** is made of four main **functions**, **initialize**, **preprocess**, **inference** and **postprocess** that each return a list. The code snippet below shows an example of a custom handler.**Custom handlers inherit** from **BaseHandler** in Torchserve and can **overwrite** any of the **main** **functions**.  Here is an example of the handler used for loading the [Detectron2](https://github.com/facebookresearch/detectron2) model for figure detection, this model has been [exported to Torchscript](https://github.com/fairinternal/sketch_rig/blob/jesse/d2_mar_creation_files/torchserve_d2/a_weights_to_ts/export_model.py) and uses model.half() to run the inference with FP16, details are explained in another [section]() in this post.
+Torchserve **handler** is made of four main **functions**, **initialize**, **preprocess**, **inference** and **postprocess** that each return a list. The code snippet below shows an example of a custom handler.**Custom handlers inherit** from **BaseHandler** in Torchserve and can **overwrite** any of the **main** **functions**.  Here is an example of the handler used for loading the [Detectron2](https://github.com/facebookresearch/detectron2) model for figure detection, this model has been exported to Torchscript and uses model.half() to run the inference with FP16, details are explained in another [section]() in this post.
 
 ```python
 
@@ -416,7 +416,7 @@ Also feel free to open a ticket on [Torchserve repo](https://github.com/pytorch/
 
 ### Acknowledgement
 
-We would like to thank Somya Jain (Meta) Christopher Gustave (Meta) for their great support and guidance throughout many steps of this blog and providing insights to Sketch Animator workflow. Also, special thanks to[ Li Ning](https://www.linkedin.com/in/li-ning-7274604/) from AWS for the great efforts to make performance tuning much easier on Torchserve with automated benchmark suite.
+We would like to thank Somya Jain (Meta), Christopher Gustave (Meta) for their great support and guidance throughout many steps of this blog and providing insights to Sketch Animator workflow. Also, special thanks to[ Li Ning](https://www.linkedin.com/in/li-ning-7274604/) from AWS for the great efforts to make performance tuning much easier on Torchserve with automated benchmark suite.
 
 
 <style>
