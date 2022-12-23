@@ -222,7 +222,7 @@ This yaml file will be referenced in the [benchmark_config_template](https://git
 python benchmarks/auto_benchmark.py --input benchmark_config_template.yaml
 ```
 
-Running the **benchmarks**, results will be written in “csv” file that can be found in “_ /tmp/benchmark/ab_report.csv_” and full report “/tmp/ts_benchmark/report.md".It will include items such as Torchserve average latency, model P99 latency, throughput, number of concurrency, number of requests, handler time, and some other metrics. Here we focus on some of the important ones that we track to tune the performance which are, **concurrency**, **model P99** latency, **throughput**. We look at these numbers specifically in **combination** with **batch size**, the used **device, number of workers** and if any **model optimization** has been done.
+Running the **benchmarks**, results will be written in “csv” file that can be found in “_ /tmp/benchmark/ab_report.csv_” and full report “/tmp/ts_benchmark/report.md". It will include items such as Torchserve average latency, model P99 latency, throughput, number of concurrency, number of requests, handler time, and some other metrics. Here we focus on some of the important ones that we track to tune the performance which are, **concurrency**, **model P99** latency, **throughput**. We look at these numbers specifically in **combination** with **batch size**, the used **device, number of workers** and if any **model optimization** has been done.
 
 
 The **latency SLA** for this model has been set to **100 ms,** this is real-time application and as we discussed earlier, latency is more of a concern and **throughput** ideally should be as high as possible while it does **not violate** the **latency SLA.**
