@@ -73,14 +73,14 @@ class MyModelHandler(BaseHandler):
         serialized_file = self.manifest["model"]["serializedFile"]
         model_pt_path = os.path.join(model_dir, serialized_file)
 
-    self.device = torch.device(
+        self.device = torch.device(
         "cuda:" + str(properties.get("gpu_id"))
         if torch.cuda.is_available() and properties.get("gpu_id") is not None
         else "cpu"
         )
-    self.model = torch.jit.load(model_pt_path, map_location=self.device)
+        self.model = torch.jit.load(model_pt_path, map_location=self.device)
 
-    self.model = self.model.half()
+        self.model = self.model.half()
 
     def preprocess(self, data):
 
