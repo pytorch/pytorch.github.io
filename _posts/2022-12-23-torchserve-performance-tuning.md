@@ -66,53 +66,53 @@ Torchserve **handler** is made of four main **functions**, **initialize**, **pre
 ```python
 
 class MyModelHandler(BaseHandler):
-  def initialize(self, context):
-      self.manifest = ctx.manifest
-      properties = ctx.system_properties
-      model_dir = properties.get("model_dir")
-      serialized_file = self.manifest["model"]["serializedFile"]
-      model_pt_path = os.path.join(model_dir, serialized_file)
+    def initialize(self, context):
+        self.manifest = ctx.manifest
+        properties = ctx.system_properties
+        model_dir = properties.get("model_dir")
+        serialized_file = self.manifest["model"]["serializedFile"]
+        model_pt_path = os.path.join(model_dir, serialized_file)
 
-      self.device = torch.device(
-          "cuda:" + str(properties.get("gpu_id"))
-          if torch.cuda.is_available() and properties.get("gpu_id") is not None
-          else "cpu"
-      )
-       self.model = torch.jit.load(model_pt_path, map_location=self.device)
+    self.device = torch.device(
+        "cuda:" + str(properties.get("gpu_id"))
+        if torch.cuda.is_available() and properties.get("gpu_id") is not None
+        else "cpu"
+        )
+    self.model = torch.jit.load(model_pt_path, map_location=self.device)
 
-      self.model = self.model.half()
+    self.model = self.model.half()
 
-  def preprocess(self, data):
+    def preprocess(self, data):
 
-      inputs = []
-      for request in batch:
+        inputs = []
+        for request in batch:
 
-          request_body = request.get("body")
+            request_body = request.get("body")
 
-          input_ = io.BytesIO(request_body)
-          image = cv2.imdecode(np.fromstring(input_.read(), np.uint8), 1)
-          input = torch.Tensor(image).permute(2, 0, 1)
-          input = input.to(self.device)
-          input = input.half()
-          inputs.append({"image": input})
+            input_ = io.BytesIO(request_body)
+            image = cv2.imdecode(np.fromstring(input_.read(), np.uint8), 1)
+            input = torch.Tensor(image).permute(2, 0, 1)
+            input = input.to(self.device)
+            input = input.half()
+            inputs.append({"image": input})
 
-      return inputs
+        return inputs
 
-  def inference(self,inputs):
-      predictions = self.model(**inputs)
-      return predictions
+    def inference(self,inputs):
+        predictions = self.model(**inputs)
+        return predictions
 
-  def postprocess(self, output):
-      responses = []
-      for inference_output in inference_outputs:
-          responses_json = {
-           'classes': inference_output['pred_classes'].tolist(),
-           'scores': inference_output['scores'].tolist(),
+    def postprocess(self, output):
+        responses = []
+        for inference_output in inference_outputs:
+            responses_json = {
+            'classes': inference_output['pred_classes'].tolist(),
+            'scores': inference_output['scores'].tolist(),
             "boxes": inference_output['pred_boxes'].tolist()
             }
-          responses.append(json.dumps(responses_json))
+            responses.append(json.dumps(responses_json))
 
-      return responses
+        return responses
 ```
 
 ## Metrics
@@ -193,26 +193,26 @@ Model level settings can be configured in a yaml file similar to
 ```yaml
 
 Model_name:
-   eager_mode:
-       benchmark_engine: "ab"
-       url: "Path to .mar file"
-       workers:
-           - 1
-           - 4
-       batch_delay: 100
-       batch_size:
-           - 1
-           - 2
-           - 4
-           - 8
-       requests: 10000
-       concurrency: 10
-       input: "Path to model input"
-       backend_profiling: False
-       exec_env: "local"
-       processors:
-           - "cpu"
-           - "gpus": "all"
+    eager_mode:
+        benchmark_engine: "ab"
+        url: "Path to .mar file"
+        workers:
+            - 1
+            - 4
+        batch_delay: 100
+        batch_size:
+            - 1
+            - 2
+            - 4
+            - 8
+        requests: 10000
+        concurrency: 10
+        input: "Path to model input"
+        backend_profiling: False
+        exec_env: "local"
+        processors:
+            - "cpu"
+            - "gpus": "all"
 
 ```
 
