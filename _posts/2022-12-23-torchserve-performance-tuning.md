@@ -186,8 +186,6 @@ pip install -r requirements-ab.txt
 apt-get install apache2-utils
 ```
 
-To **get the “mar” file** for the Animated Drawings model follow the steps [here](https://github.com/fairinternal/sketch_rig/tree/jesse/d2_mar_creation_files/torchserve_d2). 
-
 Model level settings can be configured in a yaml file similar to 
 
 ```yaml
