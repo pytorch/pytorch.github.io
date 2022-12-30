@@ -104,7 +104,7 @@ CUDA graphs help eliminate the overhead from launching individual kernels from a
 torch.compile() supports many different backends but one that we’re particularly excited about is Inductor which generates Triton kernels [https://github.com/openai/triton](https://github.com/openai/triton) which are written in Python yet outperform the vast majority of handwritten CUDA kernels. Suppose our example above was called trig.py we can actually inspect the code generated triton kernels by running.
 
 ```
-TORCHINDUCTOR_TRACE=1 python trig.py
+TORCH_COMPILE_DEBUG=1 python trig.py
 ```
 
 ```python
