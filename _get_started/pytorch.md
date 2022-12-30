@@ -395,13 +395,13 @@ It’s rare to get both performance and convenience, but this is why the core te
 For GPU (newer generation GPUs will see drastically better performance)
 
 ```
-pip3 install numpy --pre torch --force-reinstall --extra-index-url https://download.pytorch.org/whl/nightly/cu117
+pip3 install numpy --pre torch --force-reinstall --index-url https://download.pytorch.org/whl/nightly/cu117
 ```
 
 For CPU
 
 ```
-pip3 install --pre torch --extra-index-url https://download.pytorch.org/whl/nightly/cpu
+pip3 install --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu
 ```
 
 Optional: Verify Installation
@@ -452,15 +452,15 @@ PyTorch 2.0 is what 1.14 would have been. We were releasing substantial new feat
 
     CUDA 11.7<br>
     ```
-    pip3 install numpy --pre torch torchvision torchaudio --force-reinstall --extra-index-url https://download.pytorch.org/whl/nightly/cu117
+    pip3 install numpy --pre torch torchvision torchaudio --force-reinstall --index-url https://download.pytorch.org/whl/nightly/cu117
     ```  
     CUDA 11.6  
     ```
-    pip3 install numpy --pre torch torchvision torchaudio --force-reinstall --extra-index-url https://download.pytorch.org/whl/nightly/cu116
+    pip3 install numpy --pre torch torchvision torchaudio --force-reinstall --index-url https://download.pytorch.org/whl/nightly/cu116
     ```  
     CPU  
     ```
-    pip3 install numpy --pre torch torchvision torchaudio --force-reinstall --extra-index-url https://download.pytorch.org/whl/nightly/cpu
+    pip3 install numpy --pre torch torchvision torchaudio --force-reinstall --index-url https://download.pytorch.org/whl/nightly/cpu
     ```  
 
 4. **Is 2.0 code backwards-compatible with 1.X?**  
