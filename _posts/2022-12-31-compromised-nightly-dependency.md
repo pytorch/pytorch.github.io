@@ -13,7 +13,7 @@ $ pip3 cache purge
 
 PyTorch-nightly Linux packages installed via pip during that time installed a dependency, torchtriton, which was compromised on the Python Package Index (PyPI) code repository and ran a malicious binary. This is what is known as a supply chain attack and directly affects dependencies for packages that are hosted on public package indices.
 
-**NOTE:** Users of the PyTorch **stable** packages **are not** affected by this issue.**
+**NOTE:** Users of the PyTorch **stable** packages **are not** affected by this issue.
 
 
 ## How to check if your Python environment is affected
