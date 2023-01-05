@@ -5,8 +5,6 @@ author:  Hamid Shojanazeri, Geeta Chauhan, Mark Saroufim, Jesse Smith
 featured-img: "assets/images/sketch_animator.png"
 ---
 
-## Serving models in production 
-
 In this post we discuss performance tuning of Torchserve for serving your models in production. One of the biggest challenges in the life cycle of a ML project is deploying models in production.  This requires a reliable serving solution along with solutions that address the MLOps needs. A robust serving solution needs to provide support for multi model serving, model versioning, metric logging, monitoring and scaling to serve the peak traffic. In this post, we will have an overview of Torchserve and how to tune its performance for production use-cases. We discuss the [Animated Drawings app](https://ai.facebook.com/blog/using-ai-to-bring-childrens-drawings-to-life/) from Meta that can turn your human figure sketches to animations and how it could serve the peak traffic with Torchserve. The Animated Drawing’s workflow is below.
 
 <p>
