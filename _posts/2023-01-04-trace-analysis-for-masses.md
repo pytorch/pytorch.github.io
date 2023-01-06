@@ -1,7 +1,7 @@
 ---
 layout: blog_detail
 title: "PyTorch Trace Analysis for the Masses"
-author:  The PyTorch Team
+author: Anupam Bhatnagar, Xizhou Feng,  Brian Coutinho, Yifan Liu, Sung-Han Lin and Louis Feng
 ---
 
 ## Introduction
@@ -12,7 +12,7 @@ ML researchers and systems engineers often struggle to computationally scale up 
 
 The initial HTA implementation was specifically targeted at Deep Learning Based Recommendation Models (DLRM). To make the features in HTA generic and applicable to use cases such as analyzing Vision and NLP models, we decided to refactor the HTA codebase and make the library available to the larger community. This new codebase has implemented several important ideas which lead to significant efficiency and performance improvements. 
 
-In this blog, we present several features implemented in this generic version of HTA, which can be used as a Python script as well as interactively in a Jupyter notebook. HTA provides the following features:
+In this blog, we present several features implemented in the open source version of HTA, which can be used as a Python script as well as interactively in a Jupyter notebook. HTA provides the following features:
 
 1. **Breakdown by Dimensions**
     1. **Temporal**: Breakdown of GPU time in terms of time spent in computation, communication, memory events, and idle time on a single node and across all ranks.
@@ -41,7 +41,7 @@ At a high level, we can break down the GPU operations in a model execution into 
 
 Because a modern GPU device like the NVIDIA A100 GPU is a massively parallel device which is capable of running multiple kernels simultaneously, it is possible to overlap the computation, communication, and memory kernels to reduce the model execution time. One common technique to achieve the overlap is to utilize multiple CUDA streams. A CUDA stream is a sequence of operations that execute on a GPU device in the order in which they are issued by the host code. Different CUDA streams can be interleaved and even run concurrently, thus achieving the effect of kernel overlap. 
 
-To help understand the above concepts, Figure 1 provides a timeline of the GPU kernels in a sample distributed training job on 8 GPUs for one iteration. In the figure, each rank represents one GPU and the kernels on each GPU run on 6 CUDA streams. In the right column of the figure, you can see names of the GPU kernels used. In the right column of the figure, you see the overlap between compute and communicate kernels. This figure is created using the [plot_timeline example notebook](https://github.com/facebookresearch/HolisticTraceAnalysis/blob/main/examples/plot_timeline.ipynb) available in HTA.
+To help understand the above concepts, Figure 1 provides a timeline of the GPU kernels in a sample distributed training job on 8 GPUs for one iteration. In the figure below, each rank represents one GPU and the kernels on each GPU run on 6 CUDA streams. In the right column of the figure, you can see names of the GPU kernels used. In the middle of the figure, you see the overlap between compute and communicate kernels. This figure is created using the [plot_timeline example notebook](https://github.com/facebookresearch/HolisticTraceAnalysis/blob/main/examples/plot_timeline.ipynb) available in HTA.
 
 ![Figure 1. An example of the execution timeline of GPU Kernels across multiple ranks](/assets/images/trace-image6.png){:width="100%"}
 
@@ -63,24 +63,24 @@ For most users, understanding the performance of GPU training jobs is nontrivial
 
 **Kernel Breakdown**: It is natural to ask which kernels are taking the most amount of time. The next feature breaks down the time spent within each kernel type (COMM, COMP, MEM) and sorts them by duration. We present this information for each kernel type and for each rank as a pie chart. See figure 3 below. 
 
-![Figure 4: Pie chart of top computation and communication kernels](/assets/images/trace-image1.png){:width="100%"}
+![Figure 3: Pie chart of top computation and communication kernels](/assets/images/trace-image1.png){:width="100%"}
 
-*Figure 4: Pie chart of top computation and communication kernels*
+*Figure 3: Pie chart of top computation and communication kernels*
 
 **Kernel Duration Distribution**: Subsequently, one can also ask - for any given kernel, what is the distribution of the time spent across the ranks? To answer this, HTA generates bar graphs for the average duration of a given kernel across all ranks. Additionally, the error bars in the bar graphs show the minimum and maximum amount of time taken by a given kernel on a given rank. Figure 4 below shows a discrepancy between average duration on rank 0 as compared to other ranks. This anomalous behavior on rank 0 guides the user on where to look for possible bugs.
 
-![Figure 5: Average duration of NCCL AllReduce Kernel across 8 ranks](/assets/images/trace-image4.png){:width="100%"}
+![Figure 4: Average duration of NCCL AllReduce Kernel across 8 ranks](/assets/images/trace-image4.png){:width="100%"}
 
-*Figure 5: Average duration of NCCL AllReduce Kernel across 8 ranks*
+*Figure 4: Average duration of NCCL AllReduce Kernel across 8 ranks*
 
 **Communication Computation Overlap**: In distributed training, a significant amount of time is spent in communication and synchronization events among multiple GPU devices. To achieve high GPU efficiency (i.e. TFLOPS/GPU) it is vital to keep the GPU doing actual computation work. In other words, a GPU should not be blocked because of waiting for data from other GPUs. One way to measure the extent to which computation is blocked by data dependencies is to calculate the computation-communication overlap. Higher GPU efficiency is observed if communication events overlap computation events. Lack of communication and computation overlap will lead to the GPU being idle, thus the efficiency would be low. Thus, the communication computation overlap feature calculates the percentage of time communication and computation overlap in a job for each rank and generates a bar graph representation. See figure below. More precisely, we measure the following ratio
 
 (time spent in computation while communicating) / (time spent in communication)
 
 
-![Figure: Communication computation overlap](/assets/images/trace-image5.png){:width="100%"}
+![Figure 5: Communication computation overlap](/assets/images/trace-image5.png){:width="100%"}
 
-*Figure: Communication computation overlap*
+*Figure 5: Communication computation overlap*
 
 **Augmented Counters (Queue length, Memory bandwidth)**: To aid in debugging, HTA calculates the memory bandwidth statistics for D2H, H2D and D2D memory copy (memcpy) and memory set (memset) events. Additionally, HTA also computes the number of outstanding CUDA operations on each CUDA stream. We refer to this as queue length. When the queue length on a stream is 1024 or larger new events cannot be scheduled on that stream and the CPU will stall until the GPU events have processed. Additionally, HTA generates a new trace file containing tracks with the memory bandwidth and queue length time series. See Figure 6 below.
 
@@ -94,11 +94,11 @@ These primary features give us a peek into the system performance and help answe
 
 ### Installation
 
-For installing the generic HTA package please refer to the [README](https://github.com/facebookresearch/HolisticTraceAnalysis/blob/main/README.md). In brief, the user is required to clone the repo (https://github.com/facebookresearch/HolisticTraceAnalysis) and install the necessary Python package via pip.
+For installing the HTA please refer to the [README](https://github.com/facebookresearch/HolisticTraceAnalysis/blob/main/README.md). In brief, the user is required to clone the [repo](https://github.com/facebookresearch/HolisticTraceAnalysis) and install the necessary Python packages via pip.
 
 ### Usage
 
-This version of Holistic Trace Analysis is currently in beta. We recommend using HTA in a Jupyter notebook. We provide a [demo notebook](https://github.com/facebookresearch/HolisticTraceAnalysis/blob/main/examples/trace_analysis_demo.ipynb), for your convenience. To get started, import the hta package in a Jupyter notebook, create a TraceAnalysis object and off we go in exactly two lines of code.
+This version of Holistic Trace Analysis is currently in beta and we recommend using HTA in a Jupyter notebook. A [demo notebook](https://github.com/facebookresearch/HolisticTraceAnalysis/blob/main/examples/trace_analysis_demo.ipynb) is provided for your convenience. To get started, import the hta package in a Jupyter notebook, create a TraceAnalysis object and off we go in exactly two lines of code.
 
 ```python
 from hta.trace_analysis import TraceAnalysis
@@ -112,24 +112,26 @@ analyzer = TraceAnalysis(trace_dir = “/trace/folder/path”)
 
 ## FAQ
 
-Q. How can I install HTA?
+#### Q. How can I install HTA?
 
 Please see the [README](https://github.com/facebookresearch/HolisticTraceAnalysis/blob/main/README.md) in the root directory of the repository.
 
-Q. Can you implement feature X?
+#### Q. Is there any documentation on the features and API in HTA?
+
+The documentation and detailed API is available [here](https://hta.readthedocs.io/).
+
+#### Q. Can you implement feature X?
 
 Depending on how widely the feature is needed and the level of effort required to implement it we would consider developing the feature. Please open a [Github Issue](https://github.com/facebookresearch/HolisticTraceAnalysis/issues) and tag it with the feature-request label.
 
-Q. Can I modify the code?
+#### Q. Can I modify the code?
 
 Please do and [send a PR](https://github.com/facebookresearch/HolisticTraceAnalysis/pulls) along the way, if you think it would be useful for others.
 
-Q. How can I collect traces in PyTorch?
+#### Q. How can I collect traces in PyTorch?
 
 Please refer to this tutorial [here](https://pytorch.org/tutorials/intermediate/tensorboard_profiler_tutorial.html#use-profiler-to-record-execution-events).
 
-Q. Can HTA be used at production scale?
+#### Q. Can HTA be used at production scale?
 
 Yes, please see a use case study [here](https://pytorch.org/blog/performance-debugging-of-production-pytorch-models-at-meta/).
-
-
