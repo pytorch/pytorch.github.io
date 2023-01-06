@@ -46,6 +46,7 @@ To help understand the above concepts, Figure 1 provides a timeline of the GPU k
 ![Figure 1. An example of the execution timeline of GPU Kernels across multiple ranks](/assets/images/trace-image6.png){:width="100%"}
 
 *Figure 1. An example of the execution timeline of GPU Kernels across multiple ranks*
+{: style="text-align: center;"}
 
 The performance of multiple GPU training jobs is affected by multiple factors. Among these factors, how does a model execution create and orchestrate the GPU kernels plays a critical role. HTA provides insights on how the model execution interacts with the GPU devices and highlights the opportunities for performance improvement.
 
@@ -60,33 +61,39 @@ For most users, understanding the performance of GPU training jobs is nontrivial
 ![Figure 2: Temporal Breakdown across 8 GPUs](/assets/images/trace-image3.png){:width="100%"}
 
 *Figure 2: Temporal Breakdown across 8 GPUs*
+{: style="text-align: center;"}
 
 **Kernel Breakdown**: It is natural to ask which kernels are taking the most amount of time. The next feature breaks down the time spent within each kernel type (COMM, COMP, MEM) and sorts them by duration. We present this information for each kernel type and for each rank as a pie chart. See figure 3 below. 
 
 ![Figure 3: Pie chart of top computation and communication kernels](/assets/images/trace-image1.png){:width="100%"}
 
 *Figure 3: Pie chart of top computation and communication kernels*
+{: style="text-align: center;"}
 
 **Kernel Duration Distribution**: Subsequently, one can also ask - for any given kernel, what is the distribution of the time spent across the ranks? To answer this, HTA generates bar graphs for the average duration of a given kernel across all ranks. Additionally, the error bars in the bar graphs show the minimum and maximum amount of time taken by a given kernel on a given rank. Figure 4 below shows a discrepancy between average duration on rank 0 as compared to other ranks. This anomalous behavior on rank 0 guides the user on where to look for possible bugs.
 
 ![Figure 4: Average duration of NCCL AllReduce Kernel across 8 ranks](/assets/images/trace-image4.png){:width="100%"}
 
 *Figure 4: Average duration of NCCL AllReduce Kernel across 8 ranks*
+{: style="text-align: center;"}
 
 **Communication Computation Overlap**: In distributed training, a significant amount of time is spent in communication and synchronization events among multiple GPU devices. To achieve high GPU efficiency (i.e. TFLOPS/GPU) it is vital to keep the GPU doing actual computation work. In other words, a GPU should not be blocked because of waiting for data from other GPUs. One way to measure the extent to which computation is blocked by data dependencies is to calculate the computation-communication overlap. Higher GPU efficiency is observed if communication events overlap computation events. Lack of communication and computation overlap will lead to the GPU being idle, thus the efficiency would be low. Thus, the communication computation overlap feature calculates the percentage of time communication and computation overlap in a job for each rank and generates a bar graph representation. See figure below. More precisely, we measure the following ratio
 
 (time spent in computation while communicating) / (time spent in communication)
+{: style="text-align: center;"}
 
 
 ![Figure 5: Communication computation overlap](/assets/images/trace-image5.png){:width="100%"}
 
 *Figure 5: Communication computation overlap*
+{: style="text-align: center;"}
 
 **Augmented Counters (Queue length, Memory bandwidth)**: To aid in debugging, HTA calculates the memory bandwidth statistics for D2H, H2D and D2D memory copy (memcpy) and memory set (memset) events. Additionally, HTA also computes the number of outstanding CUDA operations on each CUDA stream. We refer to this as queue length. When the queue length on a stream is 1024 or larger new events cannot be scheduled on that stream and the CPU will stall until the GPU events have processed. Additionally, HTA generates a new trace file containing tracks with the memory bandwidth and queue length time series. See Figure 6 below.
 
 ![Figure 6: Memory Bandwidth and Queue Length](/assets/images/trace-image2.png){:width="100%"}
 
 *Figure 6: Memory Bandwidth and Queue Length*
+{: style="text-align: center;"}
 
 These primary features give us a peek into the system performance and help answer “what is happening in the system?”. As HTA evolves, we hope to address “why is X happening?” and also suggest possible solutions to overcome the bottlenecks.
 
