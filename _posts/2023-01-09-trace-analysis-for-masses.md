@@ -1,10 +1,8 @@
 ---
 layout: blog_detail
 title: "PyTorch Trace Analysis for the Masses"
-author: Anupam Bhatnagar, Xizhou Feng,  Brian Coutinho, Yifan Liu, Sung-Han Lin and Louis Feng
+author: Anupam Bhatnagar, Xizhou Feng,  Brian Coutinho, Yifan Liu, Sung-Han Lin, Louis Feng, and Yuzhen Huang
 ---
-
-## Introduction
 
 We are excited to announce the public release of Holistic Trace Analysis (HTA), an open source performance analysis and visualization Python library for PyTorch users. HTA takes as input [Kineto traces](https://github.com/pytorch/kineto) collected by the [PyTorch profiler](https://pytorch.org/blog/introducing-pytorch-profiler-the-new-and-improved-performance-tool/), which are complex and challenging to interpret, and up-levels the performance information contained in these traces. It was initially developed internally at Meta to understand and debug performance problems for large-scale distributed training jobs on GPUs. The multidisciplinary team has made a number of enhancements to HTA’s features and scaled them to support state-of-the-art ML workloads. 
 
