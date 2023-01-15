@@ -235,7 +235,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href='https://pytorch.org/docs/versions.html'>master (2.0.0a0+git901a34c ) &#x25BC</a>
+      <a href='https://pytorch.org/docs/versions.html'>master (2.0.0a0+gitd41b5d7 ) &#x25BC</a>
     </div>
     
 
@@ -468,6 +468,7 @@
 <span class="kn">from</span> <span class="nn">torch</span> <span class="kn">import</span> <span class="n">Tensor</span>
 
 <span class="kn">from</span> <span class="nn">.optimizer</span> <span class="kn">import</span> <span class="n">Optimizer</span><span class="p">,</span> <span class="n">_use_grad_for_differentiable</span>
+<span class="kn">from</span> <span class="nn">torch.utils._foreach_utils</span> <span class="kn">import</span> <span class="n">_group_tensors_by_device_and_dtype</span>
 <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span>
 
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;Adadelta&quot;</span><span class="p">,</span> <span class="s2">&quot;adadelta&quot;</span><span class="p">]</span>
@@ -512,7 +513,11 @@
 <span class="sd">        lr (float, optional): coefficient that scale delta before it is applied</span>
 <span class="sd">            to the parameters (default: 1.0)</span>
 <span class="sd">        weight_decay (float, optional): weight decay (L2 penalty) (default: 0)</span>
-<span class="sd">        foreach (bool, optional): whether foreach implementation of optimizer is used (default: None)</span>
+<span class="sd">        foreach (bool, optional): whether foreach implementation of optimizer is used.</span>
+<span class="sd">            Since the foreach implementation is usually significantly faster than</span>
+<span class="sd">            the for-loop implementation on CUDA, we try to use it whenever possible</span>
+<span class="sd">            (all parameters are on CUDA). Else, we continue with the for-loop</span>
+<span class="sd">            implementation. (default: None)</span>
 <span class="sd">        maximize (bool, optional): maximize the params based on the objective, instead of</span>
 <span class="sd">            minimizing (default: False)</span>
 
@@ -639,7 +644,7 @@
     <span class="n">acc_deltas</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Tensor</span><span class="p">],</span>
     <span class="c1"># kwonly args with defaults are not supported by functions compiled with torchscript issue #70627</span>
     <span class="c1"># setting this as kwarg for now as functional API is compiled by torch/distributed/optim</span>
-    <span class="n">foreach</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">foreach</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">bool</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">differentiable</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="o">*</span><span class="p">,</span>
     <span class="n">lr</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
@@ -653,9 +658,19 @@
 <span class="sd">    See :class:`~torch.optim.Adadelta` for details.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
+    <span class="c1"># We try to use the foreach implementation on CUDA whenever possible since</span>
+    <span class="c1"># it is faster than the for-loop implementation. However, the foreach</span>
+    <span class="c1"># implementation is not differentiable, so we must check differentiable=False.</span>
+    <span class="c1"># We still respect when the user inputs False for foreach.</span>
     <span class="k">if</span> <span class="n">foreach</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="c1"># Placeholder for more complex foreach logic to be added when value is not set</span>
-        <span class="n">foreach</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="n">all_tensors</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">all_tensors</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">params</span><span class="p">)</span>
+        <span class="n">all_tensors</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">grads</span><span class="p">)</span>
+        <span class="n">all_tensors</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">square_avgs</span><span class="p">)</span>
+        <span class="n">all_tensors</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">acc_deltas</span><span class="p">)</span>
+        <span class="n">foreach</span> <span class="o">=</span> <span class="ow">not</span> <span class="n">torch</span><span class="o">.</span><span class="n">jit</span><span class="o">.</span><span class="n">is_scripting</span><span class="p">()</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">differentiable</span> <span class="ow">and</span> <span class="nb">all</span><span class="p">(</span>
+            <span class="n">p</span><span class="o">.</span><span class="n">is_cuda</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">all_tensors</span>
+        <span class="p">)</span>
 
     <span class="k">if</span> <span class="n">foreach</span> <span class="ow">and</span> <span class="n">torch</span><span class="o">.</span><span class="n">jit</span><span class="o">.</span><span class="n">is_scripting</span><span class="p">():</span>
         <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;torch.jit.script not supported with foreach optimizers&quot;</span><span class="p">)</span>
@@ -738,27 +753,29 @@
     <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">params</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
         <span class="k">return</span>
 
-    <span class="k">if</span> <span class="n">maximize</span><span class="p">:</span>
-        <span class="n">grads</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">_foreach_neg</span><span class="p">(</span><span class="n">grads</span><span class="p">)</span>
+    <span class="n">grouped_tensors</span> <span class="o">=</span> <span class="n">_group_tensors_by_device_and_dtype</span><span class="p">([</span><span class="n">params</span><span class="p">,</span> <span class="n">grads</span><span class="p">,</span> <span class="n">square_avgs</span><span class="p">,</span> <span class="n">acc_deltas</span><span class="p">])</span>
+    <span class="k">for</span> <span class="n">device_params</span><span class="p">,</span> <span class="n">device_grads</span><span class="p">,</span> <span class="n">device_square_avgs</span><span class="p">,</span> <span class="n">device_acc_deltas</span> <span class="ow">in</span> <span class="n">grouped_tensors</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+        <span class="k">if</span> <span class="n">maximize</span><span class="p">:</span>
+            <span class="n">device_grads</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">_foreach_neg</span><span class="p">(</span><span class="n">device_grads</span><span class="p">)</span>
 
-    <span class="k">if</span> <span class="n">weight_decay</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">:</span>
-        <span class="n">torch</span><span class="o">.</span><span class="n">_foreach_add_</span><span class="p">(</span><span class="n">grads</span><span class="p">,</span> <span class="n">params</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="n">weight_decay</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">weight_decay</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">_foreach_add_</span><span class="p">(</span><span class="n">device_grads</span><span class="p">,</span> <span class="n">device_params</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="n">weight_decay</span><span class="p">)</span>
 
-    <span class="n">torch</span><span class="o">.</span><span class="n">_foreach_mul_</span><span class="p">(</span><span class="n">square_avgs</span><span class="p">,</span> <span class="n">rho</span><span class="p">)</span>
-    <span class="n">torch</span><span class="o">.</span><span class="n">_foreach_addcmul_</span><span class="p">(</span><span class="n">square_avgs</span><span class="p">,</span> <span class="n">grads</span><span class="p">,</span> <span class="n">grads</span><span class="p">,</span> <span class="n">value</span><span class="o">=</span><span class="mi">1</span> <span class="o">-</span> <span class="n">rho</span><span class="p">)</span>
+        <span class="n">torch</span><span class="o">.</span><span class="n">_foreach_mul_</span><span class="p">(</span><span class="n">device_square_avgs</span><span class="p">,</span> <span class="n">rho</span><span class="p">)</span>
+        <span class="n">torch</span><span class="o">.</span><span class="n">_foreach_addcmul_</span><span class="p">(</span><span class="n">device_square_avgs</span><span class="p">,</span> <span class="n">device_grads</span><span class="p">,</span> <span class="n">device_grads</span><span class="p">,</span> <span class="n">value</span><span class="o">=</span><span class="mi">1</span> <span class="o">-</span> <span class="n">rho</span><span class="p">)</span>
 
-    <span class="n">std</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">_foreach_add</span><span class="p">(</span><span class="n">square_avgs</span><span class="p">,</span> <span class="n">eps</span><span class="p">)</span>
-    <span class="n">torch</span><span class="o">.</span><span class="n">_foreach_sqrt_</span><span class="p">(</span><span class="n">std</span><span class="p">)</span>
+        <span class="n">std</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">_foreach_add</span><span class="p">(</span><span class="n">device_square_avgs</span><span class="p">,</span> <span class="n">eps</span><span class="p">)</span>
+        <span class="n">torch</span><span class="o">.</span><span class="n">_foreach_sqrt_</span><span class="p">(</span><span class="n">std</span><span class="p">)</span>
 
-    <span class="n">deltas</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">_foreach_add</span><span class="p">(</span><span class="n">acc_deltas</span><span class="p">,</span> <span class="n">eps</span><span class="p">)</span>
-    <span class="n">torch</span><span class="o">.</span><span class="n">_foreach_sqrt_</span><span class="p">(</span><span class="n">deltas</span><span class="p">)</span>
-    <span class="n">torch</span><span class="o">.</span><span class="n">_foreach_div_</span><span class="p">(</span><span class="n">deltas</span><span class="p">,</span> <span class="n">std</span><span class="p">)</span>
-    <span class="n">torch</span><span class="o">.</span><span class="n">_foreach_mul_</span><span class="p">(</span><span class="n">deltas</span><span class="p">,</span> <span class="n">grads</span><span class="p">)</span>
+        <span class="n">deltas</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">_foreach_add</span><span class="p">(</span><span class="n">device_acc_deltas</span><span class="p">,</span> <span class="n">eps</span><span class="p">)</span>
+        <span class="n">torch</span><span class="o">.</span><span class="n">_foreach_sqrt_</span><span class="p">(</span><span class="n">deltas</span><span class="p">)</span>
+        <span class="n">torch</span><span class="o">.</span><span class="n">_foreach_div_</span><span class="p">(</span><span class="n">deltas</span><span class="p">,</span> <span class="n">std</span><span class="p">)</span>
+        <span class="n">torch</span><span class="o">.</span><span class="n">_foreach_mul_</span><span class="p">(</span><span class="n">deltas</span><span class="p">,</span> <span class="n">device_grads</span><span class="p">)</span>
 
-    <span class="n">torch</span><span class="o">.</span><span class="n">_foreach_add_</span><span class="p">(</span><span class="n">params</span><span class="p">,</span> <span class="n">deltas</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=-</span><span class="n">lr</span><span class="p">)</span>
+        <span class="n">torch</span><span class="o">.</span><span class="n">_foreach_add_</span><span class="p">(</span><span class="n">device_params</span><span class="p">,</span> <span class="n">deltas</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=-</span><span class="n">lr</span><span class="p">)</span>
 
-    <span class="n">torch</span><span class="o">.</span><span class="n">_foreach_mul_</span><span class="p">(</span><span class="n">acc_deltas</span><span class="p">,</span> <span class="n">rho</span><span class="p">)</span>
-    <span class="n">torch</span><span class="o">.</span><span class="n">_foreach_addcmul_</span><span class="p">(</span><span class="n">acc_deltas</span><span class="p">,</span> <span class="n">deltas</span><span class="p">,</span> <span class="n">deltas</span><span class="p">,</span> <span class="n">value</span><span class="o">=</span><span class="mi">1</span> <span class="o">-</span> <span class="n">rho</span><span class="p">)</span>
+        <span class="n">torch</span><span class="o">.</span><span class="n">_foreach_mul_</span><span class="p">(</span><span class="n">device_acc_deltas</span><span class="p">,</span> <span class="n">rho</span><span class="p">)</span>
+        <span class="n">torch</span><span class="o">.</span><span class="n">_foreach_addcmul_</span><span class="p">(</span><span class="n">device_acc_deltas</span><span class="p">,</span> <span class="n">deltas</span><span class="p">,</span> <span class="n">deltas</span><span class="p">,</span> <span class="n">value</span><span class="o">=</span><span class="mi">1</span> <span class="o">-</span> <span class="n">rho</span><span class="p">)</span>
 </pre></div>
 
              </article>
