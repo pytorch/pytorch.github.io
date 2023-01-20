@@ -541,14 +541,14 @@ Disclaimer: Please do not share your personal information, last name, company wh
    </td>
   </tr>
   <tr>
-   <td><b>PT2 Profiling and Debugging</b></td>
+   <td><a href="https://www.youtube.com/watch?v=1FSBurHpH_Q&list=PL_lsbAsL_o2CQr8oh5sNWt96yWQphNEzM&index=2"><b>PT2 Profiling and Debugging</b></a></td>
    <td>Bert Maher<br>
    <a href="https://www.linkedin.com/in/bertrand-maher/">LinkedIn</a> | 
    <a href="https://twitter.com/tensorbert">Twitter</a>
    </td>
   </tr>
   <tr>
-   <td><b>A deep dive on TorchInductor and PT 2.0 Backend Integration</b></td>
+   <td><a href="https://community.linuxfoundation.org/j/gayr75zshnded/"><b>A deep dive on TorchInductor and PT 2.0 Backend Integration</b></a></td>
    <td>Natalia Gimelshein, Bin Bao and Sherlock Huang<br>
    Natalia Gimelshein<br>
    <a href="https://www.linkedin.com/in/natalia-gimelshein-8347a480/">LinkedIn</a><br>
@@ -568,7 +568,7 @@ Disclaimer: Please do not share your personal information, last name, company wh
    </td>
   </tr>
   <tr>
-   <td><b>A deep dive on TorchDynamo</b></td>
+   <td><a href="https://www.youtube.com/watch?v=5FNHwPIyHr8&list=PL_lsbAsL_o2CQr8oh5sNWt96yWQphNEzM&index=3"><b>A deep dive on TorchDynamo</b></a></td>
    <td>Michael Voznesensky<br>
    <a href="https://www.linkedin.com/in/michael-voznesensky-70459624/">LinkedIn</a>
    </td>
@@ -584,7 +584,7 @@ Disclaimer: Please do not share your personal information, last name, company wh
    <td>Ananth Subramaniam</td>
   </tr>
   <tr>
-   <td><b>How and why contribute code and tutorials to PyTorch</b></td>
+   <td><a href="https://www.youtube.com/watch?v=v4nDZTK_eJg&list=PL_lsbAsL_o2CQr8oh5sNWt96yWQphNEzM&index=1"><b>How and why contribute code and tutorials to PyTorch</b></a></td>
    <td>Zain Rizvi, Svetlana Karslioglu and Carl Parker<br>
    Zain Rizvi<br>
    <a href="https://linkedin.com/in/zainrizvi">LinkedIn</a> |
@@ -602,7 +602,7 @@ Disclaimer: Please do not share your personal information, last name, company wh
    </td>
   </tr>
   <tr>
-   <td><b>PyTorch 2.0 Export: Sound Whole Graph Capture for PyTorch</b></td>
+   <td><a href="https://www.youtube.com/watch?v=U6J5hl6nXlU&list=PL_lsbAsL_o2CQr8oh5sNWt96yWQphNEzM&index=4"><b>PyTorch 2.0 Export: Sound Whole Graph Capture for PyTorch</b></a></td>
    <td>Michael Suo and Yanan Cao<br>
    Yanan Cao<br>
    <a href="https://www.linkedin.com/in/yanan-cao-65836020/">LinkedIn</a>
@@ -619,7 +619,7 @@ Disclaimer: Please do not share your personal information, last name, company wh
    </td>
   </tr>
   <tr>
-   <td><b>TorchRec and FSDP in Production</b></td>
+   <td><a href="https://www.youtube.com/watch?v=NgW6gp69ssc&list=PL_lsbAsL_o2CQr8oh5sNWt96yWQphNEzM&index=5"><b>TorchRec and FSDP in Production</b></a></td>
    <td>Dennis van der Staay, Andrew Gu and Rohan Varma<br>
    Dennis van der Staay<br>
    <a href="https://www.linkedin.com/in/staay/">LinkedIn</a><br>
@@ -655,7 +655,7 @@ Disclaimer: Please do not share your personal information, last name, company wh
    </td>
   </tr>
   <tr>
-   <td><b>PT2 and Distributed</b></td>
+   <td><a href="https://community.linuxfoundation.org/j/5s25r7uxmpq5e/"><b>PT2 and Distributed</b></a></td>
    <td>Will Constable<br>
    <a href="https://www.linkedin.com/in/will-constable-969a53b/">LinkedIn</a>
    </td>
