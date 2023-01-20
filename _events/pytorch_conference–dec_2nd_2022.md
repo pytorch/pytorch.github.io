@@ -2,29 +2,12 @@
 category: event
 title: PyTorch Conference – Dec 2nd 2022
 date: December 2, 2022
-header-image: assets/images/pytorch_conference–dec_2nd_2022_new.gif
+header-image: assets/images/pytorch_conference–dec_2nd_2022_ty.jpg
 ---
 
-
-**When**: Dec 2nd, 2022
-
-**Where**: New Orleans, Louisiana (USA) at Generations Hall &#124; _Virtual option as well_
-
-**What**: The PyTorch Conference brings together leading academics, researchers and developers from the Machine Learning community to learn more about software releases on PyTorch, ways PyTorch is being used in academia and industry, development in trends, and more.
-
-Watch the livestream on December 2 starting 7:00am PST here:
-
-1. <font size="4"><a href="https://fb.me/e/29RoWnqBX">Facebook Event Page</a></font>
-2. <font size="4"><a href="https://www.youtube.com/@PyTorch">YouTube/PyTorch</a></font>
-
-**FAQs**
-
-Q: Is there a fee to attend the PyTorch Conference?
-
-A: There is no registration fee to attend the conference, however attendees are responsible for their own travel, and accommodations.
-
-Q: Is The PyTorch Conference affiliated with NeurIPS?
-
-A: As a satellite event, we have to use NeurlPS's hotel portal for reservations, however aside from that our events are independent of one another, meaning registration to our event does not grant you access to NeurlPS and vice versa.
-
-**Questions**: Contact pytorch-marketing@fb.com
+The PyTorch Conference brings together leading academics, researchers and developers from the Machine Learning community to learn more about software releases on PyTorch, ways PyTorch is being used in academia and industry, development in trends, and more. Find the full list of talks below:
+- [Keynotes and Technical Talks](https://youtube.com/playlist?list=PL_lsbAsL_o2CC-RIvjdLzSvxo92fCdMAB)  
+- [Breakout Sessions](https://youtube.com/playlist?list=PL_lsbAsL_o2BFRvdSIAW9HxIVDtZIo3u5)
+- [Community and Partner Talks](https://youtube.com/playlist?list=PL_lsbAsL_o2C__Imwx_CxtyR5_2evuIaJ)
+- [Panel Discussion, PyTorch on Mars and AI Art](https://youtube.com/playlist?list=PL_lsbAsL_o2C_hizy1bAkn8xXq5tIR6bC)
+- [Posters](https://pytorch.org/ecosystem/ptc/2022)
