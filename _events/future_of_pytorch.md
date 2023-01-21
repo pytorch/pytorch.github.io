@@ -7,4 +7,4 @@ header-image: assets/images/py20-ask-engs.png
 
 **Date**: February 8, 2023, 10AM  PST  
 **Speakers**: Raziel Alvarez Guevara  
-[Register here](https://community.linuxfoundation.org/j/gayr75zshnded/)
+[Register here](https://community.linuxfoundation.org/events/details/lfhq-pytorch-foundation-presents-pytorch-20-ask-the-engineers-qa-series-the-future-of-pytorch-on-device/)
