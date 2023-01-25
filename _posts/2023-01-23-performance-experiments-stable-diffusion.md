@@ -2,6 +2,7 @@
 layout: blog_detail
 title: "Performance experiments with Stable Diffusion"
 author: Grigori Sizov, Michael Gschwind, Hamid Shojanazeri, Driss Guessous, Daniel Haziza, Christian Puhrsch
+hidden: true
 ---
 
 *This is a companion to the main blog [“Accelerated Stable Diffusion with PyTorch 2”](/blog/accelerated-stable-diffusion-2/), containing detailed information on benchmarking setup and results of individual experiments. It is mainly aimed at a hands-on reader who would want to reproduce or develop further the work we described in the main text. Please see the main text for all the context and the summary of results.*
