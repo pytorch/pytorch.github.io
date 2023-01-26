@@ -1,7 +1,7 @@
 ---
 layout: blog_detail
 title: "Performance experiments with Stable Diffusion"
-author: Grigori Sizov, Michael Gschwind, Hamid Shojanazeri, Driss Guessous, Daniel Haziza, Christian Puhrsch
+author: Grigory Sizov, Michael Gschwind, Hamid Shojanazeri, Driss Guessous, Daniel Haziza, Christian Puhrsch
 hidden: true
 ---
 
@@ -18,7 +18,7 @@ Lives in [https://github.com/sgrigory/stablediffusion2](https://github.com/sgrig
 
   
 
-This code uses Torch 1.12 and [the original custom implementation of attention](https://github.com/sgrigory/stablediffusion2/blob/cee9b9f057eeef4b481e138da9dbc4fe8ecb0cba/ldm/modules/attention.py#L165-L196).
+This code uses PyTorch 1.12 and [the original custom implementation of attention](https://github.com/sgrigory/stablediffusion2/blob/cee9b9f057eeef4b481e138da9dbc4fe8ecb0cba/ldm/modules/attention.py#L165-L196).
 
 **Optimized code**
 
@@ -26,11 +26,11 @@ The _optimized version_ is the code living [here](https://github.com/sgrigory/st
 
 
 
-* _nn.MultiheadAttention_ in _CrossAttention_ instead of custom attention implementation 
+* _**nn.MultiheadAttention**_ in _**CrossAttention**_ instead of custom attention implementation 
 * Compilation with `torch.compile`
 * Other minor optimizations in PyTorch-related code. 
 
-The first optimization (using _nn.MultiheadAttention _in _CrossAttention) _schematically boils down to the following pseudocode:
+The first optimization (using _**nn.MultiheadAttention**_ in _**CrossAttention**_) schematically boils down to the following pseudocode:
 
 ```
 class CrossAttention(nn.Module):
@@ -67,12 +67,12 @@ The optimized version uses PyTorch 2.0.0.dev20230111+cu117
 
 **Flags added to both code versions**
 
-In both code versions we have added the following CLI options to _txt2img.py._ 
+In both code versions we have added the following CLI options to _**txt2img.py**_. 
 
 
 
-* `--skip_first` to use a “warm-up” iteration before starting to measure time. See the end of section “Benchmarking setup and results summary” in the main text [TODO: insert link] on why this was necessary
-* `--time_file &lt;FILENAME> `to write runtime in seconds in text format to the specified file
+* `--skip_first` to use a “warm-up” iteration before starting to measure time. See the end of section “Benchmarking setup and results summary” in [the main text](/blog/accelerated-stable-diffusion-2/) on why this was necessary
+* `--time_file <FILENAME> `to write runtime in seconds in text format to the specified file
 
 **Prompts**
 
@@ -118,19 +118,19 @@ USE_XFORMERS=False python stable-diffusion-original/scripts/txt2img.py --prompt 
 
 ## Appendix 2: per-run data
 
-Plots with per-run benchmark data can be found [here](https://drive.google.com/drive/folders/1NWIGDBAsMakMeByQU0FmMFtyoRsUI0pF?usp=share_link). Each plot shows all the runs for a particular GPU (P100, V100, T4, A10, A100) and batch size (1, 2, or 4). The bar charts in the previous appendix are obtained from this data by averaging. The file names are self-explanatory, for example “original_vs_optimized_A10_n_samples_2_n_iter_2_sd2.png” contains runs for A10 GPU, batch size 2 and number of iterations 2. 
+Plots with per-run benchmark data can be found [here](https://drive.google.com/drive/folders/1NWIGDBAsMakMeByQU0FmMFtyoRsUI0pF?usp=share_link). Each plot shows all the runs for a particular GPU (P100, V100, T4, A10, A100) and batch size (1, 2, or 4). The bar charts in [the main text](/blog/accelerated-stable-diffusion-2/) are obtained from this data by averaging. The file names are self-explanatory, for example “original_vs_optimized_A10_n_samples_2_n_iter_2_sd2.png” contains runs for A10 GPU, batch size 2 and number of iterations 2. 
 
 
 ## Appendix 3: Accelerated Stable Diffusion 1
 
-Before the work on Stable Diffusion 2 described in the main text, we also applied similar optimizations to [Stable Diffusion 1](https://github.com/CompVis/stable-diffusion) by CompVis prior to the release of Stable Diffusion 2. The original implementation of SD1 does not integrate with xFormers yet, and so the speedup from just using the PyTorch optimized attention instead of custom implementation is significant. It should be noted that the [HuggingFace Diffusers port of SD1](https://huggingface.co/docs/diffusers/api/pipelines/stable_diffusion) allows integration with xFormers, so an interesting open question which we didn’t explore would be how the performance of SD1 with PyTorch optimized attention compares to HuggingFace SD1+xFormers. 
+Before the work on Stable Diffusion 2 described in the main text, we also applied similar optimizations to [Stable Diffusion 1](https://github.com/CompVis/stable-diffusion) by CompVis prior to the release of Stable Diffusion 2. The original implementation of SD1 does not integrate with xFormers yet, and so the speedup from just using the PyTorch optimized attention instead of custom implementation is significant. It should be noted that the [HuggingFace Diffusers port of SD1](https://github.com/huggingface/diffusers#stable-diffusion-is-fully-compatible-with-diffusers) allows integration with xFormers, so an interesting open question which we didn’t explore would be how the performance of SD1 with PyTorch optimized attention compares to HuggingFace SD1+xFormers. 
 
-We benchmarked two versions of SD1, _original _and _optimized_:
+We benchmarked two versions of SD1, _original and optimized_:
 
 
 
-* As the _original _version we took the first SD release, and placed it [here](https://github.com/sgrigory/stable-diffusion/tree/original-release) with minimal modifications to simplify benchmarking. It uses PyTorch 1.11 and custom implementation of attention.
-* The _optimized _version is the code living [here](https://github.com/sgrigory/stable-diffusion/tree/9809711e6921dfae8a4c2934f8c737bd03ad32a1). It uses _nn.MultiheadAttention_ in _CrossAttention_ and torch 2.0.0.dev20221220+cu117.
+* As the _original_ version we took the first SD release, and placed it [here](https://github.com/sgrigory/stable-diffusion/tree/original-release) with minimal modifications to simplify benchmarking. It uses PyTorch 1.11 and custom implementation of attention.
+* The _optimized_ version is the code living [here](https://github.com/sgrigory/stable-diffusion/tree/9809711e6921dfae8a4c2934f8c737bd03ad32a1). It uses _**nn.MultiheadAttention**_ in _**CrossAttention**_ and PyTorch 2.0.0.dev20221220+cu117.
 
 Here are the results for different GPU architectures and batch size 2:
 
