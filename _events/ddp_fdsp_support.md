@@ -7,4 +7,5 @@ header-image: assets/images/py20-ask-engs.png
 
 **Date**: January 24, 2023, 2PM  PST  
 **Speaker**: Will Constable  
-[Register here](https://community.linuxfoundation.org/j/5s25r7uxmpq5e/)
+[Watch on YouTube](https://www.youtube.com/watch?v=6S4tH9qEswo)  
+[Watch on LinkedIn](https://www.linkedin.com/video/event/urn:li:ugcPost:7023384711771160577/?utm_content=235500656&utm_medium=social&utm_source=twitter&hss_channel=tw-776585502606721024)  
