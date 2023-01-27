@@ -26,11 +26,11 @@ The _optimized version_ is the code living [here](https://github.com/sgrigory/st
 
 
 
-* _**nn.MultiheadAttention**_ in _**CrossAttention**_ instead of custom attention implementation 
+* `nn.MultiheadAttention` in `CrossAttention` instead of custom attention implementation 
 * Compilation with `torch.compile`
 * Other minor optimizations in PyTorch-related code. 
 
-The first optimization (using _**nn.MultiheadAttention**_ in _**CrossAttention**_) schematically boils down to the following pseudocode:
+The first optimization (using `nn.MultiheadAttention` in `CrossAttention`) schematically boils down to the following pseudocode:
 
 ```
 class CrossAttention(nn.Module):
@@ -67,7 +67,7 @@ The optimized version uses PyTorch 2.0.0.dev20230111+cu117
 
 **Flags added to both code versions**
 
-In both code versions we have added the following CLI options to _**txt2img.py**_. 
+In both code versions we have added the following CLI options to `txt2img.py`. 
 
 
 
@@ -130,7 +130,7 @@ We benchmarked two versions of SD1, _original and optimized_:
 
 
 * As the _original_ version we took the first SD release, and placed it [here](https://github.com/sgrigory/stable-diffusion/tree/original-release) with minimal modifications to simplify benchmarking. It uses PyTorch 1.11 and custom implementation of attention.
-* The _optimized_ version is the code living [here](https://github.com/sgrigory/stable-diffusion/tree/9809711e6921dfae8a4c2934f8c737bd03ad32a1). It uses _**nn.MultiheadAttention**_ in _**CrossAttention**_ and PyTorch 2.0.0.dev20221220+cu117.
+* The _optimized_ version is the code living [here](https://github.com/sgrigory/stable-diffusion/tree/9809711e6921dfae8a4c2934f8c737bd03ad32a1). It uses `nn.MultiheadAttention` in `CrossAttention` and PyTorch 2.0.0.dev20221220+cu117.
 
 Here are the results for different GPU architectures and batch size 2:
 

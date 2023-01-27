@@ -5,7 +5,7 @@ author: Grigory Sizov, Michael Gschwind, Hamid Shojanazeri, Driss Guessous, Dani
 featured-img: "assets/images/stable-diffusion/summary_n_samples_1_n_iter_2_sd2.png"
 ---
 
-**TL;DR:** PyTorch 2.0 nightly offers out-of-the-box performance improvement for Stable Diffusion 2.1 by using the new **torch.compile()** compiler and optimized implementations of Multihead Attention integrated with PyTorch 2.
+**TL;DR:** PyTorch 2.0 nightly offers out-of-the-box performance improvement for Stable Diffusion 2.1 by using the new `torch.compile()` compiler and optimized implementations of Multihead Attention integrated with PyTorch 2.
 
 ## Introduction
 
@@ -120,7 +120,7 @@ Here we’ll go into more detail about the optimizations introduced into the SD 
 
 ### Optimized Attention
 
-One part of the code which we optimized was the scaled dot-product attention. Attention is known to be a heavy operation: naive implementation materializes the attention matrix, leading to time and memory complexity quadratic in sequence length. In Stable Diffusion attention (_**CrossAttention**_) appears as part of Transformer blocks in multiple parts of the U-Net. Since the U-Net runs at every sampling step, this becomes a critical point to optimize. In PyTorch 2 optimized attention implementation is integrated into _**torch.nn.MultiheadAttention**_, and so we used it to replace the [custom attention implementation](https://github.com/Stability-AI/stablediffusion/blob/d55bcd4d31d0316fcbdf552f2fd2628fdc812500/ldm/modules/attention.py#L145-L194) in _**CrossAttention**_.
+One part of the code which we optimized was the scaled dot-product attention. Attention is known to be a heavy operation: naive implementation materializes the attention matrix, leading to time and memory complexity quadratic in sequence length. In Stable Diffusion attention (`CrossAttention`) appears as part of Transformer blocks in multiple parts of the U-Net. Since the U-Net runs at every sampling step, this becomes a critical point to optimize. In PyTorch 2 optimized attention implementation is integrated into `torch.nn.MultiheadAttention`, and so we used it to replace the [custom attention implementation](https://github.com/Stability-AI/stablediffusion/blob/d55bcd4d31d0316fcbdf552f2fd2628fdc812500/ldm/modules/attention.py#L145-L194) in `CrossAttention`.
 
 The optimized implementation of attention was available already in PyTorch 1.13 (see [here](https://pytorch.org/blog/a-better-transformer-for-fast-transformer-encoder-inference/)) and widely adopted (see e.g. [HuggingFace transformers library example](https://medium.com/pytorch/bettertransformer-out-of-the-box-performance-for-huggingface-transformers-3fbe27d50ab2)). In particular, it integrates memory-efficient attention from the [xFormers](https://github.com/facebookresearch/xformers) library and flash attention from [https://arxiv.org/abs/2205.14135](https://arxiv.org/abs/2205.14135). PyTorch 2.0 expands this to additional attention functions such as cross attention and custom kernels for further acceleration, making it applicable to SD.
 
@@ -163,7 +163,7 @@ We have two versions of SD code to compare: _original_ and _optimized_. On top o
 
 As the _original version_ we took the SD 2.1 release, and placed it [here](https://github.com/sgrigory/stablediffusion2/tree/cee9b9f057eeef4b481e138da9dbc4fe8ecb0cba) with minimal modifications necessary for benchmarking. It uses PyTorch 1.12 and a custom implementation of attention.
 
-The _optimized version_ is the code living [here](https://github.com/sgrigory/stablediffusion2/tree/0f6d17cb2602302bc0f5c7dee6825e4b49a85518). It uses _**nn.MultiheadAttention**_ in _**CrossAttention**_ and PyTorch 2.0.0.dev20230111+cu117. It also has a few other minor optimizations in PyTorch-related code. 
+The _optimized version_ is the code living [here](https://github.com/sgrigory/stablediffusion2/tree/0f6d17cb2602302bc0f5c7dee6825e4b49a85518). It uses `nn.MultiheadAttention` in `CrossAttention` and PyTorch 2.0.0.dev20230111+cu117. It also has a few other minor optimizations in PyTorch-related code. 
 
 Please see the appendix “Benchmarked versions definition” in [the companion page](/blog/performance-experiments-stable-diffusion/) for the precise definition of the 5 configurations and prompts triggering each of them.
 
