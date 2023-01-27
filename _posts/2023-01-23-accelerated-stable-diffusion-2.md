@@ -2,6 +2,7 @@
 layout: blog_detail
 title: "Accelerated Stable Diffusion with PyTorch 2"
 author: Grigory Sizov, Michael Gschwind, Hamid Shojanazeri, Driss Guessous, Daniel Haziza, Christian Puhrsch
+featured-img: "assets/images/stable-diffusion/summary_n_samples_1_n_iter_2_sd2.png"
 ---
 
 **TL;DR:** PyTorch 2.0 nightly offers out-of-the-box performance improvement for Stable Diffusion 2.1 by using the new **torch.compile()** compiler and optimized implementations of Multihead Attention integrated with PyTorch 2.
