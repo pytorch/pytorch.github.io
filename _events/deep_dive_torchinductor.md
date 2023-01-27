@@ -6,5 +6,5 @@ header-image: assets/images/py20-ask-engs.png
 ---
 
 **Date**: January 25, 2023, 11AM  PST  
-**Speakers**: Natalia Gimelshein, Bin Bao, Sherlock Huang and Eikan Wang
+**Speakers**: Natalia Gimelshein, Bin Bao, Sherlock Huang and Eikan Wang  
 [Register here](https://community.linuxfoundation.org/j/gayr75zshnded/)
