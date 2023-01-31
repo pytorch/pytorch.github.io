@@ -3,23 +3,27 @@ layout: blog_detail
 title: "Ambient Clinical Intelligence: Generating Medical Reports with PyTorch"
 author: Miguel Del-Agua, Principal Research Scientist, Nuance and Jeremy Jancsary, Senior Principal Research Scientist, Nuance
 featured-img: ""
+tags:
+  - tag 2
+  - tag3
+  - tag4
 ---
 
 ## Introduction
 
 Complete and accurate clinical documentation is an essential tool for tracking patient care. It allows for treatment plans to be shared among care teams to aid in continuity of care and ensures a transparent and effective process for reimbursement.
 
-Physicians are responsible for documenting patient care. Traditional clinical documentation methods have resulted in a sub-par patient-provider experience, less time interacting with patients, and decreased work-life balance.  A significant amount of physicians’ time is spent in front of the computer doing administrative tasks. As a result, patients are less satisfied with the overall experience, and physicians, who prepare for years studying medicine, cannot practice at the top of their license and are burned out. Every hour physicians provide direct clinical face time to patients results in nearly two additional hours spent on EHR and desk work within the clinic day. Outside office hours, physicians [spend another 1 to 2 hours of personal](https://www.acpjournals.org/doi/10.7326/m16-0961) time each night doing additional computer and other clerical work.
+Physicians are responsible for documenting patient care. Traditional clinical documentation methods have resulted in a sub-par patient-provider experience, less time interacting with patients, and decreased work-life balance. A significant amount of physicians’ time is spent in front of the computer doing administrative tasks. As a result, patients are less satisfied with the overall experience, and physicians, who prepare for years studying medicine, cannot practice at the top of their license and are burned out. Every hour physicians provide direct clinical face time to patients results in nearly two additional hours spent on EHR and desk work within the clinic day. Outside office hours, physicians [spend another 1 to 2 hours of personal](https://www.acpjournals.org/doi/10.7326/m16-0961) time each night doing additional computer and other clerical work.
 
-* [42% of all physicians reported having burnout. – Medscape](https://www.medscape.com/slideshow/2020-lifestyle-burnout-6012460)
-* [The problem has grown worse due to the pandemic with 64% of U.S. physicians now reporting burnout. - AAFP](https://www.aafp.org/journals/fpm/blogs/inpractice/entry/covid_burnout_survey.html#:~:text=Physician%20burnout%20was%20already%20a,5%2C000%20%E2%80%94%20practice%20in%20the%20U.S.)
-* ["Too many bureaucratic tasks e.g., charting and paperwork" is the leading contribution to burnout, increased computerization ranks 4th.](https://login.medscape.com/login/sso/getlogin?urlCache=aHR0cHM6Ly93d3cubWVkc2NhcGUuY29tL3NsaWRlc2hvdy8yMDIwLWxpZmVzdHlsZS1idXJub3V0LTYwMTI0NjA%3D&ac=401) - Medscape
-* [75% of U.S. Consumers Wish Their Healthcare Experiences Were More Personalized,](https://www.businesswire.com/news/home/20200218005006/en/75-of-U.S.-Consumers-Wish-Their-Healthcare-Experiences-Were-More-Personalized-Redpoint-Global-Survey-Reveals)- Business Wire
-* [61% of patients would visit their healthcare provider more often if the communication experience felt more personalized.](https://www.businesswire.com/news/home/20200218005006/en/75-of-U.S.-Consumers-Wish-Their-Healthcare-Experiences-Were-More-Personalized-Redpoint-Global-Survey-Reveals)  – Business Wire
+- [42% of all physicians reported having burnout. – Medscape](https://www.medscape.com/slideshow/2020-lifestyle-burnout-6012460)
+- [The problem has grown worse due to the pandemic with 64% of U.S. physicians now reporting burnout. - AAFP](https://www.aafp.org/journals/fpm/blogs/inpractice/entry/covid_burnout_survey.html#:~:text=Physician%20burnout%20was%20already%20a,5%2C000%20%E2%80%94%20practice%20in%20the%20U.S.)
+- ["Too many bureaucratic tasks e.g., charting and paperwork" is the leading contribution to burnout, increased computerization ranks 4th.](https://login.medscape.com/login/sso/getlogin?urlCache=aHR0cHM6Ly93d3cubWVkc2NhcGUuY29tL3NsaWRlc2hvdy8yMDIwLWxpZmVzdHlsZS1idXJub3V0LTYwMTI0NjA%3D&ac=401) - Medscape
+- [75% of U.S. Consumers Wish Their Healthcare Experiences Were More Personalized,](https://www.businesswire.com/news/home/20200218005006/en/75-of-U.S.-Consumers-Wish-Their-Healthcare-Experiences-Were-More-Personalized-Redpoint-Global-Survey-Reveals)- Business Wire
+- [61% of patients would visit their healthcare provider more often if the communication experience felt more personalized.](https://www.businesswire.com/news/home/20200218005006/en/75-of-U.S.-Consumers-Wish-Their-Healthcare-Experiences-Were-More-Personalized-Redpoint-Global-Survey-Reveals) – Business Wire
 
 Physician burnout is one of the primary causes for increased [medical errors](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC6175626/), malpractice suits, turnover, and decreased access to care. Burnout leads to an increase in healthcare costs and a decrease in overall patient satisfaction. [Burnout costs the United States $4.6 billion a year.](https://www.nejm.org/doi/full/10.1056/NEJMp2003149)
 
-What can we do to bring back trust, joy, and humanity to the delivery of healthcare? A significant portion of the administrative work consists of entering patient data into Electronic Health Records (EHRs) and creating clinical documentation. Clinical documentation is created from information already in the EHR as well as from the patient-provider encounter conversation. 
+What can we do to bring back trust, joy, and humanity to the delivery of healthcare? A significant portion of the administrative work consists of entering patient data into Electronic Health Records (EHRs) and creating clinical documentation. Clinical documentation is created from information already in the EHR as well as from the patient-provider encounter conversation.
 
 This article will showcase how the Nuance Dragon Ambient eXperience (DAX), an AI-powered, voice-enabled, ambient clinical intelligence solution, automatically documents patient encounters accurately and efficiently at the point of care and the technologies that enable it.
 
@@ -39,14 +43,14 @@ Two main NLP components play a role in automating the creation of clinical docum
 
 We will focus on this second component, Automatic Text Summarization, which is a difficult task with many challenges:
 
-* Its performance is tied to the ASR quality from multiple speakers (noisy input).
-* The input is conversational in nature and contains layman's terms.
-* Protected Health Information (PHI) regulations limit medical data access.
-* The information for one output sentence is potentially spread across multiple conversation turns.
-* There is no explicit sentence alignment between input and output.
-* Various medical specialties, encounter types, and EHR systems constitute a broad and complex output space. 
-* Physicians have different styles of conducting encounters and have their preferences for medical reports; there is no standard. 
-* Standard summarization metrics might differ from human judgment of quality.
+- Its performance is tied to the ASR quality from multiple speakers (noisy input).
+- The input is conversational in nature and contains layman's terms.
+- Protected Health Information (PHI) regulations limit medical data access.
+- The information for one output sentence is potentially spread across multiple conversation turns.
+- There is no explicit sentence alignment between input and output.
+- Various medical specialties, encounter types, and EHR systems constitute a broad and complex output space.
+- Physicians have different styles of conducting encounters and have their preferences for medical reports; there is no standard.
+- Standard summarization metrics might differ from human judgment of quality.
 
 <p align="center">
  <img src="/assets/images/ambient_clinical_intel_fig2.png" width="60%">
@@ -68,18 +72,18 @@ Figure 3: Excerpt of an AI-generated medical report. HPI stands for History of p
 
 [PyTorch](https://pytorch.org/) is an open-source machine learning framework developed by Facebook that helps researchers prototype Deep Learning models. The [Fairseq](https://github.com/pytorch/fairseq) toolkit is built on top of PyTorch and focuses on sequence generation tasks, such as Neural Machine Translation (NMT) or Text Summarization. Fairseq features an active community that is continuously providing reference implementations of state-of-the-art models. It contains many built-in components (model architectures, modules, loss functions, and optimizers) and is easily extendable with plugins.
 
-Text summarization constitutes a significant challenge in NLP. We need models capable of generating a short version of a document while retaining the key points and avoiding uninformative content. These  challenges can be addressed with  different approaches. 1). Abstractive text summarization aimed at training models that can generate a summary in narrative form. 2). Extractive methods where the models are trained to select the most important parts from the input text. 3). A combination of the two, where the essential parts from the input are selected and then summarized in an abstractive fashion. Hence, summarization can be accomplished via a single end-to-end network or as a pipeline of extractive and abstractive components. To that end, Fairseq provides all the necessary tools to be successful in our endeavor. It features either end-to-end models such as the classical Transformer, different types of Language Models and pre-trained versions that enable researchers to focus on what matters most—to build state-of-the-art models that generate valuable reports.
+Text summarization constitutes a significant challenge in NLP. We need models capable of generating a short version of a document while retaining the key points and avoiding uninformative content. These challenges can be addressed with different approaches. 1). Abstractive text summarization aimed at training models that can generate a summary in narrative form. 2). Extractive methods where the models are trained to select the most important parts from the input text. 3). A combination of the two, where the essential parts from the input are selected and then summarized in an abstractive fashion. Hence, summarization can be accomplished via a single end-to-end network or as a pipeline of extractive and abstractive components. To that end, Fairseq provides all the necessary tools to be successful in our endeavor. It features either end-to-end models such as the classical Transformer, different types of Language Models and pre-trained versions that enable researchers to focus on what matters most—to build state-of-the-art models that generate valuable reports.
 
 However, we are not just summarizing the transcribed conversation; we generate high-quality medical reports, which have many considerations.
 
-* Every section of a medical report is different in terms of content, structure, fluency, etc.
-* All medical facts mentioned in the conversation should be present in the report, for example, a particular treatment or dosage.
-* In the healthcare domain, the vocabulary is extensive, and models need to deal with medical terminology.
-* Patient-doctor conversations are usually much longer than the final report.
+- Every section of a medical report is different in terms of content, structure, fluency, etc.
+- All medical facts mentioned in the conversation should be present in the report, for example, a particular treatment or dosage.
+- In the healthcare domain, the vocabulary is extensive, and models need to deal with medical terminology.
+- Patient-doctor conversations are usually much longer than the final report.
 
 All these challenges require our researchers to run a battery of extensive experiments. Thanks to the flexibility of PyTorch and Fairseq, their productivity has greatly increased. Further, the ecosystem offers an easy path from ideation, implementation, experimentation, and final roll-out to production. Using multiple GPUs or CPUs is as simple as providing an additional argument to the tools, and because of the tight Python integration, PyTorch code can be easily debugged.
 
-In our continuous effort to contribute to the open-source community, features have been developed at Nuance and pushed to the Fairseq GitHub repository.  These try to overcome some of the challenges mentioned such as, facilitating copying of, especially rare or unseen, words from the input to summary, training speedups by improving Tensor Core utilization, and ensuring TorchScript compatibility of different Transformer configurations. Following, we will show an example of how to train a Transformer model with a Pointer Generator mechanism (Transformer-PG), which can copy words from the input.
+In our continuous effort to contribute to the open-source community, features have been developed at Nuance and pushed to the Fairseq GitHub repository. These try to overcome some of the challenges mentioned such as, facilitating copying of, especially rare or unseen, words from the input to summary, training speedups by improving Tensor Core utilization, and ensuring TorchScript compatibility of different Transformer configurations. Following, we will show an example of how to train a Transformer model with a Pointer Generator mechanism (Transformer-PG), which can copy words from the input.
 
 ## How to build a Transformer model with a Pointer Generator mechanism
 
@@ -158,8 +162,8 @@ fairseq-preprocess --task "translation" \
                    --cpu \
                    --joined-dictionary \
                    --destdir <data_dir>
-```		   
-				   
+```
+
 You might notice the type of task is "translation". This is because there is no "summarization" task available; we could understand it as a kind of NMT task where the input and output languages are shared and the output (summary) is shorter than the input.
 
 ### 4. Now we can train the model:
@@ -193,8 +197,8 @@ fairseq-train <data_dir> \
 
 This configuration makes use of features Nuance has contributed back to Fairseq:
 
-* Transformer with a Pointer Generator mechanism to facilitate copying of words from the input.
-* Sequence length padded to a multiple of 8 to better use tensor cores and reduce training time.
+- Transformer with a Pointer Generator mechanism to facilitate copying of words from the input.
+- Sequence length padded to a multiple of 8 to better use tensor cores and reduce training time.
 
 ### 5. Now let's take a look at how to generate a summary with our new medical report generation system:
 
