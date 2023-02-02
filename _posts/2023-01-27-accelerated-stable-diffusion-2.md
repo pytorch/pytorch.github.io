@@ -108,19 +108,15 @@ Specifically, we benchmark 5 configurations and the plots below compare their ab
 
 
 
-If you prefer looking directly at the code, see the [Google Colab](https://colab.research.google.com/drive/1cSP5HoRZCbjH55MdYiRtxC_Q0obQQ5ZD?usp=sharing) which runs the benchmark on T4.
-
-			
-
 
 ## Optimizations 
 
-Here we’ll go into more detail about the optimizations introduced into the SD code. At the moment they rely on features only available in the nightlies, so we pinned the PyTorch version to a recent nightly (see [here](https://github.com/sgrigory/stablediffusion2/blob/0f6d17cb2602302bc0f5c7dee6825e4b49a85518/environment.yaml#L13-L15)). Once the PyTorch 2.0 release comes out, these optimizations won’t have to rely on nightlies any more. 
+Here we’ll go into more detail about the optimizations introduced into the SD code. At the moment they rely on features only available in the nightlies, so we pinned the PyTorch version to a recent nightly. Once the PyTorch 2.0 release comes out, these optimizations won’t have to rely on nightlies any more. 
 
 
 ### Optimized Attention
 
-One part of the code which we optimized was the scaled dot-product attention. Attention is known to be a heavy operation: naive implementation materializes the attention matrix, leading to time and memory complexity quadratic in sequence length. In Stable Diffusion attention (`CrossAttention`) appears as part of Transformer blocks in multiple parts of the U-Net. Since the U-Net runs at every sampling step, this becomes a critical point to optimize. In PyTorch 2 optimized attention implementation is integrated into `torch.nn.MultiheadAttention`, and so we used it to replace the [custom attention implementation](https://github.com/Stability-AI/stablediffusion/blob/d55bcd4d31d0316fcbdf552f2fd2628fdc812500/ldm/modules/attention.py#L145-L194) in `CrossAttention`.
+One part of the code which we optimized was the scaled dot-product attention. Attention is known to be a heavy operation: naive implementation materializes the attention matrix, leading to time and memory complexity quadratic in sequence length. In Stable Diffusion attention (`CrossAttention`) appears as part of Transformer blocks in multiple parts of the U-Net. Since the U-Net runs at every sampling step, this becomes a critical point to optimize. In PyTorch 2 optimized attention implementation is integrated into `torch.nn.MultiheadAttention`, and so we used it to replace the custom attention implementation in `CrossAttention`.
 
 The optimized implementation of attention was available already in PyTorch 1.13 (see [here](https://pytorch.org/blog/a-better-transformer-for-fast-transformer-encoder-inference/)) and widely adopted (see e.g. [HuggingFace transformers library example](https://medium.com/pytorch/bettertransformer-out-of-the-box-performance-for-huggingface-transformers-3fbe27d50ab2)). In particular, it integrates memory-efficient attention from the [xFormers](https://github.com/facebookresearch/xformers) library and flash attention from [https://arxiv.org/abs/2205.14135](https://arxiv.org/abs/2205.14135). PyTorch 2.0 expands this to additional attention functions such as cross attention and custom kernels for further acceleration, making it applicable to SD.
 
@@ -139,14 +135,14 @@ model = torch.compile(model)
 
 PyTorch compiler then turns Python code into a set of instructions which can be executed efficiently without Python overhead. The compilation happens dynamically the first time the code is executed. With the default behavior, under the hood PyTorch utilized [TorchDynamo](https://pytorch.org/docs/master/dynamo/index.html) to compile the code and [TorchInductor](https://dev-discuss.pytorch.org/t/torchinductor-a-pytorch-native-compiler-with-define-by-run-ir-and-symbolic-shapes/747) to further optimize it. See [this tutorial](https://pytorch.org/tutorials/intermediate/dynamo_tutorial.html) for more details.
 
-Although the one-liner above is enough for compilation, certain modifications in the code can squeeze a larger speedup. In particular, one should avoid so-called graph breaks - places in the code which PyTorch can’t compile. As opposed to previous PyTorch compilation approaches (like TorchScript), PyTorch 2 compiler doesn’t break in this case. Instead it falls back on eager execution - so the code runs, but with reduced performance. We introduced a few minor changes to the SD code to eliminate graph breaks ([here](https://github.com/Stability-AI/stablediffusion/compare/main...sgrigory:stablediffusion2:optimize-w-compile?expand=1#diff-db5d837c282869a3588a17885e0baec3e29bf0701af6f4f34774d7b94503f7d4R34) and [here](https://github.com/Stability-AI/stablediffusion/compare/main...sgrigory:stablediffusion2:optimize-w-compile?expand=1#diff-db5d837c282869a3588a17885e0baec3e29bf0701af6f4f34774d7b94503f7d4R336-R343)). See this [doc](https://pytorch.org/docs/master/dynamo/faq.html#identifying-the-cause-of-a-graph-break) to learn more about graph breaks and how to eliminate them.
+Although the one-liner above is enough for compilation, certain modifications in the code can squeeze a larger speedup. In particular, one should avoid so-called graph breaks - places in the code which PyTorch can’t compile. As opposed to previous PyTorch compilation approaches (like TorchScript), PyTorch 2 compiler doesn’t break in this case. Instead it falls back on eager execution - so the code runs, but with reduced performance. We introduced a few minor changes to the SD code to eliminate graph breaks. See this [doc](https://pytorch.org/docs/master/dynamo/faq.html#identifying-the-cause-of-a-graph-break) to learn more about graph breaks and how to eliminate them.
 
 Note that compilation [requires GPU compute capability >= SM 7.0](https://github.com/openai/triton/blob/b5d32896b1f89fc44a82f8df3bb010934c53f4f5/README.md?plain=1#L66-L68) to run in non-eager mode. This covers all GPUs in our benchmarks -  T4, V100, A10, A100 - except for P100 (see the [full list](https://developer.nvidia.com/cuda-gpus#compute)). 
 
 
 ### Other optimizations
 
-In addition, we have improved efficiency of some memory operations - e.g. creating a tensor on GPU directly rather than creating it on CPU and later moving to GPU (see [here](https://github.com/Stability-AI/stablediffusion/compare/main...sgrigory:stablediffusion2:optimize-w-compile?expand=1#diff-7f9fb1cdee2602845e0a4ad2a62dfcf86d4a868490e0ff126e8a1d045106d065R166-R167) and [here](https://github.com/Stability-AI/stablediffusion/compare/main...sgrigory:stablediffusion2:optimize-w-compile?expand=1#diff-1cd43c874cb6fb8799d24ba5b9e9c2f8a9e058b976b93a09e409c9d5853884f2R150-R220)). The places where such optimizations were necessary were determined by line-profiling and looking at CPU/GPU traces and [Flame Graphs](https://github.com/brendangregg/FlameGraph).
+In addition, we have improved efficiency of some memory operations - e.g. creating a tensor on GPU directly rather than creating it on CPU and later moving to GPU. The places where such optimizations were necessary were determined by line-profiling and looking at CPU/GPU traces and [Flame Graphs](https://github.com/brendangregg/FlameGraph).
 
 
 ## Benchmarking setup and results summary
@@ -161,9 +157,9 @@ We have two versions of SD code to compare: _original_ and _optimized_. On top o
 * _Optimized code with memory-efficient attention backend and no compilation_
 * _Optimized code with memory-efficient attention backend and compilation_
 
-As the _original version_ we took the SD 2.1 release, and placed it [here](https://github.com/sgrigory/stablediffusion2/tree/cee9b9f057eeef4b481e138da9dbc4fe8ecb0cba) with minimal modifications necessary for benchmarking. It uses PyTorch 1.12 and a custom implementation of attention.
+As the _original version_ we took the SD 2.1 release. It uses PyTorch 1.12 and a custom implementation of attention.
 
-The _optimized version_ is the code living [here](https://github.com/sgrigory/stablediffusion2/tree/0f6d17cb2602302bc0f5c7dee6825e4b49a85518). It uses `nn.MultiheadAttention` in `CrossAttention` and PyTorch 2.0.0.dev20230111+cu117. It also has a few other minor optimizations in PyTorch-related code. 
+It uses `nn.MultiheadAttention` in `CrossAttention` and PyTorch 2.0.0.dev20230111+cu117. It also has a few other minor optimizations in PyTorch-related code. 
 
 Please see the appendix “Benchmarked versions definition” in [the companion page](/blog/performance-experiments-stable-diffusion/) for the precise definition of the 5 configurations and prompts triggering each of them.
 
@@ -451,7 +447,7 @@ Each run of `txt2img.py` generates several batches, which is regulated by the CL
 
 The numbers in the table above are for number of iterations 2 (plus a “warm-up one”), prompt ”A photo”, seed 1, PLMS sampler, and autocast turned on. See [the companion page](/blog/performance-experiments-stable-diffusion/) for precise CLI commands in appendix “Benchmarked versions definition” and detailed results of individual runs in appendix “Per-run data”.
 
-The P100, V100, and A100 benchmarks were done on Meta internal infrastructure. The T4 benchmarks were done in Google Colab Pro (see the [Google Colab notebook](https://colab.research.google.com/drive/1cSP5HoRZCbjH55MdYiRtxC_Q0obQQ5ZD?authuser=1#scrollTo=0d793Fus6RBY)). The A10 benchmarks were done on g5.4xlarge AWS instances with 1 GPU.
+The P100, V100, and A100 benchmarks were done on Meta internal infrastructure. The T4 benchmarks were done in Google Colab Pro. The A10 benchmarks were done on g5.4xlarge AWS instances with 1 GPU.
 
 
 ## Conclusions and next steps
@@ -469,9 +465,9 @@ There are a few natural directions in which this work can be continued:
 * Current code only applies compilation within the PLMS sampler, but it should be trivial to extend it to other samplers
 * Besides text-to-image generation, SD 2.1 has other pipelines - image-to-image and inpainting. It would be interesting to measure how their performance improves from PyTorch 2 optimizations 
 
-Try some of this in the [Colab](https://colab.research.google.com/drive/1cSP5HoRZCbjH55MdYiRtxC_Q0obQQ5ZD?usp=sharing) or on a GPU of your choice. See if you can further increase the performance of SD, and share the results! This is your chance to get a preview of PyTorch 2.0 and experience the features coming in the next release. 
+See if you can further increase the performance of SD, and share the results! This is your chance to get a preview of PyTorch 2.0 and experience the features coming in the next release. 
 
-As a note, if you want access to new PyTorch features which come after this post is published, just tweak the PyTorch and TorchVision versions in [environment.yaml](https://github.com/sgrigory/stablediffusion2/blob/0f6d17cb2602302bc0f5c7dee6825e4b49a85518/environment.yaml#L14-L15).
+As a note, if you want access to new PyTorch features which come after this post is published, just tweak the PyTorch and TorchVision versions in environment.yaml.
 
 
 ## Resources
@@ -494,5 +490,4 @@ We would like to thank Geeta Chauhan, Natalia Gimelshein, Patrick Labatut, Bert 
 
 Special thanks to Yudong Tao for creating the first version of Stable Diffusion with PyTorch native attention.
 
-For more information, [visit this page with additional resources](/blog/performance-experiments-stable-diffusion/).
 
