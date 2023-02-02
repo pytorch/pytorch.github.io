@@ -235,7 +235,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href='https://pytorch.org/docs/versions.html'>master (2.0.0a0+git218d4ea ) &#x25BC</a>
+      <a href='https://pytorch.org/docs/versions.html'>master (2.0.0a0+git0485bf5 ) &#x25BC</a>
     </div>
     
 
@@ -328,7 +328,6 @@
 <li class="toctree-l1"><a class="reference internal" href="../../../../autograd.html">torch.autograd</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../library.html">torch.library</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../cuda.html">torch.cuda</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../../../../_awaits.html">torch._awaits</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../backends.html">torch.backends</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../distributed.html">torch.distributed</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../distributed.algorithms.join.html">torch.distributed.algorithms.join</a></li>
@@ -467,11 +466,13 @@
              <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
               
   <h1>Source code for torch.cuda.amp.grad_scaler</h1><div class="highlight"><pre>
-<span></span><span class="kn">import</span> <span class="nn">torch</span>
-<span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">defaultdict</span><span class="p">,</span> <span class="n">abc</span>
-<span class="kn">import</span> <span class="nn">warnings</span>
+<span></span><span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">defaultdict</span><span class="p">,</span> <span class="n">abc</span>
 <span class="kn">from</span> <span class="nn">enum</span> <span class="kn">import</span> <span class="n">Enum</span>
-<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Tuple</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">cast</span>
+<span class="kn">import</span> <span class="nn">inspect</span>
+<span class="kn">import</span> <span class="nn">warnings</span>
+
+<span class="kn">import</span> <span class="nn">torch</span>
 <span class="kn">from</span> <span class="nn">.common</span> <span class="kn">import</span> <span class="n">amp_definitely_not_available</span>
 
 
@@ -798,8 +799,35 @@
             <span class="c1"># The contract with custom optimizers is that their step() should accept an additional,</span>
             <span class="c1"># optional grad_scaler kwarg.  We append self to the kwargs so the custom optimizer has full information:</span>
             <span class="c1"># it can query its own state, invoke unscale_ on itself, etc</span>
-            <span class="n">retval</span> <span class="o">=</span> <span class="n">optimizer</span><span class="o">.</span><span class="n">step</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="nb">dict</span><span class="p">(</span><span class="n">kwargs</span><span class="p">,</span> <span class="n">grad_scaler</span><span class="o">=</span><span class="bp">self</span><span class="p">))</span>
+            <span class="c1"># The contract above is being deprecated to avoid introducing `grad_scaler: GradScaler` argument</span>
+            <span class="c1"># to `Optimizer.step`. The new behavior is going to add two Tensor attributes of `grad_scale`</span>
+            <span class="c1"># and `found_inf` to the passed optimizer so that the optimizer can utilize those</span>
+            <span class="c1"># to skip the parameter updates or unscale gradients before updating parameters in</span>
+            <span class="c1"># the fused kernel, e.g. `FusedAdamMathFunctor`.</span>
+            <span class="n">kwargs_</span> <span class="o">=</span> <span class="n">kwargs</span>
+            <span class="n">has_grad_scaler_kwarg</span> <span class="o">=</span> <span class="s2">&quot;grad_scaler&quot;</span> <span class="ow">in</span> <span class="n">inspect</span><span class="o">.</span><span class="n">signature</span><span class="p">(</span><span class="n">optimizer</span><span class="o">.</span><span class="n">step</span><span class="p">)</span><span class="o">.</span><span class="n">parameters</span>
+            <span class="k">if</span> <span class="n">has_grad_scaler_kwarg</span><span class="p">:</span>
+                <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                    <span class="s2">&quot;GradScaler is going to stop passing itself as a keyword argument to the passed &quot;</span>
+                    <span class="s2">&quot;optimizer. In the near future GradScaler registers `grad_scale: Tensor` and &quot;</span>
+                    <span class="s2">&quot;`found_inf: Tensor` to the passed optimizer and let the optimizer use them directly.&quot;</span><span class="p">,</span>
+                    <span class="ne">FutureWarning</span><span class="p">)</span>
+                <span class="n">kwargs_</span><span class="o">.</span><span class="n">update</span><span class="p">({</span><span class="s2">&quot;grad_scaler&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="p">})</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">scaler</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_scale_async</span><span class="p">()</span>
+                <span class="n">found_inf</span> <span class="o">=</span> <span class="n">cast</span><span class="p">(</span>
+                    <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+                    <span class="nb">sum</span><span class="p">([</span>
+                        <span class="n">t</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">scaler</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">non_blocking</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_check_inf_per_device</span><span class="p">(</span><span class="n">optimizer</span><span class="p">)</span><span class="o">.</span><span class="n">values</span><span class="p">()</span>
+                    <span class="p">])</span>
+                <span class="p">)</span>
+                <span class="n">optimizer</span><span class="o">.</span><span class="n">grad_scale</span> <span class="o">=</span> <span class="n">scaler</span>
+                <span class="n">optimizer</span><span class="o">.</span><span class="n">found_inf</span> <span class="o">=</span> <span class="n">found_inf</span>
+            <span class="n">retval</span> <span class="o">=</span> <span class="n">optimizer</span><span class="o">.</span><span class="n">step</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs_</span><span class="p">)</span>
             <span class="n">optimizer_state</span><span class="p">[</span><span class="s2">&quot;stage&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">OptState</span><span class="o">.</span><span class="n">STEPPED</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">has_grad_scaler_kwarg</span><span class="p">:</span>
+                <span class="k">del</span> <span class="n">optimizer</span><span class="o">.</span><span class="n">grad_scale</span>
+                <span class="k">del</span> <span class="n">optimizer</span><span class="o">.</span><span class="n">found_inf</span>
             <span class="k">return</span> <span class="n">retval</span>
 
         <span class="k">if</span> <span class="n">optimizer_state</span><span class="p">[</span><span class="s2">&quot;stage&quot;</span><span class="p">]</span> <span class="ow">is</span> <span class="n">OptState</span><span class="o">.</span><span class="n">READY</span><span class="p">:</span>
