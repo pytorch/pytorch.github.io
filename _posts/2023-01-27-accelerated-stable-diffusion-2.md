@@ -161,8 +161,6 @@ As the _original version_ we took the SD 2.1 release. It uses PyTorch 1.12 and a
 
 It uses `nn.MultiheadAttention` in `CrossAttention` and PyTorch 2.0.0.dev20230111+cu117. It also has a few other minor optimizations in PyTorch-related code. 
 
-Please see the appendix “Benchmarked versions definition” in [the companion page](/blog/performance-experiments-stable-diffusion/) for the precise definition of the 5 configurations and prompts triggering each of them.
-
 The table below shows runtime of each version of the code in seconds, and the percentage improvement compared to the _original with xFormers_. The compilation time is excluded.
 
 **Runtimes for batch size 1. In parenthesis - relative improvement with respect to the “Original with xFormers” row**
@@ -438,16 +436,16 @@ The table below shows runtime of each version of the code in seconds, and the pe
 </table>
 
 
-To minimize fluctuations and external influence on the performance of the benchmarked code, we ran each version of the code one after another, and then repeated this sequence 10 times: A, B, C, D, E,  A, B, … So the results of a typical run would look like the one in the picture below. For results of all runs please see appendix “Per-run data” in [the companion page](/blog/performance-experiments-stable-diffusion/). Note that one shouldn’t rely on comparison of absolute run times between different graphs, but comparison of run times _inside_ one graph is pretty reliable, thanks to our benchmarking setup.
+To minimize fluctuations and external influence on the performance of the benchmarked code, we ran each version of the code one after another, and then repeated this sequence 10 times: A, B, C, D, E,  A, B, … So the results of a typical run would look like the one in the picture below. Note that one shouldn’t rely on comparison of absolute run times between different graphs, but comparison of run times _inside_ one graph is pretty reliable, thanks to our benchmarking setup.
 
 ![Stable Diffusion 2.1 benchmarks](/assets/images/stable-diffusion/original_vs_optimized_a100_n_samples_1_n_iter_2_sd2.png){:width="80%"}
 
 
 Each run of `txt2img.py` generates several batches, which is regulated by the CLI parameter `--n_iter`. In the benchmarks we used `n_iter = 2`, but introduced an additional “warm-up” iteration, which doesn’t contribute to the run time. This was necessary for the runs with compilation, because compilation happens the first time the code runs, and so the first iteration is much longer than all subsequent. To make comparison fair, we also introduced this additional “warm-up” iteration to all other runs, which is turned on by CLI option `--skip_first` provided to the modified `txt2img.py`.
 
-The numbers in the table above are for number of iterations 2 (plus a “warm-up one”), prompt ”A photo”, seed 1, PLMS sampler, and autocast turned on. See [the companion page](/blog/performance-experiments-stable-diffusion/) for precise CLI commands in appendix “Benchmarked versions definition” and detailed results of individual runs in appendix “Per-run data”.
+The numbers in the table above are for number of iterations 2 (plus a “warm-up one”), prompt ”A photo”, seed 1, PLMS sampler, and autocast turned on.
 
-The P100, V100, and A100 benchmarks were done on Meta internal infrastructure. The T4 benchmarks were done in Google Colab Pro. The A10 benchmarks were done on g5.4xlarge AWS instances with 1 GPU.
+Benchmarks were done using P100, V100, A100, A10 and T4 GPUs.
 
 
 ## Conclusions and next steps
