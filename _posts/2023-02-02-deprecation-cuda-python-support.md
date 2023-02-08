@@ -3,7 +3,7 @@ layout: blog_detail
 title: "Deprecation of CUDA 11.6 and Python 3.7 Support"
 ---
 
-For the upcoming PyTorch 2.0 feature release (target March 2022), we will target CUDA 11.7 as the stable version and CUDA 11.8 as the experimental version of CUDA and Python >=3.8, &lt;=3.11. 
+For the upcoming PyTorch 2.0 feature release (target March 2023), we will target CUDA 11.7 as the stable version and CUDA 11.8 as the experimental version of CUDA and Python >=3.8, &lt;=3.11. 
 
 If you are still using or depending on CUDA 11.6 or Python 3.7 builds, we strongly recommend moving to at least CUDA 11.7 and Python 3.8, as it would be the minimum versions required for PyTorch 2.0.
 
