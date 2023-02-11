@@ -235,7 +235,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href='https://pytorch.org/docs/versions.html'>master (2.0.0a0+git299ada9 ) &#x25BC</a>
+      <a href='https://pytorch.org/docs/versions.html'>master (2.0.0a0+gitd51ca38 ) &#x25BC</a>
     </div>
     
 
@@ -328,6 +328,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../../../../../autograd.html">torch.autograd</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../../library.html">torch.library</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../../cuda.html">torch.cuda</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../mps.html">torch.mps</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../../backends.html">torch.backends</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../../distributed.html">torch.distributed</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../../distributed.algorithms.join.html">torch.distributed.algorithms.join</a></li>
@@ -468,20 +469,19 @@
               
   <h1>Source code for torch.onnx._internal.diagnostics._diagnostic</h1><div class="highlight"><pre>
 <span></span><span class="sd">&quot;&quot;&quot;Diagnostic components for PyTorch ONNX export.&quot;&quot;&quot;</span>
+<span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
 
 <span class="kn">import</span> <span class="nn">contextlib</span>
-<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">TypeVar</span>
+<span class="kn">from</span> <span class="nn">collections.abc</span> <span class="kn">import</span> <span class="n">Generator</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Optional</span>
 
 <span class="kn">import</span> <span class="nn">torch</span>
+
 <span class="kn">from</span> <span class="nn">torch.onnx._internal.diagnostics</span> <span class="kn">import</span> <span class="n">infra</span>
-<span class="kn">from</span> <span class="nn">torch.onnx._internal.diagnostics.infra</span> <span class="kn">import</span> <span class="n">utils</span> <span class="k">as</span> <span class="n">infra_utils</span>
 <span class="kn">from</span> <span class="nn">torch.utils</span> <span class="kn">import</span> <span class="n">cpp_backtrace</span>
 
-<span class="c1"># This is a workaround for mypy not supporting Self from typing_extensions.</span>
-<span class="n">_ExportDiagnostic</span> <span class="o">=</span> <span class="n">TypeVar</span><span class="p">(</span><span class="s2">&quot;_ExportDiagnostic&quot;</span><span class="p">,</span> <span class="n">bound</span><span class="o">=</span><span class="s2">&quot;ExportDiagnostic&quot;</span><span class="p">)</span>
 
-
-<span class="k">def</span> <span class="nf">_cpp_call_stack</span><span class="p">(</span><span class="n">frames_to_skip</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span> <span class="n">frames_to_log</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">32</span><span class="p">):</span>
+<span class="k">def</span> <span class="nf">_cpp_call_stack</span><span class="p">(</span><span class="n">frames_to_skip</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span> <span class="n">frames_to_log</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">32</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">infra</span><span class="o">.</span><span class="n">Stack</span><span class="p">:</span>
     <span class="sd">&quot;&quot;&quot;Returns the current C++ call stack.</span>
 
 <span class="sd">    This function utilizes `torch.utils.cpp_backtrace` to get the current C++ call stack.</span>
@@ -490,6 +490,7 @@
 <span class="sd">    r&quot;frame #[0-9]+: (?P&lt;frame_info&gt;.*)&quot;. More info at `c10/util/Backtrace.cpp`.</span>
 
 <span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># NOTE: Cannot use `@_beartype.beartype`. It somehow erases the cpp stack frame info.</span>
     <span class="n">frames</span> <span class="o">=</span> <span class="n">cpp_backtrace</span><span class="o">.</span><span class="n">get_cpp_backtrace</span><span class="p">(</span><span class="n">frames_to_skip</span><span class="p">,</span> <span class="n">frames_to_log</span><span class="p">)</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">)</span>
     <span class="n">frame_messages</span> <span class="o">=</span> <span class="p">[]</span>
     <span class="k">for</span> <span class="n">frame</span> <span class="ow">in</span> <span class="n">frames</span><span class="p">:</span>
@@ -520,28 +521,31 @@
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="o">*</span><span class="n">args</span><span class="p">,</span>
+        <span class="n">frames_to_skip</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="n">cpp_stack</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">record_python_call_stack</span><span class="p">(</span><span class="n">frames_to_skip</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">record_cpp_call_stack</span><span class="p">(</span><span class="n">frames_to_skip</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">python_call_stack</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">record_python_call_stack</span><span class="p">(</span>
+            <span class="n">frames_to_skip</span><span class="o">=</span><span class="n">frames_to_skip</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="n">cpp_stack</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">cpp_call_stack</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">record_cpp_call_stack</span><span class="p">(</span>
+                <span class="n">frames_to_skip</span><span class="o">=</span><span class="n">frames_to_skip</span>
+            <span class="p">)</span>
 
-<div class="viewcode-block" id="ExportDiagnostic.record_python_call_stack"><a class="viewcode-back" href="../../../../../onnx_diagnostics.html#torch.onnx._internal.diagnostics.ExportDiagnostic.record_python_call_stack">[docs]</a>    <span class="k">def</span> <span class="nf">record_python_call_stack</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">frames_to_skip</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="sd">&quot;&quot;&quot;Records the current Python call stack in the diagnostic.&quot;&quot;&quot;</span>
-        <span class="n">frames_to_skip</span> <span class="o">+=</span> <span class="mi">1</span>  <span class="c1"># Skip this function.</span>
-        <span class="n">stack</span> <span class="o">=</span> <span class="n">infra_utils</span><span class="o">.</span><span class="n">python_call_stack</span><span class="p">(</span><span class="n">frames_to_skip</span><span class="o">=</span><span class="n">frames_to_skip</span><span class="p">)</span>
-        <span class="n">stack</span><span class="o">.</span><span class="n">message</span> <span class="o">=</span> <span class="s2">&quot;Python call stack&quot;</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">with_stack</span><span class="p">(</span><span class="n">stack</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">python_call_stack</span> <span class="o">=</span> <span class="n">stack</span></div>
-
-<div class="viewcode-block" id="ExportDiagnostic.record_cpp_call_stack"><a class="viewcode-back" href="../../../../../onnx_diagnostics.html#torch.onnx._internal.diagnostics.ExportDiagnostic.record_cpp_call_stack">[docs]</a>    <span class="k">def</span> <span class="nf">record_cpp_call_stack</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">frames_to_skip</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<div class="viewcode-block" id="ExportDiagnostic.record_cpp_call_stack"><a class="viewcode-back" href="../../../../../onnx_diagnostics.html#torch.onnx._internal.diagnostics.ExportDiagnostic.record_cpp_call_stack">[docs]</a>    <span class="k">def</span> <span class="nf">record_cpp_call_stack</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">frames_to_skip</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">infra</span><span class="o">.</span><span class="n">Stack</span><span class="p">:</span>
         <span class="sd">&quot;&quot;&quot;Records the current C++ call stack in the diagnostic.&quot;&quot;&quot;</span>
+        <span class="c1"># NOTE: Cannot use `@_beartype.beartype`. It somehow erases the cpp stack frame info.</span>
         <span class="c1"># No need to skip this function because python frame is not recorded</span>
         <span class="c1"># in cpp call stack.</span>
         <span class="n">stack</span> <span class="o">=</span> <span class="n">_cpp_call_stack</span><span class="p">(</span><span class="n">frames_to_skip</span><span class="o">=</span><span class="n">frames_to_skip</span><span class="p">)</span>
         <span class="n">stack</span><span class="o">.</span><span class="n">message</span> <span class="o">=</span> <span class="s2">&quot;C++ call stack&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">with_stack</span><span class="p">(</span><span class="n">stack</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">cpp_call_stack</span> <span class="o">=</span> <span class="n">stack</span></div></div>
+        <span class="k">return</span> <span class="n">stack</span></div>
+
+    <span class="k">def</span> <span class="nf">record_fx_graphmodule</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">gm</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">fx</span><span class="o">.</span><span class="n">GraphModule</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">with_graph</span><span class="p">(</span><span class="n">infra</span><span class="o">.</span><span class="n">Graph</span><span class="p">(</span><span class="n">gm</span><span class="o">.</span><span class="n">print_readable</span><span class="p">(</span><span class="kc">False</span><span class="p">),</span> <span class="n">gm</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="p">))</span></div>
 
 
 <span class="k">class</span> <span class="nc">ExportDiagnosticEngine</span><span class="p">(</span><span class="n">infra</span><span class="o">.</span><span class="n">DiagnosticEngine</span><span class="p">):</span>
@@ -585,41 +589,54 @@
 
 
 <span class="n">engine</span> <span class="o">=</span> <span class="n">ExportDiagnosticEngine</span><span class="p">()</span>
-<span class="n">context</span> <span class="o">=</span> <span class="n">engine</span><span class="o">.</span><span class="n">background_context</span>
+<span class="n">_context</span> <span class="o">=</span> <span class="n">engine</span><span class="o">.</span><span class="n">background_context</span>
 
 
 <span class="nd">@contextlib</span><span class="o">.</span><span class="n">contextmanager</span>
-<span class="k">def</span> <span class="nf">create_export_diagnostic_context</span><span class="p">():</span>
+<span class="k">def</span> <span class="nf">create_export_diagnostic_context</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">Generator</span><span class="p">[</span>
+    <span class="n">infra</span><span class="o">.</span><span class="n">DiagnosticContext</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span>
+<span class="p">]:</span>
     <span class="sd">&quot;&quot;&quot;Create a diagnostic context for export.</span>
 
 <span class="sd">    This is a workaround for code robustness since diagnostic context is accessed by</span>
 <span class="sd">    export internals via global variable. See `ExportDiagnosticEngine` for more details.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">global</span> <span class="n">context</span>
-    <span class="n">context</span> <span class="o">=</span> <span class="n">engine</span><span class="o">.</span><span class="n">create_diagnostic_context</span><span class="p">(</span>
+    <span class="k">global</span> <span class="n">_context</span>
+    <span class="k">assert</span> <span class="p">(</span>
+        <span class="n">_context</span> <span class="o">==</span> <span class="n">engine</span><span class="o">.</span><span class="n">background_context</span>
+    <span class="p">),</span> <span class="s2">&quot;Export context is already set. Nested export is not supported.&quot;</span>
+    <span class="n">_context</span> <span class="o">=</span> <span class="n">engine</span><span class="o">.</span><span class="n">create_diagnostic_context</span><span class="p">(</span>
         <span class="s2">&quot;torch.onnx.export&quot;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">__version__</span><span class="p">,</span> <span class="n">diagnostic_type</span><span class="o">=</span><span class="n">ExportDiagnostic</span>
     <span class="p">)</span>
     <span class="k">try</span><span class="p">:</span>
-        <span class="k">yield</span> <span class="n">context</span>
+        <span class="k">yield</span> <span class="n">_context</span>
     <span class="k">finally</span><span class="p">:</span>
-        <span class="n">context</span><span class="o">.</span><span class="n">pretty_print</span><span class="p">(</span><span class="n">context</span><span class="o">.</span><span class="n">options</span><span class="o">.</span><span class="n">log_verbose</span><span class="p">,</span> <span class="n">context</span><span class="o">.</span><span class="n">options</span><span class="o">.</span><span class="n">log_level</span><span class="p">)</span>
-        <span class="n">context</span> <span class="o">=</span> <span class="n">engine</span><span class="o">.</span><span class="n">background_context</span>
+        <span class="n">_context</span><span class="o">.</span><span class="n">pretty_print</span><span class="p">(</span><span class="n">_context</span><span class="o">.</span><span class="n">options</span><span class="o">.</span><span class="n">log_verbose</span><span class="p">,</span> <span class="n">_context</span><span class="o">.</span><span class="n">options</span><span class="o">.</span><span class="n">log_level</span><span class="p">)</span>
+        <span class="n">_context</span> <span class="o">=</span> <span class="n">engine</span><span class="o">.</span><span class="n">background_context</span>
 
 
 <span class="k">def</span> <span class="nf">diagnose</span><span class="p">(</span>
     <span class="n">rule</span><span class="p">:</span> <span class="n">infra</span><span class="o">.</span><span class="n">Rule</span><span class="p">,</span>
     <span class="n">level</span><span class="p">:</span> <span class="n">infra</span><span class="o">.</span><span class="n">Level</span><span class="p">,</span>
     <span class="n">message</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">frames_to_skip</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">2</span><span class="p">,</span>
     <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ExportDiagnostic</span><span class="p">:</span>
     <span class="sd">&quot;&quot;&quot;Creates a diagnostic and record it in the global diagnostic context.</span>
 
 <span class="sd">    This is a wrapper around `context.record` that uses the global diagnostic context.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">global</span> <span class="n">context</span>
-    <span class="n">diagnostic</span> <span class="o">=</span> <span class="n">ExportDiagnostic</span><span class="p">(</span><span class="n">rule</span><span class="p">,</span> <span class="n">level</span><span class="p">,</span> <span class="n">message</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
-    <span class="n">context</span><span class="o">.</span><span class="n">add_diagnostic</span><span class="p">(</span><span class="n">diagnostic</span><span class="p">)</span>
+    <span class="c1"># NOTE: Cannot use `@_beartype.beartype`. It somehow erases the cpp stack frame info.</span>
+    <span class="n">diagnostic</span> <span class="o">=</span> <span class="n">ExportDiagnostic</span><span class="p">(</span>
+        <span class="n">rule</span><span class="p">,</span> <span class="n">level</span><span class="p">,</span> <span class="n">message</span><span class="p">,</span> <span class="n">frames_to_skip</span><span class="o">=</span><span class="n">frames_to_skip</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
+    <span class="p">)</span>
+    <span class="n">export_context</span><span class="p">()</span><span class="o">.</span><span class="n">add_diagnostic</span><span class="p">(</span><span class="n">diagnostic</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">diagnostic</span>
+
+
+<span class="k">def</span> <span class="nf">export_context</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">infra</span><span class="o">.</span><span class="n">DiagnosticContext</span><span class="p">:</span>
+    <span class="k">global</span> <span class="n">_context</span>
+    <span class="k">return</span> <span class="n">_context</span>
 </pre></div>
 
              </article>
