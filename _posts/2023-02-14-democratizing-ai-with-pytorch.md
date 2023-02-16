@@ -39,9 +39,10 @@ AMD, along with key PyTorch codebase developers (including those at Meta AI), de
 
 The progressive improvements on both the AMD CDNA™ architecture as well as ROCm and PyTorch shows single GPU model throughput increase from AMD Instinct MI100 to the latest generation AMD Instinct MI200 family GPUs going from ROCm 4.2 to ROCm 5.3 and from PyTorch 1.7 to PyTorch 1.12.
 
-![Graph 1: ML model performance over generation using Microsoft Superbench Suite](/assets/images/2023-02-14-democratizing-ai-with-pytorch-2.jpg){:width="100%"}
+![Graph 1: ML model performance over generation using Microsoft Superbench Suite](/assets/images/2023-02-14-democratizing-ai-with-pytorch-2.png){:width="100%"}
 
-Graph 1: ML model performance over generation using Microsoft Superbench Suite<sup>1,2</sup> 
+<small><em>Graph 1: ML model performance over generation using Microsoft Superbench Suite <sup>1, 2, 3</sup></em></small>
+
 
 Below are a few of the key updates for ROCm support since the PyTorch 1.12 release
 
@@ -91,13 +92,15 @@ The content in this blog highlights the joint work between AMD and key PyTorch c
 
 ## CAUTIONARY STATEMENT 
 
+<small>
 This blog contains forward-looking statements concerning Advanced Micro Devices, Inc. (AMD) such as the availability, timing and expected benefits of an AMD datacenter APU form factor, which are made pursuant to the Safe Harbor provisions of the Private Securities Litigation Reform Act of 1995. Forward-looking statements are commonly identified by words such as "would," "may," "expects," "believes," "plans," "intends," "projects" and other terms with similar meaning. Investors are cautioned that the forward-looking statements in this blog are based on current beliefs, assumptions and expectations, speak only as of the date of this blog and involve risks and uncertainties that could cause actual results to differ materially from current expectations. Such statements are subject to certain known and unknown risks and uncertainties, many of which are difficult to predict and generally beyond AMD's control, that could cause actual results and other future events to differ materially from those expressed in, or implied or projected by, the forward-looking information and statements. Investors are urged to review in detail the risks and uncertainties in AMD’s Securities and Exchange Commission filings, including but not limited to AMD’s most recent reports on Forms 10-K and 10-Q. AMD does not assume, and hereby disclaims, any obligation to update forward-looking statements made in this blog, except as may be required by law. 
-
+</small>
  
 
 ## Endnotes
 
-1. MI100D-01 SuperBench v0.5 model training results based on AMD internal testing as of 11/09/2022 measuring the total training throughput, at half precision, using a 2P AMD EPYC™ 7763 CPU server tested with 1x AMD Instinct™ MI100 (32GB HBM2e) 300W GPU, SBIOS 2.2, Ubuntu® 20.04.5 LTS, host ROCm™ 5.2.0, guest ROCm 4.2,    PyTorch 1.7.0. Server manufacturers may vary configurations, yielding different results. Performance may vary based factors including use of latest drivers and optimizations.
-2. MI200D-01 SuperBench v0.6 model training results based on AMD internal testing as of 11/09/2022 measuring the total training throughput, at half precision, using a 2P AMD EPYC™ 7763 CPU server tested with 1x AMD Instinct™ MI210 (64GB HBM2e) 300W GPU, SBIOS 2.2, Ubuntu 20.04.5 LTS, host ROCm 5.3.0, guest ROCm 5.3, PyTorch 1.12. Server manufacturers may vary configurations, yielding different results. Performance may vary based factors including use of latest drivers and optimizations.
 
- 
+1. <small>MI100D-01 SuperBench v0.5 model training results based on AMD internal testing as of 11/09/2022 measuring the total training throughput, at half precision, using a 2P AMD EPYC™ 7763 CPU server tested with 1x AMD Instinct™ MI100 (32GB HBM2e) 300W GPU, SBIOS 2.2, Ubuntu® 20.04.5 LTS, host ROCm™ 5.2.0, guest ROCm 4.2,    PyTorch 1.7.0. Server manufacturers may vary configurations, yielding different results. Performance may vary based factors including use of latest drivers and optimizations.</small>
+2. <small>MI200D-01 SuperBench v0.6 model training results based on AMD internal testing as of 11/09/2022 measuring the total training throughput, at half precision, using a 2P AMD EPYC™ 7763 CPU server tested with 1x AMD Instinct™ MI210 (64GB HBM2e) 300W GPU, SBIOS 2.2, Ubuntu 20.04.5 LTS, host ROCm 5.3.0, guest ROCm 5.3, PyTorch 1.12. Server manufacturers may vary configurations, yielding different results. Performance may vary based factors including use of latest drivers and optimizations.</small>
+3. <small>MI200D-02: SuperBench v0.6 model training results based on AMD internal testing as of 11/09/2022 measuring the total training throughput, at half precision, using a 2P AMD EPYC™️ 7763 CPU server tested with 1x AMD Instinct™️ MI250 (128GB HBM2e) 560W GPU, SBIOS M12, Ubuntu 20.04 LTS, host ROCm 5.3.0, guest ROCm 5.3, PyTorch 1.12. Server manufacturers may vary configurations, yielding different results. Performance may vary based factors including use of latest drivers and optimizations.</small>
+
