@@ -235,7 +235,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href='https://pytorch.org/docs/versions.html'>master (2.0.0a0+git3bafecf ) &#x25BC</a>
+      <a href='https://pytorch.org/docs/versions.html'>master (2.0.0a0+gitca59b2d ) &#x25BC</a>
     </div>
     
 
@@ -504,6 +504,15 @@
 <span class="n">_queued_calls</span> <span class="o">=</span> <span class="p">[]</span>  <span class="c1"># don&#39;t invoke these until initialization occurs</span>
 <span class="n">_is_in_bad_fork</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="p">,</span> <span class="s2">&quot;_cuda_isInBadFork&quot;</span><span class="p">,</span> <span class="k">lambda</span><span class="p">:</span> <span class="kc">False</span><span class="p">)</span>
 <span class="n">_device_t</span> <span class="o">=</span> <span class="n">Union</span><span class="p">[</span><span class="n">_device</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="kc">None</span><span class="p">]</span>
+
+<span class="n">_HAS_PYNVML</span> <span class="o">=</span> <span class="kc">False</span>
+<span class="n">_PYNVML_ERR</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="k">try</span><span class="p">:</span>
+    <span class="kn">import</span> <span class="nn">pynvml</span>  <span class="c1"># type: ignore[import]</span>
+    <span class="n">_HAS_PYNVML</span> <span class="o">=</span> <span class="kc">True</span>
+<span class="k">except</span> <span class="ne">ImportError</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
+    <span class="n">_PYNVML_ERR</span> <span class="o">=</span> <span class="n">err</span>  <span class="c1"># sometimes a lib is installed but the import fails for some other reason, so we log the error for later</span>
+
 
 
 <span class="k">class</span> <span class="nc">_LazySeedTracker</span><span class="p">:</span>
@@ -1250,6 +1259,19 @@
     <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">_cuda_get_sync_debug_mode</span><span class="p">()</span></div>
 
 
+<span class="k">def</span> <span class="nf">_get_pynvml_handler</span><span class="p">(</span><span class="n">device</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">Device</span><span class="p">,</span> <span class="nb">int</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">_HAS_PYNVML</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ModuleNotFoundError</span><span class="p">(</span><span class="s2">&quot;pynvml does not seem to be installed or it can&#39;t be imported.&quot;</span><span class="p">)</span> <span class="kn">from</span> <span class="nn">_PYNVML_ERR</span>
+    <span class="kn">from</span> <span class="nn">pynvml</span> <span class="kn">import</span> <span class="n">NVMLError_DriverNotLoaded</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">pynvml</span><span class="o">.</span><span class="n">nvmlInit</span><span class="p">()</span>
+    <span class="k">except</span> <span class="n">NVMLError_DriverNotLoaded</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;cuda driver can&#39;t be loaded, is cuda enabled?&quot;</span><span class="p">)</span> <span class="kn">from</span> <span class="nn">e</span>
+
+    <span class="n">device</span> <span class="o">=</span> <span class="n">_get_nvml_device_index</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
+    <span class="n">handle</span> <span class="o">=</span> <span class="n">pynvml</span><span class="o">.</span><span class="n">nvmlDeviceGetHandleByIndex</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">handle</span>
+
 <div class="viewcode-block" id="memory_usage"><a class="viewcode-back" href="../../generated/torch.cuda.memory_usage.html#torch.cuda.memory_usage">[docs]</a><span class="k">def</span> <span class="nf">memory_usage</span><span class="p">(</span><span class="n">device</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">Device</span><span class="p">,</span> <span class="nb">int</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
     <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Returns the percent of time over the past sample period during which global (device)</span>
 <span class="sd">    memory was being read or written. as given by `nvidia-smi`.</span>
@@ -1262,15 +1284,8 @@
 <span class="sd">    Warning: Each sample period may be between 1 second and 1/6 second,</span>
 <span class="sd">    depending on the product being queried.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">try</span><span class="p">:</span>
-        <span class="kn">import</span> <span class="nn">pynvml</span>  <span class="c1"># type: ignore[import]</span>
-    <span class="k">except</span> <span class="ne">ModuleNotFoundError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="ne">ModuleNotFoundError</span><span class="p">(</span><span class="s2">&quot;pynvml module not found, please install pynvml&quot;</span><span class="p">)</span> <span class="kn">from</span> <span class="nn">e</span>
-    <span class="kn">from</span> <span class="nn">pynvml</span> <span class="kn">import</span> <span class="n">NVMLError_DriverNotLoaded</span>
-    <span class="k">try</span><span class="p">:</span>
-        <span class="n">pynvml</span><span class="o">.</span><span class="n">nvmlInit</span><span class="p">()</span>
-    <span class="k">except</span> <span class="n">NVMLError_DriverNotLoaded</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;cuda driver can&#39;t be loaded, is cuda enabled?&quot;</span><span class="p">)</span> <span class="kn">from</span> <span class="nn">e</span>
+    <span class="n">handle</span> <span class="o">=</span> <span class="n">_get_pynvml_handler</span><span class="p">()</span>
+
     <span class="n">device</span> <span class="o">=</span> <span class="n">_get_nvml_device_index</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
     <span class="n">handle</span> <span class="o">=</span> <span class="n">pynvml</span><span class="o">.</span><span class="n">nvmlDeviceGetHandleByIndex</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">pynvml</span><span class="o">.</span><span class="n">nvmlDeviceGetUtilizationRates</span><span class="p">(</span><span class="n">handle</span><span class="p">)</span><span class="o">.</span><span class="n">memory</span></div>
@@ -1288,18 +1303,58 @@
 <span class="sd">    Warning: Each sample period may be between 1 second and 1/6 second,</span>
 <span class="sd">    depending on the product being queried.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">try</span><span class="p">:</span>
-        <span class="kn">import</span> <span class="nn">pynvml</span>  <span class="c1"># type: ignore[import]</span>
-    <span class="k">except</span> <span class="ne">ModuleNotFoundError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="ne">ModuleNotFoundError</span><span class="p">(</span><span class="s2">&quot;pynvml module not found, please install pynvml&quot;</span><span class="p">)</span> <span class="kn">from</span> <span class="nn">e</span>
-    <span class="kn">from</span> <span class="nn">pynvml</span> <span class="kn">import</span> <span class="n">NVMLError_DriverNotLoaded</span>
-    <span class="k">try</span><span class="p">:</span>
-        <span class="n">pynvml</span><span class="o">.</span><span class="n">nvmlInit</span><span class="p">()</span>
-    <span class="k">except</span> <span class="n">NVMLError_DriverNotLoaded</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;cuda driver can&#39;t be loaded, is cuda enabled?&quot;</span><span class="p">)</span> <span class="kn">from</span> <span class="nn">e</span>
+
+    <span class="n">handle</span> <span class="o">=</span> <span class="n">_get_pynvml_handler</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
     <span class="n">device</span> <span class="o">=</span> <span class="n">_get_nvml_device_index</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
     <span class="n">handle</span> <span class="o">=</span> <span class="n">pynvml</span><span class="o">.</span><span class="n">nvmlDeviceGetHandleByIndex</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">pynvml</span><span class="o">.</span><span class="n">nvmlDeviceGetUtilizationRates</span><span class="p">(</span><span class="n">handle</span><span class="p">)</span><span class="o">.</span><span class="n">gpu</span></div>
+
+<div class="viewcode-block" id="temperature"><a class="viewcode-back" href="../../generated/torch.cuda.temperature.html#torch.cuda.temperature">[docs]</a><span class="k">def</span> <span class="nf">temperature</span><span class="p">(</span><span class="n">device</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">Device</span><span class="p">,</span> <span class="nb">int</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+    <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Returns the average temperature of the GPU sensor in Degrees C (Centigrades)</span>
+<span class="sd">        over the past sample period as given by `nvidia-smi`.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        device (torch.device or int, optional): selected device. Returns</span>
+<span class="sd">            statistic for the current device, given by :func:`~torch.cuda.current_device`,</span>
+<span class="sd">            if :attr:`device` is ``None`` (default).</span>
+
+<span class="sd">    Warning: Each sample period may be between 1 second and 1/6 second,</span>
+<span class="sd">    depending on the product being queried.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">handle</span> <span class="o">=</span> <span class="n">_get_pynvml_handler</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
+    <span class="c1"># 0 refers to the temperature sensor for the GPU die.</span>
+    <span class="k">return</span> <span class="n">pynvml</span><span class="o">.</span><span class="n">nvmlDeviceGetTemperature</span><span class="p">(</span><span class="n">handle</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="power_draw"><a class="viewcode-back" href="../../generated/torch.cuda.power_draw.html#torch.cuda.power_draw">[docs]</a><span class="k">def</span> <span class="nf">power_draw</span><span class="p">(</span><span class="n">device</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">Device</span><span class="p">,</span> <span class="nb">int</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+    <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Returns the average power draw of the GPU sensor in mW (MilliWatts)</span>
+<span class="sd">        over the past sample period as given by `nvidia-smi` for Fermi or newer fully supported devices.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        device (torch.device or int, optional): selected device. Returns</span>
+<span class="sd">            statistic for the current device, given by :func:`~torch.cuda.current_device`,</span>
+<span class="sd">            if :attr:`device` is ``None`` (default).</span>
+
+<span class="sd">    Warning: Each sample period may be between 1 second and 1/6 second,</span>
+<span class="sd">    depending on the product being queried.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">handle</span> <span class="o">=</span> <span class="n">_get_pynvml_handler</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">pynvml</span><span class="o">.</span><span class="n">nvmlDeviceGetPowerUsage</span><span class="p">(</span><span class="n">handle</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="clock_rate"><a class="viewcode-back" href="../../generated/torch.cuda.clock_rate.html#torch.cuda.clock_rate">[docs]</a><span class="k">def</span> <span class="nf">clock_rate</span><span class="p">(</span><span class="n">device</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">Device</span><span class="p">,</span> <span class="nb">int</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+    <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Returns the clock speed of the GPU SM in Hz Hertz over the past sample period as given by `nvidia-smi`.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        device (torch.device or int, optional): selected device. Returns</span>
+<span class="sd">            statistic for the current device, given by :func:`~torch.cuda.current_device`,</span>
+<span class="sd">            if :attr:`device` is ``None`` (default).</span>
+
+<span class="sd">    Warning: Each sample period may be between 1 second and 1/6 second,</span>
+<span class="sd">    depending on the product being queried.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">handle</span> <span class="o">=</span> <span class="n">_get_pynvml_handler</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">pynvml</span><span class="o">.</span><span class="n">nvmlDeviceGetClockInfo</span><span class="p">(</span><span class="n">handle</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span></div>
+
+
 
 
 <span class="kn">from</span> <span class="nn">.memory</span> <span class="kn">import</span> <span class="o">*</span>  <span class="c1"># noqa: F403</span>
@@ -1513,10 +1568,11 @@
     <span class="s1">&#39;is_current_stream_capturing&#39;</span><span class="p">,</span> <span class="s1">&#39;is_initialized&#39;</span><span class="p">,</span> <span class="s1">&#39;jiterator&#39;</span><span class="p">,</span> <span class="s1">&#39;list_gpu_processes&#39;</span><span class="p">,</span> <span class="s1">&#39;make_graphed_callables&#39;</span><span class="p">,</span>
     <span class="s1">&#39;manual_seed&#39;</span><span class="p">,</span> <span class="s1">&#39;manual_seed_all&#39;</span><span class="p">,</span> <span class="s1">&#39;max_memory_allocated&#39;</span><span class="p">,</span> <span class="s1">&#39;max_memory_cached&#39;</span><span class="p">,</span> <span class="s1">&#39;max_memory_reserved&#39;</span><span class="p">,</span>
     <span class="s1">&#39;mem_get_info&#39;</span><span class="p">,</span> <span class="s1">&#39;memory&#39;</span><span class="p">,</span> <span class="s1">&#39;memory_allocated&#39;</span><span class="p">,</span> <span class="s1">&#39;memory_cached&#39;</span><span class="p">,</span> <span class="s1">&#39;memory_reserved&#39;</span><span class="p">,</span> <span class="s1">&#39;memory_snapshot&#39;</span><span class="p">,</span>
-    <span class="s1">&#39;memory_stats&#39;</span><span class="p">,</span> <span class="s1">&#39;memory_stats_as_nested_dict&#39;</span><span class="p">,</span> <span class="s1">&#39;memory_summary&#39;</span><span class="p">,</span> <span class="s1">&#39;memory_usage&#39;</span><span class="p">,</span> <span class="s1">&#39;nccl&#39;</span><span class="p">,</span> <span class="s1">&#39;nvtx&#39;</span><span class="p">,</span> <span class="s1">&#39;profiler&#39;</span><span class="p">,</span>
-    <span class="s1">&#39;random&#39;</span><span class="p">,</span> <span class="s1">&#39;reset_accumulated_memory_stats&#39;</span><span class="p">,</span> <span class="s1">&#39;reset_max_memory_allocated&#39;</span><span class="p">,</span> <span class="s1">&#39;reset_max_memory_cached&#39;</span><span class="p">,</span>
-    <span class="s1">&#39;reset_peak_memory_stats&#39;</span><span class="p">,</span> <span class="s1">&#39;seed&#39;</span><span class="p">,</span> <span class="s1">&#39;seed_all&#39;</span><span class="p">,</span> <span class="s1">&#39;set_device&#39;</span><span class="p">,</span> <span class="s1">&#39;set_per_process_memory_fraction&#39;</span><span class="p">,</span> <span class="s1">&#39;set_rng_state&#39;</span><span class="p">,</span>
-    <span class="s1">&#39;set_rng_state_all&#39;</span><span class="p">,</span> <span class="s1">&#39;set_stream&#39;</span><span class="p">,</span> <span class="s1">&#39;set_sync_debug_mode&#39;</span><span class="p">,</span> <span class="s1">&#39;sparse&#39;</span><span class="p">,</span> <span class="s1">&#39;stream&#39;</span><span class="p">,</span> <span class="s1">&#39;streams&#39;</span><span class="p">,</span> <span class="s1">&#39;synchronize&#39;</span><span class="p">,</span> <span class="s1">&#39;utilization&#39;</span><span class="p">]</span>
+    <span class="s1">&#39;memory_stats&#39;</span><span class="p">,</span> <span class="s1">&#39;memory_stats_as_nested_dict&#39;</span><span class="p">,</span> <span class="s1">&#39;memory_summary&#39;</span><span class="p">,</span> <span class="s1">&#39;memory_usage&#39;</span><span class="p">,</span> <span class="s1">&#39;temperature&#39;</span><span class="p">,</span> <span class="s1">&#39;power_draw&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;clock_rate&#39;</span><span class="p">,</span> <span class="s1">&#39;nccl&#39;</span><span class="p">,</span> <span class="s1">&#39;nvtx&#39;</span><span class="p">,</span> <span class="s1">&#39;profiler&#39;</span><span class="p">,</span> <span class="s1">&#39;random&#39;</span><span class="p">,</span> <span class="s1">&#39;reset_accumulated_memory_stats&#39;</span><span class="p">,</span> <span class="s1">&#39;reset_max_memory_allocated&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;reset_max_memory_cached&#39;</span><span class="p">,</span> <span class="s1">&#39;reset_peak_memory_stats&#39;</span><span class="p">,</span> <span class="s1">&#39;seed&#39;</span><span class="p">,</span> <span class="s1">&#39;seed_all&#39;</span><span class="p">,</span> <span class="s1">&#39;set_device&#39;</span><span class="p">,</span> <span class="s1">&#39;set_per_process_memory_fraction&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;set_rng_state&#39;</span><span class="p">,</span> <span class="s1">&#39;set_rng_state_all&#39;</span><span class="p">,</span> <span class="s1">&#39;set_stream&#39;</span><span class="p">,</span> <span class="s1">&#39;set_sync_debug_mode&#39;</span><span class="p">,</span> <span class="s1">&#39;sparse&#39;</span><span class="p">,</span> <span class="s1">&#39;stream&#39;</span><span class="p">,</span> <span class="s1">&#39;streams&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;synchronize&#39;</span><span class="p">,</span> <span class="s1">&#39;utilization&#39;</span><span class="p">]</span>
 </pre></div>
 
              </article>
