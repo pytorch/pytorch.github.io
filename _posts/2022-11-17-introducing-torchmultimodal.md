@@ -39,7 +39,7 @@ TorchMultimodal is a PyTorch domain library for training multi-task multimodal m
 
 - **[Examples](https://github.com/facebookresearch/multimodal/tree/main/examples)**. A collection of examples that show how to combine these building blocks with components and common infrastructure (Lightning, TorchMetrics) from across the PyTorch Ecosystem to replicate state-of-the-art models published in literature. We currently provide five examples, which include.
 
-  - [FLAVA](https://arxiv.org/abs/2112.04482) \[[paper](https://arxiv.org/abs/2112.04482)\]. Official code for the paper accepted at CVPR, including a tutorial on finetuning FLAVA.
+  - [FLAVA](https://github.com/facebookresearch/multimodal/tree/main/examples/flava) \[[paper](https://arxiv.org/abs/2112.04482)\]. Official code for the paper accepted at CVPR, including a tutorial on finetuning FLAVA.
 
   - [MDETR](https://github.com/facebookresearch/multimodal/tree/main/examples/mdetr) \[[paper](https://arxiv.org/abs/2104.12763)\]. Collaboration with authors from NYU to provide an example which alleviates interoperability pain points in the PyTorch ecosystem, including a [notebook](https://github.com/facebookresearch/multimodal/blob/main/examples/mdetr/MDETRTutorial.ipynb) on using MDETR for phrase grounding and visual question answering.
 
