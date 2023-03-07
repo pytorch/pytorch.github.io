@@ -395,7 +395,7 @@ It’s rare to get both performance and convenience, but this is why the core te
 For GPU (newer generation GPUs will see drastically better performance)
 
 ```
-pip3 install numpy --pre torch --force-reinstall --index-url https://download.pytorch.org/whl/nightly/cu117
+pip3 install numpy --pre torch --force-reinstall --extra-index-url https://download.pytorch.org/whl/nightly/cu117
 ```
 
 For CPU
