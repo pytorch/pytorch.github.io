@@ -450,13 +450,13 @@ PyTorch 2.0 is what 1.14 would have been. We were releasing substantial new feat
 
     Install the latest nightlies:
 
-    CUDA 11.7<br>
+    CUDA 11.8<br>
+    ```
+    pip3 install numpy --pre torch torchvision torchaudio --force-reinstall --index-url https://download.pytorch.org/whl/nightly/cu118
+    ```  
+    CUDA 11.7  
     ```
     pip3 install numpy --pre torch torchvision torchaudio --force-reinstall --index-url https://download.pytorch.org/whl/nightly/cu117
-    ```  
-    CUDA 11.6  
-    ```
-    pip3 install numpy --pre torch torchvision torchaudio --force-reinstall --index-url https://download.pytorch.org/whl/nightly/cu116
     ```  
     CPU  
     ```
