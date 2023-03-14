@@ -235,7 +235,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href='https://pytorch.org/docs/versions.html'>master (2.1.0a0+git99efe3e ) &#x25BC</a>
+      <a href='https://pytorch.org/docs/versions.html'>master (2.1.0a0+git6a49290 ) &#x25BC</a>
     </div>
     
 
@@ -467,6 +467,8 @@
               
   <h1>Source code for torch.nn.parallel.distributed</h1><div class="highlight"><pre>
 <span></span><span class="kn">import</span> <span class="nn">copy</span>
+<span class="kn">import</span> <span class="nn">functools</span>
+<span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">defaultdict</span><span class="p">,</span> <span class="n">deque</span>
 <span class="kn">import</span> <span class="nn">inspect</span>
 <span class="kn">import</span> <span class="nn">itertools</span>
 <span class="kn">import</span> <span class="nn">logging</span>
@@ -477,7 +479,7 @@
 <span class="kn">from</span> <span class="nn">contextlib</span> <span class="kn">import</span> <span class="n">contextmanager</span>
 <span class="kn">from</span> <span class="nn">dataclasses</span> <span class="kn">import</span> <span class="n">dataclass</span><span class="p">,</span> <span class="n">fields</span><span class="p">,</span> <span class="n">is_dataclass</span>
 <span class="kn">from</span> <span class="nn">enum</span> <span class="kn">import</span> <span class="n">Enum</span><span class="p">,</span> <span class="n">auto</span>
-<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Type</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Type</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Optional</span>
 
 <span class="kn">import</span> <span class="nn">torch</span>
 <span class="kn">import</span> <span class="nn">torch.distributed</span> <span class="k">as</span> <span class="nn">dist</span>
@@ -496,6 +498,9 @@
         <span class="n">_verify_param_shape_across_processes</span><span class="p">,</span>
         <span class="n">_sync_module_states</span><span class="p">,</span>
         <span class="n">_to_kwargs</span><span class="p">,</span>
+        <span class="n">_apply_to_tensors</span><span class="p">,</span>
+        <span class="n">_alloc_storage</span><span class="p">,</span>
+        <span class="n">_free_storage</span><span class="p">,</span>
     <span class="p">)</span>
     <span class="kn">from</span> <span class="nn">torch.distributed.distributed_c10d</span> <span class="kn">import</span> <span class="n">ReduceOp</span><span class="p">,</span> <span class="n">_get_default_group</span>
 <span class="k">if</span> <span class="n">torch</span><span class="o">.</span><span class="n">distributed</span><span class="o">.</span><span class="n">rpc</span><span class="o">.</span><span class="n">is_available</span><span class="p">():</span>
@@ -511,6 +516,97 @@
 
 <span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
 
+<span class="nd">@dataclass</span>
+<span class="k">class</span> <span class="nc">_MixedPrecision</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    This configures DDP-native mixed precision training.</span>
+
+<span class="sd">    Attributes:</span>
+<span class="sd">        param_dtype (torch.dtype): This specifies the dtype for model</span>
+<span class="sd">            parameters, inputs (when ``cast_forward_inputs`` is set to</span>
+<span class="sd">            ``True``), and therefore the dtype for computation.</span>
+<span class="sd">            However, outside the forward and backward passes, parameters are in</span>
+<span class="sd">            full precision. Model checkpointing always happens in full</span>
+<span class="sd">            precision.</span>
+<span class="sd">        reduce_dtype (torch.dtype): This specifies the dtype for gradient</span>
+<span class="sd">            reduction, which is permitted to differ from ``param_dtype``.</span>
+<span class="sd">        buffer_dtype (torch.dtype): This specifies the dtype for buffers.</span>
+
+<span class="sd">    .. note:: This API is experimental and subject to change.</span>
+
+<span class="sd">    .. note:: Only floating point tensors are cast to their specified dtypes.</span>
+
+<span class="sd">    .. note:: ``state_dict`` checkpoints parameters and buffers in full</span>
+<span class="sd">        precision.</span>
+
+<span class="sd">    .. note:: Each low precision dtype must be specified explicitly. For</span>
+<span class="sd">        example, ``_MixedPrecision(reduce_dtype=torch.float16)`` only specifies</span>
+<span class="sd">        the reduction dtype to be low precision, and DDP will not cast</span>
+<span class="sd">        parameters or buffers.</span>
+
+<span class="sd">    .. note:: If a ``reduce_dtype`` is not specified, then gradient reduction</span>
+<span class="sd">        happens in ``param_dtype`` if specified or the original parameter dtype</span>
+<span class="sd">        otherwise. For example, ``_MixedPrecision(param_dtype=torch.float16)``</span>
+<span class="sd">        would result in communication ocurring in fp16.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">param_dtype</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">dtype</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">reduce_dtype</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">dtype</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">buffer_dtype</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">dtype</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="c1"># TODO (rohan-varma): keep_low_precision_grads: bool = False</span>
+    <span class="c1"># TODO (rohan-varma): APIs to allow users to run batchnorm and layernorm</span>
+    <span class="c1"># in full precision. For DDP, this can be implemented by not performing the</span>
+    <span class="c1"># parameter cast for BN and LN units.</span>
+
+<span class="k">def</span> <span class="nf">_cast_buffers</span><span class="p">(</span><span class="n">mixed_precision_config</span><span class="p">,</span> <span class="n">root_module</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Casts buffers to the given ``buffer_dtype``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">for</span> <span class="n">buf</span> <span class="ow">in</span> <span class="n">root_module</span><span class="o">.</span><span class="n">buffers</span><span class="p">():</span>
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">buf</span><span class="p">,</span> <span class="s1">&#39;_ddp_ignored&#39;</span><span class="p">)</span> <span class="ow">and</span> <span class="n">buf</span><span class="o">.</span><span class="n">_ddp_ignored</span><span class="p">:</span>
+            <span class="k">continue</span>
+
+        <span class="n">buf</span><span class="o">.</span><span class="n">data</span> <span class="o">=</span> <span class="n">buf</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">dtype</span><span class="o">=</span><span class="n">mixed_precision_config</span><span class="o">.</span><span class="n">buffer_dtype</span><span class="p">)</span>
+
+<span class="k">def</span> <span class="nf">_setup_mixed_precision_params</span><span class="p">(</span><span class="n">mixed_precision_config</span><span class="p">,</span> <span class="n">root_module</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Creates and frees storage for the mixed precision parameters.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">for</span> <span class="n">param</span> <span class="ow">in</span> <span class="n">root_module</span><span class="o">.</span><span class="n">parameters</span><span class="p">():</span>
+        <span class="c1"># Do not setup mixed precision for DDP ignored parameters.</span>
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">param</span><span class="p">,</span> <span class="s1">&#39;_ddp_ignored&#39;</span><span class="p">)</span> <span class="ow">and</span> <span class="n">param</span><span class="o">.</span><span class="n">_ddp_ignored</span><span class="p">:</span>
+            <span class="k">continue</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">param</span><span class="p">,</span> <span class="s1">&#39;_mp_param&#39;</span><span class="p">):</span>
+            <span class="n">param</span><span class="o">.</span><span class="n">_mp_param</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span>
+                <span class="n">param</span><span class="p">,</span>
+                <span class="n">device</span><span class="o">=</span><span class="n">param</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+                <span class="n">dtype</span><span class="o">=</span><span class="n">mixed_precision_config</span><span class="o">.</span><span class="n">param_dtype</span><span class="p">,</span>
+                <span class="n">requires_grad</span><span class="o">=</span><span class="n">param</span><span class="o">.</span><span class="n">requires_grad</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">_free_storage</span><span class="p">(</span><span class="n">param</span><span class="o">.</span><span class="n">_mp_param</span><span class="p">)</span>
+            <span class="c1"># _fp_param will point to the full precision param so it can be switched</span>
+            <span class="c1"># back to at the end of forward / backward.</span>
+            <span class="n">param</span><span class="o">.</span><span class="n">_fp_param</span> <span class="o">=</span> <span class="n">param</span><span class="o">.</span><span class="n">data</span>
+
+<span class="k">def</span> <span class="nf">_cast_forward_inputs</span><span class="p">(</span>
+    <span class="n">input_dtype</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">dtype</span><span class="p">],</span>
+    <span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Casts input args and kwargs to the given input_dtype. Note that only</span>
+<span class="sd">    floating point tensors are cast.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">def</span> <span class="nf">cast_fn</span><span class="p">(</span><span class="n">x</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">torch</span><span class="o">.</span><span class="n">is_floating_point</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="ow">or</span> <span class="n">x</span><span class="o">.</span><span class="n">dtype</span> <span class="o">==</span> <span class="n">input_dtype</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">x</span>
+        <span class="k">return</span> <span class="n">x</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">input_dtype</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="p">(</span>
+        <span class="n">_apply_to_tensors</span><span class="p">(</span><span class="n">cast_fn</span><span class="p">,</span> <span class="n">args</span><span class="p">),</span>
+        <span class="n">_apply_to_tensors</span><span class="p">(</span><span class="n">cast_fn</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">)</span>
+    <span class="p">)</span>
 
 <span class="k">def</span> <span class="nf">_tree_flatten_with_rref</span><span class="p">(</span><span class="n">output</span><span class="p">):</span>
     <span class="n">output_is_rref</span> <span class="o">=</span> <span class="n">RPC_AVAILABLE</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">output</span><span class="p">,</span> <span class="n">RRef</span><span class="p">)</span>
@@ -1024,6 +1120,7 @@
         <span class="n">check_reduction</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
         <span class="n">gradient_as_bucket_view</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
         <span class="n">static_graph</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">mixed_precision</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">_MixedPrecision</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
         <span class="n">Joinable</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
@@ -1101,6 +1198,9 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">require_backward_grad_sync</span> <span class="o">=</span> <span class="kc">True</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">require_forward_param_sync</span> <span class="o">=</span> <span class="kc">True</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">gradient_as_bucket_view</span> <span class="o">=</span> <span class="n">gradient_as_bucket_view</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">mixed_precision</span> <span class="o">=</span> <span class="n">mixed_precision</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">mixed_precision</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Received mixed precision config </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">mixed_precision</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 
         <span class="k">if</span> <span class="n">check_reduction</span><span class="p">:</span>
             <span class="c1"># This argument is no longer used since the reducer</span>
@@ -1145,6 +1245,7 @@
         <span class="n">param_to_name_mapping</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_build_debug_param_to_name_mapping</span><span class="p">(</span>
             <span class="n">parameters</span>
         <span class="p">)</span>
+
         <span class="c1"># Builds reducer.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_ddp_init_helper</span><span class="p">(</span>
             <span class="n">parameters</span><span class="p">,</span>
@@ -1152,6 +1253,44 @@
             <span class="n">param_to_name_mapping</span><span class="p">,</span>
             <span class="n">static_graph</span><span class="p">,</span>
         <span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">mixed_precision</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">_setup_mixed_precision_params</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">mixed_precision</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="p">)</span>
+            <span class="n">_cast_buffers</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">mixed_precision</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="p">)</span>
+            <span class="c1"># Stream used for async low precision copies.</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_mp_stream</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">Stream</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_submodule_to_event</span> <span class="o">=</span> <span class="n">defaultdict</span><span class="p">(</span><span class="n">deque</span><span class="p">)</span>  <span class="c1"># type: ignore[var-annotated]</span>
+            <span class="c1"># Add forward pre-hook to root module to kick off copies to lower</span>
+            <span class="c1"># precision.</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="o">.</span><span class="n">register_forward_pre_hook</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_root_copy_hook</span><span class="p">,</span> <span class="n">prepend</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">with_kwargs</span><span class="o">=</span><span class="kc">True</span>
+            <span class="p">)</span>
+            <span class="c1"># Add forward pre hook to all submodules to wait for copy events</span>
+            <span class="c1"># before running computation.</span>
+            <span class="k">for</span> <span class="n">module</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="o">.</span><span class="n">modules</span><span class="p">():</span>
+                <span class="n">module</span><span class="o">.</span><span class="n">register_forward_pre_hook</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_module_wait_for_copy_hook</span><span class="p">,</span> <span class="n">prepend</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">with_kwargs</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                <span class="p">)</span>
+            <span class="c1"># Set up callbacks in backward to upcast and use full precision</span>
+            <span class="c1"># params. TODO (rohan-varma): Make this compose with general</span>
+            <span class="c1"># comm hooks and apply_optimizer_in_backward. Importing inline to</span>
+            <span class="c1"># avoid circular import issue.</span>
+            <span class="kn">from</span> <span class="nn">torch.distributed.algorithms.ddp_comm_hooks.mixed_precision_hooks</span> <span class="kn">import</span> <span class="p">(</span>
+                <span class="n">_reducer_allreduce_and_upcast_hook</span><span class="p">,</span> <span class="n">_AllreduceUpcastHookState</span>
+            <span class="p">)</span>
+            <span class="n">upcast_hook_state</span> <span class="o">=</span> <span class="n">_AllreduceUpcastHookState</span><span class="p">(</span>
+                <span class="n">ddp_weakref</span><span class="o">=</span><span class="n">weakref</span><span class="o">.</span><span class="n">ref</span><span class="p">(</span><span class="bp">self</span><span class="p">),</span>
+                <span class="n">upcast_stream</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">Stream</span><span class="p">(),</span>
+            <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">register_comm_hook</span><span class="p">(</span>
+                <span class="n">upcast_hook_state</span><span class="p">,</span>
+                <span class="n">_reducer_allreduce_and_upcast_hook</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="c1"># Inform reducer of reduced precision param dtype for correctness</span>
+            <span class="c1"># of type checks between gradient and bucket.</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">reducer</span><span class="o">.</span><span class="n">_set_mixed_precision_param_dtype</span><span class="p">(</span>  <span class="c1"># type: ignore[attr-defined]</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">mixed_precision</span><span class="o">.</span><span class="n">param_dtype</span>
+            <span class="p">)</span>
+
         <span class="bp">self</span><span class="o">.</span><span class="n">_has_rebuilt_buckets</span> <span class="o">=</span> <span class="kc">False</span>
 
         <span class="k">if</span> <span class="n">static_graph</span><span class="p">:</span>
@@ -1213,6 +1352,92 @@
                 <span class="p">)</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">reducer</span><span class="o">.</span><span class="n">_set_grads_to_none</span><span class="p">()</span>  <span class="c1"># type: ignore[attr-defined]</span>
 
+    <span class="k">def</span> <span class="nf">_fire_reducer_autograd_hook</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">idx</span><span class="p">,</span> <span class="o">*</span><span class="n">unused</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Fires the reducer&#39;s autograd hook to allreduce params in a Reducer bucket.</span>
+<span class="sd">        Note that this is only used during mixed precision training as the</span>
+<span class="sd">        Reducer&#39;s hooks installed during construction time would not be called</span>
+<span class="sd">        as we&#39;re working in the low precision parameter setting.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">reducer</span><span class="o">.</span><span class="n">_autograd_hook</span><span class="p">(</span><span class="n">idx</span><span class="p">)</span>  <span class="c1"># type: ignore[attr-defined]</span>
+
+    <span class="k">def</span> <span class="nf">_root_copy_hook</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        When training with DDP mixed precision, this root pre-forward hook kicks</span>
+<span class="sd">        off low precision copies on a separate stream and creates respective</span>
+<span class="sd">        events to wait for them.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Clear out previous iteration submodule to event. This is because we</span>
+        <span class="c1"># may have populated some events for modules that didn&#39;t end up being</span>
+        <span class="c1"># used.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_submodule_to_event</span> <span class="o">=</span> <span class="n">defaultdict</span><span class="p">(</span><span class="n">deque</span><span class="p">)</span>  <span class="c1"># type: ignore[var-annotated]</span>
+        <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">stream</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_mp_stream</span><span class="p">):</span>
+            <span class="k">for</span> <span class="n">submodule</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="o">.</span><span class="n">modules</span><span class="p">():</span>
+                <span class="k">for</span> <span class="n">param</span> <span class="ow">in</span> <span class="n">submodule</span><span class="o">.</span><span class="n">parameters</span><span class="p">(</span><span class="n">recurse</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+                    <span class="c1"># Do not cast DDP ignored parameters.</span>
+                    <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">param</span><span class="p">,</span> <span class="s1">&#39;_ddp_ignored&#39;</span><span class="p">)</span> <span class="ow">and</span> <span class="n">param</span><span class="o">.</span><span class="n">_ddp_ignored</span><span class="p">:</span>
+                        <span class="k">continue</span>
+                    <span class="n">_alloc_storage</span><span class="p">(</span><span class="n">param</span><span class="o">.</span><span class="n">_mp_param</span><span class="p">,</span> <span class="n">param</span><span class="o">.</span><span class="n">size</span><span class="p">())</span>
+                    <span class="c1"># copy() implicitly casts to low precision</span>
+                    <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>
+                        <span class="n">param</span><span class="o">.</span><span class="n">_mp_param</span><span class="o">.</span><span class="n">copy_</span><span class="p">(</span><span class="n">param</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
+                        <span class="c1"># TODO: when zero_grad(set_to_none=False) or in grad</span>
+                        <span class="c1"># accumulation case, accumulated grads can be in fp32</span>
+                        <span class="c1"># which can cause errors when running DDP backwards due</span>
+                        <span class="c1"># to mismatched incoming and accumulated gradient types.</span>
+                        <span class="c1"># So we manually cast the accumulated grad down for now,</span>
+                        <span class="c1"># in the future we may shift to FSDP style gradient</span>
+                        <span class="c1"># accumulation management where the accumulated gradient</span>
+                        <span class="c1"># is saved and .grad field is set to None, bypassing</span>
+                        <span class="c1"># this issue.</span>
+                        <span class="k">if</span> <span class="n">param</span><span class="o">.</span><span class="n">grad</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                            <span class="n">param</span><span class="o">.</span><span class="n">grad</span><span class="o">.</span><span class="n">data</span> <span class="o">=</span> <span class="n">param</span><span class="o">.</span><span class="n">grad</span><span class="o">.</span><span class="n">to</span><span class="p">(</span>
+                                <span class="bp">self</span><span class="o">.</span><span class="n">mixed_precision</span><span class="o">.</span><span class="n">param_dtype</span>  <span class="c1"># type: ignore[union-attr]</span>
+                            <span class="p">)</span>
+                    <span class="n">param</span><span class="o">.</span><span class="n">data</span> <span class="o">=</span> <span class="n">param</span><span class="o">.</span><span class="n">_mp_param</span>
+                <span class="n">copy_event</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">Event</span><span class="p">()</span>
+                <span class="n">copy_event</span><span class="o">.</span><span class="n">record</span><span class="p">()</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_submodule_to_event</span><span class="p">[</span><span class="n">submodule</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">copy_event</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_module_wait_for_copy_hook</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">module</span><span class="p">,</span>
+        <span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Before carrying out computation, wait on the appropriate event to ensure</span>
+<span class="sd">        low precision copies have finished.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">event</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_submodule_to_event</span><span class="p">[</span><span class="n">module</span><span class="p">]</span><span class="o">.</span><span class="n">popleft</span><span class="p">()</span>
+        <span class="k">except</span> <span class="ne">IndexError</span><span class="p">:</span>
+            <span class="c1"># copy event has already been waited on</span>
+            <span class="k">return</span>
+
+        <span class="n">event</span><span class="o">.</span><span class="n">wait</span><span class="p">(</span><span class="n">stream</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">current_stream</span><span class="p">())</span>
+        <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">module</span><span class="o">.</span><span class="n">parameters</span><span class="p">(</span><span class="n">recurse</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+            <span class="c1"># Don&#39;t register hooks if param does not require grad</span>
+            <span class="k">if</span> <span class="p">(</span>
+                <span class="ow">not</span> <span class="n">p</span><span class="o">.</span><span class="n">requires_grad</span>
+                <span class="ow">or</span> <span class="p">(</span><span class="nb">hasattr</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="s1">&#39;_ddp_ignored&#39;</span><span class="p">)</span> <span class="ow">and</span> <span class="n">p</span><span class="o">.</span><span class="n">_ddp_ignored</span><span class="p">)</span>
+            <span class="p">):</span>
+                <span class="k">continue</span>
+            <span class="c1"># We need to register autograd hook here instead of DDP&#39;s ctor</span>
+            <span class="c1"># since we&#39;re working with the low precision param. Register them</span>
+            <span class="c1"># via obtaining the gradient accumulator.</span>
+            <span class="n">tmp</span> <span class="o">=</span> <span class="n">p</span><span class="o">.</span><span class="n">expand_as</span><span class="p">(</span><span class="n">p</span><span class="p">)</span>
+            <span class="n">grad_acc</span> <span class="o">=</span> <span class="n">tmp</span><span class="o">.</span><span class="n">grad_fn</span><span class="o">.</span><span class="n">next_functions</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+
+            <span class="n">hook</span> <span class="o">=</span> <span class="n">grad_acc</span><span class="o">.</span><span class="n">register_hook</span><span class="p">(</span>
+                <span class="n">functools</span><span class="o">.</span><span class="n">partial</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_fire_reducer_autograd_hook</span><span class="p">,</span> <span class="n">p</span><span class="o">.</span><span class="n">_idx</span><span class="p">)</span>
+            <span class="p">)</span>
+            <span class="n">p</span><span class="o">.</span><span class="n">_ddp_mp_hook_state</span> <span class="o">=</span> <span class="p">(</span><span class="n">grad_acc</span><span class="p">,</span> <span class="n">hook</span><span class="p">)</span>
+
     <span class="k">def</span> <span class="nf">_log_and_throw</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">err_type</span><span class="p">,</span> <span class="n">err_msg</span><span class="p">):</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">logger</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">set_error_and_log</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">err_type</span><span class="p">)</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">err_msg</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
@@ -1268,6 +1493,12 @@
             <span class="n">bucket_size_limits</span><span class="p">,</span>
             <span class="n">expect_sparse_gradient</span><span class="p">,</span>
         <span class="p">)</span>
+
+        <span class="c1"># Remember index for parameters if we are in mixed precision, as we</span>
+        <span class="c1"># need to pass in index to Reducer&#39;s autograd hook via python.</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">mixed_precision</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">p</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">parameters</span><span class="p">):</span>
+                <span class="n">p</span><span class="o">.</span><span class="n">_idx</span> <span class="o">=</span> <span class="n">i</span>
 
         <span class="c1"># Note: reverse list of buckets because we want to approximate the</span>
         <span class="c1"># order in which their gradients are produced, and assume they</span>
@@ -1547,9 +1778,29 @@
                 <span class="bp">self</span><span class="o">.</span><span class="n">device_ids</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">use_side_stream_for_tensor_copies</span><span class="p">,</span>
             <span class="p">)</span>
+            <span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span> <span class="o">=</span> <span class="n">inputs</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">kwargs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>  <span class="c1"># type: ignore[index]</span>
+            <span class="c1"># Cast inputs to reduced precision if needed.</span>
+            <span class="k">if</span> <span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">mixed_precision</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+            <span class="p">):</span>
+                <span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span> <span class="o">=</span> <span class="n">_cast_forward_inputs</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">mixed_precision</span><span class="o">.</span><span class="n">param_dtype</span><span class="p">,</span>
+                    <span class="o">*</span><span class="n">args</span><span class="p">,</span>
+                    <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+                <span class="p">)</span>
             <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_inside_ddp_forward</span><span class="p">():</span>
-                <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="p">(</span><span class="o">*</span><span class="n">inputs</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>  <span class="c1"># type: ignore[index]</span>
+                <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>  <span class="c1"># type: ignore[index]</span>
         <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># Cast inputs to reduced precision if needed.</span>
+            <span class="c1"># TODO (rohan-varma) test this codepath.</span>
+            <span class="k">if</span> <span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">mixed_precision</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+            <span class="p">):</span>
+                <span class="n">inputs</span><span class="p">,</span> <span class="n">kwargs</span> <span class="o">=</span> <span class="n">_cast_forward_inputs</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">mixed_precision</span><span class="o">.</span><span class="n">param_dtype</span><span class="p">,</span>
+                    <span class="o">*</span><span class="n">inputs</span><span class="p">,</span>
+                    <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+                <span class="p">)</span>
             <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_inside_ddp_forward</span><span class="p">():</span>
                 <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="p">(</span><span class="o">*</span><span class="n">inputs</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 
