@@ -7,4 +7,5 @@ date: March 1, 2023
 
 **Date**: March 1, 2023, 11 AM PST  
 **Speakers**: Wanchao Liang and Junjie Wang  
-[Register here](https://community.linuxfoundation.org/events/details/lfhq-pytorch-foundation-presents-pytorch-20-ask-the-engineers-qa-series-2d-parallelism-using-distributedtensor/)
+[Watch on YouTube](https://www.youtube.com/watch?v=dKkSYNQISeI&list=PL_lsbAsL_o2CQr8oh5sNWt96yWQphNEzM&index=13)  
+[Watch on LinkedIn](https://www.linkedin.com/video/event/urn:li:ugcPost:7032431642803671040/)  

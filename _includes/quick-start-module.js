@@ -18,7 +18,7 @@ var default_selected_os = getAnchorSelectedOS() || getDefaultSelectedOS();
 var opts = {
   cuda: getPreferredCuda(default_selected_os),
   os: default_selected_os,
-  pm: 'conda',
+  pm: 'pip',
   language: 'python',
   ptbuild: 'stable',
 };

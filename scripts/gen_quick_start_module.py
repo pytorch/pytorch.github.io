@@ -35,15 +35,15 @@ MACOS = "macos"
 acc_arch_ver_default = {
     "nightly": {
         "accnone": ("cpu", ""),
-        "cuda.x": ("cuda", "11.6"),
-        "cuda.y": ("cuda", "11.7"),
-        "rocm5.x": ("rocm", "5.2")
+        "cuda.x": ("cuda", "11.7"),
+        "cuda.y": ("cuda", "11.8"),
+        "rocm5.x": ("rocm", "5.4.2")
         },
     "release": {
         "accnone": ("cpu", ""),
-        "cuda.x": ("cuda", "11.6"),
-        "cuda.y": ("cuda", "11.7"),
-        "rocm5.x": ("rocm", "5.2")
+        "cuda.x": ("cuda", "11.7"),
+        "cuda.y": ("cuda", "11.8"),
+        "rocm5.x": ("rocm", "5.4.2")
         }
     }
 
