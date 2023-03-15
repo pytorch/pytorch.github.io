@@ -1,0 +1,6 @@
+﻿torch.greater
+=============
+
+.. currentmodule:: torch
+
+.. autofunction:: greater
