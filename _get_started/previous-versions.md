@@ -102,7 +102,7 @@ pip install torch==1.13.0+cu116 torchvision==0.14.0+cu116 torchaudio==0.13.0 --e
 # CUDA 11.7
 pip install torch==1.13.0+cu117 torchvision==0.14.0+cu117 torchaudio==0.13.0 --extra-index-url https://download.pytorch.org/whl/cu117
 # CPU only
-pip install torch==1.13.0+cpu torchvision==0.4.0+cpu torchaudio==0.13.0 --extra-index-url https://download.pytorch.org/whl/cpu
+pip install torch==1.13.0+cpu torchvision==0.14.0+cpu torchaudio==0.13.0 --extra-index-url https://download.pytorch.org/whl/cpu
 ```
 
 ### v1.12.1
