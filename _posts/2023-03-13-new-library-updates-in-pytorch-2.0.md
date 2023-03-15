@@ -5,7 +5,7 @@ title: "New Library Updates in PyTorch 2.0"
 
 ## Summary
 
-We are bringing a number of improvements to the current PyTorch libraries, alongside the PyTorch 2.0 release. These updates demonstrate our focus on developing common and extensible APIs across all domains to make it easier for our community to build ecosystem projects on PyTorch. 
+We are bringing a number of improvements to the current PyTorch libraries, alongside the [PyTorch 2.0 release](/blog/pytorch-2.0-release/). These updates demonstrate our focus on developing common and extensible APIs across all domains to make it easier for our community to build ecosystem projects on PyTorch. 
 
 Along with 2.0, we are also releasing a series of beta updates to the PyTorch domain libraries, including those that are in-tree, and separate libraries including TorchAudio, TorchVision, and TorchText. An update for TorchX is also being released as it moves to community supported mode. Please find the list of the latest stable versions and updates below.
 
@@ -14,7 +14,7 @@ Along with 2.0, we are also releasing a series of beta updates to the PyTorch do
   <tr>
    <td>TorchArrow 0.1.0
    </td>
-   <td>TorchRec (Beta)
+   <td>TorchRec 0.4.0
    </td>
    <td>TorchVision 0.15
    </td>
@@ -43,8 +43,29 @@ Along with 2.0, we are also releasing a series of beta updates to the PyTorch do
 
 ## TorchAudio 
 
+### [Beta] Data augmentation operators
 
-### [Beta] WavLM and XLS-R Models
+The release adds several data augmentation operators under torchaudio.functional and torchaudio.transforms:
+* torchaudio.functional.add_noise
+* torchaudio.functional.convolve
+* torchaudio.functional.deemphasis
+* torchaudio.functional.fftconvolve
+* torchaudio.functional.preemphasis
+* torchaudio.functional.speed
+* torchaudio.transforms.AddNoise
+* torchaudio.transforms.Convolve
+* torchaudio.transforms.Deemphasis
+* torchaudio.transforms.FFTConvolve
+* torchaudio.transforms.Preemphasis
+* torchaudio.transforms.Speed
+* torchaudio.transforms.SpeedPerturbation
+
+The operators can be used to synthetically diversify training data to improve the generalizability of downstream models.
+
+For usage details, please refer to the [functional](https://pytorch.org/audio/2.0.0/functional.html) and [transform](https://pytorch.org/audio/2.0.0/transforms.html) documentation and [Audio Data Augmentation](https://pytorch.org/audio/2.0.0/tutorials/audio_data_augmentation_tutorial.html) tutorial.
+
+
+### [Beta] WavLM and XLS-R models
 
 The release adds two self-supervised learning models for speech and audio.
 
@@ -60,7 +81,7 @@ Besides the model architectures, torchaudio also supports corresponding pre-trai
 * torchaudio.pipelines.WAV2VEC_XLSR_1B
 * torchaudio.pipelines.WAV2VEC_XLSR_2B
 
-For usage details, please refer to documentation at [https://pytorch.org/audio/main/generated/torchaudio.models.Wav2Vec2Model.html#factory-functions](https://pytorch.org/audio/main/generated/torchaudio.models.Wav2Vec2Model.html#factory-functions) and [https://pytorch.org/audio/main/pipelines.html#wav2vec-2-0-hubert-wavlm-ssl](https://pytorch.org/audio/main/pipelines.html#wav2vec-2-0-hubert-wavlm-ssl).
+For usage details, please refer to the [factory function](https://pytorch.org/audio/2.0.0/generated/torchaudio.models.Wav2Vec2Model.html#factory-functions) and [pre-trained pipelines](https://pytorch.org/audio/2.0.0/pipelines.html#id3) documentation.
 
 
 ## TorchRL  
@@ -109,7 +130,7 @@ Vectorized value function operators also appear in the library. Check the docume
 We provide multiple models, modules and exploration strategies. Get a detailed description in [the doc](https://pytorch.org/rl/reference/modules.html).
 
 
-### [Beta] Composable Replay buffer
+### [Beta] Composable replay buffer
 
 A composable replay buffer class is provided that can be used to store data in multiple contexts including single and multi-agent, on and off-policy and many more.. Components include:
 
