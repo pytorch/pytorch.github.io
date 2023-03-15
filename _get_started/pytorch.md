@@ -478,7 +478,7 @@ While the speedups are primarily observed during training, you can also use it f
     def train(model, dataloader):
       model = torch.compile(model)
       for batch in dataloader:
-      run_epoch(model, batch)
+        run_epoch(model, batch)
 
     def infer(model, input):
       model = torch.compile(model)
