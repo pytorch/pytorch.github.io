@@ -1,5 +1,5 @@
 ---
 order: 1
-link: /blog/deprecation-cuda-python-support/
-summary: "Deprecation of CUDA 11.6 and Python 3.7 Support"
+link: /blog/pytorch-2.0-release/
+summary: "PyTorch 2.0: Our next generation release that is faster, more Pythonic and Dynamic as ever"
 ---

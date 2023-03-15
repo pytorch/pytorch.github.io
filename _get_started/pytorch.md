@@ -488,36 +488,32 @@ While the speedups are primarily observed during training, you can also use it f
 7. **Why should I use PT2.0 instead of PT 1.X?**  
 See answer to Question (2).
 
-8. **Are there any applications where I should NOT use PT 2.0?**  
-The current release of PT 2.0 is still experimental and in the nightlies. Dynamic shapes support in torch.compile is still early, and you should not be using it yet, and wait until the Stable 2.0 release lands in March 2023.  
-That said, even with static-shaped workloads, we’re still building Compiled mode and there might be bugs. Disable Compiled mode for parts of your code that are crashing, and raise an [issue](https://github.com/pytorch/pytorch/issues) (if it isn’t raised already).
-
-9. **What is my code doing differently when running PyTorch 2.0?**  
+8. **What is my code doing differently when running PyTorch 2.0?**  
 Out of the box, PyTorch 2.0 is the same as PyTorch 1.x, your models run in eager-mode i.e. every line of Python is executed one after the other.  
 In 2.0, if you wrap your model in `model = torch.compile(model)`, your model goes through 3 steps before execution:  
     1.  Graph acquisition: first the model is rewritten as blocks of subgraphs. Subgraphs which can be compiled by TorchDynamo are “flattened” and the other subgraphs (which might contain control-flow code or other unsupported Python constructs) will fall back to Eager-Mode.  
     2.  Graph lowering: all the PyTorch operations are decomposed into their constituent kernels specific to the chosen backend.  
     3.  Graph compilation, where the kernels call their corresponding low-level device-specific operations.  
 
-10. **What new components does PT2.0 add to PT?**  
+9. **What new components does PT2.0 add to PT?**  
     - **TorchDynamo** generates FX Graphs from Python bytecode. It maintains the eager-mode capabilities using [guards](https://pytorch.org/docs/master/dynamo/guards-overview.html#caching-and-guards-overview) to ensure the generated graphs are valid ([read more](https://dev-discuss.pytorch.org/t/torchdynamo-an-experiment-in-dynamic-python-bytecode-transformation/361))  
     - **AOTAutograd** to generate the backward graph corresponding to the forward graph captured by TorchDynamo ([read more](https://dev-discuss.pytorch.org/t/torchdynamo-update-6-training-support-with-aotautograd/570)).  
     - **PrimTorch** to decompose complicated PyTorch operations into simpler and more elementary ops ([read more](https://dev-discuss.pytorch.org/t/tracing-with-primitives-update-2/645)).  
     - **\[Backend]** Backends integrate with TorchDynamo to compile the graph into IR that can run on accelerators. For example, **TorchInductor** compiles the graph to either **Triton** for GPU execution or **OpenMP** for CPU execution ([read more](https://dev-discuss.pytorch.org/t/torchinductor-a-pytorch-native-compiler-with-define-by-run-ir-and-symbolic-shapes/747)).  
   
-11. **What compiler backends does 2.0 currently support?**  
+10. **What compiler backends does 2.0 currently support?**  
 The default and the most complete backend is [TorchInductor](https://github.com/pytorch/pytorch/tree/master/torch/_inductor), but TorchDynamo has a growing list of backends that can be found by calling `torchdynamo.list_backends()`.  
   
-12. **How does distributed training work with 2.0?**  
+11. **How does distributed training work with 2.0?**  
 DDP and FSDP in Compiled mode  can run up to 15% faster than Eager-Mode in FP32 and up to 80% faster in AMP precision. PT2.0 does some extra optimization to ensure DDP’s communication-computation overlap works well with Dynamo’s partial graph creation. Ensure you run DDP with static_graph=False. More details [here](https://dev-discuss.pytorch.org/t/torchdynamo-update-9-making-ddp-work-with-torchdynamo/860).  
 
-13. **How can I learn more about PT2.0 developments?**  
+12. **How can I learn more about PT2.0 developments?**  
 The [PyTorch Developers forum](http://dev-discuss.pytorch.org/) is the best place to learn about 2.0 components directly from the developers who build them.  
 
-14. **Help my code is running slower with 2.0’s Compiled Mode!**  
+13. **Help my code is running slower with 2.0’s Compiled Mode!**  
 The most likely reason for performance hits is too many graph breaks. For instance, something innocuous as a print statement in your model’s forward triggers a graph break. We have ways to diagnose these  - read more [here](https://pytorch.org/docs/master/dynamo/faq.html#why-am-i-not-seeing-speedups).  
 
-15. **My previously-running code is crashing with 2.0’s Compiled Mode! How do I debug it?**  
+14. **My previously-running code is crashing with 2.0’s Compiled Mode! How do I debug it?**  
 Here are some techniques to triage where your code might be failing, and printing helpful logs: [https://pytorch.org/docs/master/dynamo/faq.html#why-is-my-code-crashing](https://pytorch.org/docs/master/dynamo/faq.html#why-is-my-code-crashing).  
 
 ## Ask the Engineers: 2.0 Live Q&A Series

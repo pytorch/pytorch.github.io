@@ -7,4 +7,5 @@ date: February 23, 2023
 
 **Date**: February 23, 2023, 11 AM PST  
 **Speakers**: Kartikay Khandelwal and Ankita De  
-[Register here](https://community.linuxfoundation.org/events/details/lfhq-pytorch-foundation-presents-pytorch-20-ask-the-engineers-qa-series-torchmultimodal/)
+[Watch on YouTube](https://www.youtube.com/watch?v=L7W2-0pwsFI&list=PL_lsbAsL_o2CQr8oh5sNWt96yWQphNEzM&index=12)  
+[Watch on LinkedIn](https://www.linkedin.com/video/event/urn:li:ugcPost:7032009478761844736/)  
