@@ -142,7 +142,7 @@ A composable replay buffer class is provided that can be used to store data in m
 Replay buffers and other data utilities are documented [here](https://pytorch.org/rl/reference/data.html).
 
 
-### [Beta] Logging tools and Trainer
+### [Beta] Logging tools and trainer
 
 We support multiple logging tools including tensorboard, wandb and mlflow.
 
@@ -174,7 +174,7 @@ The [tensordict.nn module](https://pytorch-labs.github.io/tensordict/reference/n
 ## TorchRec
 
 
-## [Beta] KeyedJaggedTensor All-to-All Redesign and Input Dist Fusion
+### [Beta] KeyedJaggedTensor All-to-All Redesign and Input Dist Fusion
 
 We observed performance regression due to a bottleneck in sparse data distribution for models that have multiple, large KJTs to redistribute. 
 
