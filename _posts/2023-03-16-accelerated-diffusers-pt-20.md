@@ -94,4 +94,4 @@ For more examples and in-detail benchmark numbers, please also have a look at th
 
 ## Acknowledgement
 
-The authors are grateful to the PyTorch team for their insights, assistance and suggestions during the elaboration of this post, and for creating such excellent software. We are particularly indebted to [Hamid Shojanazeri](https://www.linkedin.com/in/hamid-nazeri), [Grigory Sizov](https://www.linkedin.com/in/christianpuhrsch/), [Christian Puhrsch](https://www.linkedin.com/in/christianpuhrsch/), [Driss Guessous](https://www.linkedin.com/in/drissguessous1/), [Michael Gschwind](https://www.linkedin.com/in/michael-gschwind-3704222/) and [Geeta Chauhan](https://www.linkedin.com/in/geetachauhan/).
+The authors are grateful to the PyTorch team for creating such excellent software.
