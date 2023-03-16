@@ -17,6 +17,94 @@ your convenience.
 
 ## Commands for Versions >= 1.0.0
 
+### v1.13.1
+
+#### Conda
+
+##### OSX
+
+```
+# conda
+conda install pytorch==1.13.1 torchvision==0.14.1 torchaudio==0.13.1 -c pytorch
+```
+
+#####  Linux and Windows
+
+```
+# CUDA 11.6
+conda install pytorch==1.13.1 torchvision==0.14.1 torchaudio==0.13.1 pytorch-cuda=11.6 -c pytorch -nvidia
+# CUDA 11.7
+conda install pytorch==1.13.1 torchvision==0.14.1 torchaudio==0.13.1 pytorch-cuda=11.7 -c pytorch -nvidia
+# CPU Only
+conda install pytorch==1.13.1 torchvision==0.14.1 torchaudio==0.13.1 cpuonly -c pytorch
+```
+
+#### Wheel
+
+##### OSX
+
+```
+pip install torch==1.13.1 torchvision==0.14.1 torchaudio==0.13.1
+```
+
+##### Linux and Windows
+
+```
+# ROCM 5.2 (Linux only)
+pip3 install torch torchvision torchaudio --extra-index-url
+pip install torch==1.13.1+rocm5.2 torchvision==0.14.1+rocm5.2 torchaudio==0.13.1 --extra-index-url https://download.pytorch.org/whl/rocm5.2
+# CUDA 11.6
+pip install torch==1.13.1+cu116 torchvision==0.14.1+cu116 torchaudio==0.13.1 --extra-index-url https://download.pytorch.org/whl/cu116
+# CUDA 11.7
+pip install torch==1.13.1+cu117 torchvision==0.14.1+cu117 torchaudio==0.13.1 --extra-index-url https://download.pytorch.org/whl/cu117
+# CPU only
+pip install torch==1.13.1+cpu torchvision==0.14.1+cpu torchaudio==0.13.1 --extra-index-url https://download.pytorch.org/whl/cpu
+```
+
+### v1.13.0
+
+#### Conda
+
+##### OSX
+
+```
+# conda
+conda install pytorch==1.13.0 torchvision==0.14.0 torchaudio==0.13.0 -c pytorch
+```
+
+#####  Linux and Windows
+
+```
+# CUDA 11.6
+conda install pytorch==1.13.0 torchvision==0.14.0 torchaudio==0.13.0 pytorch-cuda=11.6 -c pytorch -nvidia
+# CUDA 11.7
+conda install pytorch==1.13.0 torchvision==0.14.0 torchaudio==0.13.0 pytorch-cuda=11.7 -c pytorch -nvidia
+# CPU Only
+conda install pytorch==1.13.0 torchvision==0.14.0 torchaudio==0.13.0 cpuonly -c pytorch
+```
+
+#### Wheel
+
+##### OSX
+
+```
+pip install torch==1.13.0 torchvision==0.14.0 torchaudio==0.13.0
+```
+
+##### Linux and Windows
+
+```
+# ROCM 5.2 (Linux only)
+pip3 install torch torchvision torchaudio --extra-index-url
+pip install torch==1.13.0+rocm5.2 torchvision==0.14.0+rocm5.2 torchaudio==0.13.0 --extra-index-url https://download.pytorch.org/whl/rocm5.2
+# CUDA 11.6
+pip install torch==1.13.0+cu116 torchvision==0.14.0+cu116 torchaudio==0.13.0 --extra-index-url https://download.pytorch.org/whl/cu116
+# CUDA 11.7
+pip install torch==1.13.0+cu117 torchvision==0.14.0+cu117 torchaudio==0.13.0 --extra-index-url https://download.pytorch.org/whl/cu117
+# CPU only
+pip install torch==1.13.0+cpu torchvision==0.14.0+cpu torchaudio==0.13.0 --extra-index-url https://download.pytorch.org/whl/cpu
+```
+
 ### v1.12.1
 
 #### Conda
@@ -392,7 +480,7 @@ macOS is currently not supported for LTS.
 # NOTE: PyTorch LTS version 1.8.2 is only supported for Python <= 3.8.
 conda install pytorch torchvision torchaudio cudatoolkit=10.2 -c pytorch-lts
 
-# CUDA 11.1 (Linux) 
+# CUDA 11.1 (Linux)
 # NOTE: 'nvidia' channel is required for cudatoolkit 11.1 <br> <b>NOTE:</b> Pytorch LTS version 1.8.2 is only supported for Python <= 3.8.
 conda install pytorch torchvision torchaudio cudatoolkit=11.1 -c pytorch-lts -c nvidia
 
@@ -411,7 +499,7 @@ Not supported in LTS.
 
 #### Wheel
 
-##### OSX 
+##### OSX
 
 macOS is currently not supported in LTS.
 
