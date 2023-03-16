@@ -226,8 +226,8 @@ Accessing model attributes work as they would in eager mode.
 You can access or modify attributes of your model (such as `model.conv1.weight`) as you generally would. This is completely safe and sound in terms of code correction. TorchDynamo inserts guards into the code to check if its assumptions hold true. If attributes change in certain ways, then TorchDynamo knows to recompile automatically as needed.
 
 ```python
-# optimized_model works similar to model, feel free to access its attributes and modify them
-optimized_model.conv1.weight.fill_(0.01)
+# compiled_model works similar to model, feel free to access its attributes and modify them
+compiled_model.conv1.weight.fill_(0.01)
 
 # this change is reflected in model
 ```
@@ -238,18 +238,18 @@ Module and Tensor [hooks](https://pytorch.org/docs/stable/notes/modules.html#mod
 
 ### Serialization
 
-You can serialize the state-dict of the `optimized_model` OR the `model`. They point to the same parameters and state and hence are equivalent.
+You can serialize the state-dict of the `compiled_model` OR the `model`. They point to the same parameters and state and hence are equivalent.
 
 ```python
-torch.save(optimized_model.state_dict(), "foo.pt")
+torch.save(compiled_model.state_dict(), "foo.pt")
 # both these lines of code do the same thing
 torch.save(model.state_dict(), "foo.pt")
 ```
 
-You cannot serialize `optimized_model` currently. If you wish to save the object directly, save `model` instead.
+You cannot serialize `compiled_model` currently. If you wish to save the object directly, save `model` instead.
 
 ```python
-torch.save(optimized_model, "foo.pt") # Error
+torch.save(compiled_model, "foo.pt") # Error
 torch.save(model, "foo.pt")           # Works
 ```
 
