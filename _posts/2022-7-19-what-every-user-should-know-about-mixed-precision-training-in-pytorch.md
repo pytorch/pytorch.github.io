@@ -57,7 +57,7 @@ scaler = torch.cuda.amp.GradScaler()
 for data, label in data_iter:
    optimizer.zero_grad()
    # Casts operations to mixed precision
-   with torch.amp.autocast(device_type=“cuda”, dtype=torch.float16):
+   with torch.amp.autocast(device_type="cuda", dtype=torch.float16):
       loss = model(data)
 
    # Scales the loss, and calls backward()
