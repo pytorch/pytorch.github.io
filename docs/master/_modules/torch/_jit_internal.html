@@ -235,7 +235,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href='https://pytorch.org/docs/versions.html'>master (2.1.0a0+git0b094ca ) &#x25BC</a>
+      <a href='https://pytorch.org/docs/versions.html'>master (2.1.0a0+git13ca084 ) &#x25BC</a>
     </div>
     
 
@@ -491,6 +491,7 @@
     <span class="n">Callable</span><span class="p">,</span>
     <span class="n">Dict</span><span class="p">,</span>
     <span class="n">Final</span><span class="p">,</span>
+    <span class="n">ForwardRef</span><span class="p">,</span>
     <span class="n">Generic</span><span class="p">,</span>
     <span class="n">List</span><span class="p">,</span>
     <span class="n">Optional</span><span class="p">,</span>
@@ -1667,7 +1668,7 @@
 
 
 <span class="k">def</span> <span class="nf">_get_named_tuple_properties</span><span class="p">(</span>
-    <span class="n">obj</span><span class="p">,</span> <span class="n">loc</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">_jit_tree_views</span><span class="o">.</span><span class="n">SourceRange</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">obj</span><span class="p">,</span> <span class="n">loc</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">_jit_tree_views</span><span class="o">.</span><span class="n">SourceRange</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">rcb</span><span class="o">=</span><span class="kc">None</span>
 <span class="p">):</span>
     <span class="k">if</span> <span class="n">loc</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">loc</span> <span class="o">=</span> <span class="n">fake_range</span><span class="p">()</span>
@@ -1693,7 +1694,53 @@
     <span class="n">annotations</span> <span class="o">=</span> <span class="p">[]</span>
     <span class="k">for</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">obj</span><span class="o">.</span><span class="n">_fields</span><span class="p">:</span>
         <span class="k">if</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">obj_annotations</span><span class="p">:</span>
-            <span class="n">the_type</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">jit</span><span class="o">.</span><span class="n">annotations</span><span class="o">.</span><span class="n">ann_to_type</span><span class="p">(</span><span class="n">obj_annotations</span><span class="p">[</span><span class="n">field</span><span class="p">],</span> <span class="n">loc</span><span class="p">)</span>
+            <span class="n">field_type</span> <span class="o">=</span> <span class="n">obj_annotations</span><span class="p">[</span><span class="n">field</span><span class="p">]</span>
+            <span class="c1"># [Note: ForwardRef annotations in NamedTuple attributes]</span>
+            <span class="c1"># NamedTuple types are slightly different from normal types.</span>
+            <span class="c1">#</span>
+            <span class="c1"># Normally, annotations are evaluted like this (during jit.script):</span>
+            <span class="c1"># 1. Load strings of python code into c++ and parse.</span>
+            <span class="c1"># 2. Get annotations as strings</span>
+            <span class="c1"># 3. Use the PythonResolver&#39;s resolution callback (rcb) to convert</span>
+            <span class="c1">#    the string into a python object</span>
+            <span class="c1"># 4. We call into annotations.py:ann_to_type to convert python obj</span>
+            <span class="c1">#    from step 3 into a type that torchscript understands.</span>
+            <span class="c1">#</span>
+            <span class="c1"># NamedTuples are more complicated, because it has sub-types.</span>
+            <span class="c1"># Normally, once we have the NamedTuple type object from #3,</span>
+            <span class="c1"># we can just look at the annotation literal values and use</span>
+            <span class="c1"># ann_to_type directly on them.</span>
+            <span class="c1">#</span>
+            <span class="c1"># But sometimes, users will annotate with string literals, e.g.</span>
+            <span class="c1">#    x: &#39;int&#39;</span>
+            <span class="c1"># This also happens with PEP563 (from __forward__ import annotations)</span>
+            <span class="c1">#</span>
+            <span class="c1"># These annotations appear in the annotation dict as ForwardRef(&#39;int&#39;).</span>
+            <span class="c1">#</span>
+            <span class="c1"># Then, we need to convert the string into a python object. This</span>
+            <span class="c1"># requires having local context for custom objects or imported types.</span>
+            <span class="c1"># rcb() is what gives us this. So, we plumb rcb through the stack so</span>
+            <span class="c1"># it can be used in this context for the if block below.</span>
+            <span class="c1">#</span>
+            <span class="c1"># FAQ:</span>
+            <span class="c1"># - Why do we need this special handling for NamedTuple but string</span>
+            <span class="c1">#   annotations work fine for normal types? Normally, we parse the</span>
+            <span class="c1">#   string directly and then call rcb() directly from C++.</span>
+            <span class="c1"># - Why not use ForwardRef._evaluate? For that, we need globals()</span>
+            <span class="c1">#   and locals() for the local context where the NamedTuple was defined.</span>
+            <span class="c1">#   rcb is what lets us look up into these. So, basically rcb does the</span>
+            <span class="c1">#   hard work for us.</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">field_type</span><span class="p">,</span> <span class="n">ForwardRef</span><span class="p">)</span> <span class="ow">and</span> <span class="n">rcb</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">rcb_type</span> <span class="o">=</span> <span class="n">rcb</span><span class="p">(</span><span class="n">field_type</span><span class="o">.</span><span class="n">__forward_arg__</span><span class="p">)</span>
+                <span class="c1"># rcb returns None if it can&#39;t find anything.</span>
+                <span class="k">if</span> <span class="n">rcb_type</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;Unknown type annotation: &#39;</span><span class="si">{</span><span class="n">field_type</span><span class="si">}</span><span class="s2">&#39; in NamedTuple </span><span class="si">{</span><span class="n">obj</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">.&quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot; Likely due to partial support for ForwardRef parameters in NamedTuples, see #95858.&quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot; Issue occurred at </span><span class="si">{</span><span class="n">loc</span><span class="o">.</span><span class="n">highlight</span><span class="p">()</span><span class="si">}</span><span class="s2">&quot;</span>
+                    <span class="p">)</span>
+                <span class="n">field_type</span> <span class="o">=</span> <span class="n">rcb_type</span>
+            <span class="n">the_type</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">jit</span><span class="o">.</span><span class="n">annotations</span><span class="o">.</span><span class="n">ann_to_type</span><span class="p">(</span><span class="n">field_type</span><span class="p">,</span> <span class="n">loc</span><span class="p">,</span> <span class="n">rcb</span><span class="p">)</span>
             <span class="n">annotations</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">the_type</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="n">annotations</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">TensorType</span><span class="o">.</span><span class="n">getInferred</span><span class="p">())</span>
