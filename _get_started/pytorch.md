@@ -283,7 +283,7 @@ The minifier automatically reduces the issue you are seeing to a small snippet o
 
 If you are not seeing the speedups that you expect, then we have the **torch.\_dynamo.explain** tool that explains which parts of your code induced what we call “graph breaks”. Graph breaks generally hinder the compiler from speeding up the code, and reducing the number of graph breaks likely will speed up your code (up to some limit of diminishing returns).
 
-You can read about these and more in our [troubleshooting guide](https://pytorch.org/docs/master/dynamo/troubleshooting.html).
+You can read about these and more in our [troubleshooting guide](https://pytorch.org/docs/stable/dynamo/troubleshooting.html).
 
 ### Dynamic Shapes
 
