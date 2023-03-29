@@ -28,7 +28,7 @@ Underpinning `torch.compile` are new technologies -- TorchDynamo, AOTAutograd, P
 * **AOTAutograd** overloads PyTorch’s autograd engine as a tracing autodiff for generating ahead-of-time backward traces.
 
 - **PrimTorch** canonicalizes ~2000+ PyTorch operators down to a closed set of ~250 primitive operators that developers can target to build a complete PyTorch backend. This substantially lowers the barrier of writing a PyTorch feature or backend.
-- **TorchInductor** is a deep learning compiler that generates fast code for multiple accelerators and backends. For NVIDIA GPUs, it uses OpenAI Triton as a key building block.
+- **TorchInductor** is a deep learning compiler that generates fast code for multiple accelerators and backends. For NVIDIA and AMD GPUs, it uses OpenAI Triton as a key building block.
 
 TorchDynamo, AOTAutograd, PrimTorch and TorchInductor are written in Python and support dynamic shapes (i.e. the ability to send in Tensors of different sizes without inducing a recompilation), making them flexible, easily hackable and lowering the barrier of entry for developers and vendors.
 
