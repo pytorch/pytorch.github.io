@@ -27,7 +27,7 @@ By design, PyTorch 2.0 is backward compatible to earlier PyTorch releases. This 
 
 The initial results using AMD Instinct MI250 GPUs already shows strong performance improvement with minimal optimization on TorchInductor compared to the default eager-mode. We see an average performance increase of up to 1.54X on 44 out of the 45 models on HuggingFace benchmarks suite with CamemBert, DistillGPT2 and T5Small being a few of the standout models with up to 1.5X or more performance improvement over eager-mode. We are looking forward to continued engagement with members of the PyTorch team at Meta to enable further optimization on ROCm software stack and the additional performance improvement for future PyTorch releases.  
 
-![GPU performance improvement for TorchInductor vs eager-mode](/assets/images/t-vs-eager-mode.png){:width="100%"}       
+![GPU performance improvement for TorchInductor vs eager-mode](/assets/images/t-vs-eager-mode.svg){:width="100%"}       
 
 <small style="line-height: 1.1"><em>Image 1: AMD MI250 GPU performance improvement for TorchInductor vs eager-mode using HuggingFace <sup>MI200-89.</sup></em></small>
 
