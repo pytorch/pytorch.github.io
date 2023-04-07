@@ -27,7 +27,7 @@ The below shows screenshots of two trace files output by PyTorch profiler in a u
 * The first screenshot shows that a process has a very high allreduce cost in both the first and the third steps, because this process reaches the synchronization phase earlier than the straggler(s), and it spends more time on waiting. On the other hand, the allreduce cost is relatively small in the second step, this suggests that 1) there is no straggler at this step; or 2) this process is the straggler among all the processes, so it does not need to wait for any other process.
 
 
-![chart showing allreduce cost](/assets/images/straggler-mitigation/straggler-mitigation/straggler-mitigation-1.png){:style="max-height:800px; width:100%"}  
+![chart showing allreduce cost](/assets/images/straggler-mitigation/straggler-mitigation-1.png){:style="max-height:800px; width:100%"}  
 
 <small style="line-height: 1.1"><em>Both the 1st and the 3rd Steps Are Slowed Down by Stragglers</em></small>
 
@@ -35,7 +35,7 @@ The below shows screenshots of two trace files output by PyTorch profiler in a u
 * The second screenshot shows a normal case without stragglers. In this case, all the gradient synchronizations are relatively short.
 
 
-![chart showing normal case without stragglers](/assets/images/straggler-mitigation/straggler-mitigation/straggler-mitigation-2.png){:style="max-height:800px; width:100%"}  
+![chart showing normal case without stragglers](/assets/images/straggler-mitigation/straggler-mitigation-2.png){:style="max-height:800px; width:100%"}  
 
 <small style="line-height: 1.1"><em>Normal Case Without Stragglers</em></small>
 
@@ -63,7 +63,7 @@ The following figure illustrates an example of 4-level hierarchy SGD among 16 pr
 Particularly, when the step number can be divided by 8, only the synchronization at 3) is executed, and when the step number can be divided by 4 but not 8, only the synchronization at 2) is executed.
 
 
-![An example of 4-level hierarchy SGD among 16 processes on 8 machines, each of which has 2 GPUs](/assets/images/straggler-mitigation/straggler-mitigation/straggler-mitigation-3.png){:style="max-height:800px; width:100%"}  
+![An example of 4-level hierarchy SGD among 16 processes on 8 machines, each of which has 2 GPUs](/assets/images/straggler-mitigation/straggler-mitigation-3.png){:style="max-height:800px; width:100%"}  
 
 
 Intuitively, hierarchical SGD can be viewed as an extension of [local SGD](https://core.ac.uk/download/pdf/211998087.pdf), which only has a two-level hierarchy – every process runs mini-batch SGD locally and then synchronizes globally at a certain frequency. This can also help explain that, just like local SGD, hierarchical SGD synchronizes model parameters instead of gradients. Otherwise the gradient descent will be mathematically incorrect when the frequency is greater than 1.
@@ -76,7 +76,7 @@ The key insight here is that, when there is a random straggler, it only directly
 The example below assumes that there is a random straggler among totally 8 processes at every step. After 4 steps, vanilla DDP that runs synchronous SGD will be slowed down by straggler 4 times, because it runs global synchronization at every step. In contrast, hierarchical SGD runs synchronization with the groups of 4 processes after the first two steps, and then a global synchronization after another two steps. We can see that both the first two and the last two stragglers have a large overlap, and hence the performance loss can be mitigated.
 
 
-![flow diagram](/assets/images/straggler-mitigation/straggler-mitigation/straggler-mitigation-4.png){:style="max-height:800px; width:100%"}  
+![flow diagram](/assets/images/straggler-mitigation/straggler-mitigation-4.png){:style="max-height:800px; width:100%"}  
 
 
 Essentially, the mitigation effect of this hierarchical SGD example actually is between local SGD at a frequency of every 2 steps and every 4 steps. The main advantage of hierarchical SGD over local SGD is a better convergence efficiency of the same global synchronization frequency, because hierarchical SGD allows more low-level synchronization. Moreover, it is possible for hierarchical SGD to provide a global synchronization frequency lower than local SGD with model parity, leading to a higher training performance, especially in a large-scale distributed training.
@@ -112,22 +112,22 @@ ddp_model = nn.parallel.DistributedDataParallel(
 
 )
 
-## Register a post-local SGD communication hook for the warmup.
+# Register a post-local SGD communication hook for the warmup.
 subgroup, _ = torch.distributed.new_subgroups()
 state = PostLocalSGDState(subgroup=subgroup, start_localSGD_iter=1_000)
 ddp_model.register_comm_hook(state, post_localSGD_hook)
 
-## Wraps the existing (local) optimizer to run hierarchical model averaging.
+# Wraps the existing (local) optimizer to run hierarchical model averaging.
 optim = PostLocalSGDOptimizer(
   optim=optim,
   averager=hierarchicalSGD.HierarchicalModelAverager(
-    ## The config runs a 4-level hierarchy SGD among 128 processes:
-    ## 1) Each process runs mini-batch SGD locally;
-    ## 2) Each 8-process group synchronize every 2 steps;
-    ## 3) Each 32-process group synchronize every 4 steps;
-    ## 4) All 128 processes synchronize every 8 steps.
+    # The config runs a 4-level hierarchy SGD among 128 processes:
+    # 1) Each process runs mini-batch SGD locally;
+    # 2) Each 8-process group synchronize every 2 steps;
+    # 3) Each 32-process group synchronize every 4 steps;
+    # 4) All 128 processes synchronize every 8 steps.
     period_group_size_dict=OrderedDict([(2, 8), (4, 32), (8, 128)]),
-    ## Do not run hierarchical SGD until 1K steps for model parity.
+    # Do not run hierarchical SGD until 1K steps for model parity.
     warmup_steps=1_000)
 )
 ```
@@ -162,7 +162,7 @@ The code snippet below shows how a straggler can be emulated in the training loo
 
 ```
      loss = loss_fn(y_pred, y)
-     ## Emulate a straggler that lags for 1 second at a rate of 1%.
+     # Emulate a straggler that lags for 1 second at a rate of 1%.
      if random.randint(1, 100) == 1:
          time.sleep(1)
      loss.backward()
@@ -251,11 +251,11 @@ Since only simulated data is used in the experiments, we did not demonstrate the
 2. For some cases, hierarchical SGD could lead to a slightly lower quality than the original model for the same number of training steps (i.e., lower convergence rate), but with a speedup like 2X+ per training step, it is still possible to achieve model parity with more steps but still less total training time.
 
 
-![Speedups on 64 GPUs](/assets/images/straggler-mitigation/straggler-mitigation/straggler-mitigation-5.png){:style="max-height:800px; width:100%"}  
+![Speedups on 64 GPUs](/assets/images/straggler-mitigation/straggler-mitigation-5.png){:style="max-height:800px; width:100%"}  
 
-![Speedups on 128 GPUs](/assets/images/straggler-mitigation/straggler-mitigation/straggler-mitigation-6.png){:style="max-height:800px; width:100%"}  
+![Speedups on 128 GPUs](/assets/images/straggler-mitigation/straggler-mitigation-6.png){:style="max-height:800px; width:100%"}  
 
-![Speedups on 256 GPUs](/assets/images/straggler-mitigation/straggler-mitigation/straggler-mitigation-7.png){:style="max-height:800px; width:100%"}  
+![Speedups on 256 GPUs](/assets/images/straggler-mitigation/straggler-mitigation-7.png){:style="max-height:800px; width:100%"}  
 
 
 
