@@ -93,23 +93,15 @@ As the code example below shows, only a few lines need to be added to the setup 
 
 ```
 import torch.distributed.algorithms.model_averaging.hierarchical_model_averager as hierarchicalSGD
-
 from torch.distributed.algorithms.ddp_comm_hooks.post_localSGD_hook import (
-
     PostLocalSGDState,
-
     post_localSGD_hook,
-
 )
-
 from torch.distributed.optim import PostLocalSGDOptimizer
 
 ddp_model = nn.parallel.DistributedDataParallel(
-
     module=model,
-
     device_ids=[rank],
-
 )
 
 # Register a post-local SGD communication hook for the warmup.
@@ -225,15 +217,15 @@ We ran hierarchical SGD with the following configurations:
 
 
 1. On 64 GPUs:
-    1. Each 8-process group, 32-process, and the global 64-process group synchronizes every 2, 4, and 8 steps, respectively. Denoted as “**_HSGD 2-8,4-32,8-64_**”.
-    2. Each 32-process group and the global 64-process group synchronizes every 4 and 8 steps, respectively. Denoted as “**_HSGD 4-32,8-64_**”.
+    1. Each 8-process group, 32-process, and the global 64-process group synchronizes every 2, 4, and 8 steps, respectively. Denoted as "_**HSGD 2-8,4-32,8-64**_".
+    2. Each 32-process group and the global 64-process group synchronizes every 4 and 8 steps, respectively. Denoted as "_**HSGD 4-32,8-64**_".
 2. On 128 GPUs:
-    3. Each 8-process group, 32-process group, and the global 128-process group synchronizes every 2, 4, and 8 steps, respectively. Denoted as “**_HSGD 2-8,4-32,8-128_**”.
-    4. Each 32-process group and the global 128-process group synchronizes every 4 and 8 steps, respectively. Denoted as “**_HSGD 4-32,8-128_**”.
+    3. Each 8-process group, 32-process group, and the global 128-process group synchronizes every 2, 4, and 8 steps, respectively. Denoted as "_**HSGD 2-8,4-32,8-128**_".
+    4. Each 32-process group and the global 128-process group synchronizes every 4 and 8 steps, respectively. Denoted as "_**HSGD 4-32,8-128**_".
 3. On 256 GPUs:
-    5. Each 4-process group, 16-process group, 64-process group, and the global 256-process group synchronizes every 1, 2, 4, and 8 steps, respectively. Denoted as “**_HSGD 1-4,2-16,4-64,8-256_**”.
-    6. Each 8-process group, 64-process group, and the global 256-process group synchronizes every 2, 4, and 8 steps. Denoted as “**_HSGD 2-8,4-64,8-256_**”.
-    7. Each 16-process group and the global 256-process group synchronizes every 4 and 8 steps, respectively. Denoted as “**_HSGD 4-16,8-256_**”.
+    5. Each 4-process group, 16-process group, 64-process group, and the global 256-process group synchronizes every 1, 2, 4, and 8 steps, respectively. Denoted as "_**HSGD 1-4,2-16,4-64,8-256**_".
+    6. Each 8-process group, 64-process group, and the global 256-process group synchronizes every 2, 4, and 8 steps. Denoted as "_**HSGD 2-8,4-64,8-256**_".
+    7. Each 16-process group and the global 256-process group synchronizes every 4 and 8 steps, respectively. Denoted as "_**HSGD 4-16,8-256**_".
 
 
 ### Experimental Results
