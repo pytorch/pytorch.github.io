@@ -1,9 +1,10 @@
 ---
 layout: blog_detail
-title: "Celebrate PyTorch* 2.0 with New Performance Features for AI Developers"
+title: "Celebrate PyTorch 2.0 with New Performance Features for AI Developers"
+author: Intel
 ---
 
-Congratulations to the PyTorch Foundation for its release of **PyTorch* 2.0**! In this blog, I discuss the four features for which Intel made significant contributions to PyTorch 2.0:
+Congratulations to the PyTorch Foundation for its release of **PyTorch 2.0**! In this blog, I discuss the four features for which Intel made significant contributions to PyTorch 2.0:
 
 1. TorchInductor
 2. GNN
