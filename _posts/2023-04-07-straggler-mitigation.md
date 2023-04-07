@@ -250,7 +250,6 @@ Since only simulated data is used in the experiments, we did not demonstrate the
 ![Speedups on 256 GPUs](/assets/images/straggler-mitigation/straggler-mitigation-7.png){:style="max-height:800px; width:100%"}  
 
 
-
 ## Limitations
 
 Before applying hierarchical SGD to straggler mitigation, the user should be aware of a few limitations of this approach:
