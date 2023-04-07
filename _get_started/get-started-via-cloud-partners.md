@@ -4,7 +4,7 @@ title: Start via Cloud Partners
 permalink: /get-started/cloud-partners/
 background-class: get-started-background
 body-class: get-started
-order: 2
+order: 3
 published: true
 get-started-via-cloud: true
 ---
@@ -42,3 +42,4 @@ get-started-via-cloud: true
 <script page-id="get-started-via-cloud-partners" src="{{ site.baseurl }}/assets/menu-tab-selection.js"></script>
 <script src="{{ site.baseurl }}/assets/quick-start-module.js"></script>
 <script src="{{ site.baseurl }}/assets/show-screencast.js"></script>
+<script src="{{ site.baseurl }}/assets/get-started-sidebar.js"></script>

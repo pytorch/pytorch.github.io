@@ -40,7 +40,7 @@ bundle = HDEMUCS_HIGH_MUSDB_PLUS
 model = bundle.get_model()
 sources_list = model.sources
 
-mixture, samplerate = torchaudio.load(“song.wav”)
+mixture, samplerate = torchaudio.load("song.wav")
 sources = model(mixture)
 audios = dict(zip(sources_list, sources)
 ```

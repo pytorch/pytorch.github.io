@@ -50,7 +50,7 @@ cd master-branch
 cp -a "../_site/." .
 
 # have small jekyll config to allow underscores
-echo "include: [_static, _images, _modules, _sources, _asserts.html, _lowrank.html, _script.html, _serialization.html, _tensor_str.html, _trace.html, _utils.html]" > _config.yml
+echo "include: [_static, _images, _modules, _sources, _asserts.html, _creation.html, _comparison.html, _lowrank.html, _script.html, _diagnostic.html, _dynamo.html, _serialization.html, _type_utils, _tensor_str.html, _trace.html, _utils.html, _internal, _C, _distributed_autograd.html, _distributed_c10d.html, _distributed_rpc.html, _fft.html, _linalg.html, _monitor.html, _nested.html, _nn.html, _profiler.html, _sparse.html, _special.html, __config__.html, _dynamo, _lobpcg.html, _jit_internal.html, _numeric_suite.html, _numeric_suite_fx.html, _sanitizer.html, _symbolic_trace.html, _async.html, _freeze.html, _fuser.html, _type_utils.html, _utils ]" > _config.yml
 
 # stage any changes and new files
 git add -A

@@ -1,0 +1,6 @@
+﻿torch.atleast\_1d
+=================
+
+.. currentmodule:: torch
+
+.. autofunction:: atleast_1d

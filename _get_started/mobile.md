@@ -18,3 +18,4 @@ Get started on [Android]({{ site.baseurl }}/mobile/android)
 Get started on [iOS]({{ site.baseurl }}/mobile/ios)
 
 <script page-id="mobile" src="{{ site.baseurl }}/assets/menu-tab-selection.js"></script>
+<script src="{{ site.baseurl }}/assets/get-started-sidebar.js"></script>
