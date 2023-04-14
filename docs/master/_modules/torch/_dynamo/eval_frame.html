@@ -235,7 +235,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href='https://pytorch.org/docs/versions.html'>master (2.1.0a0+gitdda9523 ) &#x25BC</a>
+      <a href='https://pytorch.org/docs/versions.html'>master (2.1.0a0+gitfd7eaf7 ) &#x25BC</a>
     </div>
     
 
@@ -528,6 +528,12 @@
 
 <span class="n">always_optimize_code_objects</span> <span class="o">=</span> <span class="n">utils</span><span class="o">.</span><span class="n">ExactWeakKeyDictionary</span><span class="p">()</span>
 <span class="n">null_context</span> <span class="o">=</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">nullcontext</span>
+
+
+<span class="kn">import</span> <span class="nn">sympy</span>
+
+<span class="kn">from</span> <span class="nn">torch.fx.experimental.symbolic_shapes</span> <span class="kn">import</span> <span class="n">StrictMinMaxConstraint</span>
+<span class="kn">from</span> <span class="nn">torch.utils._sympy.value_ranges</span> <span class="kn">import</span> <span class="n">ValueRanges</span>
 
 
 <span class="c1"># See https://github.com/python/typing/pull/240</span>
@@ -832,7 +838,9 @@
 
 <span class="k">def</span> <span class="nf">catch_errors_wrapper</span><span class="p">(</span><span class="n">callback</span><span class="p">,</span> <span class="n">hooks</span><span class="p">:</span> <span class="n">Hooks</span><span class="p">):</span>
     <span class="nd">@functools</span><span class="o">.</span><span class="n">wraps</span><span class="p">(</span><span class="n">callback</span><span class="p">)</span>
-    <span class="k">def</span> <span class="nf">catch_errors</span><span class="p">(</span><span class="n">frame</span><span class="p">,</span> <span class="n">cache_size</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">catch_errors</span><span class="p">(</span><span class="n">frame</span><span class="p">,</span> <span class="n">cache_size</span><span class="p">,</span> <span class="n">frame_state</span><span class="p">):</span>
+        <span class="k">assert</span> <span class="n">frame_state</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+
         <span class="k">if</span> <span class="p">(</span>
             <span class="c1"># TODO: the first condition is not covered by any test</span>
             <span class="n">frame</span><span class="o">.</span><span class="n">f_lasti</span> <span class="o">&gt;=</span> <span class="n">first_real_inst_idx</span><span class="p">(</span><span class="n">frame</span><span class="o">.</span><span class="n">f_code</span><span class="p">)</span>
@@ -858,10 +866,10 @@
                         <span class="n">ddp_optimizer</span><span class="o">.</span><span class="n">compile_fn</span><span class="p">,</span>
                         <span class="n">hooks</span><span class="o">=</span><span class="n">hooks</span><span class="p">,</span>
                     <span class="p">)</span>
-                    <span class="k">return</span> <span class="n">hijacked_callback</span><span class="p">(</span><span class="n">frame</span><span class="p">,</span> <span class="n">cache_size</span><span class="p">,</span> <span class="n">hooks</span><span class="p">)</span>
+                    <span class="k">return</span> <span class="n">hijacked_callback</span><span class="p">(</span><span class="n">frame</span><span class="p">,</span> <span class="n">cache_size</span><span class="p">,</span> <span class="n">hooks</span><span class="p">,</span> <span class="n">frame_state</span><span class="p">)</span>
 
         <span class="k">with</span> <span class="n">compile_lock</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">callback</span><span class="p">(</span><span class="n">frame</span><span class="p">,</span> <span class="n">cache_size</span><span class="p">,</span> <span class="n">hooks</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">callback</span><span class="p">(</span><span class="n">frame</span><span class="p">,</span> <span class="n">cache_size</span><span class="p">,</span> <span class="n">hooks</span><span class="p">,</span> <span class="n">frame_state</span><span class="p">)</span>
 
     <span class="n">catch_errors</span><span class="o">.</span><span class="n">_torchdynamo_orig_callable</span> <span class="o">=</span> <span class="n">callback</span>  <span class="c1"># type: ignore[attr-defined]</span>
     <span class="k">return</span> <span class="n">catch_errors</span>
@@ -1071,9 +1079,38 @@
     <span class="c1"># TODO: We don&#39;t need t_id; we can get it off of w_tensor</span>
     <span class="n">t_id</span><span class="p">:</span> <span class="nb">int</span>
     <span class="n">dim</span><span class="p">:</span> <span class="nb">int</span>
-    <span class="n">constraint_range</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span>
-        <span class="n">torch</span><span class="o">.</span><span class="n">fx</span><span class="o">.</span><span class="n">experimental</span><span class="o">.</span><span class="n">symbolic_shapes</span><span class="o">.</span><span class="n">StrictMinMaxConstraint</span>
-    <span class="p">]</span>
+    <span class="c1"># NOTE(avik): In the future, this could be Union[StrictMinMaxConstraint, &lt;other kinds&gt;]</span>
+    <span class="n">constraint_range</span><span class="p">:</span> <span class="n">StrictMinMaxConstraint</span>
+
+    <span class="k">def</span> <span class="nf">_clone_with_range</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">lower</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">upper</span><span class="o">=</span><span class="n">sympy</span><span class="o">.</span><span class="n">oo</span><span class="p">):</span>
+        <span class="n">constraint_range</span> <span class="o">=</span> <span class="n">StrictMinMaxConstraint</span><span class="p">(</span>
+            <span class="n">vr</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">constraint_range</span><span class="o">.</span><span class="n">vr</span> <span class="o">&amp;</span> <span class="n">ValueRanges</span><span class="p">(</span><span class="n">lower</span><span class="o">=</span><span class="n">lower</span><span class="p">,</span> <span class="n">upper</span><span class="o">=</span><span class="n">upper</span><span class="p">),</span>
+            <span class="n">warn_only</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">Constraint</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">w_tensor</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">t_id</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">dim</span><span class="p">,</span> <span class="n">constraint_range</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="fm">__ge__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">lower</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_clone_with_range</span><span class="p">(</span><span class="n">lower</span><span class="o">=</span><span class="n">lower</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="fm">__gt__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">lower</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_clone_with_range</span><span class="p">(</span><span class="n">lower</span><span class="o">=</span><span class="n">lower</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="fm">__le__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">upper</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_clone_with_range</span><span class="p">(</span><span class="n">upper</span><span class="o">=</span><span class="n">upper</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="fm">__lt__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">upper</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_clone_with_range</span><span class="p">(</span><span class="n">upper</span><span class="o">=</span><span class="n">upper</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="fm">__bool__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="c1"># NOTE(avik): We do not support compound expressions like a &lt;= x &lt;= b.</span>
+        <span class="c1"># This is because Python implicitly desugars them into bool(a &lt;= x) and bool(x &lt;= b),</span>
+        <span class="c1"># and moreover, enforces that any overload of __bool__ must return True or False.</span>
+        <span class="c1"># FWIW, sympy also raises TypeError in this case.</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+            <span class="s2">&quot;Cannot determine truth value of Constraint. &quot;</span>
+            <span class="s2">&quot;If you are trying to combine Constraints with logical connectives, &quot;</span>
+            <span class="s2">&quot;you can specify them separately instead.&quot;</span>
+        <span class="p">)</span>
 
 
 <div class="viewcode-block" id="export"><a class="viewcode-back" href="../../../_dynamo.html#torch._dynamo.export">[docs]</a><span class="k">def</span> <span class="nf">export</span><span class="p">(</span>
@@ -1423,16 +1460,27 @@
     <span class="k">return</span> <span class="n">RunOnlyContext</span><span class="p">()</span></div>
 
 
-<div class="viewcode-block" id="disable"><a class="viewcode-back" href="../../../_dynamo.html#torch._dynamo.disable">[docs]</a><span class="k">def</span> <span class="nf">disable</span><span class="p">(</span><span class="n">fn</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;Decorator and context manager to disable TorchDynamo&quot;&quot;&quot;</span>
-    <span class="k">if</span> <span class="n">fn</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">fn</span> <span class="o">=</span> <span class="n">innermost_fn</span><span class="p">(</span><span class="n">fn</span><span class="p">)</span>
-        <span class="k">assert</span> <span class="n">callable</span><span class="p">(</span><span class="n">fn</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">DisableContext</span><span class="p">()(</span><span class="n">fn</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">DisableContext</span><span class="p">()</span></div>
+<div class="viewcode-block" id="disable"><a class="viewcode-back" href="../../../_dynamo.html#torch._dynamo.disable">[docs]</a><span class="k">def</span> <span class="nf">disable</span><span class="p">(</span><span class="n">fn</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">recursive</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Decorator and context manager to disable TorchDynamo</span>
+
+<span class="sd">    If recursive=True, Dynamo is completely skipped on the decorated function</span>
+<span class="sd">    frame as well as the recursively invoked functions.</span>
+
+<span class="sd">    If recursive=False, Dynamo skips frames associated with the function code,</span>
+<span class="sd">    but still process recursively invoked frames.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">recursive</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">fn</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">fn</span> <span class="o">=</span> <span class="n">innermost_fn</span><span class="p">(</span><span class="n">fn</span><span class="p">)</span>
+            <span class="k">assert</span> <span class="n">callable</span><span class="p">(</span><span class="n">fn</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">DisableContext</span><span class="p">()(</span><span class="n">fn</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">DisableContext</span><span class="p">()</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">skip</span><span class="p">(</span><span class="n">fn</span><span class="p">)</span></div>
 
 
-<div class="viewcode-block" id="skip"><a class="viewcode-back" href="../../../_dynamo.html#torch._dynamo.skip">[docs]</a><span class="k">def</span> <span class="nf">skip</span><span class="p">(</span><span class="n">fn</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="k">def</span> <span class="nf">skip</span><span class="p">(</span><span class="n">fn</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Skip frames associated with the function code, but still process recursively</span>
 <span class="sd">    invoked frames</span>
@@ -1443,7 +1491,7 @@
     <span class="k">assert</span> <span class="n">callable</span><span class="p">(</span><span class="n">fn</span><span class="p">)</span>
     <span class="n">skip_code</span><span class="p">(</span><span class="n">fn</span><span class="o">.</span><span class="vm">__code__</span><span class="p">)</span>
     <span class="n">fn</span><span class="o">.</span><span class="n">_torchdynamo_disable</span> <span class="o">=</span> <span class="kc">True</span>
-    <span class="k">return</span> <span class="n">fn</span></div>
+    <span class="k">return</span> <span class="n">fn</span>
 
 
 <span class="k">class</span> <span class="nc">TorchPatcher</span><span class="p">:</span>
@@ -1473,8 +1521,8 @@
 
         <span class="c1"># disable dynamo for the wrapper that helps give dynamo hints about entering DDP</span>
         <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">DistributedDataParallel</span><span class="p">,</span> <span class="s2">&quot;_inside_ddp_forward&quot;</span><span class="p">):</span>
-            <span class="n">DistributedDataParallel</span><span class="o">.</span><span class="n">_inside_ddp_forward</span> <span class="o">=</span> <span class="n">skip</span><span class="p">(</span>
-                <span class="n">DistributedDataParallel</span><span class="o">.</span><span class="n">_inside_ddp_forward</span>
+            <span class="n">DistributedDataParallel</span><span class="o">.</span><span class="n">_inside_ddp_forward</span> <span class="o">=</span> <span class="n">disable</span><span class="p">(</span>
+                <span class="n">DistributedDataParallel</span><span class="o">.</span><span class="n">_inside_ddp_forward</span><span class="p">,</span> <span class="n">recursive</span><span class="o">=</span><span class="kc">False</span>
             <span class="p">)</span>
 
         <span class="kn">from</span> <span class="nn">..optim</span> <span class="kn">import</span> <span class="n">adagrad</span><span class="p">,</span> <span class="n">adam</span><span class="p">,</span> <span class="n">adamax</span><span class="p">,</span> <span class="n">adamw</span><span class="p">,</span> <span class="n">asgd</span><span class="p">,</span> <span class="n">nadam</span><span class="p">,</span> <span class="n">sgd</span>
