@@ -198,7 +198,7 @@ torch.allclose(y_sdpa, y_nanogpt) # False, indicating fp issues
 torch.allclose(y_sdpa, y_scale_before) # True, as expected
 ```
 
-# Appendix B: Reproducing Experiment Results
+## Appendix B: Reproducing Experiment Results
 
 Researchers seeking to reproduce these results should start with the following commit from Andrej’s nanoGPT repository - **<span style="text-decoration:underline;">b3c17c6c6a363357623f223aaa4a8b1e89d0a465</span>**. This commit was used as the baseline when measuring the per batch speed improvements. For results which include padded vocabulary optimizations (which yielded the most significant improvements to batch speed), use the following commit - **<span style="text-decoration:underline;">77e7e04c2657846ddf30c1ca2dd9f7cbb93ddeab</span>**. From either checkout, selecting kernels for experimentation is made trivial with the use of the [torch.backends](https://pytorch.org/docs/stable/backends.html) API. 
 
