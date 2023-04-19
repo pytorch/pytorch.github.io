@@ -4,7 +4,7 @@
   <generator uri="https://jekyllrb.com/" version="3.9.0">Jekyll</generator>
   <link href="https://pytorch.org/feed.xml" rel="self" type="application/atom+xml" />
   <link href="https://pytorch.org/" rel="alternate" type="text/html" />
-  <updated>2023-04-18T17:49:36-07:00</updated>
+  <updated>2023-04-19T07:11:51-07:00</updated>
   <id>https://pytorch.org/feed.xml</id>
 
   
@@ -29,6 +29,230 @@
 
   
   
+  
+    <entry>
+      <title type="html">Accelerating Large Language Models with Accelerated Transformers</title>
+      <link href="https://pytorch.org/blog/accelerating-large-language-models/" rel="alternate" type="text/html" title="Accelerating Large Language Models with Accelerated Transformers" />
+      <published>2023-04-19T00:00:00-07:00</published>
+      <updated>2023-04-19T00:00:00-07:00</updated>
+      <id>https://pytorch.org/blog/accelerating-large-language-models</id>
+      <content type="html" xml:base="https://pytorch.org/blog/accelerating-large-language-models/">&lt;p&gt;&lt;strong&gt;TL;DR.&lt;/strong&gt; We show how to use Accelerated PyTorch 2.0 Transformers and the newly introduced &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;torch.compile()&lt;/code&gt; method to accelerate Large Language Models on the example of &lt;a href=&quot;https://github.com/karpathy/nanoGPT&quot;&gt;nanoGPT&lt;/a&gt;, a compact open-source implementation of the GPT model from Andrej Karpathy. Using the new &lt;a href=&quot;https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention.html&quot;&gt;scaled dot product attention operator&lt;/a&gt; introduced with Accelerated PT2 Transformers, we select the flash_attention custom kernel and achieve faster training time per batch (measured with Nvidia A100 GPUs), going from a ~143ms/batch baseline to ~113 ms/batch. In addition, the enhanced implementation using the SDPA operator offers better numerical stability. Finally, further optimizations are achieved using padded inputs, which when combined with flash attention lead to ~87ms/batch.&lt;/p&gt;
+
+&lt;p&gt;Recent times have seen exponential adoption of large language models (LLMs) and Generative AI in everyday life. Tightly coupled with these ever-growing models is the ever-growing training cost - in terms of both time and hardware utilization. The PyTorch team has tackled these challenges head on with &lt;a href=&quot;https://pytorch.org/blog/accelerated-pytorch-2/&quot;&gt;Accelerated PyTorch 2 Transformers&lt;/a&gt; (previously known as “Better Transformer”) and JIT Compilation in &lt;a href=&quot;https://pytorch.org/blog/pytorch-2.0-release/&quot;&gt;PyTorch 2.0&lt;/a&gt;.&lt;/p&gt;
+
+&lt;p&gt;In this blog post, we explore training optimizations gained by utilizing custom kernel implementations of SDPA - also known as scaled dot product attention - a critical layer in transformer models. The custom kernel for SDPA replaces several discrete sequential operations with one globally optimized kernel which avoids allocating a large amount of intermediate CUDA memory. This approach offers a number of advantages, including but not limited to:  higher performance computation of SDPA by reducing memory bandwidth bottleneck, reduced memory footprint to support larger batch sizes, and finally added numerical stability by prescaling input tensors. These optimizations are demonstrated on nanoGPT, an open-source implementation of GPT from Andrej Karpathy.&lt;/p&gt;
+
+&lt;h2 id=&quot;background&quot;&gt;Background&lt;/h2&gt;
+
+&lt;p&gt;Scaled dot product attention is the fundamental building block of multihead attention, as introduced in &lt;a href=&quot;https://arxiv.org/abs/1706.03762&quot;&gt;“Attention is All You Need”&lt;/a&gt;, and has a wide range of applications in LLM and Generative AI models.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/2023-04-18-accelerating-large-language-models/PyTorch_Better-Transformer_Figure-1.png&quot; alt=&quot;The Transformer model architecture&quot; style=&quot;max-height:800px; width:100%&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;small style=&quot;line-height: 1.1&quot;&gt;&lt;em&gt;&lt;strong&gt;Figure 1:&lt;/strong&gt; The Transformer model architecture based on &lt;a href=&quot;https://arxiv.org/abs/1706.03762&quot;&gt;“Attention is All You Need”&lt;/a&gt;. With the new PyTorch SDPA operator, Multi-Head Attention is efficiently implemented by a linear layer for the in-projection, the SDPA operator, and a linear layer for the out-projection.&lt;/em&gt;&lt;/small&gt;&lt;/p&gt;
+
+&lt;p&gt;With the new scaled_dot_product_attention operator, multihead attention can be implemented in just 3 steps: in projection with a linear layer, SDPA, and out projection with a linear layer.&lt;/p&gt;
+
+&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;# In Projection
+# variable descriptions:
+# q,k,v = Query, Key, Value tensors
+# bsz = batch size
+# num_heads = Numner of heads for Multihead Attention
+# tgt_len = Target length
+# src_len = Source Length
+# head_dim: Head Dimension
+    q, k, v = _in_projection(query, key, value, q_proj_weight, k_proj_weight, v_proj_weight, b_q, b_k, b_v)
+    q = q.view(bsz, num_heads, tgt_len, head_dim)
+    k = k.view(bsz, num_heads, src_len, head_dim)
+    v = v.view(bsz, num_heads, src_len, head_dim)
+
+    # Scaled Dot Product Attention
+    attn_output = scaled_dot_product_attention(q, k, v, attn_mask, dropout_p, is_causal)
+
+    # Out Projection
+    attn_output = attn_output.permute(2, 0, 1, 3).contiguous().view(bsz * tgt_len, embed_dim)
+    attn_output = linear(attn_output, out_proj_weight, out_proj_bias)
+    attn_output = attn_output.view(tgt_len, bsz, attn_output.size(1))
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;PyTorch 2. supports multiple different kernels optimized for specific use cases, with specific requirements. A kernel picker picks the best kernel for a particular combination of input parameters. If no optimized “custom kernel” for a particular combination of input parameters can be identified, the kernel picker selects a general kernel that can handle all input combinations.&lt;/p&gt;
+
+&lt;p&gt;While future releases may extend this set of operators, PyTorch 2.0 launches with 3 implementations for the SDPA operator:&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;A generic kernel which implements the mathematical equation of SDPA in the function &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;sdpa_math()&lt;/code&gt;&lt;/li&gt;
+  &lt;li&gt;An optimized kernel based on the paper “&lt;a href=&quot;https://arxiv.org/abs/2205.14135&quot;&gt;Flash Attention&lt;/a&gt;”, which supports evaluation of SDPA with 16 bit floating point data types on compute architecture SM80 (A100).&lt;/li&gt;
+  &lt;li&gt;An optimized kernel based on the paper “&lt;a href=&quot;https://arxiv.org/abs/2112.0568&quot;&gt;Self-Attention Does Not Need O(n^2) Memory&lt;/a&gt;” and implemented in &lt;a href=&quot;https://github.com/facebookresearch/xformers&quot;&gt;xFormer&lt;/a&gt;, which supports both 32 and 16 bit floating data types on a wider range of architectures (SM40 and later). This blog post refers to this kernel as the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;mem_efficient&lt;/code&gt; kernel.&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;Note that both optimized kernels (two and three listed above), support a key padding mask and limit the supported attention mask to causal attention. Accelerated PyTorch 2.0 Transformers today only support the causal mask when it is specified using the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;is_causal&lt;/code&gt; boolean. When a mask is specified, the general-purpose kernel will be selected because it is too expensive to analyze the contents of a provided mask to determine if it is the causal mask. Additional explanations on the constraints for each kernel can be found in the &lt;a href=&quot;https://pytorch.org/blog/accelerated-pytorch-2/&quot;&gt;Accelerated PT2 Transformer blog&lt;/a&gt;.&lt;/p&gt;
+
+&lt;h2 id=&quot;enabling-accelerated-transformers-with-nanogpt&quot;&gt;Enabling Accelerated Transformers with nanoGPT&lt;/h2&gt;
+
+&lt;p&gt;The SDPA operator being a critical component of the GPT model,  we identified the open source nanoGPT model as an excellent candidate for both demonstrating the ease of implementation and benefits of PyTorch 2.0’s Accelerated Transformers. The following demonstrates the exact process by which Accelerated Transformers was enabled on nanoGPT.&lt;/p&gt;
+
+&lt;p&gt;This process largely revolves around replacing the existing SDPA implementation with the newly added F.scaled_dot_product_attention operator from &lt;a href=&quot;https://github.com/pytorch/pytorch/blob/df14650f0b14b80db132b0c1797dc595fbee1054/torch/nn/functional.py#L4834&quot;&gt;functional.py&lt;/a&gt;. This process can be easily adapted to enable the operator in many other LLMs. Alternatively, users can instead choose to call F.multi_head_attention_forward() or utilize the nn.MultiHeadAttention module directly where applicable. The following code snippets are adapted from Karpathy’s nanoGPT repository.&lt;/p&gt;
+
+&lt;h3 id=&quot;step-1-identify-the-existing-sdpa-implementation&quot;&gt;Step 1: Identify the existing SDPA implementation&lt;/h3&gt;
+
+&lt;p&gt;In the case of nanoGPT, SDPA is implemented in the model’s &lt;a href=&quot;https://github.com/karpathy/nanoGPT/blob/master/model.py#L37&quot;&gt;CausalSelfAttention&lt;/a&gt; class. The original implementation at time of writing is adapted below for this post.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/2023-04-18-accelerating-large-language-models/causal_attention_step_1.png&quot; alt=&quot;The original implementation at time of writing&quot; style=&quot;max-height:800px; width:100%&quot; /&gt;&lt;/p&gt;
+
+&lt;h3 id=&quot;step-2-replace-with-torchs-scaled_dot_product_attention&quot;&gt;Step 2: Replace with Torch’s &lt;em&gt;scaled_dot_product_attention&lt;/em&gt;&lt;/h3&gt;
+
+&lt;p&gt;At this point we can note the following:&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;Lines 36 - 42 define the mathematical implementation of SDPA which we are replacing&lt;/li&gt;
+  &lt;li&gt;The mask applied on line 39 is no longer relevant since we are using scaled_dot_product_attention’s &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;is_causal&lt;/code&gt; flag.&lt;/li&gt;
+  &lt;li&gt;The dropout layer used in line 41 is also now unnecessary.&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;Swapping out the SDPA implementation for torch’s scaled_dot_product_attention and removing the now redundant code yields the following implementation.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/2023-04-18-accelerating-large-language-models/causal_attention_step_2.png&quot; alt=&quot;Swapping out the SDPA implementation for torch’s scaled_dot_product_attention and removing the now redundant code yields the following implementation.&quot; style=&quot;max-height:800px; width:100%&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Alternatively, the original mask can be passed into the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;attn_mask&lt;/code&gt; field however due to the mentioned kernel constraints that would limit the implementation to only support the generic &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;sdpa_math&lt;/code&gt; kernel.&lt;/p&gt;
+
+&lt;h3 id=&quot;step-3-bonus-faster-matmuls-with-padding&quot;&gt;Step 3 (Bonus): Faster matmuls with padding&lt;/h3&gt;
+
+&lt;p&gt;On top of the performance improvements from SDPA, our analysis yielded a nice ancillary win.  In Andrej’s words “The most dramatic optimization to nanoGPT so far (~25% speedup) is to simply increase the vocab size from 50257 to 50304 (nearest multiple of 64).”&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/2023-04-18-accelerating-large-language-models/tweet.png&quot; alt=&quot;Tweet by Andrej Karpathy&quot; style=&quot;max-height:800px; width:100%; max-width:600px&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;The vocab size determines the dimensions of matmuls in the output layer of GPT, and these are so large that they were taking a &lt;em&gt;majority&lt;/em&gt; of the time for the entire training loop!  We discovered that they were achieving performance significantly below the peak throughput achievable on the A100 GPU, and guessed from &lt;a href=&quot;https://docs.nvidia.com/deeplearning/performance/dl-performance-matrix-multiplication/index.html&quot;&gt;NVIDIA’s matmul documentation&lt;/a&gt; that 64-element alignment would yield better results.  Indeed, padding these matmuls achieves nearly a 3x speedup!  The underlying cause is that unaligned memory accesses significantly reduce efficiency.  A deeper analysis can be found in &lt;a href=&quot;https://twitter.com/cHHillee/status/1630274804795445248&quot;&gt;this Twitter thread&lt;/a&gt;.&lt;/p&gt;
+
+&lt;p&gt;With this optimization we were able to further reduce training time from ~113 ms (using flash attention) to ~87 ms per batch.&lt;/p&gt;
+
+&lt;h2 id=&quot;results&quot;&gt;Results&lt;/h2&gt;
+
+&lt;p&gt;The figure below demonstrates the performance gained using Pytorch custom kernels. Here are the exact figures:&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;baseline (nanoGPT implementation):  ~143ms&lt;/li&gt;
+  &lt;li&gt;sdpa_math (generic): ~134ms (6.71% faster)&lt;/li&gt;
+  &lt;li&gt;&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;mem_efficient&lt;/code&gt; kernel: ~119ms (20.16% faster)&lt;/li&gt;
+  &lt;li&gt;&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;flash_attention&lt;/code&gt; kernel: ~113ms (26.54% faster)&lt;/li&gt;
+  &lt;li&gt;flash_attention + padded vocab:  ~87ms (64.37% faster)&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;All code was run on an 8 x NVIDIA Corporation A100 server with 80 GB HBM [A100 SXM4 80GB], and for the purpose of this experiment dropout was set to 0.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/2023-04-18-accelerating-large-language-models/PyTorch_Better-Transformer_Chart-2.png&quot; alt=&quot;Using scaled dot product attention with custom kernels and torch.compile delivers significant speedups for training large language models&quot; style=&quot;max-height:800px; width:100%&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;small style=&quot;line-height: 1.1&quot;&gt;&lt;em&gt;&lt;strong&gt;Figure 2:&lt;/strong&gt; Using scaled dot product attention with custom kernels and torch.compile delivers significant speedups for training large language models, such as for &lt;a href=&quot;https://github.com/karpathy/nanoGPT&quot;&gt;nanoGPT&lt;/a&gt; shown here.&lt;/em&gt;&lt;/small&gt;&lt;/p&gt;
+
+&lt;h2 id=&quot;enhancing-numerical-model-stability&quot;&gt;Enhancing Numerical Model Stability&lt;/h2&gt;
+
+&lt;p&gt;In addition to being faster, PyTorch’s implementation offers increased numerical stability by avoiding loss of precision in many execution scenarios. There is a great explanation &lt;a href=&quot;https://github.com/bigscience-workshop/Megatron-DeepSpeed/pull/118&quot;&gt;here&lt;/a&gt;, but essentially the PyTorch implementation scales the Query and Key matrices &lt;em&gt;before&lt;/em&gt; multiplication, which is said to be more stable and avoid loss of precision. Because of the merged custom kernel architecture of SDPA, this scaling does not introduce additional overhead in the computation of the attention result.  In comparison, an implementation from the individual computational components would require separate pre-scaling at additional cost. For an additional explanation, see Appendix A.&lt;/p&gt;
+
+&lt;h3 id=&quot;improved-memory-consumption&quot;&gt;Improved Memory Consumption&lt;/h3&gt;
+
+&lt;p&gt;Yet another large advantage of using the torch SDPA kernels is the reduced memory footprint, which allows for the utilization of larger batch sizes. The following chart compares the best validation loss after one hour of training for both flash attention and the baseline implementations of causal attention. As can be seen, the maximum batch size achieved with the baseline causal attention implementation (on 8 x NVIDIA Corporation A100 server with 80 GB HBM) was 24, significantly less then the maximum achieved with flash attention, which was 39.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/2023-04-18-accelerating-large-language-models/chart.png&quot; alt=&quot;Using Flash Attention enables the usage of larger batch sizes&quot; style=&quot;max-height:800px; width:100%&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;small style=&quot;line-height: 1.1&quot;&gt;&lt;em&gt;&lt;strong&gt;Figure 3:&lt;/strong&gt; Using Flash Attention enables the usage of larger batch sizes, allowing users to achieve lower validation loss after one hour of training (smaller is better).&lt;/em&gt;&lt;/small&gt;&lt;/p&gt;
+
+&lt;h2 id=&quot;conclusion&quot;&gt;Conclusion&lt;/h2&gt;
+
+&lt;p&gt;Accelerated PyTorch 2 Transformers were designed to make the training and production deployment of state-of-the-art transformer models affordable and integrated with PyTorch 2.0 model JIT compilation.  The newly introduced PyTorch SDPA operator provides improved performance for training Transformer models and is particularly valuable for the expensive Large Language Model training. In this post we demonstrate a number of optimizations on the exemplary nanoGPT model  including:&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;Over 26% training speedup, when compared against the baseline with constant batch size&lt;/li&gt;
+  &lt;li&gt;An additional speedup achieved with padded vocabulary, bringing the total optimization to approximately 64% compared to the baseline&lt;/li&gt;
+  &lt;li&gt;Additional numerical stability&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h2 id=&quot;appendix-a-analyzing-attention-numeric-stability&quot;&gt;Appendix A: Analyzing Attention Numeric Stability&lt;/h2&gt;
+
+&lt;p&gt;In this section we provide a more in depth explanation of the previously mentioned enhanced numerical stability which is gained by prescaling SDPA’s input vectors. The following is a simplified version of nanoGPT’s mathematical implementation of SDPA. The important thing to note here is that the query undergoes matrix multiplication without being scaled.&lt;/p&gt;
+
+&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;# nanoGPT implementation of SDPA
+# notice q (our query vector) is not scaled !
+att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1)))
+att = att.masked_fill(self.bias[:,:,:T,:T] == 0, float('-inf'))
+att = F.softmax(att, dim=-1)
+
+# Dropout is set to 0, so we can safely ignore this line in the implementation# att = self.attn_dropout(att) 
+
+y_nanogpt = att @ v # (B, nh, T, T) x (B, nh, T, hs) -&amp;gt; (B, nh, T, hs)
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;The following is the equivalent mathematical implementation in torch’s &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;scaled_dot_product_attention&lt;/code&gt;.&lt;/p&gt;
+
+&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;# PyTorch implementation of SDPA
+embed_size = q.size(-1)
+scaling_factor = math.sqrt(math.sqrt(embed_size))
+q = q / scaling_factor 	# notice q _is_ scaled here !
+
+# same as above, but with scaling factor
+att = q @ (k.transpose(-2, -1) / scaling_factor)
+att = att.masked_fill(self.bias[:,:,:T,:T] == 0, float('-inf'))
+att = F.softmax(att0, dim=-1)
+
+# Dropout is set to 0, so we can safely ignore this line in the implementation# att = self.attn_dropout(att) 
+
+y_scale_before = att @ v
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Mathematically both approaches should be equivalent, however our experimentation shows that in practice we receive different results from each approach.&lt;/p&gt;
+
+&lt;p&gt;Using the approach above, we verified &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;y_scale_before&lt;/code&gt; matches the expected output from using the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;scaled_dot_product_attention &lt;/code&gt;method while &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;y_nanogpt&lt;/code&gt; does not.&lt;/p&gt;
+
+&lt;p&gt;The &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;torch.allclose&lt;/code&gt; method was used to test equivalence. Specifically, we showed that:&lt;/p&gt;
+
+&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;y_sdpa = torch.nn.functional._scaled_dot_product_attention(
+	q,
+	k,
+	v,
+	attn_mask=self.bias[:,:,:T,:T] != 0,
+	dropout_p=0.0,
+	need_attn_weights=False,
+	is_causal=False,
+)
+
+torch.allclose(y_sdpa, y_nanogpt) # False, indicating fp issues
+torch.allclose(y_sdpa, y_scale_before) # True, as expected
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;h2 id=&quot;appendix-b-reproducing-experiment-results&quot;&gt;Appendix B: Reproducing Experiment Results&lt;/h2&gt;
+
+&lt;p&gt;Researchers seeking to reproduce these results should start with the following commit from Andrej’s nanoGPT repository - &lt;strong&gt;&lt;span style=&quot;text-decoration:underline;&quot;&gt;b3c17c6c6a363357623f223aaa4a8b1e89d0a465&lt;/span&gt;&lt;/strong&gt;. This commit was used as the baseline when measuring the per batch speed improvements. For results which include padded vocabulary optimizations (which yielded the most significant improvements to batch speed), use the following commit - &lt;strong&gt;&lt;span style=&quot;text-decoration:underline;&quot;&gt;77e7e04c2657846ddf30c1ca2dd9f7cbb93ddeab&lt;/span&gt;&lt;/strong&gt;. From either checkout, selecting kernels for experimentation is made trivial with the use of the &lt;a href=&quot;https://pytorch.org/docs/stable/backends.html&quot;&gt;torch.backends&lt;/a&gt; API.&lt;/p&gt;
+
+&lt;p&gt;The desired kernel can be selected via a context manager:&lt;/p&gt;
+
+&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;with torch.backends.cuda.sdp_kernel (
+    enable_math = False,
+    enable_flash = False,
+    enable_mem_efficient = True
+):
+    train(model)
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;</content>
+
+      
+      
+      
+      
+      
+
+      <author>
+          <name>Lucas Pasqualin, Driss Guessous, Christian Puhrsch, Bertrand Maher, Michael Gschwind</name>
+        
+        
+      </author>
+
+      
+
+      
+
+      
+        <summary type="html">TL;DR. We show how to use Accelerated PyTorch 2.0 Transformers and the newly introduced torch.compile() method to accelerate Large Language Models on the example of nanoGPT, a compact open-source implementation of the GPT model from Andrej Karpathy. Using the new scaled dot product attention operator introduced with Accelerated PT2 Transformers, we select the flash_attention custom kernel and achieve faster training time per batch (measured with Nvidia A100 GPUs), going from a ~143ms/batch baseline to ~113 ms/batch. In addition, the enhanced implementation using the SDPA operator offers better numerical stability. Finally, further optimizations are achieved using padded inputs, which when combined with flash attention lead to ~87ms/batch.</summary>
+      
+
+      
+      
+    </entry>
   
     <entry>
       <title type="html">Experience the power of PyTorch 2.0 on AMD Solutions</title>
@@ -1714,543 +1938,6 @@ image = pipe(prompt).images[0]
 
       
         <summary type="html">Summary</summary>
-      
-
-      
-      
-    </entry>
-  
-    <entry>
-      <title type="html">PyTorch 2.0: Our next generation release that is faster, more Pythonic and Dynamic as ever</title>
-      <link href="https://pytorch.org/blog/pytorch-2.0-release/" rel="alternate" type="text/html" title="PyTorch 2.0: Our next generation release that is faster, more Pythonic and Dynamic as ever" />
-      <published>2023-03-15T00:00:00-07:00</published>
-      <updated>2023-03-15T00:00:00-07:00</updated>
-      <id>https://pytorch.org/blog/pytorch-2.0-release</id>
-      <content type="html" xml:base="https://pytorch.org/blog/pytorch-2.0-release/">&lt;p&gt;We are excited to announce the release of &lt;a href=&quot;https://github.com/pytorch/pytorch/releases/tag/v2.0.0&quot;&gt;PyTorch® 2.0&lt;/a&gt; which we highlighted during the &lt;a href=&quot;https://www.youtube.com/@PyTorch/playlists?view=50&amp;amp;sort=dd&amp;amp;shelf_id=2&quot;&gt;PyTorch Conference&lt;/a&gt; on 12/2/22! PyTorch 2.0 offers the same eager-mode development and user experience, while fundamentally changing and supercharging how PyTorch operates at compiler level under the hood with faster performance and support for Dynamic Shapes and Distributed.&lt;/p&gt;
-
-&lt;p&gt;This next-generation release includes a Stable version of Accelerated Transformers (formerly called Better Transformers); Beta includes torch.compile as the main API for PyTorch 2.0,  the scaled_dot_product_attention function as part of torch.nn.functional, the MPS backend, functorch APIs in the torch.func module; and other Beta/Prototype improvements across various inferences, performance and training optimization features on GPUs and CPUs. For a comprehensive introduction and technical overview of torch.compile, please visit the 2.0 &lt;a href=&quot;/get-started/pytorch-2.0&quot;&gt;Get Started page&lt;/a&gt;.&lt;/p&gt;
-
-&lt;p&gt;Along with 2.0, we are also releasing a series of beta updates to the PyTorch domain libraries, including those that are in-tree, and separate libraries including TorchAudio, TorchVision, and TorchText. An update for TorchX is also being released as it moves to community supported mode. More details can be found in this &lt;a href=&quot;/blog/new-library-updates-in-pytorch-2.0/&quot;&gt;library blog&lt;/a&gt;.&lt;/p&gt;
-
-&lt;p&gt;This release is composed of over 4,541 commits and 428 contributors since 1.13.1. We want to sincerely thank our dedicated community for your contributions. As always, we encourage you to try these out and report any issues as we improve 2.0 and the overall 2-series this year.&lt;/p&gt;
-
-&lt;p&gt;Summary:&lt;/p&gt;
-&lt;ul&gt;
-  &lt;li&gt;torch.compile is the main API for PyTorch 2.0, which wraps your model and returns a compiled model. It is a fully additive (and optional) feature and hence 2.0 is 100% backward compatible by definition.&lt;/li&gt;
-  &lt;li&gt;As an underpinning technology of torch.compile, TorchInductor with Nvidia and AMD GPUs will rely on OpenAI Triton deep learning compiler to generate performant code and hide low level hardware details. OpenAI Triton-generated kernels achieve performance that’s on par with hand-written kernels and specialized cuda libraries such as cublas.&lt;/li&gt;
-  &lt;li&gt;Accelerated Transformers introduce high-performance support for training and inference using a custom kernel architecture for scaled dot product attention (SPDA). The API is integrated with torch.compile() and model developers may also use the &lt;a href=&quot;#beta-scaled-dot-product-attention-20&quot;&gt;scaled dot product attention&lt;/a&gt; kernels directly by calling the new scaled_dot_product_attention() operator.&lt;/li&gt;
-  &lt;li&gt;Metal Performance Shaders (MPS) backend provides GPU accelerated PyTorch training on Mac platforms with added support for Top 60 most used ops, bringing coverage to over 300 operators.&lt;/li&gt;
-  &lt;li&gt;Amazon AWS optimizes the PyTorch CPU inference on AWS Graviton3 based &lt;a href=&quot;https://aws.amazon.com/blogs/aws/new-amazon-ec2-c7g-instances-powered-by-aws-graviton3-processors/&quot;&gt;C7g instances&lt;/a&gt;. PyTorch 2.0 improves inference performance on Graviton compared to the previous releases, including improvements for Resnet50 and Bert.&lt;/li&gt;
-  &lt;li&gt;New prototype features and technologies across TensorParallel, DTensor, 2D parallel, TorchDynamo, AOTAutograd, PrimTorch and TorchInductor.&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;table class=&quot;table table-bordered&quot;&gt;
-&lt;thead&gt;
-  &lt;tr&gt;
-   &lt;td scope=&quot;col&quot;&gt;
-&lt;strong&gt;Stable&lt;/strong&gt;
-   &lt;/td&gt;
-   &lt;td scope=&quot;col&quot;&gt;&lt;strong&gt;Beta&lt;/strong&gt;
-   &lt;/td&gt;
-   &lt;td scope=&quot;col&quot;&gt;&lt;strong&gt;Prototype&lt;/strong&gt;
-   &lt;/td&gt;
-   &lt;td scope=&quot;col&quot;&gt;&lt;strong&gt;Performance Improvements&lt;/strong&gt;
-   &lt;/td&gt;
-  &lt;/tr&gt;
-  &lt;/thead&gt;
-  &lt;tr&gt;
-   &lt;td&gt;
-
-&lt;a href=&quot;#stable-features&quot;&gt;Accelerated PT 2 Transformers&lt;/a&gt;
-   &lt;/td&gt;
-   &lt;td&gt;
-
-&lt;a href=&quot;#beta-features&quot;&gt;torch.compile&lt;/a&gt;
-   &lt;/td&gt;
-   &lt;td&gt;
-
-&lt;a href=&quot;#prototype-features&quot;&gt;DTensor&lt;/a&gt;
-   &lt;/td&gt;
-   &lt;td&gt;
-
-&lt;a href=&quot;#deprecation-of-cuda-116-and-python-37-support-for-pytorch-20&quot;&gt;CUDA support for 11.7 &amp;amp; 11.8 (deprecating CUDA 11.6) &lt;/a&gt;
-   &lt;/td&gt;
-  &lt;/tr&gt;
-  &lt;tr&gt;
-   &lt;td&gt;
-   &lt;/td&gt;
-   &lt;td&gt;
-
-&lt;a href=&quot;#beta-pytorch-mps-backend&quot;&gt;PyTorch MPS Backend&lt;/a&gt;
-   &lt;/td&gt;
-   &lt;td&gt;
-
-&lt;a href=&quot;#prototype-tensorparallel&quot;&gt;TensorParallel&lt;/a&gt;
-   &lt;/td&gt;
-   &lt;td&gt; 
-
-&lt;a href=&quot;#deprecation-of-cuda-116-and-python-37-support-for-pytorch-20&quot;&gt;Python 3.8 (deprecating Python 3.7)&lt;/a&gt;
-   &lt;/td&gt;
-  &lt;/tr&gt;
-  &lt;tr&gt;
-   &lt;td&gt;
-   &lt;/td&gt;
-   &lt;td&gt;
-
-&lt;a href=&quot;#beta-scaled-dot-product-attention-20&quot;&gt;Scaled dot product attention&lt;/a&gt;
-   &lt;/td&gt;
-   &lt;td&gt;
-
-&lt;a href=&quot;#prototype-2d-parallel&quot;&gt;2D Parallel&lt;/a&gt;
-   &lt;/td&gt;
-   &lt;td&gt;
-
-&lt;a href=&quot;#optimized-pytorch-inference-with-aws-graviton-processors&quot;&gt;AWS Graviton3&lt;/a&gt;
-   &lt;/td&gt;
-  &lt;/tr&gt;
-  &lt;tr&gt;
-   &lt;td&gt;
-   &lt;/td&gt;
-   &lt;td&gt;
-
-&lt;a href=&quot;#beta-functorch---torchfunc&quot;&gt;functorch&lt;/a&gt;
-   &lt;/td&gt;
-   &lt;td rowspan=&quot;2&quot;&gt;
-
-&lt;a href=&quot;#beta-torchcompile&quot;&gt;Torch.compile (dynamic=True)&lt;/a&gt;
-   &lt;/td&gt;
-   &lt;td&gt;
-   &lt;/td&gt;
-  &lt;/tr&gt;
-  &lt;tr&gt;
-   &lt;td&gt;
-   &lt;/td&gt;
-   &lt;td&gt;&lt;a href=&quot;#beta-dispatchable-collectives&quot;&gt;Dispatchable Collectives&lt;/a&gt;
-   &lt;/td&gt;
-   &lt;td&gt;
-   &lt;/td&gt;
-  &lt;/tr&gt;
-  &lt;tr&gt;
-   &lt;td&gt;
-   &lt;/td&gt;
-   &lt;td&gt;&lt;a href=&quot;#beta-torchset_default_device-and-torchdevice-as-context-manager&quot;&gt;Torch.set_default &amp;amp; torch.device&lt;/a&gt;
-   &lt;/td&gt;
-   &lt;td&gt;
-   &lt;/td&gt;
-   &lt;td&gt;
-   &lt;/td&gt;
-  &lt;/tr&gt;
-  &lt;tr&gt;
-   &lt;td&gt;
-   &lt;/td&gt;
-   &lt;td&gt;
-
-&lt;a href=&quot;#beta-x86-as-the-new-default-quantization-backend-for-x86-cpu&quot;&gt;X86 quantization backend&lt;/a&gt;
-   &lt;/td&gt;
-   &lt;td&gt;
-   &lt;/td&gt;
-   &lt;td&gt;
-   &lt;/td&gt;
-  &lt;/tr&gt;
-  &lt;tr&gt;
-   &lt;td&gt;
-   &lt;/td&gt;
-   &lt;td&gt;
-
-&lt;a href=&quot;#beta-gnn-inference-and-training-optimization-on-cpu&quot;&gt;GNN inference and training performance&lt;/a&gt;
-   &lt;/td&gt;
-   &lt;td&gt;
-   &lt;/td&gt;
-   &lt;td&gt;
-   &lt;/td&gt;
-  &lt;/tr&gt;
-&lt;/table&gt;
-
-&lt;p&gt;*To see a full list of public 2.0, 1.13 and 1.12 feature submissions click &lt;a href=&quot;https://docs.google.com/spreadsheets/d/1H3jazwO8BBCwK8JwLNYspLiHfUrzshEtyqjL-X93I9g/edit#gid=790902532&quot;&gt;here&lt;/a&gt;.&lt;/p&gt;
-
-&lt;h2 id=&quot;stable-features&quot;&gt;Stable Features&lt;/h2&gt;
-
-&lt;h3 id=&quot;stable-accelerated-pytorch-2-transformers&quot;&gt;[Stable] Accelerated PyTorch 2 Transformers&lt;/h3&gt;
-
-&lt;p&gt;The PyTorch 2.0 release includes a new high-performance implementation of the PyTorch Transformer API. In releasing Accelerated PT2 Transformers, our goal is to make training and deployment of state-of-the-art Transformer models affordable across the industry. This release introduces high-performance support for training and inference using a custom kernel architecture for scaled dot product attention (SPDA), extending the inference “fastpath” architecture, previously known as “Better Transformer.”&lt;/p&gt;
-
-&lt;p&gt;Similar to the “fastpath” architecture, custom kernels are fully integrated into the PyTorch Transformer API – thus, using the native Transformer and MultiHeadAttention API will enable users to:&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;transparently see significant speed improvements;&lt;/li&gt;
-  &lt;li&gt;support many more use cases including models using Cross-Attention, Transformer Decoders, and for training models; and&lt;/li&gt;
-  &lt;li&gt;continue to use fastpath inference for fixed and variable sequence length Transformer Encoder and Self Attention use cases.&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;To take full advantage of different hardware models and Transformer use cases, multiple SDPA custom kernels are supported (see below), with custom kernel selection logic that will pick the highest-performance kernel for a given model and hardware type. In addition to the existing Transformer API, model developers may also use the &lt;a href=&quot;#beta-scaled-dot-product-attention-20&quot;&gt;scaled dot product attention&lt;/a&gt; kernels directly by calling the new scaled_dot_product_attention() operator. Accelerated PyTorch 2 Transformers are integrated with torch.compile() .  To use your model while benefiting from the additional acceleration of PT2-compilation (for inference or training), pre-process the model with &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;model = torch.compile(model)&lt;/code&gt;.&lt;/p&gt;
-
-&lt;p&gt;We have achieved major speedups for training transformer models and in particular large language models with Accelerated PyTorch 2 Transformers using a combination of custom kernels and torch.compile().&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/pytorch20post.png&quot; alt=&quot;alt_text&quot; title=&quot;Accelerated PyTorch 2 speed&quot; width=&quot;100%&quot; /&gt;
-&lt;small style=&quot;line-height: 1.1&quot;&gt;&lt;em&gt;Figure: Using scaled dot product attention with custom kernels and torch.compile delivers significant speedups for training large language models, such as for &lt;a href=&quot;https://github.com/karpathy/nanoGPT&quot;&gt;nanoGPT&lt;/a&gt; shown here.&lt;/em&gt;&lt;/small&gt;&lt;/p&gt;
-
-&lt;h2 id=&quot;beta-features&quot;&gt;Beta Features&lt;/h2&gt;
-
-&lt;h3 id=&quot;beta-torchcompile&quot;&gt;[Beta] torch.compile&lt;/h3&gt;
-
-&lt;p&gt;torch.compile is the main API for PyTorch 2.0, which wraps your model and returns a compiled model. It is a fully additive (and optional) feature and hence 2.0 is 100% backward compatible by definition.&lt;/p&gt;
-
-&lt;p&gt;Underpinning torch.compile are new technologies – TorchDynamo, AOTAutograd, PrimTorch and TorchInductor:&lt;/p&gt;
-&lt;ul&gt;
-  &lt;li&gt;TorchDynamo captures PyTorch programs safely using Python Frame Evaluation Hooks and is a significant innovation that was a result of 5 years of our R&amp;amp;D into safe graph capture.&lt;/li&gt;
-  &lt;li&gt;AOTAutograd overloads PyTorch’s autograd engine as a tracing autodiff for generating ahead-of-time backward traces.&lt;/li&gt;
-  &lt;li&gt;PrimTorch canonicalizes ~2000+ PyTorch operators down to a closed set of ~250 primitive operators that developers can target to build a complete PyTorch backend. This substantially lowers the barrier of writing a PyTorch feature or backend.&lt;/li&gt;
-  &lt;li&gt;TorchInductor is a deep learning compiler that generates fast code for multiple accelerators and backends. For NVIDIA and AMD GPUs, it uses OpenAI Triton as a key building block. For intel CPUs, we generate C++ code using multithreading, vectorized instructions and offloading appropriate operations to mkldnn when possible.&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;With all the new technologies, torch.compile is able to work 93% of time across 165 open-source models and runs 20% faster on average at float32 precision and 36% faster on average at AMP precision.&lt;/p&gt;
-
-&lt;p&gt;For more information, please refer to &lt;a href=&quot;https://pytorch.org/get-started/pytorch-2.0/&quot;&gt;https://pytorch.org/get-started/pytorch-2.0/&lt;/a&gt; and for TorchInductor CPU with Intel &lt;a href=&quot;https://dev-discuss.pytorch.org/t/torchinductor-update-5-cpu-backend-backend-performance-update-and-deep-dive-on-key-optimizations/1117&quot;&gt;here&lt;/a&gt;.&lt;/p&gt;
-
-&lt;h3 id=&quot;beta-pytorch-mps-backend&quot;&gt;[Beta] PyTorch MPS Backend&lt;/h3&gt;
-
-&lt;p&gt;MPS backend provides GPU-accelerated PyTorch training on Mac platforms. This release brings improved correctness, stability, and operator coverage.&lt;/p&gt;
-
-&lt;p&gt;MPS backend now includes support for the Top 60 most used ops, along with the most frequently requested operations by the community, bringing coverage to over 300 operators. The major focus of the release was to enable full OpInfo-based forward and gradient mode testing to address silent correctness issues. These changes have resulted in wider adoption of MPS backend by 3rd party networks such as Stable Diffusion, YoloV5, WhisperAI, along with increased coverage for Torchbench networks and Basic tutorials. We encourage developers to update to the latest macOS release to see the best performance and stability on the MPS backend.&lt;/p&gt;
-
-&lt;p&gt;Links&lt;/p&gt;
-
-&lt;ol&gt;
-  &lt;li&gt;&lt;a href=&quot;https://pytorch.org/docs/stable/notes/mps.html&quot;&gt;MPS Backend&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://github.com/pytorch/pytorch/wiki/MPS-Backend&quot;&gt;Developer information&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://developer.apple.com/metal/pytorch/&quot;&gt;Accelerated PyTorch training on Mac&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://developer.apple.com/documentation/metal?language=objc&quot;&gt;Metal&lt;/a&gt;, &lt;a href=&quot;https://developer.apple.com/documentation/metalperformanceshaders?language=objc&quot;&gt;Metal Performance Shaders&lt;/a&gt; &amp;amp; &lt;a href=&quot;https://developer.apple.com/documentation/metalperformanceshadersgraph?language=objc&quot;&gt;Metal Performance Shaders Graph&lt;/a&gt;&lt;/li&gt;
-&lt;/ol&gt;
-
-&lt;h3 id=&quot;beta-scaled-dot-product-attention-20&quot;&gt;[Beta] Scaled dot product attention 2.0&lt;/h3&gt;
-
-&lt;p&gt;We are thrilled to announce the release of PyTorch 2.0, which introduces a powerful scaled dot product attention function as part of torch.nn.functional. This function includes multiple implementations that can be seamlessly applied depending on the input and hardware in use.&lt;/p&gt;
-
-&lt;p&gt;In previous versions of PyTorch, you had to rely on third-party implementations and install separate packages to take advantage of memory-optimized algorithms like &lt;a href=&quot;https://github.com/HazyResearch/flash-attention&quot;&gt;FlashAttention&lt;/a&gt;. With PyTorch 2.0, all these implementations are readily available by default.&lt;/p&gt;
-
-&lt;p&gt;These implementations include &lt;a href=&quot;https://arxiv.org/abs/2205.14135&quot;&gt;FlashAttention&lt;/a&gt; from HazyResearch, Memory-Efficient Attention from the &lt;a href=&quot;https://github.com/facebookresearch/xformers&quot;&gt;xFormers&lt;/a&gt; project, and a native C++ implementation that is ideal for non-CUDA devices or when high-precision is required.&lt;/p&gt;
-
-&lt;p&gt;PyTorch 2.0 will automatically select the optimal implementation for your use case, but you can also toggle them individually for finer-grained control. Additionally, the scaled dot product attention function can be used to build common transformer architecture components.&lt;/p&gt;
-
-&lt;p&gt;Learn more with the &lt;a href=&quot;https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention.html?highlight=scaled_dot_product#torch.nn.functional.scaled_dot_product_attention&quot;&gt;documentation&lt;/a&gt; and this &lt;a href=&quot;https://pytorch.org/tutorials/intermediate/scaled_dot_product_attention_tutorial.html&quot;&gt;tutorial&lt;/a&gt;.&lt;/p&gt;
-
-&lt;h3 id=&quot;beta-functorch---torchfunc&quot;&gt;[Beta] functorch -&amp;gt; torch.func&lt;/h3&gt;
-
-&lt;p&gt;Inspired by &lt;a href=&quot;https://github.com/google/jax&quot;&gt;Google JAX&lt;/a&gt;, functorch is a library that offers composable vmap (vectorization) and autodiff transforms. It enables advanced autodiff use cases that would otherwise be tricky to express in PyTorch. Examples include:&lt;/p&gt;
-&lt;ul&gt;
-  &lt;li&gt;&lt;a href=&quot;https://pytorch.org/tutorials/intermediate/ensembling.html&quot;&gt;model ensembling&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://pytorch.org/tutorials/intermediate/jacobians_hessians.html&quot;&gt;efficiently computing jacobians and hessians&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://pytorch.org/tutorials/intermediate/per_sample_grads.html&quot;&gt;computing per-sample-gradients (or other per-sample quantities)&lt;/a&gt;&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;We’re excited to announce that, as the final step of upstreaming and integrating functorch into PyTorch, the functorch APIs are now available in the torch.func module. Our function transform APIs are identical to before, but we have changed how the interaction with NN modules work. Please see the &lt;a href=&quot;https://pytorch.org/docs/master/func.html&quot;&gt;docs&lt;/a&gt; and the &lt;a href=&quot;https://pytorch.org/docs/master/func.migrating.html&quot;&gt;migration guide&lt;/a&gt; for more details.&lt;/p&gt;
-
-&lt;p&gt;Furthermore, we have &lt;a href=&quot;https://pytorch.org/docs/master/notes/extending.func.html&quot;&gt;added support for torch.autograd.Function&lt;/a&gt;: one is now able to apply function transformations (e.g. vmap, grad, jvp) over torch.autograd.Function.&lt;/p&gt;
-
-&lt;h3 id=&quot;beta-dispatchable-collectives&quot;&gt;[Beta] Dispatchable Collectives&lt;/h3&gt;
-
-&lt;p&gt;Dispatchable collectives is an improvement to the existing init_process_group() API which changes backend to an optional argument. For users, the main advantage of this feature is that it will allow them to write code that can run on both GPU and CPU machines without having to change the backend specification. The dispatchability feature will also make it easier for users to support both GPU and CPU collectives, as they will no longer need to specify the backend manually (e.g. “NCCL” or “GLOO”). Existing backend specifications by users will be honored and will not require change.&lt;/p&gt;
-
-&lt;p&gt;Usage example:&lt;/p&gt;
-&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;import torch.distributed.dist
-…
-# old
-dist.init_process_group(backend=”nccl”, ...)
-dist.all_reduce(...) # with CUDA tensors works
-dist.all_reduce(...) # with CPU tensors does not work
-
-# new
-dist.init_process_group(...) # backend is optional
-dist.all_reduce(...) # with CUDA tensors works
-dist.all_reduce(...) # with CPU tensors works
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;Learn more &lt;a href=&quot;https://pytorch.org/docs/master/distributed.html#torch.distributed.init_process_group&quot;&gt;here&lt;/a&gt;.&lt;/p&gt;
-
-&lt;h3 id=&quot;beta-torchset_default_device-and-torchdevice-as-context-manager&quot;&gt;[Beta] torch.set_default_device and torch.device as context manager&lt;/h3&gt;
-
-&lt;p&gt;torch.set_default_device allows users to change the default device that factory functions in PyTorch allocate on. For example, if you torch.set_default_device(‘cuda’), a call to torch.empty(2) will allocate on CUDA (rather than on CPU). You can also use torch.device as a context manager to change the default device on a local basis. This resolves a long standing feature request from PyTorch’s initial release for a way to do this.&lt;/p&gt;
-
-&lt;p&gt;Learn more &lt;a href=&quot;https://pytorch.org/tutorials/recipes/recipes/changing_default_device.html&quot;&gt;here&lt;/a&gt;.&lt;/p&gt;
-
-&lt;h3 id=&quot;beta-x86-as-the-new-default-quantization-backend-for-x86-cpu&quot;&gt;[Beta] “X86” as the new default quantization backend for x86 CPU&lt;/h3&gt;
-
-&lt;p&gt;The new X86 quantization backend, which utilizes FBGEMM and oneDNN kernel libraries, replaces FBGEMM as the default quantization backend for x86 CPU platforms and offers improved int8 inference performance compared to the original FBGEMM backend, leveraging the strengths of both libraries, with 1.3X – 2X inference performance speedup measured on 40+ deep learning models. The new backend is functionally compatible with the original FBGEMM backend.&lt;/p&gt;
-
-&lt;p&gt;&lt;strong&gt;Table: Geomean Speedup of X86 Quantization Backend vs. FBGEMM Backend&lt;/strong&gt;&lt;/p&gt;
-
-&lt;table&gt;
-  &lt;tr&gt;
-   &lt;td&gt; 
-   &lt;/td&gt;
-   &lt;td&gt;1 core/instance
-   &lt;/td&gt;
-   &lt;td&gt;2 cores/instance
-   &lt;/td&gt;
-   &lt;td&gt;4 cores/instance
-   &lt;/td&gt;
-   &lt;td&gt;1 socket (32 cores)/instance
-   &lt;/td&gt;
-  &lt;/tr&gt;
-  &lt;tr&gt;
-   &lt;td&gt;Intel(R) Xeon(R) Platinum 8358 CPU @ 2.60GHz
-   &lt;/td&gt;
-   &lt;td&gt;1.76X
-   &lt;/td&gt;
-   &lt;td&gt;1.80X
-   &lt;/td&gt;
-   &lt;td&gt;2.04X
-   &lt;/td&gt;
-   &lt;td&gt;1.34X
-   &lt;/td&gt;
-  &lt;/tr&gt;
-&lt;/table&gt;
-
-&lt;p&gt;By default, users on x86 platforms will utilize the x86 quantization backend and their PyTorch programs will remain unchanged when using the default backend. Alternatively, users have the option to specify “X86” as the quantization backend explicitly. Example code is shown below:&lt;/p&gt;
-
-&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;import torch
-from torch.ao.quantization import get_default_qconfig_mappingfrom torch.quantization.quantize_fx
-import prepare_fx, convert_fx
- 
-# get default configuration
-qconfig_mapping = get_default_qconfig_mapping()
- 
-# or explicitly specify the backend
-# qengine = 'x86'
-# torch.backends.quantized.engine = qengine
-# qconfig_mapping = get_default_qconfig_mapping(qengine)
- 
-# construct fp32 model
-model_fp32 = ...
- 
-# prepare
-prepared_model = prepare_fx(model_fp32, qconfig_mapping, example_inputs=x)
- 
-# calibrate
-...
- 
-# convert
-quantized_model = convert_fx(prepared_model)
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;Find more information: &lt;a href=&quot;https://github.com/pytorch/pytorch/issues/83888&quot;&gt;https://github.com/pytorch/pytorch/issues/83888&lt;/a&gt; and &lt;a href=&quot;https://www.intel.com/content/www/us/en/developer/articles/technical/accelerate-pytorch-int8-inf-with-new-x86-backend.html&quot;&gt;https://www.intel.com/content/www/us/en/developer/articles/technical/accelerate-pytorch-int8-inf-with-new-x86-backend.html&lt;/a&gt;.&lt;/p&gt;
-
-&lt;h3 id=&quot;beta-gnn-inference-and-training-optimization-on-cpu&quot;&gt;[Beta] GNN inference and training optimization on CPU&lt;/h3&gt;
-
-&lt;p&gt;PyTorch 2.0 includes several critical optimizations to improve GNN inference and training performance on CPU. Before 2.0, GNN models of PyG suffers from low efficiency on CPU due to lack of performance tuning for several critical kernels (scatter/gather, etc) and the lack of GNN-related sparse matrix multiplication ops. To be specific, optimizations include:&lt;/p&gt;
-&lt;ul&gt;
-  &lt;li&gt;scatter_reduce: performance hotspot in Message Passing when the edge index is stored in Coordinate format (COO).&lt;/li&gt;
-  &lt;li&gt;gather: backward of scatter_reduce, specially tuned for the GNN compute when the index is an expanded tensor.&lt;/li&gt;
-  &lt;li&gt;torch.sparse.mm with reduce flag: performance hotspot in Message Passing when the edge index is stored in Compressed Sparse Row (CSR). Supported reduce flag of: sum, mean, amax, amin.&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;On PyG benchmarks/examples, OGB benchmarks, a 1.12x - 4.07x performance speedup is measured (1.13.1 compared with 2.0) for single node inference and training.&lt;/p&gt;
-
-&lt;table class=&quot;table table-bordered&quot;&gt;
-  &lt;thead&gt;
-  &lt;tr&gt;
-   &lt;td scope=&quot;col&quot;&gt;&lt;strong&gt;Model-Dataset&lt;/strong&gt;
-   &lt;/td&gt;
-   &lt;td scope=&quot;col&quot;&gt;&lt;strong&gt;Option&lt;/strong&gt;
-   &lt;/td&gt;
-   &lt;td scope=&quot;col&quot;&gt;&lt;strong&gt;Speedup Ratio&lt;/strong&gt;
-   &lt;/td&gt;
-  &lt;/tr&gt;
-  &lt;/thead&gt;
-  &lt;tr&gt;
-   &lt;td rowspan=&quot;5&quot;&gt;GCN-Reddit (inference)
-   &lt;/td&gt;
-   &lt;td&gt;512-2-64-dense
-   &lt;/td&gt;
-   &lt;td&gt;1.22x
-   &lt;/td&gt;
-  &lt;/tr&gt;
-  &lt;tr&gt;
-   &lt;td&gt;1024-3-128-dense
-   &lt;/td&gt;
-   &lt;td&gt;1.25x
-   &lt;/td&gt;
-  &lt;/tr&gt;
-  &lt;tr&gt;
-   &lt;td&gt;512-2-64-sparse
-   &lt;/td&gt;
-   &lt;td&gt;1.31x
-   &lt;/td&gt;
-  &lt;/tr&gt;
-  &lt;tr&gt;
-   &lt;td&gt;1024-3-128-sparse
-   &lt;/td&gt;
-   &lt;td&gt;1.68x
-   &lt;/td&gt;
-  &lt;/tr&gt;
-  &lt;tr&gt;
-   &lt;td&gt;512-2-64-dense
-   &lt;/td&gt;
-   &lt;td&gt;1.22x
-   &lt;/td&gt;
-  &lt;/tr&gt;
-  &lt;tr&gt;
-   &lt;td rowspan=&quot;4&quot;&gt; 
-GraphSage-ogbn-products (inference)
-   &lt;/td&gt;
-   &lt;td&gt;1024-3-128-dense
-   &lt;/td&gt;
-   &lt;td&gt;1.15x
-   &lt;/td&gt;
-  &lt;/tr&gt;
-  &lt;tr&gt;
-   &lt;td&gt;512-2-64-sparse
-   &lt;/td&gt;
-   &lt;td&gt;1.20x
-   &lt;/td&gt;
-  &lt;/tr&gt;
-  &lt;tr&gt;
-   &lt;td&gt;1024-3-128-sparse
-   &lt;/td&gt;
-   &lt;td&gt;1.33x
-   &lt;/td&gt;
-  &lt;/tr&gt;
-  &lt;tr&gt;
-   &lt;td&gt;full-batch-sparse
-   &lt;/td&gt;
-   &lt;td&gt;4.07x
-   &lt;/td&gt;
-  &lt;/tr&gt;
-  &lt;tr&gt;
-   &lt;td&gt;GCN-PROTEINS (training)
-   &lt;/td&gt;
-   &lt;td&gt;3-32
-   &lt;/td&gt;
-   &lt;td&gt;1.67x
-   &lt;/td&gt;
-  &lt;/tr&gt;
-  &lt;tr&gt;
-   &lt;td&gt;GCN-REDDIT-BINARY (training)
-   &lt;/td&gt;
-   &lt;td&gt;3-32
-   &lt;/td&gt;
-   &lt;td&gt;1.67x
-   &lt;/td&gt;
-  &lt;/tr&gt;
-  &lt;tr&gt;
-   &lt;td rowspan=&quot;2&quot;&gt;GCN-Reddit (training)
-   &lt;/td&gt;
-   &lt;td&gt;512-2-64-dense
-   &lt;/td&gt;
-   &lt;td&gt;1.20x
-   &lt;/td&gt;
-  &lt;/tr&gt;
-  &lt;tr&gt;
-   &lt;td&gt;1024-3-128-dense
-   &lt;/td&gt;
-   &lt;td&gt;1.12x
-   &lt;/td&gt;
-  &lt;/tr&gt;
-&lt;/table&gt;
-
-&lt;p&gt;Learn more: &lt;a href=&quot;https://www.pyg.org/ns-newsarticle-accelerating-pyg-on-intel-cpus&quot;&gt;PyG CPU Performance Optimization&lt;/a&gt;.&lt;/p&gt;
-
-&lt;h3 id=&quot;beta-accelerating-inference-on-cpu-with-pytorch-by-leveraging-onednn-graph&quot;&gt;[Beta] Accelerating inference on CPU with PyTorch by leveraging oneDNN Graph&lt;/h3&gt;
-
-&lt;p&gt;&lt;a href=&quot;https://spec.oneapi.io/onednn-graph/latest/introduction.html&quot;&gt;oneDNN Graph API&lt;/a&gt; extends &lt;a href=&quot;https://spec.oneapi.io/versions/latest/elements/oneDNN/source/index.html&quot;&gt;oneDNN&lt;/a&gt; with a flexible graph API to maximize the optimization opportunity for generating efficient code on AI hardware.&lt;/p&gt;
-&lt;ul&gt;
-  &lt;li&gt;It automatically identifies the graph partitions to be accelerated via fusion.&lt;/li&gt;
-  &lt;li&gt;The &lt;a href=&quot;https://github.com/oneapi-src/oneDNN/blob/dev-graph/doc/programming_model/ops_and_patterns.md#fusion-patterns&quot;&gt;fusion patterns&lt;/a&gt; focus on fusing compute-intensive operations such as convolution, matmul and their neighbor operations for both inference and training use cases.&lt;/li&gt;
-  &lt;li&gt;Although work is ongoing to integrate oneDNN Graph with TorchDynamo as well, its integration with the PyTorch JIT Fuser attained beta status in PyTorch 2.0 for &lt;a href=&quot;https://github.com/pytorch/pytorch/tree/master/torch/csrc/jit/codegen/onednn#example-with-float&quot;&gt;Float32&lt;/a&gt; &amp;amp; &lt;a href=&quot;https://github.com/pytorch/pytorch/tree/master/torch/csrc/jit/codegen/onednn#example-with-bfloat16&quot;&gt;BFloat16&lt;/a&gt; inference (on machines that support AVX512_BF16 ISA).&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;From a developer’s/researcher’s perspective, the usage is quite simple &amp;amp; intuitive, with the only change in code being an API invocation:&lt;/p&gt;
-&lt;ul&gt;
-  &lt;li&gt;Leverage oneDNN Graph, with &lt;a href=&quot;https://pytorch.org/docs/stable/generated/torch.jit.trace.html&quot;&gt;JIT-tracing&lt;/a&gt;, a model is profiled with an example input.&lt;/li&gt;
-  &lt;li&gt;The context manager &lt;em&gt;with torch.jit.fuser(“fuser3”):&lt;/em&gt; can also be used instead of invoking &lt;em&gt;torch.jit.enable_onednn_fusion(True)&lt;/em&gt;.&lt;/li&gt;
-  &lt;li&gt;For accelerating &lt;a href=&quot;https://github.com/pytorch/pytorch/tree/master/torch/csrc/jit/codegen/onednn#example-with-bfloat16&quot;&gt;BFloat16 inference&lt;/a&gt;, we rely on eager-mode AMP (Automatic Mixed Precision) support in PyTorch &amp;amp; disable JIT mode’s AMP, as both of them are currently divergent:&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;# Assuming we have a model of the name 'model'
- 
-example_input = torch.rand(1, 3, 224, 224)
- 
-# enable oneDNN Graph
-torch.jit.enable_onednn_fusion(True)
-# Disable AMP for JIT
-torch._C._jit_set_autocast_mode(False)
-with torch.no_grad(), torch.cpu.amp.autocast():
-	model = torch.jit.trace(model, (example_input))
-	model = torch.jit.freeze(model)
- 	# 2 warm-ups (2 for tracing/scripting with an example, 3 without an example)
-	model(example_input)
-	model(example_input)
- 
-	# speedup would be observed in subsequent runs.
-	model(example_input)
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;Learn more &lt;a href=&quot;https://pytorch.org/tutorials/recipes/recipes/tuning_guide.html#use-onednn-graph-with-torchscript-for-inference&quot;&gt;here&lt;/a&gt;.&lt;/p&gt;
-
-&lt;h2 id=&quot;prototype-features&quot;&gt;Prototype Features&lt;/h2&gt;
-
-&lt;h3 id=&quot;distributed-api&quot;&gt;Distributed API&lt;/h3&gt;
-
-&lt;h4 id=&quot;prototype-dtensor&quot;&gt;[Prototype] DTensor&lt;/h4&gt;
-
-&lt;p&gt;PyTorch &lt;a href=&quot;https://github.com/pytorch/pytorch/blob/master/torch/distributed/_tensor/README.md&quot;&gt;DistributedTensor&lt;/a&gt; (DTensor) is a prototyping effort with distributed tensor primitives to allow easier distributed computation authoring in the SPMD (Single Program Multiple Devices) paradigm. The primitives are simple but powerful when used to express tensor distributions with both sharded and replicated parallelism strategies. PyTorch DTensor empowered PyTorch &lt;a href=&quot;https://pytorch.org/docs/master/distributed.tensor.parallel.html&quot;&gt;Tensor Parallelism&lt;/a&gt; along with other advanced parallelism explorations. In addition, it also offers a uniform way to save/load state_dict for distributed checkpointing purposes, even when there’re complex tensor distribution strategies such as combining tensor parallelism with parameter sharding in FSDP. More details can be found in this &lt;a href=&quot;https://github.com/pytorch/pytorch/issues/88838&quot;&gt;RFC&lt;/a&gt; and the &lt;a href=&quot;https://colab.research.google.com/drive/12Pl5fvh0eLPUrcVO7s6yY4n2_RZo8pLR#scrollTo=stYPKb9Beq4e&quot;&gt;DTensor examples notebook&lt;/a&gt;.&lt;/p&gt;
-
-&lt;h4 id=&quot;prototype-tensorparallel&quot;&gt;[Prototype] TensorParallel&lt;/h4&gt;
-
-&lt;p&gt;We now support DTensor based Tensor Parallel which users can distribute their model parameters across different GPU devices. We also support Pairwise Parallel which shards two concatenated linear layers in a col-wise and row-wise style separately so that only one collective(all-reduce/reduce-scatter) is needed in the end. More details can be found in this &lt;a href=&quot;https://github.com/pytorch/examples/blob/main/distributed/tensor_parallelism/example.py&quot;&gt;example&lt;/a&gt;.&lt;/p&gt;
-
-&lt;h4 id=&quot;prototype-2d-parallel&quot;&gt;[Prototype] 2D Parallel&lt;/h4&gt;
-
-&lt;p&gt;We implemented the integration of the aforementioned TP with FullyShardedDataParallel(FSDP) as 2D parallel to further scale large model training. More details can be found in this &lt;a href=&quot;https://docs.google.com/presentation/d/17g6WqrO00rP3MsxbRENsPpjrlSkwiA_QB4r93_eB5is/edit?usp=sharing&quot;&gt;slide&lt;/a&gt; and &lt;a href=&quot;https://github.com/pytorch/pytorch/blob/master/test/distributed/tensor/parallel/test_2d_parallel.py&quot;&gt;code example&lt;/a&gt;.&lt;/p&gt;
-
-&lt;h4 id=&quot;prototype-torchcompiledynamictrue&quot;&gt;[Prototype] torch.compile(dynamic=True)&lt;/h4&gt;
-
-&lt;p&gt;Experimental support for PT2 compilation with dynamic shapes is available in this release. Inference compilation with inductor for simple models is supported, but there are a lot of limitations:&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;Training available in a future release (This is partially fixed in nightlies!)&lt;/li&gt;
-  &lt;li&gt;Minifier available in a future release.&lt;/li&gt;
-  &lt;li&gt;It is easy to end up in a situation where the dimension you wanted to be dynamic gets specialized anyway. Some of these issues are fixed in nightlies, others are not.&lt;/li&gt;
-  &lt;li&gt;We do not appropriately propagate Inductor guards to the top-level, this is tracked at &lt;a href=&quot;https://github.com/pytorch/pytorch/issues/96296&quot;&gt;#96296&lt;/a&gt;.&lt;/li&gt;
-  &lt;li&gt;Data-dependent operations like nonzero still require a graph break.&lt;/li&gt;
-  &lt;li&gt;Dynamic does not work with non-standard modes like reduce-overhead or max-autotune.&lt;/li&gt;
-  &lt;li&gt;There are many bugs in Inductor compilation. To track known bugs, check the &lt;a href=&quot;https://github.com/pytorch/pytorch/issues?q=is%3Aopen+is%3Aissue+label%3A%22module%3A+dynamic+shapes%22&quot;&gt;dynamic shapes&lt;/a&gt; label on the PyTorch issue tracker.&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;For the latest and greatest news about dynamic shapes support on master, check out &lt;a href=&quot;https://dev-discuss.pytorch.org/t/state-of-symbolic-shapes-branch/777/43&quot;&gt;our status reports&lt;/a&gt;.&lt;/p&gt;
-
-&lt;h2 id=&quot;highlightsperformance-improvements&quot;&gt;Highlights/Performance Improvements&lt;/h2&gt;
-
-&lt;h3 id=&quot;deprecation-of-cuda-116-and-python-37-support-for-pytorch-20&quot;&gt;&lt;a href=&quot;https://pytorch.org/blog/deprecation-cuda-python-support/&quot;&gt;Deprecation of Cuda 11.6 and Python 3.7 support&lt;/a&gt; for PyTorch 2.0&lt;/h3&gt;
-
-&lt;p&gt;If you are still using or depending on CUDA 11.6 or Python 3.7 builds, we strongly recommend moving to at least CUDA 11.7 and Python 3.8, as it would be the minimum versions required for PyTorch 2.0. For more detail, please refer to the &lt;a href=&quot;https://github.com/pytorch/pytorch/blob/master/RELEASE.md#release-compatibility-matrix&quot;&gt;Release Compatibility Matrix for PyTorch&lt;/a&gt; releases.&lt;/p&gt;
-
-&lt;h3 id=&quot;python-311-support-on-anaconda-platform&quot;&gt;Python 3.11 support on Anaconda Platform&lt;/h3&gt;
-
-&lt;p&gt;Due to lack of Python 3.11 support for packages that PyTorch depends on, including NumPy, SciPy, SymPy, Pillow and others on the Anaconda platform. We will not be releasing Conda binaries compiled with Python 3.11 for PyTorch Release 2.0. The Pip packages with Python 3.11 support will be released, hence if you intend to use PyTorch 2.0 with Python 3.11 please use our Pip packages. Please note: Conda packages with Python 3.11 support will be made available on our nightly channel. Also we are planning on releasing Conda Python 3.11 binaries as part of future release once Anaconda provides these key dependencies. More information and instructions on how to download the Pip packages can be found &lt;a href=&quot;https://dev-discuss.pytorch.org/t/pytorch-2-0-message-concerning-python-3-11-support-on-anaconda-platform/1087&quot;&gt;here&lt;/a&gt;.&lt;/p&gt;
-
-&lt;h3 id=&quot;optimized-pytorch-inference-with-aws-graviton-processors&quot;&gt;Optimized PyTorch Inference with AWS Graviton processors&lt;/h3&gt;
-
-&lt;p&gt;The optimizations focused on three key areas: GEMM kernels, bfloat16 support, primitive caching and the memory allocator. For aarch64 platforms, PyTorch supports Arm Compute Library (ACL) GEMM kernels via Mkldnn(OneDNN) backend. The ACL library provides Neon/SVE GEMM kernels for fp32 and bfloat16 formats. The bfloat16 support on c7g allows efficient deployment of bfloat16 trained, AMP (Automatic Mixed Precision) trained, or even the standard fp32 trained models. The standard fp32 models leverage bfloat16 kernels via OneDNN fast math mode, without any model quantization. Next we implemented primitive caching for conv, matmul and inner product operators. More information on the updated PyTorch user guide with the upcoming 2.0 release improvements and TorchBench benchmark details can be found &lt;a href=&quot;https://github.com/aws/aws-graviton-getting-started&quot;&gt;here&lt;/a&gt;.&lt;/p&gt;</content>
-
-      
-      
-      
-      
-      
-
-      <author>
-          <name>Facebook</name>
-        
-        
-      </author>
-
-      
-
-      
-
-      
-        <summary type="html">We are excited to announce the release of PyTorch® 2.0 which we highlighted during the PyTorch Conference on 12/2/22! PyTorch 2.0 offers the same eager-mode development and user experience, while fundamentally changing and supercharging how PyTorch operates at compiler level under the hood with faster performance and support for Dynamic Shapes and Distributed.</summary>
       
 
       
