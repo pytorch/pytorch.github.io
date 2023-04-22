@@ -537,15 +537,12 @@
 <span class="kn">from</span> <span class="nn">torch.distributed.utils</span> <span class="kn">import</span> <span class="n">_p_assert</span>
 
 <span class="kn">from</span> <span class="nn">._optim_utils</span> <span class="kn">import</span> <span class="p">(</span>
-    <span class="n">_broadcast_pos_dim_tensor_states</span><span class="p">,</span>
-    <span class="n">_broadcast_processed_optim_state_dict</span><span class="p">,</span>
     <span class="n">_flatten_optim_state_dict</span><span class="p">,</span>
     <span class="n">_get_param_id_to_param_from_optim_input</span><span class="p">,</span>
     <span class="n">_get_param_key_to_param</span><span class="p">,</span>
     <span class="n">_get_param_to_param_id_from_optim_input</span><span class="p">,</span>
     <span class="n">_get_param_to_param_key</span><span class="p">,</span>
     <span class="n">_optim_state_dict</span><span class="p">,</span>
-    <span class="n">_process_pos_dim_tensor_state</span><span class="p">,</span>
     <span class="n">_rekey_sharded_optim_state_dict</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span> <span class="nn">._state_dict_utils</span> <span class="kn">import</span> <span class="n">_register_all_state_dict_hooks</span>
@@ -1680,17 +1677,19 @@
         <span class="n">group</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">dist</span><span class="o">.</span><span class="n">ProcessGroup</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
         <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        The internal API that is used by all the load optim_state_dict</span>
-<span class="sd">        implementations except for loading optim_state_dict with rank0_only is</span>
-<span class="sd">        True option.</span>
-<span class="sd">        Given model, optim, the saved optim_state_dict, this API adds the</span>
-<span class="sd">        FSDP internal information and internal sharding to the optim_state_dict.</span>
+<span class="sd">        The internal API that is used by all the load optim_state_dict implementations.</span>
+<span class="sd">        Given model, optim, and the saved optim_state_dict, this API adds the FSDP</span>
+<span class="sd">        internal information and internal sharding to the optim_state_dict.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">FullyShardedDataParallel</span><span class="o">.</span><span class="n">_warn_optim_input</span><span class="p">(</span><span class="n">optim_input</span><span class="p">)</span>
-        <span class="n">using_optim_input</span> <span class="o">=</span> <span class="n">FullyShardedDataParallel</span><span class="o">.</span><span class="n">_is_using_optim_input</span><span class="p">(</span>
-            <span class="n">optim_input</span><span class="p">,</span>
-            <span class="n">optim</span><span class="p">,</span>
-        <span class="p">)</span>
+        <span class="k">if</span> <span class="n">full_state_dict</span><span class="p">:</span>
+            <span class="n">FullyShardedDataParallel</span><span class="o">.</span><span class="n">_warn_optim_input</span><span class="p">(</span><span class="n">optim_input</span><span class="p">)</span>
+            <span class="n">using_optim_input</span> <span class="o">=</span> <span class="n">FullyShardedDataParallel</span><span class="o">.</span><span class="n">_is_using_optim_input</span><span class="p">(</span>
+                <span class="n">optim_input</span><span class="p">,</span>
+                <span class="n">optim</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">using_optim_input</span> <span class="o">=</span> <span class="kc">False</span>
+            <span class="k">assert</span> <span class="n">optim_input</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">rank0_only</span>
 
         <span class="n">use_orig_params</span> <span class="o">=</span> <span class="n">FullyShardedDataParallel</span><span class="o">.</span><span class="n">fsdp_modules</span><span class="p">(</span><span class="n">model</span><span class="p">)[</span>
             <span class="mi">0</span>
@@ -1700,70 +1699,24 @@
             <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="n">FullyShardedDataParallel</span><span class="o">.</span><span class="n">fsdp_modules</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
         <span class="p">),</span> <span class="s2">&quot;Not all FSDP modules have the same _use_orig_params value&quot;</span>
 
-        <span class="k">if</span> <span class="n">rank0_only</span><span class="p">:</span>
-            <span class="n">rank</span> <span class="o">=</span> <span class="n">dist</span><span class="o">.</span><span class="n">get_rank</span><span class="p">(</span><span class="n">group</span><span class="p">)</span>
-            <span class="n">world_size</span> <span class="o">=</span> <span class="n">dist</span><span class="o">.</span><span class="n">get_world_size</span><span class="p">(</span><span class="n">group</span><span class="p">)</span>
-            <span class="c1"># Flatten the optimizer state dict and construct a copy with the</span>
-            <span class="c1"># positive-dimension tensors&#39; shapes in place of the tensors themselves</span>
-            <span class="c1"># since those tensors will be broadcast separately to avoid copying</span>
-            <span class="k">if</span> <span class="n">rank</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
-                <span class="n">flat_osd</span> <span class="o">=</span> <span class="n">_flatten_optim_state_dict</span><span class="p">(</span>
-                    <span class="n">optim_state_dict</span><span class="p">,</span>
-                    <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span>
-                    <span class="n">shard_state</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-                    <span class="n">use_orig_params</span><span class="o">=</span><span class="n">use_orig_params</span><span class="p">,</span>
-                    <span class="n">optim</span><span class="o">=</span><span class="p">(</span><span class="n">optim</span> <span class="k">if</span> <span class="n">is_named_optimizer</span> <span class="k">else</span> <span class="kc">None</span><span class="p">),</span>
-                <span class="p">)</span>
-                <span class="n">processed_osd</span> <span class="o">=</span> <span class="n">_process_pos_dim_tensor_state</span><span class="p">(</span><span class="n">flat_osd</span><span class="p">,</span> <span class="n">world_size</span><span class="p">)</span>
-                <span class="c1"># Broadcast the optim state dict without positive-dimension tensor</span>
-                <span class="c1"># state and the FSDP parameter IDs from rank 0 to all ranks</span>
-            <span class="n">processed_osd</span> <span class="o">=</span> <span class="n">_broadcast_processed_optim_state_dict</span><span class="p">(</span>
-                <span class="n">processed_osd</span> <span class="k">if</span> <span class="n">rank</span> <span class="o">==</span> <span class="mi">0</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
-                <span class="n">rank</span><span class="p">,</span>
-                <span class="n">group</span><span class="p">,</span>
-            <span class="p">)</span>
-            <span class="c1"># Broadcast positive-dimension tensor state (both sharded tensors for</span>
-            <span class="c1"># FSDP parameters and unsharded tensors for non-FSDP parameters)</span>
-            <span class="n">broadcast_device</span> <span class="o">=</span> <span class="p">(</span>
-                <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s2">&quot;cuda&quot;</span><span class="p">)</span>
-                <span class="k">if</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span><span class="p">()</span>
-                <span class="k">else</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s2">&quot;cpu&quot;</span><span class="p">)</span>
-            <span class="p">)</span>
-            <span class="n">sharded_osd</span> <span class="o">=</span> <span class="n">_broadcast_pos_dim_tensor_states</span><span class="p">(</span>
-                <span class="n">processed_osd</span><span class="p">,</span>
-                <span class="n">flat_osd</span> <span class="k">if</span> <span class="n">rank</span> <span class="o">==</span> <span class="mi">0</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
-                <span class="n">rank</span><span class="p">,</span>
-                <span class="n">world_size</span><span class="p">,</span>
-                <span class="n">group</span><span class="p">,</span>
-                <span class="n">broadcast_device</span><span class="p">,</span>
-            <span class="p">)</span>
-            <span class="c1"># Rekey the optimizer state dict to use parameter IDs according to this</span>
-            <span class="c1"># rank&#39;s `optim`</span>
-            <span class="n">ret_state_dict</span> <span class="o">=</span> <span class="n">_rekey_sharded_optim_state_dict</span><span class="p">(</span>
-                <span class="n">sharded_osd</span><span class="p">,</span>
-                <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span>
-                <span class="n">optim</span><span class="o">=</span><span class="n">optim</span><span class="p">,</span>
-                <span class="n">optim_input</span><span class="o">=</span><span class="n">optim_input</span><span class="p">,</span>
-                <span class="n">using_optim_input</span><span class="o">=</span><span class="n">using_optim_input</span><span class="p">,</span>
-                <span class="n">is_named_optimizer</span><span class="o">=</span><span class="n">is_named_optimizer</span><span class="p">,</span>
-            <span class="p">)</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">sharded_osd</span> <span class="o">=</span> <span class="n">_flatten_optim_state_dict</span><span class="p">(</span>
-                <span class="n">optim_state_dict</span><span class="p">,</span>
-                <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span>
-                <span class="n">shard_state</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-                <span class="n">use_orig_params</span><span class="o">=</span><span class="n">use_orig_params</span><span class="p">,</span>
-                <span class="n">optim</span><span class="o">=</span><span class="p">(</span><span class="n">optim</span> <span class="k">if</span> <span class="n">is_named_optimizer</span> <span class="k">else</span> <span class="kc">None</span><span class="p">),</span>
-            <span class="p">)</span>
-            <span class="n">ret_state_dict</span> <span class="o">=</span> <span class="n">_rekey_sharded_optim_state_dict</span><span class="p">(</span>
-                <span class="n">sharded_osd</span><span class="p">,</span>
-                <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span>
-                <span class="n">optim</span><span class="o">=</span><span class="n">optim</span><span class="p">,</span>
-                <span class="n">optim_input</span><span class="o">=</span><span class="n">optim_input</span><span class="p">,</span>
-                <span class="n">using_optim_input</span><span class="o">=</span><span class="n">using_optim_input</span><span class="p">,</span>
-                <span class="n">is_named_optimizer</span><span class="o">=</span><span class="n">is_named_optimizer</span><span class="p">,</span>
-            <span class="p">)</span>
-        <span class="k">return</span> <span class="n">ret_state_dict</span>
+        <span class="k">if</span> <span class="n">rank0_only</span> <span class="ow">and</span> <span class="n">dist</span><span class="o">.</span><span class="n">get_rank</span><span class="p">(</span><span class="n">group</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">optim_state_dict</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">sharded_osd</span> <span class="o">=</span> <span class="n">_flatten_optim_state_dict</span><span class="p">(</span>
+            <span class="n">optim_state_dict</span><span class="p">,</span>
+            <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span>
+            <span class="n">use_orig_params</span><span class="o">=</span><span class="n">use_orig_params</span><span class="p">,</span>
+            <span class="n">optim</span><span class="o">=</span><span class="p">(</span><span class="n">optim</span> <span class="k">if</span> <span class="n">is_named_optimizer</span> <span class="k">else</span> <span class="kc">None</span><span class="p">),</span>
+            <span class="n">rank0_only</span><span class="o">=</span><span class="n">rank0_only</span><span class="p">,</span>
+            <span class="n">group</span><span class="o">=</span><span class="n">group</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">_rekey_sharded_optim_state_dict</span><span class="p">(</span>
+            <span class="n">sharded_osd</span><span class="p">,</span>
+            <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span>
+            <span class="n">optim</span><span class="o">=</span><span class="n">optim</span><span class="p">,</span>
+            <span class="n">optim_input</span><span class="o">=</span><span class="n">optim_input</span><span class="p">,</span>
+            <span class="n">using_optim_input</span><span class="o">=</span><span class="n">using_optim_input</span><span class="p">,</span>
+            <span class="n">is_named_optimizer</span><span class="o">=</span><span class="n">is_named_optimizer</span><span class="p">,</span>
+        <span class="p">)</span>
 
 <div class="viewcode-block" id="FullyShardedDataParallel.full_optim_state_dict"><a class="viewcode-back" href="../../../../fsdp.html#torch.distributed.fsdp.FullyShardedDataParallel.full_optim_state_dict">[docs]</a>    <span class="nd">@staticmethod</span>
     <span class="k">def</span> <span class="nf">full_optim_state_dict</span><span class="p">(</span>
