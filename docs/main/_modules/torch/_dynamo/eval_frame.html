@@ -368,6 +368,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../../../named_tensor.html">Named Tensors</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../name_inference.html">Named Tensors operator coverage</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../config_mod.html">torch.__config__</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../logging.html">torch._logging</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Libraries</span></p>
 <ul>
@@ -472,6 +473,7 @@
 <span class="kn">import</span> <span class="nn">warnings</span>
 <span class="kn">import</span> <span class="nn">weakref</span>
 <span class="kn">from</span> <span class="nn">enum</span> <span class="kn">import</span> <span class="n">Enum</span>
+<span class="kn">from</span> <span class="nn">os.path</span> <span class="kn">import</span> <span class="n">dirname</span><span class="p">,</span> <span class="n">join</span>
 <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Set</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">TYPE_CHECKING</span><span class="p">,</span> <span class="n">Union</span>
 <span class="kn">from</span> <span class="nn">unittest.mock</span> <span class="kn">import</span> <span class="n">patch</span>
 
@@ -482,6 +484,7 @@
 <span class="kn">from</span> <span class="nn">torch.fx.experimental.proxy_tensor</span> <span class="kn">import</span> <span class="n">make_fx</span>
 <span class="kn">from</span> <span class="nn">torch.fx.graph</span> <span class="kn">import</span> <span class="n">_PyTreeCodeGen</span><span class="p">,</span> <span class="n">_PyTreeInfo</span>
 <span class="kn">from</span> <span class="nn">torch.nn.parallel.distributed</span> <span class="kn">import</span> <span class="n">DistributedDataParallel</span>
+<span class="kn">from</span> <span class="nn">..fx</span> <span class="kn">import</span> <span class="n">GraphModule</span>
 <span class="kn">from</span> <span class="nn">.backends.registry</span> <span class="kn">import</span> <span class="n">CompilerFn</span><span class="p">,</span> <span class="n">lookup_backend</span>
 
 <span class="kn">from</span> <span class="nn">.hooks</span> <span class="kn">import</span> <span class="n">Hooks</span>
@@ -501,8 +504,8 @@
             <span class="k">continue</span>
         <span class="nb">globals</span><span class="p">()[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">_dynamo</span><span class="o">.</span><span class="n">eval_frame</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
 
-<span class="kn">from</span> <span class="nn">.</span> <span class="kn">import</span> <span class="n">config</span><span class="p">,</span> <span class="n">convert_frame</span><span class="p">,</span> <span class="n">skipfiles</span><span class="p">,</span> <span class="n">utils</span>
-<span class="kn">from</span> <span class="nn">.exc</span> <span class="kn">import</span> <span class="n">ResetRequired</span>
+<span class="kn">from</span> <span class="nn">.</span> <span class="kn">import</span> <span class="n">config</span><span class="p">,</span> <span class="n">convert_frame</span><span class="p">,</span> <span class="n">external_utils</span><span class="p">,</span> <span class="n">skipfiles</span><span class="p">,</span> <span class="n">utils</span>
+<span class="kn">from</span> <span class="nn">.exc</span> <span class="kn">import</span> <span class="n">CondOpArgsMismatchError</span><span class="p">,</span> <span class="n">ResetRequired</span><span class="p">,</span> <span class="n">UserError</span><span class="p">,</span> <span class="n">UserErrorType</span>
 <span class="kn">from</span> <span class="nn">.mutation_guard</span> <span class="kn">import</span> <span class="n">install_generation_tagging_init</span>
 <span class="kn">from</span> <span class="nn">.types</span> <span class="kn">import</span> <span class="n">DynamoCallback</span>
 <span class="kn">from</span> <span class="nn">.utils</span> <span class="kn">import</span> <span class="n">compile_times</span>
@@ -531,6 +534,11 @@
 
 <span class="n">compile_lock</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">RLock</span><span class="p">()</span>
 <span class="n">most_recent_backend</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">CompilerFn</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="n">DONT_WRAP_FILES</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="c1"># For tracing into fx modules</span>
+    <span class="n">inspect</span><span class="o">.</span><span class="n">getsourcefile</span><span class="p">(</span><span class="n">GraphModule</span><span class="p">),</span>
+    <span class="n">join</span><span class="p">(</span><span class="n">dirname</span><span class="p">(</span><span class="n">dirname</span><span class="p">(</span><span class="vm">__file__</span><span class="p">)),</span> <span class="s2">&quot;onnx/_internal/fx/dynamo_exporter.py&quot;</span><span class="p">),</span>
+<span class="p">}</span>
 
 
 <div class="viewcode-block" id="OptimizedModule"><a class="viewcode-back" href="../../../_dynamo.html#torch._dynamo.OptimizedModule">[docs]</a><span class="k">class</span> <span class="nc">OptimizedModule</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
@@ -539,30 +547,45 @@
 <span class="sd">    forward method to optimized self.forward method.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">mod</span><span class="p">,</span> <span class="n">dynamo_ctx</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">mod</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">,</span> <span class="n">dynamo_ctx</span><span class="p">):</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
         <span class="c1"># Installs the params/buffer</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_orig_mod</span> <span class="o">=</span> <span class="n">mod</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">dynamo_ctx</span> <span class="o">=</span> <span class="n">dynamo_ctx</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_initialize</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">_initialize</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="c1"># Do this stuff in constructor to lower overhead slightly</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_orig_mod</span><span class="o">.</span><span class="n">forward</span><span class="p">,</span> <span class="n">types</span><span class="o">.</span><span class="n">MethodType</span><span class="p">)</span> <span class="ow">and</span> <span class="n">skipfiles</span><span class="o">.</span><span class="n">check</span><span class="p">(</span>
+            <span class="n">inspect</span><span class="o">.</span><span class="n">getsourcefile</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_orig_mod</span><span class="o">.</span><span class="n">forward</span><span class="p">)</span>
+        <span class="p">):</span>
+            <span class="c1"># This may be a torch.nn.* instance in skipfiles.py which</span>
+            <span class="c1"># won&#39;t trigger a frame evaluation workaround to add an extra</span>
+            <span class="c1"># frame we can capture</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">forward</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">dynamo_ctx</span><span class="p">(</span><span class="n">external_utils</span><span class="o">.</span><span class="n">wrap_inline</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_orig_mod</span><span class="p">))</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># Invoke hooks outside of dynamo then pickup the inner frame</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">forward</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">dynamo_ctx</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_orig_mod</span><span class="o">.</span><span class="fm">__call__</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_orig_mod</span><span class="p">,</span> <span class="s2">&quot;_initialize_hook&quot;</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="fm">__call__</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_call_lazy_check</span>
+
+    <span class="k">def</span> <span class="nf">__getstate__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">state</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">)</span>
+        <span class="n">state</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;forward&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="n">state</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;__call__&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">state</span>
+
+    <span class="k">def</span> <span class="nf">__setstate__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span> <span class="o">=</span> <span class="n">state</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_initialize</span><span class="p">()</span>
 
     <span class="k">def</span> <span class="fm">__getattr__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">):</span>
         <span class="k">if</span> <span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;_orig_mod&quot;</span><span class="p">:</span>
             <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_modules</span><span class="p">[</span><span class="s2">&quot;_orig_mod&quot;</span><span class="p">]</span>
         <span class="k">return</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_orig_mod</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
 
-    <span class="k">def</span> <span class="fm">__setattr__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
-        <span class="k">if</span> <span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;forward&quot;</span><span class="p">:</span>
-            <span class="n">log</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
-                <span class="s2">&quot;Modifying OptimizedModule.forward may not do what you expect. &quot;</span>
-                <span class="s2">&quot;Most usage of OptimizedModule routes through __call__, which will never call OptimizedModule.forward. &quot;</span>
-                <span class="s2">&quot;Instead, OptimizedModule.__call__ will invoke a compiled version of the wrapped module&#39;s __call__. &quot;</span>
-                <span class="s2">&quot;OptimizedModule.forward is provided only as an escape hatch for invoking the compiled wrapped module &quot;</span>
-                <span class="s2">&quot;forward method without __call__ (and thus bypassing module hooks). &quot;</span>
-                <span class="s2">&quot;To alter the behavior of the wrapped module, modify its forward before compilation. &quot;</span>
-            <span class="p">)</span>
-        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__setattr__</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
-
-    <span class="k">def</span> <span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_call_lazy_check</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
         <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_orig_mod</span><span class="p">,</span> <span class="s2">&quot;_initialize_hook&quot;</span><span class="p">):</span>
             <span class="c1"># In the case of a lazy module, we want to run</span>
             <span class="c1"># the pre-hooks which initialize it.</span>
@@ -570,14 +593,7 @@
             <span class="c1"># to avoid treating it as lazy on subsequent recompile.</span>
             <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_orig_mod</span><span class="o">.</span><span class="n">_infer_parameters</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_orig_mod</span><span class="p">,</span> <span class="n">args</span><span class="p">)</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">dynamo_ctx</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_orig_mod</span><span class="o">.</span><span class="fm">__call__</span><span class="p">)(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
-
-    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
-        <span class="n">log</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
-            <span class="s2">&quot;Calling OptimizedModule.forward will compile/execute wrapped model forward without running module hooks. &quot;</span>
-            <span class="s2">&quot;Usually, you should invoke OptimizedModule.__call__ instead, which follows pytorch module behavior.&quot;</span>
-        <span class="p">)</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">dynamo_ctx</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_orig_mod</span><span class="o">.</span><span class="n">forward</span><span class="p">)(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
+        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__call__</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
 
 
 <span class="k">def</span> <span class="nf">remove_from_cache</span><span class="p">(</span><span class="n">f</span><span class="p">):</span>
@@ -678,8 +694,19 @@
             <span class="c1"># of decorators.</span>
             <span class="n">new_mod</span><span class="o">.</span><span class="n">_torchdynamo_orig_callable</span> <span class="o">=</span> <span class="n">mod</span><span class="o">.</span><span class="n">forward</span>
             <span class="k">return</span> <span class="n">new_mod</span>
-
         <span class="k">assert</span> <span class="n">callable</span><span class="p">(</span><span class="n">fn</span><span class="p">)</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">filename</span> <span class="o">=</span> <span class="n">inspect</span><span class="o">.</span><span class="n">getsourcefile</span><span class="p">(</span><span class="n">fn</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">TypeError</span><span class="p">:</span>
+            <span class="n">filename</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="p">(</span><span class="n">filename</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">skipfiles</span><span class="o">.</span><span class="n">check</span><span class="p">(</span><span class="n">filename</span><span class="p">))</span>
+            <span class="ow">and</span> <span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="n">fn</span><span class="p">,</span> <span class="s2">&quot;__name__&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span> <span class="o">!=</span> <span class="s2">&quot;_call_impl&quot;</span><span class="p">)</span>
+            <span class="ow">and</span> <span class="n">filename</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">DONT_WRAP_FILES</span>
+        <span class="p">):</span>
+            <span class="c1"># call to a builtin without a frame for us to capture</span>
+            <span class="n">fn</span> <span class="o">=</span> <span class="n">external_utils</span><span class="o">.</span><span class="n">wrap_inline</span><span class="p">(</span><span class="n">fn</span><span class="p">)</span>
 
         <span class="n">callback</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">callback</span>
         <span class="n">on_enter</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">on_enter</span>
@@ -1110,8 +1137,9 @@
     <span class="n">decomposition_table</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span>
         <span class="n">Dict</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">_ops</span><span class="o">.</span><span class="n">OpOverload</span><span class="p">,</span> <span class="n">Callable</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span>
     <span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-    <span class="n">tracing_mode</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;real&quot;</span><span class="p">,</span>
+    <span class="n">tracing_mode</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;symbolic&quot;</span><span class="p">,</span>
     <span class="n">constraints</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Constraint</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">assume_static_by_default</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">fx</span><span class="o">.</span><span class="n">GraphModule</span><span class="p">,</span> <span class="n">Set</span><span class="p">[</span><span class="n">_guards</span><span class="o">.</span><span class="n">Guard</span><span class="p">]]:</span>
     <span class="sd">&quot;&quot;&quot;</span>
@@ -1148,7 +1176,7 @@
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">check_if_dynamo_supported</span><span class="p">()</span>
     <span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">_log_api_usage_once</span><span class="p">(</span><span class="s2">&quot;torch._dynamo.export&quot;</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">decomposition_table</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">tracing_mode</span> <span class="o">!=</span> <span class="s2">&quot;real&quot;</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">decomposition_table</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">assert</span> <span class="p">(</span>
             <span class="n">aten_graph</span>
         <span class="p">),</span> <span class="s2">&quot;Specifying a decomposition_table table or tracing mode is illegal without setting aten_graph=True&quot;</span>
@@ -1224,7 +1252,9 @@
 
     <span class="n">remove_from_cache</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
     <span class="k">with</span> <span class="n">patch</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">.most_recent_backend&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">),</span> <span class="n">config</span><span class="o">.</span><span class="n">patch</span><span class="p">(</span>
-        <span class="n">summarize_dim_constraints</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">specialize_int</span><span class="o">=</span><span class="kc">True</span>
+        <span class="n">summarize_dim_constraints</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="n">specialize_int</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="n">assume_static_by_default</span><span class="o">=</span><span class="n">assume_static_by_default</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="n">opt_f</span> <span class="o">=</span> <span class="n">optimize_assert</span><span class="p">(</span>
             <span class="n">dynamo_normalization_capturing_compiler</span><span class="p">,</span>
@@ -1300,12 +1330,16 @@
                 <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">fx</span><span class="o">.</span><span class="n">Interpreter</span><span class="p">(</span><span class="n">graph</span><span class="p">)</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">)</span>
 
         <span class="k">with</span> <span class="n">enable_python_dispatcher</span><span class="p">(),</span> <span class="n">fake_mode</span><span class="p">:</span>
-            <span class="n">graph</span> <span class="o">=</span> <span class="n">make_fx</span><span class="p">(</span>
-                <span class="n">graph_with_interpreter</span><span class="p">,</span>
-                <span class="n">decomposition_table</span><span class="o">=</span><span class="n">decomposition_table</span><span class="p">,</span>
-                <span class="n">tracing_mode</span><span class="o">=</span><span class="s2">&quot;real&quot;</span><span class="p">,</span>
-                <span class="n">_allow_non_fake_inputs</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-            <span class="p">)(</span><span class="o">*</span><span class="n">example_fake_inputs</span><span class="p">)</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">graph</span> <span class="o">=</span> <span class="n">make_fx</span><span class="p">(</span>
+                    <span class="n">graph_with_interpreter</span><span class="p">,</span>
+                    <span class="n">decomposition_table</span><span class="o">=</span><span class="n">decomposition_table</span><span class="p">,</span>
+                    <span class="n">tracing_mode</span><span class="o">=</span><span class="s2">&quot;real&quot;</span><span class="p">,</span>
+                    <span class="n">_allow_non_fake_inputs</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                <span class="p">)(</span><span class="o">*</span><span class="n">example_fake_inputs</span><span class="p">)</span>
+            <span class="k">except</span> <span class="n">CondOpArgsMismatchError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="c1"># Wrap the internal error to the user-facing error</span>
+                <span class="k">raise</span> <span class="n">UserError</span><span class="p">(</span><span class="n">UserErrorType</span><span class="o">.</span><span class="n">DYNAMIC_CONTROL_FLOW</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">))</span>
 
     <span class="n">new_graph</span> <span class="o">=</span> <span class="n">ChangeInputOutputSignature</span><span class="p">(</span>
         <span class="n">graph</span><span class="p">,</span>
