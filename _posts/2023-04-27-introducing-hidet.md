@@ -1,6 +1,7 @@
 ---
 layout: blog_detail
 title: "Introducing Hidet: A Deep Learning Compiler for Efficient Model Serving"
+author: Team Hidet
 ---
 
 [Hidet](https://github.com/hidet-org/hidet) is a powerful deep learning compiler that simplifies the process of implementing high-performing deep learning operators on modern accelerators (e.g., NVIDIA GPUs). With the new feature of `torch.compile(...)` in PyTorch 2.0, integrating a novel compiler into PyTorch is easier than ever - Hidet now can be used as a `torch.compile(...)` backend to accelerate PyTorch models, making it an attractive option for PyTorch users who want to improve the inference performance of their models, especially for those who also need to implement extremely optimized custom operators.
@@ -24,7 +25,7 @@ torch.compile(..., backend='hidet')
 ```
 
 
-Hidet converts the given PyTorch model in the torch.fx.Graph format into its internal graph representation, and conducts a series of optimizations. Hidet provides a few options to configure the optimizations. For example, we can use `hidet.torch.dynamo_config.use_tensor_core(<strong>True</strong>)` to allow Hidet to generate CUDA kernels that leverage the [Tensor Cores on NVIDIA GPUs](https://www.nvidia.com/en-us/data-center/tensor-cores/), and use `hidet.torch.dynamo_config.search_space(2)` to allow Hidet to search for the best operator schedule specific for your hardware and input sizes. More configurations can be found in [Hidet’s documentation](https://docs.hidet.org/stable/gallery/tutorials/optimize-pytorch-model.html).
+Hidet converts the given PyTorch model in the torch.fx.Graph format into its internal graph representation, and conducts a series of optimizations. Hidet provides a few options to configure the optimizations. For example, we can use `hidet.torch.dynamo_config.use_tensor_core(True)` to allow Hidet to generate CUDA kernels that leverage the [Tensor Cores on NVIDIA GPUs](https://www.nvidia.com/en-us/data-center/tensor-cores/), and use `hidet.torch.dynamo_config.search_space(2)` to allow Hidet to search for the best operator schedule specific for your hardware and input sizes. More configurations can be found in [Hidet’s documentation](https://docs.hidet.org/stable/gallery/tutorials/optimize-pytorch-model.html).
 
 Here's a complete example of how to use Hidet to compile and optimize a pre-trained ResNet50 model from `torchvision`:
 
@@ -136,4 +137,4 @@ Hidet originates from a research project led by the [EcoSystem lab](https://www.
 
 ## Acknowledgement
 
-We would like to thank Jerry Park, Mark Saroufim, Jason Liang and Helen Suk for their valuable help on preparing the blog post and feedback on the text. We also would like to thank Nikita Shulga, Jason Ansel, and Dmytro Dzhulgakov for reviewing and improving our PyTorch PR73873 on the 3rd-party dynamo backend registration. 
+We would like to thank Jerry Park, Mark Saroufim, Jason Liang and Helen Suk for their valuable help on preparing the blog post and feedback on the text. We also would like to thank Nikita Shulga, Jason Ansel, and Dmytro Dzhulgakov for reviewing and improving our PR https://github.com/pytorch/pytorch/pull/93873 on the 3rd-party dynamo backend registration. 
