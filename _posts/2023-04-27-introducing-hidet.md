@@ -17,7 +17,7 @@ pip install hidet
 ```
 
 
-Hidet is integrated with PyTorch as a `torch.compile(...)` backend following the [Custom Backends tutorial](https://pytorch.org/https://pytorch.org/docs/stable/dynamo/custom-backends.html#registering-custom-backendsdocs/stable/dynamo/custom-backends.html#registering-custom-backends). You can specify `hidet` as the `backend` when you compile a model. (Note: requires PyTorch version 2.0+):
+Hidet is integrated with PyTorch as a `torch.compile(...)` backend following the [Custom Backends tutorial](https://pytorch.org/docs/stable/dynamo/custom-backends.html). You can specify `hidet` as the `backend` when you compile a model. (Note: requires PyTorch version 2.0+):
 
 
 ```
@@ -57,7 +57,7 @@ print('hidet: {:2f}'.format(benchmark_func(lambda: model_opt(x))))
 ```
 
 
-We encourage you to try out the above script on your own NVIDIA GPU(s)! If you run this script on an `aws.g5.2xlarge` instance, you would get the result shown in the following figure. Hidet achieves the speedup because it could automatically fuse multiple operators, tune operator schedules, and use CUDA Graph to reduce framework-level overhead. More results can be found in the [ASPLOS’23 publication of Hidet](https://dl.acm.org/doi/10.1145/3575693.3575702) (vs. PyTorch 1.11) and our [performance tracking](https://github.com/hidet-org/hidet/issues/154) (vs. PyTorch 2.0). 
+We encourage you to try out the above script on your own NVIDIA GPU(s)! If you run this script on an `aws.g5.2xlarge` instance, you would get the result shown in the following figure. Hidet achieves the speedup because it could automatically fuse multiple operators, tune operator schedules, and use CUDA Graph to reduce framework-level overhead. More results can be found in the [ASPLOS’23 publication of Hidet](https://dl.acm.org/doi/10.1145/3575693.3575702) and our [performance tracking](https://github.com/hidet-org/hidet/issues/154)
 
 
 ![Eager vs Hidet latency](/assets/images/2023-4-27-hidet.png){:style="max-height:800px; width:100%"}   
