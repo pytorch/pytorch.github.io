@@ -235,7 +235,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href='https://pytorch.org/docs/versions.html'>master (2.1.0a0+git763e0a9 ) &#x25BC</a>
+      <a href='https://pytorch.org/docs/versions.html'>master (2.1.0a0+gitd1fbd33 ) &#x25BC</a>
     </div>
     
 
@@ -473,6 +473,7 @@
 <span class="kn">import</span> <span class="nn">collections.abc</span>
 <span class="kn">import</span> <span class="nn">contextlib</span>
 <span class="kn">import</span> <span class="nn">functools</span>
+<span class="kn">import</span> <span class="nn">hashlib</span>
 <span class="kn">import</span> <span class="nn">io</span>
 <span class="kn">import</span> <span class="nn">logging</span>
 <span class="kn">import</span> <span class="nn">os</span>
@@ -1000,18 +1001,25 @@
     <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s2">&quot;cpu&quot;</span><span class="p">)</span>
 
 
-<span class="k">def</span> <span class="nf">_store_based_barrier</span><span class="p">(</span><span class="n">rank</span><span class="p">,</span> <span class="n">store</span><span class="p">,</span> <span class="n">timeout</span><span class="p">,</span> <span class="n">logging_interval</span><span class="o">=</span><span class="n">timedelta</span><span class="p">(</span><span class="n">seconds</span><span class="o">=</span><span class="mi">10</span><span class="p">)):</span>
+<span class="c1"># Environment variable to control whether we do a barrier after process group</span>
+<span class="c1"># init. Default value is 1 for now to stay the same with previous behavior.</span>
+<span class="c1"># Users can change it to 0 if such behavior is undesired. We reserve the right</span>
+<span class="c1"># to change the default value to 0 if small rollout is successful.</span>
+<span class="n">_barrier_after_init</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s2">&quot;TORCH_DIST_INIT_BARRIER&quot;</span><span class="p">,</span> <span class="s2">&quot;1&quot;</span><span class="p">))</span>
+
+
+<span class="k">def</span> <span class="nf">_store_based_barrier</span><span class="p">(</span><span class="n">rank</span><span class="p">,</span> <span class="n">store</span><span class="p">,</span> <span class="n">group_name</span><span class="p">,</span> <span class="n">rendezvous_count</span><span class="p">,</span> <span class="n">timeout</span><span class="p">,</span> <span class="n">logging_interval</span><span class="o">=</span><span class="n">timedelta</span><span class="p">(</span><span class="n">seconds</span><span class="o">=</span><span class="mi">10</span><span class="p">)):</span>
     <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Barrier based on store which is used for synchronizing processes after</span>
 <span class="sd">    ``init_process_group`` or ``new_group``. Intended to be used only with</span>
 <span class="sd">    those two methods and is not a generic alternative to ``barrier()``.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">store_key</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">STORE_BASED_BARRIER_PREFIX</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="n">_world</span><span class="o">.</span><span class="n">group_count</span><span class="si">}</span><span class="s2">&quot;</span>
+    <span class="n">store_key</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">STORE_BASED_BARRIER_PREFIX</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="n">group_name</span><span class="si">}</span><span class="s2">&quot;</span>
     <span class="n">store</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">store_key</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
     <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Added key: </span><span class="si">%s</span><span class="s2"> to store for rank: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">store_key</span><span class="p">,</span> <span class="n">rank</span><span class="p">)</span>
 
     <span class="c1"># Now wait for all workers to check in with the store.</span>
-    <span class="n">world_size</span> <span class="o">=</span> <span class="n">get_world_size</span><span class="p">()</span>
+    <span class="n">world_size</span> <span class="o">=</span> <span class="n">rendezvous_count</span>
     <span class="n">worker_count</span> <span class="o">=</span> <span class="n">store</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">store_key</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
 
     <span class="n">last_worker_key</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">store_key</span><span class="si">}</span><span class="s2">:last_worker&quot;</span>
@@ -1400,7 +1408,7 @@
 <span class="sd">            For ``ucc``, blocking wait is supported similar to NCCL. However,</span>
 <span class="sd">            async error handling is done differently since with UCC we have</span>
 <span class="sd">            progress thread and not watch-dog thread.</span>
-<span class="sd">        group_name (str, optional, deprecated): Group name.</span>
+<span class="sd">        group_name (str, optional, deprecated): Group name. This argument is ignored</span>
 <span class="sd">        pg_options (ProcessGroupOptions, optional): process group options</span>
 <span class="sd">            specifying what additional options need to be passed in during</span>
 <span class="sd">            the construction of specific process groups. As of now, the only</span>
@@ -1448,6 +1456,12 @@
     <span class="k">else</span><span class="p">:</span>
         <span class="n">backend</span> <span class="o">=</span> <span class="n">Backend</span><span class="p">(</span><span class="s2">&quot;undefined&quot;</span><span class="p">)</span>
 
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Group name is not visible to users unless they access</span>
+<span class="sd">    internals of c10d. This means we can ignore the value</span>
+<span class="sd">    they provide as it not exposed in a public way.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">group_name</span> <span class="o">=</span> <span class="n">_process_group_name</span><span class="p">([],</span> <span class="n">use_hashed_name</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">backend</span> <span class="o">==</span> <span class="n">Backend</span><span class="o">.</span><span class="n">MPI</span><span class="p">:</span>
         <span class="k">if</span> <span class="n">world_size</span> <span class="o">!=</span> <span class="o">-</span><span class="mi">1</span> <span class="ow">or</span> <span class="n">rank</span> <span class="o">!=</span> <span class="o">-</span><span class="mi">1</span><span class="p">:</span>
             <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
@@ -1456,7 +1470,7 @@
                 <span class="s2">&quot;MPI runtime.&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">world_size</span><span class="p">,</span> <span class="n">rank</span><span class="p">)</span>
             <span class="p">)</span>
 
-        <span class="n">default_pg</span> <span class="o">=</span> <span class="n">_new_process_group_helper</span><span class="p">(</span>
+        <span class="n">default_pg</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">_new_process_group_helper</span><span class="p">(</span>
             <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="p">[],</span> <span class="n">backend</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="n">group_name</span><span class="o">=</span><span class="n">group_name</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span>
         <span class="p">)</span>
         <span class="n">_update_default_pg</span><span class="p">(</span><span class="n">default_pg</span><span class="p">)</span>
@@ -1473,7 +1487,7 @@
             <span class="c1"># different systems (e.g. RPC) in case the store is multi-tenant.</span>
             <span class="n">store</span> <span class="o">=</span> <span class="n">PrefixStore</span><span class="p">(</span><span class="s2">&quot;default_pg&quot;</span><span class="p">,</span> <span class="n">store</span><span class="p">)</span>
 
-        <span class="n">default_pg</span> <span class="o">=</span> <span class="n">_new_process_group_helper</span><span class="p">(</span>
+        <span class="n">default_pg</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">_new_process_group_helper</span><span class="p">(</span>
             <span class="n">world_size</span><span class="p">,</span>
             <span class="n">rank</span><span class="p">,</span>
             <span class="p">[],</span>
@@ -1489,16 +1503,27 @@
     <span class="n">_backend</span> <span class="o">=</span> <span class="n">_world</span><span class="o">.</span><span class="n">pg_map</span><span class="p">[</span><span class="n">GroupMember</span><span class="o">.</span><span class="n">WORLD</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>  <span class="c1"># type: ignore[index]</span>
     <span class="n">_default_pg_init_method</span> <span class="o">=</span> <span class="n">init_method</span>
 
-    <span class="c1"># barrier at the end to ensure that once we return from this method, all</span>
-    <span class="c1"># process groups including global variables are updated correctly on all</span>
-    <span class="c1"># ranks.</span>
-    <span class="k">if</span> <span class="n">backend</span> <span class="o">==</span> <span class="n">Backend</span><span class="o">.</span><span class="n">MPI</span><span class="p">:</span>
-        <span class="c1"># MPI backend doesn&#39;t use store.</span>
-        <span class="n">barrier</span><span class="p">()</span>
+    <span class="k">if</span> <span class="n">_barrier_after_init</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="c1"># barrier at the end to ensure that once we return from this method, all</span>
+        <span class="c1"># process groups including global variables are updated correctly on all</span>
+        <span class="c1"># ranks.</span>
+        <span class="c1"># Update 04/2023: for large-scale runs, this barrier (esp. store-based</span>
+        <span class="c1"># barrier) may be costly and/or unscalable. Also, in a lot of cases,</span>
+        <span class="c1"># these barriers may be unnecessary, as proved by a green CI after</span>
+        <span class="c1"># removal. An environment variable `TORCH_DIST_INIT_BARRIER` has been</span>
+        <span class="c1"># added which, when set to 0, will disable these barriers.</span>
+        <span class="k">if</span> <span class="n">backend</span> <span class="o">==</span> <span class="n">Backend</span><span class="o">.</span><span class="n">MPI</span><span class="p">:</span>
+            <span class="c1"># MPI backend doesn&#39;t use store.</span>
+            <span class="n">barrier</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># Use store based barrier here since barrier() used a bunch of</span>
+            <span class="c1"># default devices and messes up NCCL internal state.</span>
+            <span class="n">_store_based_barrier</span><span class="p">(</span><span class="n">rank</span><span class="p">,</span> <span class="n">store</span><span class="p">,</span> <span class="n">group_name</span><span class="p">,</span> <span class="n">world_size</span><span class="p">,</span> <span class="n">timeout</span><span class="p">)</span>
     <span class="k">else</span><span class="p">:</span>
-        <span class="c1"># Use store based barrier here since barrier() used a bunch of</span>
-        <span class="c1"># default devices and messes up NCCL internal state.</span>
-        <span class="n">_store_based_barrier</span><span class="p">(</span><span class="n">rank</span><span class="p">,</span> <span class="n">store</span><span class="p">,</span> <span class="n">timeout</span><span class="p">)</span></div>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="s2">&quot;TORCH_DIST_INIT_BARRIER is set to 0, omitting the barrier after &quot;</span>
+            <span class="s2">&quot;ProcessGroup initialization.&quot;</span>
+        <span class="p">)</span></div>
 
 
 <span class="k">def</span> <span class="nf">_new_process_group_helper</span><span class="p">(</span>
@@ -1523,10 +1548,6 @@
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="k">global</span> <span class="n">_world</span>
 
-    <span class="k">if</span> <span class="ow">not</span> <span class="n">group_name</span><span class="p">:</span>
-        <span class="n">group_name</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">_world</span><span class="o">.</span><span class="n">group_count</span><span class="p">)</span>
-        <span class="n">_world</span><span class="o">.</span><span class="n">group_count</span> <span class="o">=</span> <span class="n">_world</span><span class="o">.</span><span class="n">group_count</span> <span class="o">+</span> <span class="mi">1</span>
-
     <span class="k">if</span> <span class="n">group_name</span> <span class="ow">in</span> <span class="n">_world</span><span class="o">.</span><span class="n">pg_names</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
         <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
             <span class="s2">&quot;The specified group name has already been &quot;</span>
@@ -1542,7 +1563,8 @@
         <span class="c1"># creating with the same tag and rank set results in the same underlying PG</span>
         <span class="n">existing_group</span> <span class="o">=</span> <span class="n">_find_pg_by_ranks_and_tag</span><span class="p">(</span><span class="n">pg_tag</span><span class="p">,</span> <span class="n">global_ranks_in_group</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">existing_group</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">existing_group</span>
+            <span class="n">_</span><span class="p">,</span> <span class="n">prefix_store</span> <span class="o">=</span> <span class="n">_world</span><span class="o">.</span><span class="n">pg_map</span><span class="p">[</span><span class="n">existing_group</span><span class="p">]</span>
+            <span class="k">return</span> <span class="n">existing_group</span><span class="p">,</span> <span class="n">prefix_store</span>
 
     <span class="c1"># The list of group ranks is empty if we&#39;re creating the default group.</span>
     <span class="n">is_default_group</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">global_ranks_in_group</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span>
@@ -1552,7 +1574,7 @@
     <span class="k">if</span> <span class="ow">not</span> <span class="n">is_default_group</span><span class="p">:</span>
         <span class="n">global_rank</span> <span class="o">=</span> <span class="n">_get_default_group</span><span class="p">()</span><span class="o">.</span><span class="n">rank</span><span class="p">()</span>
         <span class="k">if</span> <span class="n">global_rank</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">global_ranks_in_group</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">GroupMember</span><span class="o">.</span><span class="n">NON_GROUP_MEMBER</span>
+            <span class="k">return</span> <span class="n">GroupMember</span><span class="o">.</span><span class="n">NON_GROUP_MEMBER</span><span class="p">,</span> <span class="kc">None</span>
 
     <span class="n">prefix_store</span> <span class="o">=</span> <span class="n">PrefixStore</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">group_name</span><span class="si">}</span><span class="s2">/&quot;</span><span class="p">,</span> <span class="n">store</span><span class="p">)</span>
     <span class="n">base_pg_options</span> <span class="o">=</span> <span class="n">ProcessGroup</span><span class="o">.</span><span class="n">Options</span><span class="p">(</span><span class="n">backend</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">backend</span><span class="p">))</span>
@@ -1684,7 +1706,7 @@
 
     <span class="n">_world</span><span class="o">.</span><span class="n">tags_to_pg</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="n">pg_tag</span><span class="p">,</span> <span class="p">[])</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">pg</span><span class="p">)</span>
     <span class="n">_world</span><span class="o">.</span><span class="n">pg_to_tag</span><span class="p">[</span><span class="n">pg</span><span class="p">]</span> <span class="o">=</span> <span class="n">pg_tag</span>
-    <span class="k">return</span> <span class="n">pg</span>
+    <span class="k">return</span> <span class="n">pg</span><span class="p">,</span> <span class="n">prefix_store</span>
 
 <span class="k">def</span> <span class="nf">destroy_process_group</span><span class="p">(</span><span class="n">group</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">ProcessGroup</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;</span>
@@ -4078,7 +4100,28 @@
     <span class="n">wrapped_pg</span> <span class="o">=</span> <span class="n">_ProcessGroupWrapper</span><span class="p">(</span><span class="n">wrapped_pg</span><span class="p">,</span> <span class="n">helper_pg</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">wrapped_pg</span>
 
-<div class="viewcode-block" id="new_group"><a class="viewcode-back" href="../../../distributed.html#torch.distributed.new_group">[docs]</a><span class="k">def</span> <span class="nf">new_group</span><span class="p">(</span><span class="n">ranks</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="n">default_pg_timeout</span><span class="p">,</span> <span class="n">backend</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">pg_options</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+
+<span class="k">def</span> <span class="nf">_process_group_name</span><span class="p">(</span><span class="n">ranks</span><span class="p">,</span> <span class="n">use_hashed_name</span><span class="p">):</span>
+    <span class="k">global</span> <span class="n">_world</span>
+    <span class="k">if</span> <span class="n">use_hashed_name</span><span class="p">:</span>
+        <span class="n">pg_name</span> <span class="o">=</span> <span class="n">hashlib</span><span class="o">.</span><span class="n">sha1</span><span class="p">(</span><span class="nb">bytes</span><span class="p">(</span><span class="s2">&quot;_&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">map</span><span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="n">ranks</span><span class="p">)),</span> <span class="s2">&quot;utf-8&quot;</span><span class="p">))</span><span class="o">.</span><span class="n">hexdigest</span><span class="p">()</span>
+        <span class="k">while</span> <span class="n">pg_name</span> <span class="ow">in</span> <span class="n">_world</span><span class="o">.</span><span class="n">pg_names</span><span class="p">:</span>
+            <span class="n">pg_name</span> <span class="o">=</span> <span class="n">hashlib</span><span class="o">.</span><span class="n">sha1</span><span class="p">(</span><span class="nb">bytes</span><span class="p">(</span><span class="n">pg_name</span> <span class="o">+</span> <span class="s2">&quot;_&quot;</span><span class="p">,</span> <span class="s2">&quot;utf-8&quot;</span><span class="p">))</span><span class="o">.</span><span class="n">hexdigest</span><span class="p">()</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">pg_name</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">_world</span><span class="o">.</span><span class="n">group_count</span><span class="p">)</span>
+        <span class="n">_world</span><span class="o">.</span><span class="n">group_count</span> <span class="o">+=</span> <span class="mi">1</span>
+    <span class="k">return</span> <span class="n">pg_name</span>
+
+<span class="k">def</span> <span class="nf">_get_backend_from_str</span><span class="p">(</span><span class="n">backend</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Backend</span><span class="p">:</span>
+    <span class="c1"># Default to the same backend as the global process group</span>
+    <span class="c1">#  if backend is not specified.</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">backend</span><span class="p">:</span>
+        <span class="n">backend</span> <span class="o">=</span> <span class="n">get_backend</span><span class="p">(</span><span class="n">_get_default_group</span><span class="p">())</span>
+    <span class="k">return</span> <span class="n">Backend</span><span class="p">(</span><span class="n">backend</span><span class="p">)</span>
+
+
+
+<div class="viewcode-block" id="new_group"><a class="viewcode-back" href="../../../distributed.html#torch.distributed.new_group">[docs]</a><span class="k">def</span> <span class="nf">new_group</span><span class="p">(</span><span class="n">ranks</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="n">default_pg_timeout</span><span class="p">,</span> <span class="n">backend</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">pg_options</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">use_local_synchronization</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Creates a new distributed group.</span>
 
@@ -4132,13 +4175,34 @@
 <span class="sd">            the construction of specific process groups. i.e. for the ``nccl``</span>
 <span class="sd">            backend, ``is_high_priority_stream`` can be specified so that</span>
 <span class="sd">            process group can pick up high priority cuda streams.</span>
+<span class="sd">        use_local_synchronization (bool, optional): perform a group-local</span>
+<span class="sd">            barrier at the end of the process group creation. This is different</span>
+<span class="sd">            in that non-member ranks don&#39;t need to call into API and don&#39;t</span>
+<span class="sd">            join the barrier.</span>
 
 <span class="sd">    Returns:</span>
-<span class="sd">        A handle of distributed group that can be given to collective calls.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">return</span> <span class="n">_new_group_with_tag</span><span class="p">(</span><span class="n">ranks</span><span class="p">,</span> <span class="n">timeout</span><span class="p">,</span> <span class="n">backend</span><span class="p">,</span> <span class="n">pg_options</span><span class="p">)</span></div>
+<span class="sd">        A handle of distributed group that can be given to collective calls or None if the rank is not part of ``ranks``.</span>
 
-<span class="k">def</span> <span class="nf">_new_group_with_tag</span><span class="p">(</span><span class="n">ranks</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="n">default_pg_timeout</span><span class="p">,</span> <span class="n">backend</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">pg_options</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">pg_tag</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="sd">    N.B. use_local_synchronization doesn&#39;t work with MPI.</span>
+
+<span class="sd">    N.B. While use_local_synchronization=True can be significantly faster with larger</span>
+<span class="sd">    clusters and small process groups, care must be taken since it changes cluster behavior</span>
+<span class="sd">    as non-member ranks don&#39;t join the group barrier().</span>
+
+<span class="sd">    N.B. use_local_synchronization=True can lead to deadlocks when each rank creates</span>
+<span class="sd">    multiple overlaping process groups. To avoid that, make sure all ranks follow the</span>
+<span class="sd">    same global creation order.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">_new_group_with_tag</span><span class="p">(</span><span class="n">ranks</span><span class="p">,</span> <span class="n">timeout</span><span class="p">,</span> <span class="n">backend</span><span class="p">,</span> <span class="n">pg_options</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="n">use_local_synchronization</span><span class="o">=</span><span class="n">use_local_synchronization</span><span class="p">)</span></div>
+
+<span class="k">def</span> <span class="nf">_new_group_with_tag</span><span class="p">(</span>
+    <span class="n">ranks</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">timeout</span><span class="o">=</span><span class="n">default_pg_timeout</span><span class="p">,</span>
+    <span class="n">backend</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">pg_options</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">pg_tag</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">use_local_synchronization</span><span class="o">=</span><span class="kc">False</span>
+<span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    This is a variant of ``new_group`` that exposes tag creation.</span>
 
@@ -4156,6 +4220,13 @@
     <span class="c1"># if the backend is not specified.</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="n">backend</span><span class="p">:</span>
         <span class="n">backend</span> <span class="o">=</span> <span class="n">default_backend</span>
+    <span class="n">backend</span> <span class="o">=</span> <span class="n">Backend</span><span class="p">(</span><span class="n">backend</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">use_local_synchronization</span><span class="p">:</span>
+        <span class="c1"># MPI backend doesn&#39;t have have a way for us to perform a partial sync</span>
+        <span class="k">if</span> <span class="n">backend</span> <span class="o">==</span> <span class="n">Backend</span><span class="o">.</span><span class="n">MPI</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;MPI backend doesn&#39;t support use_local_synchronization=True&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">ranks</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">get_rank</span><span class="p">()</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">ranks</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
 
     <span class="c1"># checks the input ranks</span>
     <span class="k">if</span> <span class="n">ranks</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
@@ -4183,15 +4254,16 @@
         <span class="n">group_world_size</span> <span class="o">=</span> <span class="n">global_world_size</span>
         <span class="n">group_rank</span> <span class="o">=</span> <span class="n">global_rank</span>
 
-    <span class="n">backend</span> <span class="o">=</span> <span class="n">Backend</span><span class="p">(</span><span class="n">backend</span><span class="p">)</span>
+    <span class="n">group_name</span> <span class="o">=</span> <span class="n">_process_group_name</span><span class="p">(</span><span class="n">ranks</span><span class="p">,</span> <span class="n">use_hashed_name</span><span class="o">=</span><span class="n">use_local_synchronization</span><span class="p">)</span>
 
     <span class="k">with</span> <span class="n">record_function</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;## process_group:init with ranks: </span><span class="si">{</span><span class="n">ranks</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">):</span>
-        <span class="n">pg</span> <span class="o">=</span> <span class="n">_new_process_group_helper</span><span class="p">(</span>
+        <span class="n">pg</span><span class="p">,</span> <span class="n">pg_store</span> <span class="o">=</span> <span class="n">_new_process_group_helper</span><span class="p">(</span>
             <span class="n">group_world_size</span><span class="p">,</span>
             <span class="n">group_rank</span><span class="p">,</span>
             <span class="n">ranks</span><span class="p">,</span>
             <span class="n">backend</span><span class="p">,</span>
             <span class="n">default_store</span><span class="p">,</span>
+            <span class="n">group_name</span><span class="o">=</span><span class="n">group_name</span><span class="p">,</span>
             <span class="n">pg_options</span><span class="o">=</span><span class="n">pg_options</span><span class="p">,</span>
             <span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">,</span>
             <span class="n">pg_tag</span><span class="o">=</span><span class="n">pg_tag</span>
@@ -4202,16 +4274,29 @@
         <span class="n">global_rank</span><span class="p">:</span> <span class="n">group_rank</span> <span class="k">for</span> <span class="n">group_rank</span><span class="p">,</span> <span class="n">global_rank</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">ranks</span><span class="p">)</span>
     <span class="p">}</span>
 
-    <span class="c1"># barrier at the end to ensure that once we return from this method, all</span>
-    <span class="c1"># process groups including global variables are updated correctly on all</span>
-    <span class="c1"># ranks.</span>
-    <span class="k">if</span> <span class="n">backend</span> <span class="o">==</span> <span class="n">Backend</span><span class="o">.</span><span class="n">MPI</span><span class="p">:</span>
-        <span class="c1"># MPI doesn&#39;t have store.</span>
-        <span class="n">barrier</span><span class="p">()</span>
+    <span class="k">if</span> <span class="n">_barrier_after_init</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="c1"># barrier at the end to ensure that once we return from this method, all</span>
+        <span class="c1"># process groups including global variables are updated correctly on all</span>
+        <span class="c1"># ranks.</span>
+        <span class="c1"># Update 04/2023: for large-scale runs, these barriers (esp. store-based</span>
+        <span class="c1"># barrier) may be costly and/or unscalable. Also, in a lot of cases,</span>
+        <span class="c1"># these barriers may be unnecessary, as proved by a green CI after</span>
+        <span class="c1"># removal. An environment variable `TORCH_DIST_INIT_BARRIER` has been</span>
+        <span class="c1"># added which, when set to 0, will disable these barriers.</span>
+        <span class="k">if</span> <span class="n">backend</span> <span class="o">==</span> <span class="n">Backend</span><span class="o">.</span><span class="n">MPI</span><span class="p">:</span>
+            <span class="c1"># MPI doesn&#39;t have store.</span>
+            <span class="n">barrier</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">barrier_store</span> <span class="o">=</span> <span class="n">pg_store</span> <span class="k">if</span> <span class="n">use_local_synchronization</span> <span class="k">else</span> <span class="n">default_store</span>
+            <span class="n">world_size</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">ranks</span><span class="p">)</span> <span class="k">if</span> <span class="n">use_local_synchronization</span> <span class="k">else</span> <span class="n">get_world_size</span><span class="p">()</span>
+            <span class="c1"># Use store based barrier here since barrier() used a bunch of</span>
+            <span class="c1"># default devices and messes up NCCL internal state.</span>
+            <span class="n">_store_based_barrier</span><span class="p">(</span><span class="n">global_rank</span><span class="p">,</span> <span class="n">barrier_store</span><span class="p">,</span> <span class="n">group_name</span><span class="p">,</span> <span class="n">world_size</span><span class="p">,</span> <span class="n">timeout</span><span class="p">)</span>
     <span class="k">else</span><span class="p">:</span>
-        <span class="c1"># Use store based barrier here since barrier() used a bunch of</span>
-        <span class="c1"># default devices and messes up NCCL internal state.</span>
-        <span class="n">_store_based_barrier</span><span class="p">(</span><span class="n">global_rank</span><span class="p">,</span> <span class="n">default_store</span><span class="p">,</span> <span class="n">timeout</span><span class="p">)</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="s2">&quot;TORCH_DIST_INIT_BARRIER is set to 0, omitting the barrier after &quot;</span>
+            <span class="s2">&quot;ProcessGroup initialization.&quot;</span>
+        <span class="p">)</span>
 
     <span class="k">return</span> <span class="n">pg</span>
 
