@@ -7,7 +7,7 @@ date: May 10, 2023
 
 **Date**: May 10, 2023
 
-**Agenda**
+**Agenda**  
 **3:45 pm** - Meet in lobby and check in  
 **4:00 - 4:30 pm** - Generative AI and Stable Diffusion - Will Berman | Hugging Face  
 **4:30 - 5:00 pm** -  Joe Spisak & Milad Mohammadi | Open XLA  
