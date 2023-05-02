@@ -235,7 +235,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href='https://pytorch.org/docs/versions.html'>master (2.1.0a0+gite779a30 ) &#x25BC</a>
+      <a href='https://pytorch.org/docs/versions.html'>master (2.1.0a0+gitdc9c79d ) &#x25BC</a>
     </div>
     
 
@@ -469,16 +469,19 @@
              <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
               
   <h1>Source code for torch.onnx._internal.diagnostics._diagnostic</h1><div class="highlight"><pre>
-<span></span><span class="sd">&quot;&quot;&quot;Diagnostic components for PyTorch ONNX export.&quot;&quot;&quot;</span>
+<span></span><span class="sd">&quot;&quot;&quot;Diagnostic components for TorchScript based ONNX export, i.e. `torch.onnx.export`.&quot;&quot;&quot;</span>
 <span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
 
 <span class="kn">import</span> <span class="nn">contextlib</span>
+<span class="kn">import</span> <span class="nn">gzip</span>
 <span class="kn">from</span> <span class="nn">collections.abc</span> <span class="kn">import</span> <span class="n">Generator</span>
-<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Optional</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Type</span>
 
 <span class="kn">import</span> <span class="nn">torch</span>
 
 <span class="kn">from</span> <span class="nn">torch.onnx._internal.diagnostics</span> <span class="kn">import</span> <span class="n">infra</span>
+<span class="kn">from</span> <span class="nn">torch.onnx._internal.diagnostics.infra</span> <span class="kn">import</span> <span class="n">formatter</span><span class="p">,</span> <span class="n">sarif</span>
+<span class="kn">from</span> <span class="nn">torch.onnx._internal.diagnostics.infra.sarif</span> <span class="kn">import</span> <span class="n">version</span> <span class="k">as</span> <span class="n">sarif_version</span>
 <span class="kn">from</span> <span class="nn">torch.utils</span> <span class="kn">import</span> <span class="n">cpp_backtrace</span>
 
 
@@ -549,10 +552,10 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">with_graph</span><span class="p">(</span><span class="n">infra</span><span class="o">.</span><span class="n">Graph</span><span class="p">(</span><span class="n">gm</span><span class="o">.</span><span class="n">print_readable</span><span class="p">(</span><span class="kc">False</span><span class="p">),</span> <span class="n">gm</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="p">))</span></div>
 
 
-<span class="k">class</span> <span class="nc">ExportDiagnosticEngine</span><span class="p">(</span><span class="n">infra</span><span class="o">.</span><span class="n">DiagnosticEngine</span><span class="p">):</span>
+<span class="k">class</span> <span class="nc">ExportDiagnosticEngine</span><span class="p">:</span>
     <span class="sd">&quot;&quot;&quot;PyTorch ONNX Export diagnostic engine.</span>
 
-<span class="sd">    The only purpose of creating this class instead of using the base class directly</span>
+<span class="sd">    The only purpose of creating this class instead of using `DiagnosticContext` directly</span>
 <span class="sd">    is to provide a background context for `diagnose` calls inside exporter.</span>
 
 <span class="sd">    By design, one `torch.onnx.export` call should initialize one diagnostic context.</span>
@@ -565,10 +568,11 @@
 <span class="sd">    established.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
+    <span class="n">contexts</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">infra</span><span class="o">.</span><span class="n">DiagnosticContext</span><span class="p">]</span>
     <span class="n">_background_context</span><span class="p">:</span> <span class="n">infra</span><span class="o">.</span><span class="n">DiagnosticContext</span>
 
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">contexts</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_background_context</span> <span class="o">=</span> <span class="n">infra</span><span class="o">.</span><span class="n">DiagnosticContext</span><span class="p">(</span>
             <span class="n">name</span><span class="o">=</span><span class="s2">&quot;torch.onnx&quot;</span><span class="p">,</span>
             <span class="n">version</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">__version__</span><span class="p">,</span>
@@ -579,12 +583,55 @@
     <span class="k">def</span> <span class="nf">background_context</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">infra</span><span class="o">.</span><span class="n">DiagnosticContext</span><span class="p">:</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_background_context</span>
 
+    <span class="k">def</span> <span class="nf">create_diagnostic_context</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">version</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">options</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">infra</span><span class="o">.</span><span class="n">DiagnosticOptions</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">diagnostic_type</span><span class="p">:</span> <span class="n">Type</span><span class="p">[</span><span class="n">infra</span><span class="o">.</span><span class="n">Diagnostic</span><span class="p">]</span> <span class="o">=</span> <span class="n">infra</span><span class="o">.</span><span class="n">Diagnostic</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">infra</span><span class="o">.</span><span class="n">DiagnosticContext</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Creates a new diagnostic context.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            name: The subject name for the diagnostic context.</span>
+<span class="sd">            version: The subject version for the diagnostic context.</span>
+<span class="sd">            options: The options for the diagnostic context.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            A new diagnostic context.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">options</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">options</span> <span class="o">=</span> <span class="n">infra</span><span class="o">.</span><span class="n">DiagnosticOptions</span><span class="p">()</span>
+        <span class="n">context</span> <span class="o">=</span> <span class="n">infra</span><span class="o">.</span><span class="n">DiagnosticContext</span><span class="p">(</span>
+            <span class="n">name</span><span class="p">,</span> <span class="n">version</span><span class="p">,</span> <span class="n">options</span><span class="p">,</span> <span class="n">diagnostic_type</span><span class="o">=</span><span class="n">diagnostic_type</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">contexts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">context</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">context</span>
+
     <span class="k">def</span> <span class="nf">clear</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+        <span class="sd">&quot;&quot;&quot;Clears all diagnostic contexts.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">contexts</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_background_context</span><span class="o">.</span><span class="n">diagnostics</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
 
+    <span class="k">def</span> <span class="nf">to_json</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">formatter</span><span class="o">.</span><span class="n">sarif_to_json</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">sarif_log</span><span class="p">())</span>
+
+    <span class="k">def</span> <span class="nf">dump</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">file_path</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">compress</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Dumps the SARIF log to a file.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">compress</span><span class="p">:</span>
+            <span class="k">with</span> <span class="n">gzip</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="n">file_path</span><span class="p">,</span> <span class="s2">&quot;wt&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+                <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">to_json</span><span class="p">())</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">file_path</span><span class="p">,</span> <span class="s2">&quot;w&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+                <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">to_json</span><span class="p">())</span>
+
     <span class="k">def</span> <span class="nf">sarif_log</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="n">log</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">sarif_log</span><span class="p">()</span>
+        <span class="n">log</span> <span class="o">=</span> <span class="n">sarif</span><span class="o">.</span><span class="n">SarifLog</span><span class="p">(</span>
+            <span class="n">version</span><span class="o">=</span><span class="n">sarif_version</span><span class="o">.</span><span class="n">SARIF_VERSION</span><span class="p">,</span>
+            <span class="n">schema_uri</span><span class="o">=</span><span class="n">sarif_version</span><span class="o">.</span><span class="n">SARIF_SCHEMA_LINK</span><span class="p">,</span>
+            <span class="n">runs</span><span class="o">=</span><span class="p">[</span><span class="n">context</span><span class="o">.</span><span class="n">sarif</span><span class="p">()</span> <span class="k">for</span> <span class="n">context</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">contexts</span><span class="p">],</span>
+        <span class="p">)</span>
+
         <span class="n">log</span><span class="o">.</span><span class="n">runs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_background_context</span><span class="o">.</span><span class="n">sarif</span><span class="p">())</span>
         <span class="k">return</span> <span class="n">log</span>
 
@@ -625,7 +672,8 @@
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ExportDiagnostic</span><span class="p">:</span>
     <span class="sd">&quot;&quot;&quot;Creates a diagnostic and record it in the global diagnostic context.</span>
 
-<span class="sd">    This is a wrapper around `context.record` that uses the global diagnostic context.</span>
+<span class="sd">    This is a wrapper around `context.add_diagnostic` that uses the global diagnostic</span>
+<span class="sd">    context.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="c1"># NOTE: Cannot use `@_beartype.beartype`. It somehow erases the cpp stack frame info.</span>
     <span class="n">diagnostic</span> <span class="o">=</span> <span class="n">ExportDiagnostic</span><span class="p">(</span>
