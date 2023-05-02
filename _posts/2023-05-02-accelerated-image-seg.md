@@ -259,10 +259,8 @@ Extend the optimizations on an Intel CPU by using the Intel Extension for PyTorc
 
 `pip install intel-extension-for-pytorch`  
 
+`git clone https://github.com/intel/intel-extension-for-pytorch`
 
-```
-git clone https://github.com/intel/intel-extension-for-pytorch
-```
 
 [Get in touch with me on LinkedIn](http://linkedin.com/in/bconsolvo) if you have any more questions!
 
