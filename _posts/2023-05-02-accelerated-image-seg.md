@@ -1,12 +1,12 @@
 ---
 layout: blog_detail
-title: "Accelerated Image Segmentation using PyTorch*"
+title: "Accelerated Image Segmentation using PyTorch"
 author: Intel
 ---
 
-_Using Intel® Extension for PyTorch* to Boost Image Processing Performance_
+_Using Intel® Extension for PyTorch to Boost Image Processing Performance_
 
-PyTorch* delivers great CPU performance, and it can be further accelerated with Intel® Extension for PyTorch. I trained an AI image segmentation model using PyTorch 1.13.1 (with ResNet34 + UNet architecture) to identify roads and speed limits from satellite images, all on the 4th Gen Intel® Xeon® Scalable processor.
+PyTorch delivers great CPU performance, and it can be further accelerated with Intel® Extension for PyTorch. I trained an AI image segmentation model using PyTorch 1.13.1 (with ResNet34 + UNet architecture) to identify roads and speed limits from satellite images, all on the 4th Gen Intel® Xeon® Scalable processor.
 
 I will walk you through the steps to work with a satellite image dataset called SpaceNet5 and how I optimized the code to make deep learning workloads feasible on CPUs just by flipping a few key switches.
 
