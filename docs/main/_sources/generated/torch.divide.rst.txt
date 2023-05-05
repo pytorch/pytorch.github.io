@@ -1,0 +1,6 @@
+﻿torch.divide
+============
+
+.. currentmodule:: torch
+
+.. autofunction:: divide
