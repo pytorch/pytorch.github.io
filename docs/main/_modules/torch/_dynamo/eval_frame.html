@@ -10,7 +10,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>torch._dynamo.eval_frame &mdash; PyTorch 2.1 documentation</title>
+  <title>torch._dynamo.eval_frame &mdash; PyTorch main documentation</title>
   
 
   
@@ -41,6 +41,12 @@
   <link rel="stylesheet" href="../../../_static/css/jit.css" type="text/css" />
     <link rel="index" title="Index" href="../../../genindex.html" />
     <link rel="search" title="Search" href="../../../search.html" />
+
+<!--
+  Search engines should not index the main version of documentation.
+  Stable documentation are built without release == 'main'.
+-->
+<meta name="robots" content="noindex">
 
 
   <!-- Google Analytics -->
@@ -229,7 +235,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href='https://pytorch.org/docs/versions.html'>2.1 &#x25BC</a>
+      <a href='https://pytorch.org/docs/versions.html'>main (2.1.0a0+git660a0d8 ) &#x25BC</a>
     </div>
     
 
@@ -248,6 +254,13 @@
           </div>
 
           
+
+<div>
+  <a style="color:#F05732" href="https://pytorch.org/docs/stable/_modules/torch/_dynamo/eval_frame.html">
+    You are viewing unstable developer preview docs.
+    Click here to view docs for latest stable release.
+  </a>
+</div>
 
 
             
@@ -295,6 +308,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../../../compile/guards-overview.html">Guards Overview</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../compile/custom-backends.html">Custom Backends</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../compile/deep-dive.html">TorchDynamo Deeper Dive</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../compile/performance-dashboard.html">PyTorch 2.0 Performance Dashboard</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../ir.html">IRs</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Language Bindings</span></p>
@@ -465,6 +479,7 @@
 <span class="kn">import</span> <span class="nn">inspect</span>
 <span class="kn">import</span> <span class="nn">logging</span>
 <span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">import</span> <span class="nn">re</span>
 <span class="kn">import</span> <span class="nn">sys</span>
 <span class="kn">import</span> <span class="nn">textwrap</span>
 <span class="kn">import</span> <span class="nn">threading</span>
@@ -484,6 +499,7 @@
 <span class="kn">from</span> <span class="nn">torch.fx.experimental.proxy_tensor</span> <span class="kn">import</span> <span class="n">make_fx</span>
 <span class="kn">from</span> <span class="nn">torch.fx.graph</span> <span class="kn">import</span> <span class="n">_PyTreeCodeGen</span><span class="p">,</span> <span class="n">_PyTreeInfo</span>
 <span class="kn">from</span> <span class="nn">torch.nn.parallel.distributed</span> <span class="kn">import</span> <span class="n">DistributedDataParallel</span>
+
 <span class="kn">from</span> <span class="nn">..fx</span> <span class="kn">import</span> <span class="n">GraphModule</span>
 <span class="kn">from</span> <span class="nn">.backends.registry</span> <span class="kn">import</span> <span class="n">CompilerFn</span><span class="p">,</span> <span class="n">lookup_backend</span>
 
@@ -521,7 +537,10 @@
 
 <span class="kn">import</span> <span class="nn">sympy</span>
 
-<span class="kn">from</span> <span class="nn">torch.fx.experimental.symbolic_shapes</span> <span class="kn">import</span> <span class="n">StrictMinMaxConstraint</span>
+<span class="kn">from</span> <span class="nn">torch.fx.experimental.symbolic_shapes</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">ConstraintViolationError</span><span class="p">,</span>
+    <span class="n">StrictMinMaxConstraint</span><span class="p">,</span>
+<span class="p">)</span>
 <span class="kn">from</span> <span class="nn">torch.utils._sympy.value_ranges</span> <span class="kn">import</span> <span class="n">ValueRanges</span>
 
 
@@ -537,7 +556,7 @@
 <span class="n">DONT_WRAP_FILES</span> <span class="o">=</span> <span class="p">{</span>
     <span class="c1"># For tracing into fx modules</span>
     <span class="n">inspect</span><span class="o">.</span><span class="n">getsourcefile</span><span class="p">(</span><span class="n">GraphModule</span><span class="p">),</span>
-    <span class="n">join</span><span class="p">(</span><span class="n">dirname</span><span class="p">(</span><span class="n">dirname</span><span class="p">(</span><span class="vm">__file__</span><span class="p">)),</span> <span class="s2">&quot;onnx/_internal/fx/dynamo_exporter.py&quot;</span><span class="p">),</span>
+    <span class="n">join</span><span class="p">(</span><span class="n">dirname</span><span class="p">(</span><span class="n">dirname</span><span class="p">(</span><span class="vm">__file__</span><span class="p">)),</span> <span class="s2">&quot;onnx/_internal/fx/dynamo_graph_extractor.py&quot;</span><span class="p">),</span>
 <span class="p">}</span>
 
 
@@ -568,7 +587,8 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">forward</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">dynamo_ctx</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_orig_mod</span><span class="o">.</span><span class="fm">__call__</span><span class="p">)</span>
 
         <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_orig_mod</span><span class="p">,</span> <span class="s2">&quot;_initialize_hook&quot;</span><span class="p">):</span>
-            <span class="bp">self</span><span class="o">.</span><span class="fm">__call__</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_call_lazy_check</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_forward</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">forward</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">forward</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_call_lazy_check</span>
 
     <span class="k">def</span> <span class="nf">__getstate__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="n">state</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">)</span>
@@ -593,7 +613,7 @@
             <span class="c1"># to avoid treating it as lazy on subsequent recompile.</span>
             <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_orig_mod</span><span class="o">.</span><span class="n">_infer_parameters</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_orig_mod</span><span class="p">,</span> <span class="n">args</span><span class="p">)</span>
-        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__call__</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_forward</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
 
 
 <span class="k">def</span> <span class="nf">remove_from_cache</span><span class="p">(</span><span class="n">f</span><span class="p">):</span>
@@ -702,7 +722,9 @@
             <span class="n">filename</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="k">if</span> <span class="p">(</span>
             <span class="p">(</span><span class="n">filename</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">skipfiles</span><span class="o">.</span><span class="n">check</span><span class="p">(</span><span class="n">filename</span><span class="p">))</span>
-            <span class="ow">and</span> <span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="n">fn</span><span class="p">,</span> <span class="s2">&quot;__name__&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span> <span class="o">!=</span> <span class="s2">&quot;_call_impl&quot;</span><span class="p">)</span>
+            <span class="ow">and</span> <span class="p">(</span>
+                <span class="nb">getattr</span><span class="p">(</span><span class="n">fn</span><span class="p">,</span> <span class="s2">&quot;__name__&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;_call_impl&quot;</span><span class="p">,</span> <span class="s2">&quot;_wrapped_call_impl&quot;</span><span class="p">]</span>
+            <span class="p">)</span>
             <span class="ow">and</span> <span class="n">filename</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">DONT_WRAP_FILES</span>
         <span class="p">):</span>
             <span class="c1"># call to a builtin without a frame for us to capture</span>
@@ -1085,10 +1107,9 @@
 
 
 <span class="nd">@dataclasses</span><span class="o">.</span><span class="n">dataclass</span>
-<span class="k">class</span> <span class="nc">Constraint</span><span class="p">:</span>
+<span class="k">class</span> <span class="nc">ConstraintTarget</span><span class="p">:</span>
     <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    This represents constraints on input tensor dimensions, e.g., requiring</span>
-<span class="sd">    them to be fully polymorphic or within some range.  Don&#39;t create this</span>
+<span class="sd">    This represents input tensor dimensions.  Don&#39;t create this</span>
 <span class="sd">    class directly; instead, use :func:`torch._export.dynamic_dim`.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
@@ -1096,15 +1117,30 @@
     <span class="c1"># TODO: We don&#39;t need t_id; we can get it off of w_tensor</span>
     <span class="n">t_id</span><span class="p">:</span> <span class="nb">int</span>
     <span class="n">dim</span><span class="p">:</span> <span class="nb">int</span>
+
+
+<span class="nd">@dataclasses</span><span class="o">.</span><span class="n">dataclass</span>
+<span class="k">class</span> <span class="nc">Constraint</span><span class="p">(</span><span class="n">ConstraintTarget</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    This represents constraints on input tensor dimensions, e.g., requiring</span>
+<span class="sd">    them to be fully polymorphic or within some range.  Don&#39;t create this</span>
+<span class="sd">    class directly; instead, use :func:`torch._export.dynamic_dim`.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
     <span class="c1"># NOTE(avik): In the future, this could be Union[StrictMinMaxConstraint, &lt;other kinds&gt;]</span>
     <span class="n">constraint_range</span><span class="p">:</span> <span class="n">StrictMinMaxConstraint</span>
+    <span class="c1"># Represent that `constraint_range` is shared with another ConstraintTarget, which</span>
+    <span class="c1"># typically arises because of a specified equality with another dynamic dimension.</span>
+    <span class="n">shared</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">ConstraintTarget</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
 
     <span class="k">def</span> <span class="nf">_clone_with_range</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">lower</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">upper</span><span class="o">=</span><span class="n">sympy</span><span class="o">.</span><span class="n">oo</span><span class="p">):</span>
         <span class="n">constraint_range</span> <span class="o">=</span> <span class="n">StrictMinMaxConstraint</span><span class="p">(</span>
             <span class="n">vr</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">constraint_range</span><span class="o">.</span><span class="n">vr</span> <span class="o">&amp;</span> <span class="n">ValueRanges</span><span class="p">(</span><span class="n">lower</span><span class="o">=</span><span class="n">lower</span><span class="p">,</span> <span class="n">upper</span><span class="o">=</span><span class="n">upper</span><span class="p">),</span>
             <span class="n">warn_only</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
         <span class="p">)</span>
-        <span class="k">return</span> <span class="n">Constraint</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">w_tensor</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">t_id</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">dim</span><span class="p">,</span> <span class="n">constraint_range</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">Constraint</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">w_tensor</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">t_id</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">dim</span><span class="p">,</span> <span class="n">constraint_range</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">shared</span>
+        <span class="p">)</span>
 
     <span class="k">def</span> <span class="fm">__ge__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">lower</span><span class="p">):</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_clone_with_range</span><span class="p">(</span><span class="n">lower</span><span class="o">=</span><span class="n">lower</span><span class="p">)</span>
@@ -1129,17 +1165,48 @@
             <span class="s2">&quot;you can specify them separately instead.&quot;</span>
         <span class="p">)</span>
 
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">serializable_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="c1"># We need a serialization compatible format of the constraint so that it</span>
+        <span class="c1"># can be savedin the graph module w/o breaking the module serialization.</span>
+        <span class="c1"># The saved constraints will be used directly for the post-exporting pass</span>
+        <span class="c1"># that converts constraints to runtime assertion. The saved constraints</span>
+        <span class="c1"># will not be saved in the serialized module.</span>
+        <span class="c1"># TODO: A better way is needed. Currently we use &#39;t_id&#39; to map the constraint,</span>
+        <span class="c1"># which is not reliable</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">&quot;t_id&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">t_id</span><span class="p">,</span>
+            <span class="s2">&quot;dim&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">dim</span><span class="p">,</span>
+            <span class="s2">&quot;min&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">constraint_range</span><span class="o">.</span><span class="n">vr</span><span class="o">.</span><span class="n">lower</span><span class="p">,</span>
+            <span class="s2">&quot;max&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">constraint_range</span><span class="o">.</span><span class="n">vr</span><span class="o">.</span><span class="n">upper</span><span class="p">,</span>
+        <span class="p">}</span>
+
+    <span class="k">def</span> <span class="fm">__eq__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">):</span>
+        <span class="n">constraint_range</span> <span class="o">=</span> <span class="n">StrictMinMaxConstraint</span><span class="p">(</span>
+            <span class="n">vr</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">constraint_range</span><span class="o">.</span><span class="n">vr</span> <span class="o">&amp;</span> <span class="n">other</span><span class="o">.</span><span class="n">constraint_range</span><span class="o">.</span><span class="n">vr</span><span class="p">,</span>
+            <span class="n">warn_only</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">Constraint</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">w_tensor</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">t_id</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">dim</span><span class="p">,</span>
+            <span class="n">constraint_range</span><span class="p">,</span>
+            <span class="n">shared</span><span class="o">=</span><span class="n">ConstraintTarget</span><span class="p">(</span><span class="n">other</span><span class="o">.</span><span class="n">w_tensor</span><span class="p">,</span> <span class="n">other</span><span class="o">.</span><span class="n">t_id</span><span class="p">,</span> <span class="n">other</span><span class="o">.</span><span class="n">dim</span><span class="p">),</span>
+        <span class="p">)</span>
+
 
 <div class="viewcode-block" id="export"><a class="viewcode-back" href="../../../_dynamo.html#torch._dynamo.export">[docs]</a><span class="k">def</span> <span class="nf">export</span><span class="p">(</span>
     <span class="n">f</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
     <span class="o">*</span><span class="n">args</span><span class="p">,</span>
     <span class="n">aten_graph</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="n">pre_autograd</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="n">decomposition_table</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span>
         <span class="n">Dict</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">_ops</span><span class="o">.</span><span class="n">OpOverload</span><span class="p">,</span> <span class="n">Callable</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span>
     <span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">tracing_mode</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;symbolic&quot;</span><span class="p">,</span>
     <span class="n">constraints</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Constraint</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">assume_static_by_default</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="n">functionalize</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">fx</span><span class="o">.</span><span class="n">GraphModule</span><span class="p">,</span> <span class="n">Set</span><span class="p">[</span><span class="n">_guards</span><span class="o">.</span><span class="n">Guard</span><span class="p">]]:</span>
     <span class="sd">&quot;&quot;&quot;</span>
@@ -1153,11 +1220,19 @@
 <span class="sd">        aten_graph (bool): If True, exports a graph with ATen operators.</span>
 <span class="sd">        If False, exports a graph with Python operators. Default is False.</span>
 
+<span class="sd">        pre_autograd (bool): If True, exports a graph with ATen operators,</span>
+<span class="sd">        but before autograd has run. This can be useful if you want to apply further tranformations</span>
+<span class="sd">        on a graph before running it through autograd.</span>
+<span class="sd">        This flag is only valid if aten_graph=True is set.</span>
+<span class="sd">        Default is False.</span>
+
 <span class="sd">        decomposition_table (dict): A dictionary that maps operators to their decomposition functions.</span>
 <span class="sd">        Required if aten_graph or tracing_mode is specified. Default is None.</span>
 
-<span class="sd">        tracing_mode (str): Specifies the tracing mode. Must be set to &quot;real&quot; if decomposition_table is not specified.</span>
-<span class="sd">        If decomposition_table is specified, the options are &quot;symbolic&quot; or &quot;fake&quot;. Default is &quot;real&quot;.</span>
+<span class="sd">        tracing_mode (str): If &quot;symbolic&quot;, turn on dynamic shapes support. Default is &quot;symbolic&quot;.</span>
+
+<span class="sd">        functionalize (bool): If True, the resulting aten graph module will be functional. You will need to</span>
+<span class="sd">        set aten_graph=True to see the effect. By default, this flag will be false.</span>
 
 <span class="sd">        **kwargs: Arbitrary keyword arguments to be passed to the function f.</span>
 
@@ -1167,7 +1242,7 @@
 <span class="sd">        Guards: The guards we accumulated during tracing f above</span>
 
 <span class="sd">    Raises:</span>
-<span class="sd">        AssertionError: If decomposition_table or tracing_mode is specified without setting aten_graph=True,</span>
+<span class="sd">        AssertionError: If decomposition_table is specified without setting aten_graph=True,</span>
 <span class="sd">        or if graph breaks during tracing in export.</span>
 
 <span class="sd">        AssertionError: If Dynamo input and output is not consistent with traced input/output.</span>
@@ -1180,7 +1255,17 @@
         <span class="k">assert</span> <span class="p">(</span>
             <span class="n">aten_graph</span>
         <span class="p">),</span> <span class="s2">&quot;Specifying a decomposition_table table or tracing mode is illegal without setting aten_graph=True&quot;</span>
+    <span class="k">if</span> <span class="n">pre_autograd</span><span class="p">:</span>
+        <span class="k">assert</span> <span class="n">aten_graph</span><span class="p">,</span> <span class="s2">&quot;pre_autograd=True can only be used when aten_graph=True&quot;</span>
     <span class="n">f</span> <span class="o">=</span> <span class="n">innermost_fn</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
+    <span class="n">call_to_inspect</span> <span class="o">=</span> <span class="n">f</span><span class="o">.</span><span class="n">forward</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">f</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">)</span> <span class="k">else</span> <span class="n">f</span>
+    <span class="n">original_signature</span> <span class="o">=</span> <span class="n">inspect</span><span class="o">.</span><span class="n">signature</span><span class="p">(</span><span class="n">call_to_inspect</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">functionalize</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">aten_graph</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">UserError</span><span class="p">(</span>
+            <span class="n">UserErrorType</span><span class="o">.</span><span class="n">ANTI_PATTERN</span><span class="p">,</span>
+            <span class="s2">&quot;TorchDynamo won&#39;t functionalize non-aten graphs. Please set `functionalize` to true&quot;</span><span class="p">,</span>
+        <span class="p">)</span>
 
     <span class="n">graph</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">out_guards</span> <span class="o">=</span> <span class="kc">None</span>
@@ -1223,6 +1308,7 @@
 
     <span class="n">fake_mode</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">example_inputs</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">var_to_range_map</span> <span class="o">=</span> <span class="p">{}</span>
 
     <span class="k">def</span> <span class="nf">dynamo_normalization_capturing_compiler</span><span class="p">(</span>
         <span class="n">gm</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">fx</span><span class="o">.</span><span class="n">GraphModule</span><span class="p">,</span> <span class="n">inner_example_inputs</span>
@@ -1233,9 +1319,11 @@
         <span class="p">),</span> <span class="s2">&quot;Tried to emit a second graph during export. Tracing through &#39;f&#39; must produce a single graph.&quot;</span>
         <span class="n">graph</span> <span class="o">=</span> <span class="n">gm</span>
 
-        <span class="k">nonlocal</span> <span class="n">fake_mode</span><span class="p">,</span> <span class="n">example_inputs</span>
+        <span class="k">nonlocal</span> <span class="n">fake_mode</span><span class="p">,</span> <span class="n">example_inputs</span><span class="p">,</span> <span class="n">var_to_range_map</span>
         <span class="n">fake_mode</span> <span class="o">=</span> <span class="n">_guards</span><span class="o">.</span><span class="n">detect_fake_mode</span><span class="p">(</span><span class="n">inner_example_inputs</span><span class="p">)</span>
         <span class="n">example_inputs</span> <span class="o">=</span> <span class="n">inner_example_inputs</span>
+        <span class="k">if</span> <span class="n">fake_mode</span> <span class="ow">and</span> <span class="n">fake_mode</span><span class="o">.</span><span class="n">shape_env</span><span class="p">:</span>
+            <span class="n">var_to_range_map</span> <span class="o">=</span> <span class="n">fake_mode</span><span class="o">.</span><span class="n">shape_env</span><span class="o">.</span><span class="n">var_to_range</span>
 
         <span class="k">def</span> <span class="nf">result_capturing_wrapper</span><span class="p">(</span><span class="o">*</span><span class="n">graph_inputs</span><span class="p">):</span>
             <span class="k">nonlocal</span> <span class="n">graph_captured_result</span>
@@ -1251,6 +1339,7 @@
     <span class="n">flat_args</span><span class="p">,</span> <span class="n">in_spec</span> <span class="o">=</span> <span class="n">pytree</span><span class="o">.</span><span class="n">tree_flatten</span><span class="p">((</span><span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">))</span>
 
     <span class="n">remove_from_cache</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
+    <span class="n">constraint_violation_error</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="k">with</span> <span class="n">patch</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">.most_recent_backend&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">),</span> <span class="n">config</span><span class="o">.</span><span class="n">patch</span><span class="p">(</span>
         <span class="n">summarize_dim_constraints</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
         <span class="n">specialize_int</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
@@ -1267,8 +1356,28 @@
             <span class="n">dynamic</span><span class="o">=</span><span class="p">(</span><span class="n">tracing_mode</span> <span class="o">==</span> <span class="s2">&quot;symbolic&quot;</span><span class="p">),</span>
         <span class="p">)(</span><span class="n">f</span><span class="p">)</span>
         <span class="c1"># TODO(voz): We may have instances of `f` that mutate inputs, we should track sideffects and reject.</span>
-        <span class="n">result_traced</span> <span class="o">=</span> <span class="n">opt_f</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">result_traced</span> <span class="o">=</span> <span class="n">opt_f</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">except</span> <span class="n">ConstraintViolationError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="n">constraint_violation_error</span> <span class="o">=</span> <span class="n">e</span>
     <span class="n">remove_from_cache</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="n">shape_env</span> <span class="o">:=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">fake_mode</span><span class="p">,</span> <span class="s2">&quot;shape_env&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">))</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">dim_constraints</span> <span class="o">=</span> <span class="n">shape_env</span><span class="o">.</span><span class="n">dim_constraints</span>
+        <span class="k">assert</span> <span class="n">dim_constraints</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+        <span class="n">dim_constraints</span><span class="o">.</span><span class="n">solve</span><span class="p">()</span>
+        <span class="n">msg</span> <span class="o">=</span> <span class="n">dim_constraints</span><span class="o">.</span><span class="n">prettify_results</span><span class="p">(</span><span class="n">original_signature</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">constraint_violation_error</span><span class="p">:</span>
+            <span class="n">constraint_violation_error</span><span class="o">.</span><span class="n">args</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="n">constraint_violation_error</span><span class="o">.</span><span class="n">args</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">+</span> <span class="n">msg</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">log</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+                <span class="s2">&quot;Summary of dimension constraints:</span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span>
+                <span class="n">msg</span><span class="p">,</span>
+            <span class="p">)</span>
+    <span class="k">if</span> <span class="n">constraint_violation_error</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">constraint_violation_error</span>
 
     <span class="k">assert</span> <span class="p">(</span>
         <span class="n">graph</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
@@ -1324,10 +1433,40 @@
     <span class="n">example_fake_inputs</span> <span class="o">=</span> <span class="p">[</span><span class="n">fake_mode</span><span class="o">.</span><span class="n">from_tensor</span><span class="p">(</span><span class="n">t</span><span class="p">)</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">example_inputs</span><span class="p">]</span>
 
     <span class="k">if</span> <span class="n">aten_graph</span><span class="p">:</span>
+        <span class="n">memo</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+
+        <span class="k">def</span> <span class="nf">to_fun</span><span class="p">(</span><span class="n">t</span><span class="p">):</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+                <span class="k">if</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">memo</span><span class="p">:</span>
+                    <span class="k">return</span> <span class="n">memo</span><span class="p">[</span><span class="n">t</span><span class="p">]</span>
+                <span class="n">r</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">_to_functional_tensor</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="n">mirror_autograd_meta</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+                <span class="n">memo</span><span class="p">[</span><span class="n">t</span><span class="p">]</span> <span class="o">=</span> <span class="n">r</span>
+                <span class="k">return</span> <span class="n">r</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">t</span>
+
+        <span class="k">def</span> <span class="nf">from_fun</span><span class="p">(</span><span class="n">t</span><span class="p">):</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">torch</span><span class="o">.</span><span class="n">_is_functional_tensor</span><span class="p">(</span><span class="n">t</span><span class="p">):</span>
+                <span class="k">return</span> <span class="n">t</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">_sync</span><span class="p">(</span><span class="n">t</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">_from_functional_tensor</span><span class="p">(</span><span class="n">t</span><span class="p">)</span>
+
         <span class="c1"># Running graph with interpreter is needed for propagating the stack_trace</span>
         <span class="k">def</span> <span class="nf">graph_with_interpreter</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">):</span>
             <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">fx</span><span class="o">.</span><span class="n">traceback</span><span class="o">.</span><span class="n">preserve_node_meta</span><span class="p">():</span>
-                <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">fx</span><span class="o">.</span><span class="n">Interpreter</span><span class="p">(</span><span class="n">graph</span><span class="p">)</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">functionalize</span><span class="p">:</span>
+                    <span class="n">torch</span><span class="o">.</span><span class="n">_enable_functionalization</span><span class="p">(</span><span class="n">reapply_views</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+                    <span class="k">try</span><span class="p">:</span>
+                        <span class="k">return</span> <span class="n">pytree</span><span class="o">.</span><span class="n">tree_map</span><span class="p">(</span>
+                            <span class="n">from_fun</span><span class="p">,</span>
+                            <span class="n">torch</span><span class="o">.</span><span class="n">fx</span><span class="o">.</span><span class="n">Interpreter</span><span class="p">(</span><span class="n">graph</span><span class="p">)</span><span class="o">.</span><span class="n">run</span><span class="p">(</span>
+                                <span class="o">*</span><span class="n">pytree</span><span class="o">.</span><span class="n">tree_map</span><span class="p">(</span><span class="n">to_fun</span><span class="p">,</span> <span class="n">args</span><span class="p">)</span>
+                            <span class="p">),</span>
+                        <span class="p">)</span>
+                    <span class="k">finally</span><span class="p">:</span>
+                        <span class="n">torch</span><span class="o">.</span><span class="n">_disable_functionalization</span><span class="p">()</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">fx</span><span class="o">.</span><span class="n">Interpreter</span><span class="p">(</span><span class="n">graph</span><span class="p">)</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">)</span>
 
         <span class="k">with</span> <span class="n">enable_python_dispatcher</span><span class="p">(),</span> <span class="n">fake_mode</span><span class="p">:</span>
             <span class="k">try</span><span class="p">:</span>
@@ -1336,6 +1475,7 @@
                     <span class="n">decomposition_table</span><span class="o">=</span><span class="n">decomposition_table</span><span class="p">,</span>
                     <span class="n">tracing_mode</span><span class="o">=</span><span class="s2">&quot;real&quot;</span><span class="p">,</span>
                     <span class="n">_allow_non_fake_inputs</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                    <span class="n">pre_autograd</span><span class="o">=</span><span class="n">pre_autograd</span><span class="p">,</span>
                 <span class="p">)(</span><span class="o">*</span><span class="n">example_fake_inputs</span><span class="p">)</span>
             <span class="k">except</span> <span class="n">CondOpArgsMismatchError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
                 <span class="c1"># Wrap the internal error to the user-facing error</span>
@@ -1344,6 +1484,20 @@
     <span class="n">new_graph</span> <span class="o">=</span> <span class="n">ChangeInputOutputSignature</span><span class="p">(</span>
         <span class="n">graph</span><span class="p">,</span>
     <span class="p">)</span><span class="o">.</span><span class="n">transform</span><span class="p">()</span>
+
+    <span class="c1"># Store constraints and inputs as metadata for user passes, e.g. turn constraints to runtime check</span>
+    <span class="n">new_graph</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s2">&quot;input_shape_constraints&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="p">[</span><span class="n">constraint</span><span class="o">.</span><span class="n">serializable_spec</span> <span class="k">for</span> <span class="n">constraint</span> <span class="ow">in</span> <span class="n">constraints</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">constraints</span>
+        <span class="k">else</span> <span class="kc">None</span>
+    <span class="p">)</span>
+    <span class="n">new_graph</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s2">&quot;inline_constraints&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="n">node</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s2">&quot;val&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">node</span><span class="o">.</span><span class="n">expr</span><span class="p">:</span> <span class="n">var_to_range_map</span><span class="p">[</span><span class="n">node</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s2">&quot;val&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">node</span><span class="o">.</span><span class="n">expr</span><span class="p">]</span>
+        <span class="k">for</span> <span class="n">node</span> <span class="ow">in</span> <span class="n">new_graph</span><span class="o">.</span><span class="n">graph</span><span class="o">.</span><span class="n">nodes</span>
+        <span class="k">if</span> <span class="n">node</span><span class="o">.</span><span class="n">op</span> <span class="o">!=</span> <span class="s2">&quot;placeholder&quot;</span> <span class="ow">and</span> <span class="s2">&quot;val&quot;</span> <span class="ow">in</span> <span class="n">node</span><span class="o">.</span><span class="n">meta</span>
+        <span class="c1"># Find constraints frome unbacked symints</span>
+        <span class="ow">and</span> <span class="n">re</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="sa">r</span><span class="s2">&quot;^i\d+$&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">node</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s2">&quot;val&quot;</span><span class="p">]))</span>
+    <span class="p">}</span>
 
     <span class="k">def</span> <span class="nf">signature_to_fullargspec</span><span class="p">(</span><span class="n">sig</span><span class="p">:</span> <span class="n">inspect</span><span class="o">.</span><span class="n">Signature</span><span class="p">):</span>
         <span class="c1"># Get a list of Parameter objects from the Signature object</span>
@@ -1387,10 +1541,7 @@
 
     <span class="c1"># Make dynamo graph to have same input/output spec as user code</span>
     <span class="k">def</span> <span class="nf">argument_names</span><span class="p">(</span><span class="n">f</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
-        <span class="n">call_to_inspect</span> <span class="o">=</span> <span class="n">f</span><span class="o">.</span><span class="n">forward</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">f</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">)</span> <span class="k">else</span> <span class="n">f</span>
-
-        <span class="n">sig</span> <span class="o">=</span> <span class="n">inspect</span><span class="o">.</span><span class="n">signature</span><span class="p">(</span><span class="n">call_to_inspect</span><span class="p">)</span>
-        <span class="n">fullargspec</span> <span class="o">=</span> <span class="n">signature_to_fullargspec</span><span class="p">(</span><span class="n">sig</span><span class="p">)</span>
+        <span class="n">fullargspec</span> <span class="o">=</span> <span class="n">signature_to_fullargspec</span><span class="p">(</span><span class="n">original_signature</span><span class="p">)</span>
 
         <span class="c1"># 1. Map `args` 1-to-1 to positional arguments in original signature.</span>
         <span class="n">input_strs</span> <span class="o">=</span> <span class="n">fullargspec</span><span class="o">.</span><span class="n">args</span><span class="p">[:</span> <span class="nb">len</span><span class="p">(</span><span class="n">args</span><span class="p">)]</span>
@@ -1436,9 +1587,7 @@
     <span class="p">)</span>
 
     <span class="n">new_graph</span><span class="o">.</span><span class="n">recompile</span><span class="p">()</span>
-
     <span class="c1"># TODO remove this once Executorch uses proper functionalization</span>
-    <span class="n">new_graph</span><span class="o">.</span><span class="n">_example_fake_inputs</span> <span class="o">=</span> <span class="n">example_fake_inputs</span>
     <span class="n">new_graph</span><span class="o">.</span><span class="n">_matched_input_elements_positions</span> <span class="o">=</span> <span class="n">matched_input_elements_positions</span>
 
     <span class="k">return</span> <span class="p">(</span><span class="n">new_graph</span><span class="p">,</span> <span class="n">out_guards</span><span class="p">)</span></div>
@@ -1659,6 +1808,7 @@ if (url)
          <script src="../../../_static/underscore.js"></script>
          <script src="../../../_static/_sphinx_javascript_frameworks_compat.js"></script>
          <script src="../../../_static/doctools.js"></script>
+         <script src="../../../_static/sphinx_highlight.js"></script>
          <script src="../../../_static/clipboard.min.js"></script>
          <script src="../../../_static/copybutton.js"></script>
      

@@ -10,7 +10,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>torch.onnx._internal.exporter &mdash; PyTorch 2.1 documentation</title>
+  <title>torch.onnx._internal.exporter &mdash; PyTorch main documentation</title>
   
 
   
@@ -41,6 +41,12 @@
   <link rel="stylesheet" href="../../../../_static/css/jit.css" type="text/css" />
     <link rel="index" title="Index" href="../../../../genindex.html" />
     <link rel="search" title="Search" href="../../../../search.html" />
+
+<!--
+  Search engines should not index the main version of documentation.
+  Stable documentation are built without release == 'main'.
+-->
+<meta name="robots" content="noindex">
 
 
   <!-- Google Analytics -->
@@ -229,7 +235,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href='https://pytorch.org/docs/versions.html'>2.1 &#x25BC</a>
+      <a href='https://pytorch.org/docs/versions.html'>main (2.1.0a0+git660a0d8 ) &#x25BC</a>
     </div>
     
 
@@ -248,6 +254,13 @@
           </div>
 
           
+
+<div>
+  <a style="color:#F05732" href="https://pytorch.org/docs/stable/_modules/torch/onnx/_internal/exporter.html">
+    You are viewing unstable developer preview docs.
+    Click here to view docs for latest stable release.
+  </a>
+</div>
 
 
             
@@ -295,6 +308,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../../../../compile/guards-overview.html">Guards Overview</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../compile/custom-backends.html">Custom Backends</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../compile/deep-dive.html">TorchDynamo Deeper Dive</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../compile/performance-dashboard.html">PyTorch 2.0 Performance Dashboard</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../ir.html">IRs</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Language Bindings</span></p>
@@ -460,20 +474,18 @@
 <span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
 
 <span class="kn">import</span> <span class="nn">abc</span>
-<span class="kn">import</span> <span class="nn">inspect</span>
 <span class="kn">import</span> <span class="nn">io</span>
 <span class="kn">import</span> <span class="nn">logging</span>
 <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">Any</span><span class="p">,</span>
     <span class="n">Callable</span><span class="p">,</span>
+    <span class="n">Dict</span><span class="p">,</span>
     <span class="n">Final</span><span class="p">,</span>
-    <span class="n">List</span><span class="p">,</span>
     <span class="n">Mapping</span><span class="p">,</span>
     <span class="n">Optional</span><span class="p">,</span>
     <span class="n">Protocol</span><span class="p">,</span>
     <span class="n">runtime_checkable</span><span class="p">,</span>
     <span class="n">Sequence</span><span class="p">,</span>
-    <span class="n">Tuple</span><span class="p">,</span>
     <span class="n">TYPE_CHECKING</span><span class="p">,</span>
     <span class="n">TypeVar</span><span class="p">,</span>
     <span class="n">Union</span><span class="p">,</span>
@@ -482,7 +494,8 @@
 <span class="kn">import</span> <span class="nn">torch</span>
 <span class="kn">import</span> <span class="nn">torch._ops</span>
 
-<span class="kn">from</span> <span class="nn">torch.onnx._internal</span> <span class="kn">import</span> <span class="n">_beartype</span>
+<span class="kn">from</span> <span class="nn">torch.onnx._internal</span> <span class="kn">import</span> <span class="n">_beartype</span><span class="p">,</span> <span class="n">io_adapter</span>
+<span class="kn">from</span> <span class="nn">torch.onnx._internal.diagnostics</span> <span class="kn">import</span> <span class="n">infra</span>
 
 <span class="c1"># We can only import onnx from this module in a type-checking context to ensure that</span>
 <span class="c1"># &#39;import torch.onnx&#39; continues to work without having &#39;onnx&#39; installed. We fully</span>
@@ -495,6 +508,12 @@
 <span class="sd">&quot;&quot;&quot;The default ONNX opset version the exporter will use if one is not specified explicitly</span>
 <span class="sd">through ``ExportOptions``. This should NEVER be accessed outside of this module! Users</span>
 <span class="sd">should reference ``ExportOptions.opset_version``.&quot;&quot;&quot;</span>
+
+<span class="n">_PYTORCH_GITHUB_ISSUES_URL</span> <span class="o">=</span> <span class="s2">&quot;https://github.com/pytorch/pytorch/issues&quot;</span>
+<span class="sd">&quot;&quot;&quot;The URL to the PyTorch GitHub issues page.&quot;&quot;&quot;</span>
+
+<span class="n">_DEFAULT_FAILED_EXPORT_SARIF_LOG_PATH</span> <span class="o">=</span> <span class="s2">&quot;report_dynamo_export.sarif&quot;</span>
+<span class="sd">&quot;&quot;&quot;The default path to write the SARIF log to if the export fails.&quot;&quot;&quot;</span>
 
 
 <span class="k">class</span> <span class="nc">ExportOptions</span><span class="p">:</span>
@@ -536,32 +555,82 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">logger</span> <span class="o">=</span> <span class="n">logger</span>
 
 
-<span class="k">class</span> <span class="nc">ResolvedExportOptions</span><span class="p">:</span>
+<span class="k">class</span> <span class="nc">ResolvedExportOptions</span><span class="p">(</span><span class="n">ExportOptions</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Consolidates `ExportOptions` with default values.</span>
+<span class="sd">    All unspecified options from `ExportOptions` are assigned a default value.</span>
+<span class="sd">    This is an internal class and its API may be changed at any time without notice.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="c1"># Public attributes MUST be redefined below without ``Optional[]`` from ``ExportOptions``</span>
+    <span class="n">opset_version</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">dynamic_shapes</span><span class="p">:</span> <span class="nb">bool</span>
+    <span class="n">op_level_debug</span><span class="p">:</span> <span class="nb">bool</span>
+    <span class="n">logger</span><span class="p">:</span> <span class="n">logging</span><span class="o">.</span><span class="n">Logger</span>
+
+    <span class="c1"># Private only attributes</span>
+    <span class="n">decomposition_table</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">_ops</span><span class="o">.</span><span class="n">OpOverload</span><span class="p">,</span> <span class="n">Callable</span><span class="p">]</span>
+    <span class="sd">&quot;&quot;&quot;A dictionary that maps operators to their decomposition functions.&quot;&quot;&quot;</span>
+
+    <span class="n">fx_tracer</span><span class="p">:</span> <span class="n">FXGraphExtractor</span>
+    <span class="sd">&quot;&quot;&quot;The FXGraphExtractor instance used to extract the FX graph from the model.&quot;&quot;&quot;</span>
+
+    <span class="n">diagnostic_context</span><span class="p">:</span> <span class="n">infra</span><span class="o">.</span><span class="n">DiagnosticContext</span>
+    <span class="sd">&quot;&quot;&quot;The diagnostics context for the export. Responsible for recording diagnostics,</span>
+<span class="sd">    logging diagnostics, and generating the SARIF log.&quot;&quot;&quot;</span>
+
     <span class="nd">@_beartype</span><span class="o">.</span><span class="n">beartype</span>
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">options</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">ExportOptions</span><span class="p">]):</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">options</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">ExportOptions</span><span class="p">,</span> <span class="s2">&quot;ResolvedExportOptions&quot;</span><span class="p">]]</span>
+    <span class="p">):</span>
         <span class="k">if</span> <span class="n">options</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">options</span> <span class="o">=</span> <span class="n">ExportOptions</span><span class="p">()</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">options</span><span class="p">,</span> <span class="n">ResolvedExportOptions</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">opset_version</span> <span class="o">=</span> <span class="n">options</span><span class="o">.</span><span class="n">opset_version</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">dynamic_shapes</span> <span class="o">=</span> <span class="n">options</span><span class="o">.</span><span class="n">dynamic_shapes</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">op_level_debug</span> <span class="o">=</span> <span class="n">options</span><span class="o">.</span><span class="n">op_level_debug</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span> <span class="o">=</span> <span class="n">options</span><span class="o">.</span><span class="n">logger</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">fx_tracer</span> <span class="o">=</span> <span class="n">options</span><span class="o">.</span><span class="n">fx_tracer</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">decomposition_table</span> <span class="o">=</span> <span class="n">options</span><span class="o">.</span><span class="n">decomposition_table</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">diagnostic_context</span> <span class="o">=</span> <span class="n">options</span><span class="o">.</span><span class="n">diagnostic_context</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">T</span> <span class="o">=</span> <span class="n">TypeVar</span><span class="p">(</span><span class="s2">&quot;T&quot;</span><span class="p">)</span>
 
-        <span class="n">T</span> <span class="o">=</span> <span class="n">TypeVar</span><span class="p">(</span><span class="s2">&quot;T&quot;</span><span class="p">)</span>
+            <span class="nd">@_beartype</span><span class="o">.</span><span class="n">beartype</span>
+            <span class="k">def</span> <span class="nf">resolve</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">T</span><span class="p">],</span> <span class="n">fallback</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">T</span><span class="p">,</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">T</span><span class="p">]])</span> <span class="o">-&gt;</span> <span class="n">T</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="k">return</span> <span class="n">value</span>
+                <span class="k">if</span> <span class="n">callable</span><span class="p">(</span><span class="n">fallback</span><span class="p">):</span>
+                    <span class="k">return</span> <span class="n">fallback</span><span class="p">()</span>
+                <span class="k">return</span> <span class="n">fallback</span>
 
-        <span class="nd">@_beartype</span><span class="o">.</span><span class="n">beartype</span>
-        <span class="k">def</span> <span class="nf">resolve</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">T</span><span class="p">],</span> <span class="n">fallback</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">T</span><span class="p">,</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">T</span><span class="p">]])</span> <span class="o">-&gt;</span> <span class="n">T</span><span class="p">:</span>
-            <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="k">return</span> <span class="n">value</span>
-            <span class="k">if</span> <span class="n">callable</span><span class="p">(</span><span class="n">fallback</span><span class="p">):</span>
-                <span class="k">return</span> <span class="n">fallback</span><span class="p">()</span>
-            <span class="k">return</span> <span class="n">fallback</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">opset_version</span> <span class="o">=</span> <span class="n">resolve</span><span class="p">(</span><span class="n">options</span><span class="o">.</span><span class="n">opset_version</span><span class="p">,</span> <span class="n">_DEFAULT_OPSET_VERSION</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">dynamic_shapes</span> <span class="o">=</span> <span class="n">resolve</span><span class="p">(</span><span class="n">options</span><span class="o">.</span><span class="n">dynamic_shapes</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+            <span class="kn">import</span> <span class="nn">torch.onnx._internal.fx.dynamo_graph_extractor</span> <span class="k">as</span> <span class="nn">dynamo_graph_extractor</span>  <span class="c1"># TODO: Prevent circular dep</span>
+            <span class="kn">from</span> <span class="nn">torch.onnx._internal.fx</span> <span class="kn">import</span> <span class="p">(</span>  <span class="c1"># TODO: PyTorch does not take dep on onnxscript outside torch.onnx context</span>
+                <span class="n">function_dispatcher</span><span class="p">,</span>
+            <span class="p">)</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">opset_version</span> <span class="o">=</span> <span class="n">resolve</span><span class="p">(</span><span class="n">options</span><span class="o">.</span><span class="n">opset_version</span><span class="p">,</span> <span class="n">_DEFAULT_OPSET_VERSION</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">dynamic_shapes</span> <span class="o">=</span> <span class="n">resolve</span><span class="p">(</span><span class="n">options</span><span class="o">.</span><span class="n">dynamic_shapes</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">op_level_debug</span> <span class="o">=</span> <span class="n">resolve</span><span class="p">(</span><span class="n">options</span><span class="o">.</span><span class="n">op_level_debug</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span> <span class="o">=</span> <span class="n">resolve</span><span class="p">(</span>
-            <span class="n">options</span><span class="o">.</span><span class="n">logger</span><span class="p">,</span> <span class="k">lambda</span><span class="p">:</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">()</span><span class="o">.</span><span class="n">getChild</span><span class="p">(</span><span class="s2">&quot;torch.onnx&quot;</span><span class="p">)</span>
-        <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">fx_tracer</span> <span class="o">=</span> <span class="n">dynamo_graph_extractor</span><span class="o">.</span><span class="n">DynamoExport</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">decomposition_table</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="n">function_dispatcher</span><span class="o">.</span><span class="n">DEFAULT_ONNX_EXPORTER_DECOMPOSITION_TABLE</span>
+            <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">op_level_debug</span> <span class="o">=</span> <span class="n">resolve</span><span class="p">(</span><span class="n">options</span><span class="o">.</span><span class="n">op_level_debug</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span> <span class="o">=</span> <span class="n">resolve</span><span class="p">(</span>
+                <span class="n">options</span><span class="o">.</span><span class="n">logger</span><span class="p">,</span> <span class="k">lambda</span><span class="p">:</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">()</span><span class="o">.</span><span class="n">getChild</span><span class="p">(</span><span class="s2">&quot;torch.onnx&quot;</span><span class="p">)</span>
+            <span class="p">)</span>
 
-        <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="nb">dir</span><span class="p">(</span><span class="n">options</span><span class="p">):</span>
-            <span class="k">if</span> <span class="ow">not</span> <span class="n">key</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;_&quot;</span><span class="p">):</span>  <span class="c1"># skip private attributes</span>
-                <span class="k">assert</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">),</span> <span class="sa">f</span><span class="s2">&quot;Unresolved option &#39;</span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">&#39;&quot;</span>
+            <span class="c1"># TODO(bowbao): This introduces onnxscript dependency once diagnostics is moved.</span>
+            <span class="c1"># Options:</span>
+            <span class="c1">#   - Add a shim and make it noop if onnxscript is not available.</span>
+            <span class="c1">#   - Try local import and raise.</span>
+            <span class="c1"># Similar procedure needs to be done for diagnostics in `torch.onnx.export`.</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">diagnostic_context</span> <span class="o">=</span> <span class="n">infra</span><span class="o">.</span><span class="n">DiagnosticContext</span><span class="p">(</span>
+                <span class="s2">&quot;torch.onnx.dynamo_export&quot;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">__version__</span><span class="p">,</span> <span class="n">logger</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">logger</span>
+            <span class="p">)</span>
+
+            <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="nb">dir</span><span class="p">(</span><span class="n">options</span><span class="p">):</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">key</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;_&quot;</span><span class="p">):</span>  <span class="c1"># skip private attributes</span>
+                    <span class="k">assert</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">),</span> <span class="sa">f</span><span class="s2">&quot;Unresolved option &#39;</span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">&#39;&quot;</span>
 
 
 <span class="nd">@runtime_checkable</span>
@@ -614,128 +683,26 @@
         <span class="n">destination</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">export_output</span><span class="o">.</span><span class="n">model_proto</span><span class="o">.</span><span class="n">SerializeToString</span><span class="p">())</span>
 
 
-<span class="c1"># TODO(bowbao): Add diagnostics for IO adapters.</span>
-<span class="nd">@runtime_checkable</span>
-<span class="k">class</span> <span class="nc">InputAdaptStep</span><span class="p">(</span><span class="n">Protocol</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;A protocol that defines a step in the input adapting process.</span>
-
-<span class="sd">    The input adapting process is a sequence of steps that are applied to the</span>
-<span class="sd">    PyTorch model inputs to transform them into the inputs format expected by the</span>
-<span class="sd">    exported ONNX model. Each step takes the PyTorch model inputs as arguments and</span>
-<span class="sd">    returns the transformed inputs.</span>
-
-<span class="sd">    This serves as a base formalized construct for the transformation done to model</span>
-<span class="sd">    input signature by any individual component in the exporter.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-
-    <span class="k">def</span> <span class="nf">apply</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">model_args</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Any</span><span class="p">],</span> <span class="n">model_kwargs</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">Sequence</span><span class="p">[</span><span class="n">Any</span><span class="p">],</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]:</span>
-        <span class="o">...</span>
-
-
-<span class="k">class</span> <span class="nc">InputAdapter</span><span class="p">:</span>
-    <span class="sd">&quot;&quot;&quot;A class that adapts the PyTorch model inputs to exported ONNX model inputs format.&quot;&quot;&quot;</span>
-
-    <span class="n">_input_adapt_steps</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">InputAdaptStep</span><span class="p">]</span>
-
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">input_adapt_steps</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="n">InputAdaptStep</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_input_adapt_steps</span> <span class="o">=</span> <span class="n">input_adapt_steps</span> <span class="ow">or</span> <span class="p">[]</span>
-
-    <span class="nd">@_beartype</span><span class="o">.</span><span class="n">beartype</span>
-    <span class="k">def</span> <span class="nf">append_step</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">step</span><span class="p">:</span> <span class="n">InputAdaptStep</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="sd">&quot;&quot;&quot;Appends a step to the input adapt steps.</span>
-
-<span class="sd">        Args:</span>
-<span class="sd">            step: The step to append.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_input_adapt_steps</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">step</span><span class="p">)</span>
-
-    <span class="nd">@_beartype</span><span class="o">.</span><span class="n">beartype</span>
-    <span class="k">def</span> <span class="nf">apply</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">model_args</span><span class="p">,</span> <span class="o">**</span><span class="n">model_kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
-        <span class="sd">&quot;&quot;&quot;Converts the PyTorch model inputs to exported ONNX model inputs format.</span>
-
-<span class="sd">        Args:</span>
-<span class="sd">            model_args: The PyTorch model inputs.</span>
-<span class="sd">            model_kwargs: The PyTorch model keyword inputs.</span>
-
-<span class="sd">        Returns:</span>
-<span class="sd">            A sequence of tensors converted from PyTorch model inputs.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">args</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="n">model_args</span>
-        <span class="n">kwargs</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="n">model_kwargs</span>
-        <span class="k">for</span> <span class="n">step</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_input_adapt_steps</span><span class="p">:</span>
-            <span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span> <span class="o">=</span> <span class="n">step</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">)</span>
-        <span class="k">assert</span> <span class="ow">not</span> <span class="n">kwargs</span>
-        <span class="k">return</span> <span class="n">args</span>
-
-
-<span class="nd">@runtime_checkable</span>
-<span class="k">class</span> <span class="nc">OutputAdaptStep</span><span class="p">(</span><span class="n">Protocol</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;A protocol that defines a step in the output adapting process.</span>
-
-<span class="sd">    The output adapting process is a sequence of steps that are applied to the</span>
-<span class="sd">    PyTorch model outputs to transform them into the outputs format produced by the</span>
-<span class="sd">    exported ONNX model. Each step takes the PyTorch model outputs as arguments and</span>
-<span class="sd">    returns the transformed outputs.</span>
-
-<span class="sd">    This serves as a base formalized construct for the transformation done to model</span>
-<span class="sd">    output signature by any individual component in the exporter.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-
-    <span class="k">def</span> <span class="nf">apply</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model_outputs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
-        <span class="o">...</span>
-
-
-<span class="k">class</span> <span class="nc">OutputAdapter</span><span class="p">:</span>
-    <span class="sd">&quot;&quot;&quot;A class that adapts the PyTorch model outputs to exported ONNX model outputs format.&quot;&quot;&quot;</span>
-
-    <span class="n">_output_adapt_steps</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">OutputAdaptStep</span><span class="p">]</span>
-
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">output_adapt_steps</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="n">OutputAdaptStep</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_output_adapt_steps</span> <span class="o">=</span> <span class="n">output_adapt_steps</span> <span class="ow">or</span> <span class="p">[]</span>
-
-    <span class="nd">@_beartype</span><span class="o">.</span><span class="n">beartype</span>
-    <span class="k">def</span> <span class="nf">append_step</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">step</span><span class="p">:</span> <span class="n">OutputAdaptStep</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="sd">&quot;&quot;&quot;Appends a step to the output format steps.</span>
-
-<span class="sd">        Args:</span>
-<span class="sd">            step: The step to append.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_output_adapt_steps</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">step</span><span class="p">)</span>
-
-    <span class="nd">@_beartype</span><span class="o">.</span><span class="n">beartype</span>
-    <span class="k">def</span> <span class="nf">apply</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model_outputs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
-        <span class="sd">&quot;&quot;&quot;Converts the PyTorch model outputs to exported ONNX model outputs format.</span>
-
-<span class="sd">        Args:</span>
-<span class="sd">            model_outputs: The PyTorch model outputs.</span>
-
-<span class="sd">        Returns:</span>
-<span class="sd">            PyTorch model outputs in exported ONNX model outputs format.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">for</span> <span class="n">step</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_output_adapt_steps</span><span class="p">:</span>
-            <span class="n">model_outputs</span> <span class="o">=</span> <span class="n">step</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">model_outputs</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">model_outputs</span>
-
-
 <span class="k">class</span> <span class="nc">ExportOutput</span><span class="p">:</span>
     <span class="sd">&quot;&quot;&quot;An in-memory representation of a PyTorch model that has been exported to ONNX.&quot;&quot;&quot;</span>
 
     <span class="n">_model_proto</span><span class="p">:</span> <span class="n">Final</span><span class="p">[</span><span class="n">onnx</span><span class="o">.</span><span class="n">ModelProto</span><span class="p">]</span>
-    <span class="n">_input_adapter</span><span class="p">:</span> <span class="n">Final</span><span class="p">[</span><span class="n">InputAdapter</span><span class="p">]</span>
-    <span class="n">_output_adapter</span><span class="p">:</span> <span class="n">Final</span><span class="p">[</span><span class="n">OutputAdapter</span><span class="p">]</span>
+    <span class="n">_input_adapter</span><span class="p">:</span> <span class="n">Final</span><span class="p">[</span><span class="n">io_adapter</span><span class="o">.</span><span class="n">InputAdapter</span><span class="p">]</span>
+    <span class="n">_output_adapter</span><span class="p">:</span> <span class="n">Final</span><span class="p">[</span><span class="n">io_adapter</span><span class="o">.</span><span class="n">OutputAdapter</span><span class="p">]</span>
+    <span class="n">_diagnostic_context</span><span class="p">:</span> <span class="n">Final</span><span class="p">[</span><span class="n">infra</span><span class="o">.</span><span class="n">DiagnosticContext</span><span class="p">]</span>
 
     <span class="nd">@_beartype</span><span class="o">.</span><span class="n">beartype</span>
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">model_proto</span><span class="p">:</span> <span class="n">onnx</span><span class="o">.</span><span class="n">ModelProto</span><span class="p">,</span>
-        <span class="n">input_adapter</span><span class="p">:</span> <span class="n">InputAdapter</span><span class="p">,</span>
-        <span class="n">output_adapter</span><span class="p">:</span> <span class="n">OutputAdapter</span><span class="p">,</span>
+        <span class="n">input_adapter</span><span class="p">:</span> <span class="n">io_adapter</span><span class="o">.</span><span class="n">InputAdapter</span><span class="p">,</span>
+        <span class="n">output_adapter</span><span class="p">:</span> <span class="n">io_adapter</span><span class="o">.</span><span class="n">OutputAdapter</span><span class="p">,</span>
+        <span class="n">diagnostic_context</span><span class="p">:</span> <span class="n">infra</span><span class="o">.</span><span class="n">DiagnosticContext</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_model_proto</span> <span class="o">=</span> <span class="n">model_proto</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_input_adapter</span> <span class="o">=</span> <span class="n">input_adapter</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_output_adapter</span> <span class="o">=</span> <span class="n">output_adapter</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_diagnostic_context</span> <span class="o">=</span> <span class="n">diagnostic_context</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">model_proto</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">onnx</span><span class="o">.</span><span class="n">ModelProto</span><span class="p">:</span>
@@ -743,10 +710,16 @@
 
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_model_proto</span>
 
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">diagnostic_context</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">infra</span><span class="o">.</span><span class="n">DiagnosticContext</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;The diagnostic context associated with the export.&quot;&quot;&quot;</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_diagnostic_context</span>
+
 <div class="viewcode-block" id="ExportOutput.adapt_torch_inputs_to_onnx"><a class="viewcode-back" href="../../../../generated/torch.onnx.ExportOutput.html#torch.onnx.ExportOutput.adapt_torch_inputs_to_onnx">[docs]</a>    <span class="nd">@_beartype</span><span class="o">.</span><span class="n">beartype</span>
     <span class="k">def</span> <span class="nf">adapt_torch_inputs_to_onnx</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">model_args</span><span class="p">,</span> <span class="o">**</span><span class="n">model_kwargs</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">bool</span><span class="p">]]:</span>
         <span class="sd">&quot;&quot;&quot;Converts the PyTorch model inputs to exported ONNX model inputs format.</span>
 
 <span class="sd">        Due to design differences, input/output format between PyTorch model and exported</span>
@@ -803,7 +776,9 @@
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_input_adapter</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="o">*</span><span class="n">model_args</span><span class="p">,</span> <span class="o">**</span><span class="n">model_kwargs</span><span class="p">)</span></div>
 
 <div class="viewcode-block" id="ExportOutput.adapt_torch_outputs_to_onnx"><a class="viewcode-back" href="../../../../generated/torch.onnx.ExportOutput.html#torch.onnx.ExportOutput.adapt_torch_outputs_to_onnx">[docs]</a>    <span class="nd">@_beartype</span><span class="o">.</span><span class="n">beartype</span>
-    <span class="k">def</span> <span class="nf">adapt_torch_outputs_to_onnx</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model_outputs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
+    <span class="k">def</span> <span class="nf">adapt_torch_outputs_to_onnx</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">model_outputs</span><span class="p">:</span> <span class="n">Any</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">bool</span><span class="p">]]:</span>
         <span class="sd">&quot;&quot;&quot;Converts the PyTorch model outputs to exported ONNX model outputs format.</span>
 
 <span class="sd">        Due to design differences, input/output format between PyTorch model and exported</span>
@@ -868,7 +843,106 @@
             <span class="n">serializer</span><span class="o">.</span><span class="n">serialize</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">destination</span><span class="p">)</span></div>
 
 
-<span class="k">class</span> <span class="nc">Exporter</span><span class="p">(</span><span class="n">abc</span><span class="o">.</span><span class="n">ABC</span><span class="p">):</span>
+<span class="k">class</span> <span class="nc">FXGraphExtractor</span><span class="p">(</span><span class="n">abc</span><span class="o">.</span><span class="n">ABC</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Abstract interface for FX graph extractor engines.</span>
+<span class="sd">    This class isolates FX extraction logic from the rest of the export logic.</span>
+<span class="sd">    That allows a single ONNX exporter that can leverage different FX graphs.&quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">input_adapter</span><span class="p">:</span> <span class="n">io_adapter</span><span class="o">.</span><span class="n">InputAdapter</span> <span class="o">=</span> <span class="n">io_adapter</span><span class="o">.</span><span class="n">InputAdapter</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">output_adapter</span><span class="p">:</span> <span class="n">io_adapter</span><span class="o">.</span><span class="n">OutputAdapter</span> <span class="o">=</span> <span class="n">io_adapter</span><span class="o">.</span><span class="n">OutputAdapter</span><span class="p">()</span>
+
+    <span class="nd">@_beartype</span><span class="o">.</span><span class="n">beartype</span>
+    <span class="k">def</span> <span class="nf">_export_fx_to_onnx</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">options</span><span class="p">:</span> <span class="n">ResolvedExportOptions</span><span class="p">,</span>
+        <span class="n">fx_module</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">fx</span><span class="o">.</span><span class="n">GraphModule</span><span class="p">,</span>
+        <span class="n">fx_module_args</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Any</span><span class="p">],</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ExportOutput</span><span class="p">:</span>
+        <span class="c1"># TODO: Import here to prevent circular dependency</span>
+        <span class="kn">import</span> <span class="nn">torch.onnx._internal.fx.passes</span> <span class="k">as</span> <span class="nn">passes</span>
+
+        <span class="n">diagnostic_context</span> <span class="o">=</span> <span class="n">options</span><span class="o">.</span><span class="n">diagnostic_context</span>
+
+        <span class="c1"># Apply decomposition table to the input graph.</span>
+        <span class="n">module</span> <span class="o">=</span> <span class="n">passes</span><span class="o">.</span><span class="n">Decompose</span><span class="p">(</span>
+            <span class="n">diagnostic_context</span><span class="p">,</span>
+            <span class="n">fx_module</span><span class="p">,</span>
+            <span class="n">options</span><span class="o">.</span><span class="n">decomposition_table</span><span class="p">,</span>
+            <span class="n">enable_dynamic_axes</span><span class="o">=</span><span class="n">options</span><span class="o">.</span><span class="n">dynamic_shapes</span><span class="p">,</span>
+        <span class="p">)</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="o">*</span><span class="n">fx_module_args</span><span class="p">)</span>
+
+        <span class="c1"># ONNX does not support views and mutations.</span>
+        <span class="c1"># Functionalize to get a semantically equivalent graph without mutations.</span>
+        <span class="n">module</span> <span class="o">=</span> <span class="n">passes</span><span class="o">.</span><span class="n">Functionalize</span><span class="p">(</span>
+            <span class="n">diagnostic_context</span><span class="p">,</span> <span class="n">module</span><span class="p">,</span> <span class="n">enable_dynamic_axes</span><span class="o">=</span><span class="n">options</span><span class="o">.</span><span class="n">dynamic_shapes</span>
+        <span class="p">)</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="o">*</span><span class="n">fx_module_args</span><span class="p">)</span>
+        <span class="c1"># Input mutations are detected and distilled after `Functionalize` pass.</span>
+        <span class="c1"># Remove them since ONNX inference does not need them.</span>
+        <span class="n">module</span> <span class="o">=</span> <span class="n">passes</span><span class="o">.</span><span class="n">RemoveInputMutation</span><span class="p">(</span><span class="n">diagnostic_context</span><span class="p">,</span> <span class="n">module</span><span class="p">)</span><span class="o">.</span><span class="n">run</span><span class="p">(</span>
+            <span class="o">*</span><span class="n">fx_module_args</span>
+        <span class="p">)</span>
+
+        <span class="c1"># Run ShapeInferenceWithFakeTensor to get static shape of nodes for op_level_debug purposes</span>
+        <span class="c1"># The pass added nodes with static shape into original node metadata:</span>
+        <span class="c1"># node.meta[&quot;static_shape&quot;]: FakeTensor/int/float/SymInt/SynFloat</span>
+        <span class="k">if</span> <span class="n">options</span><span class="o">.</span><span class="n">op_level_debug</span><span class="p">:</span>
+            <span class="n">module</span> <span class="o">=</span> <span class="n">passes</span><span class="o">.</span><span class="n">ShapeInferenceWithFakeTensor</span><span class="p">(</span>
+                <span class="n">diagnostic_context</span><span class="p">,</span> <span class="n">module</span>
+            <span class="p">)</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="o">*</span><span class="n">fx_module_args</span><span class="p">)</span>
+
+        <span class="c1"># We want to pass list of ints and floats to TorchScript graph correctly</span>
+        <span class="c1"># in _export_fx_to_ts, so we must disable FakeTensorMode. Otherwise, graph may</span>
+        <span class="c1"># receive FakeTensor and results runtime error. In addition, TorchScript-based</span>
+        <span class="c1"># ONNX exporter used in _ts_graph_to_onnx_model_in_protobuf is not compatible</span>
+        <span class="c1"># with FakeTensorMode.</span>
+        <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">utils</span><span class="o">.</span><span class="n">_mode_utils</span><span class="o">.</span><span class="n">no_dispatch</span><span class="p">():</span>
+            <span class="n">onnxscript_graph</span> <span class="o">=</span> <span class="n">passes</span><span class="o">.</span><span class="n">export_fx_to_onnxscript</span><span class="p">(</span>
+                <span class="n">diagnostic_context</span><span class="p">,</span> <span class="n">module</span><span class="p">,</span> <span class="n">options</span>
+            <span class="p">)</span>
+            <span class="c1"># ONNX does not support None inputs. During graph building, all None inputs</span>
+            <span class="c1"># are removed. Here we register this step to input adapter.</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">input_adapter</span><span class="o">.</span><span class="n">append_step</span><span class="p">(</span><span class="n">io_adapter</span><span class="o">.</span><span class="n">RemoveNoneInputStep</span><span class="p">())</span>
+
+            <span class="c1"># NOTE: temp workaround for https://github.com/pytorch/pytorch/issues/99534</span>
+            <span class="c1"># Dynamo doesn&#39;t support non-tensor inputs.</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">input_adapter</span><span class="o">.</span><span class="n">append_step</span><span class="p">(</span><span class="n">io_adapter</span><span class="o">.</span><span class="n">RemoveNonTensorInputStep</span><span class="p">())</span>
+
+            <span class="c1"># ONNX can&#39;t represent collection types (e.g., dictionary, tuple of tuple of</span>
+            <span class="c1"># tensor, etc), we flatten the collection and register each element as output.</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">output_adapter</span><span class="o">.</span><span class="n">append_step</span><span class="p">(</span><span class="n">io_adapter</span><span class="o">.</span><span class="n">FlattenOutputStep</span><span class="p">())</span>
+
+        <span class="c1"># Export TorchScript graph to ONNX ModelProto.</span>
+        <span class="n">onnx_model</span> <span class="o">=</span> <span class="n">onnxscript_graph</span><span class="o">.</span><span class="n">to_model_proto</span><span class="p">(</span><span class="n">options</span><span class="o">.</span><span class="n">opset_version</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">onnx</span><span class="o">.</span><span class="n">ExportOutput</span><span class="p">(</span>
+            <span class="n">onnx_model</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">input_adapter</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">output_adapter</span><span class="p">,</span>
+            <span class="n">options</span><span class="o">.</span><span class="n">diagnostic_context</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="nd">@abc</span><span class="o">.</span><span class="n">abstractmethod</span>
+    <span class="k">def</span> <span class="nf">generate_fx</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">options</span><span class="p">:</span> <span class="n">ResolvedExportOptions</span><span class="p">,</span>
+        <span class="n">model</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">,</span> <span class="n">Callable</span><span class="p">],</span>
+        <span class="n">model_args</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Any</span><span class="p">],</span>
+        <span class="n">model_kwargs</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">fx</span><span class="o">.</span><span class="n">GraphModule</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Analyzes user ``model`` and generates a FX graph.</span>
+<span class="sd">        Args:</span>
+<span class="sd">            options: The export options.</span>
+<span class="sd">            model: The user model.</span>
+<span class="sd">            model_args: The model&#39;s positional input arguments.</span>
+<span class="sd">            model_kwargs: The model&#39;s keyword input arguments.</span>
+<span class="sd">        Returns:</span>
+<span class="sd">            The generated FX Graph.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="o">...</span>
+
+
+<span class="k">class</span> <span class="nc">Exporter</span><span class="p">:</span>
     <span class="nd">@_beartype</span><span class="o">.</span><span class="n">beartype</span>
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -877,33 +951,35 @@
         <span class="n">model_args</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Any</span><span class="p">],</span>
         <span class="n">model_kwargs</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
     <span class="p">):</span>
-        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">options</span><span class="p">,</span> <span class="n">ExportOptions</span><span class="p">):</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">options</span> <span class="o">=</span> <span class="n">ResolvedExportOptions</span><span class="p">(</span><span class="n">options</span><span class="p">)</span>
-        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">options</span><span class="p">,</span> <span class="n">ResolvedExportOptions</span><span class="p">):</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">options</span> <span class="o">=</span> <span class="n">options</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">options</span> <span class="o">=</span> <span class="n">ResolvedExportOptions</span><span class="p">(</span><span class="n">options</span><span class="p">)</span>
         <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">options</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">model</span> <span class="o">=</span> <span class="n">model</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">model_args</span> <span class="o">=</span> <span class="n">model_args</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">model_kwargs</span> <span class="o">=</span> <span class="n">model_kwargs</span>
 
-    <span class="nd">@abc</span><span class="o">.</span><span class="n">abstractmethod</span>
     <span class="k">def</span> <span class="nf">export</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ExportOutput</span><span class="p">:</span>
-        <span class="k">pass</span>
+        <span class="n">graph_module</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="o">.</span><span class="n">fx_tracer</span><span class="o">.</span><span class="n">generate_fx</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_args</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_kwargs</span>
+        <span class="p">)</span>
+
+        <span class="n">updated_model_args</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="o">.</span><span class="n">fx_tracer</span><span class="o">.</span><span class="n">input_adapter</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span>
+            <span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">model_args</span><span class="p">,</span> <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">model_kwargs</span>
+        <span class="p">)</span>
+
+        <span class="c1"># Export FX graph to ONNX ModelProto.</span>
+        <span class="c1">#</span>
+        <span class="c1"># Note that ALL kwargs are folded into constants in graph_module, so we don&#39;t pass kwargs</span>
+        <span class="c1"># to _export.</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="o">.</span><span class="n">fx_tracer</span><span class="o">.</span><span class="n">_export_fx_to_onnx</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">,</span> <span class="n">graph_module</span><span class="p">,</span> <span class="n">updated_model_args</span>
+        <span class="p">)</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">logger</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">logging</span><span class="o">.</span><span class="n">Logger</span><span class="p">:</span>
         <span class="c1"># options.logger will always be resolved to an instance when constructing</span>
         <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="o">.</span><span class="n">logger</span><span class="p">,</span> <span class="n">logging</span><span class="o">.</span><span class="n">Logger</span><span class="p">)</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="o">.</span><span class="n">logger</span>
-
-    <span class="nd">@property</span>
-    <span class="k">def</span> <span class="nf">model_signature</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">inspect</span><span class="o">.</span><span class="n">Signature</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">inspect</span><span class="o">.</span><span class="n">signature</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">forward</span>
-            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">)</span>
-            <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span>
-        <span class="p">)</span>
 
 
 <span class="k">class</span> <span class="nc">UnsatisfiedDependencyError</span><span class="p">(</span><span class="ne">RuntimeError</span><span class="p">):</span>
@@ -991,20 +1067,31 @@
 <span class="sd">        ).save(&quot;my_model.onnx&quot;)</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
-    <span class="n">resolved_export_options</span> <span class="o">=</span> <span class="n">ResolvedExportOptions</span><span class="p">(</span><span class="n">export_options</span><span class="p">)</span>
+    <span class="n">resolved_export_options</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">export_options</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">export_options</span><span class="p">,</span> <span class="n">ResolvedExportOptions</span><span class="p">)</span>
+        <span class="k">else</span> <span class="n">ResolvedExportOptions</span><span class="p">(</span><span class="n">export_options</span><span class="p">)</span>
+    <span class="p">)</span>
 
     <span class="n">_assert_dependencies</span><span class="p">(</span><span class="n">resolved_export_options</span><span class="p">)</span>
 
-    <span class="c1"># Import inside to avoid introducing the dependencies on `onnx` and `onnxscript` for</span>
-    <span class="c1"># this file (exporter.py).</span>
-    <span class="kn">from</span> <span class="nn">torch.onnx._internal.fx.dynamo_exporter</span> <span class="kn">import</span> <span class="n">DynamoExporter</span>
-
-    <span class="k">return</span> <span class="n">DynamoExporter</span><span class="p">(</span>
-        <span class="n">options</span><span class="o">=</span><span class="n">resolved_export_options</span><span class="p">,</span>
-        <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span>
-        <span class="n">model_args</span><span class="o">=</span><span class="n">model_args</span><span class="p">,</span>
-        <span class="n">model_kwargs</span><span class="o">=</span><span class="n">model_kwargs</span><span class="p">,</span>
-    <span class="p">)</span><span class="o">.</span><span class="n">export</span><span class="p">()</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">Exporter</span><span class="p">(</span>
+            <span class="n">options</span><span class="o">=</span><span class="n">resolved_export_options</span><span class="p">,</span>
+            <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span>
+            <span class="n">model_args</span><span class="o">=</span><span class="n">model_args</span><span class="p">,</span>
+            <span class="n">model_kwargs</span><span class="o">=</span><span class="n">model_kwargs</span><span class="p">,</span>
+        <span class="p">)</span><span class="o">.</span><span class="n">export</span><span class="p">()</span>
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="n">sarif_report_path</span> <span class="o">=</span> <span class="n">_DEFAULT_FAILED_EXPORT_SARIF_LOG_PATH</span>
+        <span class="n">resolved_export_options</span><span class="o">.</span><span class="n">diagnostic_context</span><span class="o">.</span><span class="n">dump</span><span class="p">(</span><span class="n">sarif_report_path</span><span class="p">)</span>
+        <span class="c1"># TODO(bowbao): A summary as well as suggestion for posting the .sarif log in</span>
+        <span class="c1"># the issue to be added.</span>
+        <span class="n">message</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;Failed to export the model to ONNX. Generating SARIF report at </span><span class="si">{</span><span class="n">sarif_report_path</span><span class="si">}</span><span class="s2">. &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;Please report a bug on PyTorch Github: </span><span class="si">{</span><span class="n">_PYTORCH_GITHUB_ISSUES_URL</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="p">)</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="n">message</span><span class="p">)</span> <span class="kn">from</span> <span class="nn">e</span>
 
 
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
@@ -1078,6 +1165,7 @@ if (url)
          <script src="../../../../_static/underscore.js"></script>
          <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js"></script>
          <script src="../../../../_static/doctools.js"></script>
+         <script src="../../../../_static/sphinx_highlight.js"></script>
          <script src="../../../../_static/clipboard.min.js"></script>
          <script src="../../../../_static/copybutton.js"></script>
      
