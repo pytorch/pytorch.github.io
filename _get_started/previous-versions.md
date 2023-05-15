@@ -25,18 +25,18 @@ your convenience.
 
 ```
 # conda
-conda install pytorch==2.0.0 torchvision==0.15.1 torchaudio==2.0.1 -c pytorch
+conda install pytorch==2.0.0 torchvision==0.15.0 torchaudio==2.0.0 -c pytorch
 ```
 
 #####  Linux and Windows
 
 ```
 # CUDA 11.7
-conda install pytorch==2.0.0 torchvision==0.15.1 torchaudio==2.0.1 pytorch-cuda=11.7 -c pytorch -c nvidia
+conda install pytorch==2.0.0 torchvision==0.15.0 torchaudio==2.0.0 pytorch-cuda=11.7 -c pytorch -c nvidia
 # CUDA 11.8
-conda install pytorch==2.0.0 torchvision==0.15.1 torchaudio==2.0.1 pytorch-cuda=11.8 -c pytorch -c nvidia
+conda install pytorch==2.0.0 torchvision==0.15.0 torchaudio==2.0.0 pytorch-cuda=11.8 -c pytorch -c nvidia
 # CPU Only
-conda install pytorch==2.0.0 torchvision==0.15.1 torchaudio==2.0.1 cpuonly -c pytorch
+conda install pytorch==2.0.0 torchvision==0.15.0 torchaudio==2.0.0 cpuonly -c pytorch
 ```
 
 #### Wheel
