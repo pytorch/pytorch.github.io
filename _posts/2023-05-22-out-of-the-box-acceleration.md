@@ -1,6 +1,6 @@
 ---
 layout: blog_detail
-title: "Out of the box acceleration and memory savings for decoder models with PyTorch 2.0 for 🤗 Transformers models"
+title: "Out of the box acceleration and memory savings of 🤗 decoder models with PyTorch 2.0"
 author: Felix Marty, Younes Belkada, Hamid Shojanazeri
 ---
 
