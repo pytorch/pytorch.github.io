@@ -235,7 +235,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href='https://pytorch.org/docs/versions.html'>main (2.1.0a0+git66a2600 ) &#x25BC</a>
+      <a href='https://pytorch.org/docs/versions.html'>main (2.1.0a0+git9567aae ) &#x25BC</a>
     </div>
     
 
@@ -307,7 +307,10 @@
 <li class="toctree-l1"><a class="reference internal" href="../../../compile/technical-overview.html">Technical Overview</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../compile/guards-overview.html">Guards Overview</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../compile/custom-backends.html">Custom Backends</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../compile/fine_grained_apis.html">TorchDynamo APIs to control fine-grained tracing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../compile/inductor_profiling.html">TorchInductor GPU Profiling</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../compile/deep-dive.html">TorchDynamo Deeper Dive</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../compile/cudagraph_trees.html">CUDAGraph Trees</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../compile/performance-dashboard.html">PyTorch 2.0 Performance Dashboard</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../compile/torchfunc-and-torchcompile.html">torch.func interaction with torch.compile</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../ir.html">IRs</a></li>
@@ -486,6 +489,7 @@
 <span class="kn">import</span> <span class="nn">torch.utils.hooks</span> <span class="k">as</span> <span class="nn">hooks</span>
 <span class="kn">from</span> <span class="nn">torch.utils.hooks</span> <span class="kn">import</span> <span class="n">RemovableHandle</span>
 <span class="kn">from</span> <span class="nn">torch._utils</span> <span class="kn">import</span> <span class="n">is_compiling</span>
+<span class="kn">from</span> <span class="nn">torch.utils._foreach_utils</span> <span class="kn">import</span> <span class="n">_group_tensors_by_device_and_dtype</span>
 
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;Optimizer&#39;</span><span class="p">,</span> <span class="s1">&#39;register_optimizer_step_pre_hook&#39;</span><span class="p">,</span> <span class="s1">&#39;register_optimizer_step_post_hook&#39;</span><span class="p">]</span>
 <span class="n">_global_optimizer_pre_hooks</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">Callable</span><span class="p">]</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">()</span>
@@ -701,7 +705,11 @@
 
     <span class="c1"># Currently needed by Adam and AdamW</span>
     <span class="k">def</span> <span class="nf">_cuda_graph_capture_health_check</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">if</span> <span class="n">torch</span><span class="o">.</span><span class="n">has_cuda</span> <span class="ow">and</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span><span class="p">():</span>
+        <span class="c1"># If we are compiling, we take the capturable path automatically</span>
+        <span class="c1"># One caveat here is that if we are compiling, we *permit* step/param tensors to be on CPU</span>
+        <span class="c1"># so we do not explicitly enable the capturable flag. Inductor will decide whether cudagraphs</span>
+        <span class="c1"># can be enabled based on whether there is input mutation or CPU tensors.</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">is_compiling</span><span class="p">()</span> <span class="ow">and</span> <span class="n">torch</span><span class="o">.</span><span class="n">has_cuda</span> <span class="ow">and</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span><span class="p">():</span>
             <span class="n">capturing</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_current_stream_capturing</span><span class="p">()</span>
 
             <span class="k">if</span> <span class="n">capturing</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">all</span><span class="p">(</span><span class="n">group</span><span class="p">[</span><span class="s1">&#39;capturable&#39;</span><span class="p">]</span> <span class="k">for</span> <span class="n">group</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">param_groups</span><span class="p">):</span>
@@ -762,6 +770,18 @@
                 <span class="k">return</span> <span class="n">out</span>
 
         <span class="k">return</span> <span class="n">wrapper</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">_group_tensors_by_device_and_dtype</span><span class="p">(</span><span class="n">tensorlistlist</span><span class="p">,</span> <span class="n">with_indices</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Groups a list of lists of tensors by device and dtype.</span>
+<span class="sd">        Skips this step if we are compiling since this will occur during inductor lowering.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">is_compiling</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">with_indices</span><span class="p">:</span>
+                <span class="n">indices</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">tensorlistlist</span><span class="p">[</span><span class="mi">0</span><span class="p">])))</span>
+                <span class="n">tensorlistlist</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">indices</span><span class="p">)</span>
+            <span class="k">return</span> <span class="p">{(</span><span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">):</span> <span class="n">tensorlistlist</span><span class="p">}</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">_group_tensors_by_device_and_dtype</span><span class="p">(</span><span class="n">tensorlistlist</span><span class="p">,</span> <span class="n">with_indices</span><span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">_patch_step_function</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_zero_grad_profile_name</span> <span class="o">=</span> <span class="s2">&quot;Optimizer.zero_grad#</span><span class="si">{}</span><span class="s2">.zero_grad&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="p">)</span>

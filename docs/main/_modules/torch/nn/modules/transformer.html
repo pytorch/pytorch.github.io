@@ -235,7 +235,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href='https://pytorch.org/docs/versions.html'>main (2.1.0a0+git66a2600 ) &#x25BC</a>
+      <a href='https://pytorch.org/docs/versions.html'>main (2.1.0a0+git9567aae ) &#x25BC</a>
     </div>
     
 
@@ -307,7 +307,10 @@
 <li class="toctree-l1"><a class="reference internal" href="../../../../compile/technical-overview.html">Technical Overview</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../compile/guards-overview.html">Guards Overview</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../compile/custom-backends.html">Custom Backends</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../compile/fine_grained_apis.html">TorchDynamo APIs to control fine-grained tracing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../compile/inductor_profiling.html">TorchInductor GPU Profiling</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../compile/deep-dive.html">TorchDynamo Deeper Dive</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../compile/cudagraph_trees.html">CUDAGraph Trees</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../compile/performance-dashboard.html">PyTorch 2.0 Performance Dashboard</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../compile/torchfunc-and-torchcompile.html">torch.func interaction with torch.compile</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../ir.html">IRs</a></li>
@@ -477,6 +480,7 @@
 <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Union</span><span class="p">,</span> <span class="n">Callable</span>
 
 <span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">import</span> <span class="nn">warnings</span>
 <span class="kn">from</span> <span class="nn">torch</span> <span class="kn">import</span> <span class="n">Tensor</span>
 <span class="kn">from</span> <span class="nn">..</span> <span class="kn">import</span> <span class="n">functional</span> <span class="k">as</span> <span class="n">F</span>
 <span class="kn">from</span> <span class="nn">.module</span> <span class="kn">import</span> <span class="n">Module</span>
@@ -664,8 +668,34 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">layers</span> <span class="o">=</span> <span class="n">_get_clones</span><span class="p">(</span><span class="n">encoder_layer</span><span class="p">,</span> <span class="n">num_layers</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">num_layers</span> <span class="o">=</span> <span class="n">num_layers</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">norm</span> <span class="o">=</span> <span class="n">norm</span>
+        <span class="c1"># this attribute saves the value providedat object construction</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">enable_nested_tensor</span> <span class="o">=</span> <span class="n">enable_nested_tensor</span>
+        <span class="c1"># this attribute controls whether nested tensors are used</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">use_nested_tensor</span> <span class="o">=</span> <span class="n">enable_nested_tensor</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">mask_check</span> <span class="o">=</span> <span class="n">mask_check</span>
+
+        <span class="n">first_layer</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">layers</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">str_first_layer</span> <span class="o">=</span> <span class="s2">&quot;self.layers[0]&quot;</span>
+        <span class="n">why_not_sparsity_fast_path</span> <span class="o">=</span> <span class="s1">&#39;&#39;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">first_layer</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">TransformerEncoderLayer</span><span class="p">):</span>
+            <span class="n">why_not_sparsity_fast_path</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">str_first_layer</span><span class="si">}</span><span class="s2"> was not TransformerEncoderLayer&quot;</span>
+        <span class="k">elif</span> <span class="n">first_layer</span><span class="o">.</span><span class="n">norm_first</span> <span class="p">:</span>
+            <span class="n">why_not_sparsity_fast_path</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">str_first_layer</span><span class="si">}</span><span class="s2">.norm_first was True&quot;</span>
+        <span class="k">elif</span> <span class="ow">not</span> <span class="n">first_layer</span><span class="o">.</span><span class="n">self_attn</span><span class="o">.</span><span class="n">batch_first</span><span class="p">:</span>
+            <span class="n">why_not_sparsity_fast_path</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot; </span><span class="si">{</span><span class="n">str_first_layer</span><span class="si">}</span><span class="s2">.self_attn.batch_first was not True&quot;</span>
+        <span class="k">elif</span> <span class="ow">not</span> <span class="n">first_layer</span><span class="o">.</span><span class="n">self_attn</span><span class="o">.</span><span class="n">_qkv_same_embed_dim</span><span class="p">:</span>
+            <span class="n">why_not_sparsity_fast_path</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">str_first_layer</span><span class="si">}</span><span class="s2">.self_attn._qkv_same_embed_dim was not True&quot;</span>
+        <span class="k">elif</span> <span class="ow">not</span> <span class="n">first_layer</span><span class="o">.</span><span class="n">activation_relu_or_gelu</span><span class="p">:</span>
+            <span class="n">why_not_sparsity_fast_path</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot; </span><span class="si">{</span><span class="n">str_first_layer</span><span class="si">}</span><span class="s2">.activation_relu_or_gelu was not True&quot;</span>
+        <span class="k">elif</span> <span class="ow">not</span> <span class="p">(</span><span class="n">first_layer</span><span class="o">.</span><span class="n">norm1</span><span class="o">.</span><span class="n">eps</span> <span class="o">==</span> <span class="n">first_layer</span><span class="o">.</span><span class="n">norm2</span><span class="o">.</span><span class="n">eps</span><span class="p">)</span> <span class="p">:</span>
+            <span class="n">why_not_sparsity_fast_path</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">str_first_layer</span><span class="si">}</span><span class="s2">.norm1.eps was not equal to </span><span class="si">{</span><span class="n">str_first_layer</span><span class="si">}</span><span class="s2">.norm2.eps&quot;</span>
+        <span class="k">elif</span> <span class="n">first_layer</span><span class="o">.</span><span class="n">self_attn</span><span class="o">.</span><span class="n">num_heads</span> <span class="o">%</span> <span class="mi">2</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">why_not_sparsity_fast_path</span> <span class="o">=</span> <span class="s2">&quot;num_head is odd&quot;</span>
+
+        <span class="k">if</span> <span class="n">enable_nested_tensor</span> <span class="ow">and</span> <span class="n">why_not_sparsity_fast_path</span><span class="p">:</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;enable_nested_tensor is True, but self.use_nested_tensor is False because </span><span class="si">{</span><span class="n">why_not_sparsity_fast_path</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">use_nested_tensor</span> <span class="o">=</span> <span class="kc">False</span>
+
 
 <div class="viewcode-block" id="TransformerEncoder.forward"><a class="viewcode-back" href="../../../../generated/torch.nn.TransformerEncoder.html#torch.nn.TransformerEncoder.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span>
             <span class="bp">self</span><span class="p">,</span>
@@ -713,24 +743,14 @@
         <span class="n">src_key_padding_mask_for_layers</span> <span class="o">=</span> <span class="n">src_key_padding_mask</span>
         <span class="n">why_not_sparsity_fast_path</span> <span class="o">=</span> <span class="s1">&#39;&#39;</span>
         <span class="n">str_first_layer</span> <span class="o">=</span> <span class="s2">&quot;self.layers[0]&quot;</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">first_layer</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">TransformerEncoderLayer</span><span class="p">):</span>
-            <span class="n">why_not_sparsity_fast_path</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">str_first_layer</span><span class="si">}</span><span class="s2"> was not TransformerEncoderLayer&quot;</span>
-        <span class="k">elif</span> <span class="n">first_layer</span><span class="o">.</span><span class="n">norm_first</span> <span class="p">:</span>
-            <span class="n">why_not_sparsity_fast_path</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">str_first_layer</span><span class="si">}</span><span class="s2">.norm_first was True&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;use_nested_tensor&quot;</span><span class="p">):</span>
+            <span class="n">why_not_sparsity_fast_path</span> <span class="o">=</span> <span class="s2">&quot;use_nested_tensor attribute not present&quot;</span>
+        <span class="k">elif</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">use_nested_tensor</span><span class="p">:</span>
+            <span class="n">why_not_sparsity_fast_path</span> <span class="o">=</span> <span class="s2">&quot;self.use_nested_tensor (set in init) was not True&quot;</span>
         <span class="k">elif</span> <span class="n">first_layer</span><span class="o">.</span><span class="n">training</span><span class="p">:</span>
             <span class="n">why_not_sparsity_fast_path</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">str_first_layer</span><span class="si">}</span><span class="s2"> was in training mode&quot;</span>
-        <span class="k">elif</span> <span class="ow">not</span> <span class="n">first_layer</span><span class="o">.</span><span class="n">self_attn</span><span class="o">.</span><span class="n">batch_first</span><span class="p">:</span>
-            <span class="n">why_not_sparsity_fast_path</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot; </span><span class="si">{</span><span class="n">str_first_layer</span><span class="si">}</span><span class="s2">.self_attn.batch_first was not True&quot;</span>
-        <span class="k">elif</span> <span class="ow">not</span> <span class="n">first_layer</span><span class="o">.</span><span class="n">self_attn</span><span class="o">.</span><span class="n">_qkv_same_embed_dim</span><span class="p">:</span>
-            <span class="n">why_not_sparsity_fast_path</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">str_first_layer</span><span class="si">}</span><span class="s2">.self_attn._qkv_same_embed_dim was not True&quot;</span>
-        <span class="k">elif</span> <span class="ow">not</span> <span class="n">first_layer</span><span class="o">.</span><span class="n">activation_relu_or_gelu</span><span class="p">:</span>
-            <span class="n">why_not_sparsity_fast_path</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot; </span><span class="si">{</span><span class="n">str_first_layer</span><span class="si">}</span><span class="s2">.activation_relu_or_gelu was not True&quot;</span>
-        <span class="k">elif</span> <span class="ow">not</span> <span class="p">(</span><span class="n">first_layer</span><span class="o">.</span><span class="n">norm1</span><span class="o">.</span><span class="n">eps</span> <span class="o">==</span> <span class="n">first_layer</span><span class="o">.</span><span class="n">norm2</span><span class="o">.</span><span class="n">eps</span><span class="p">)</span> <span class="p">:</span>
-            <span class="n">why_not_sparsity_fast_path</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">str_first_layer</span><span class="si">}</span><span class="s2">.norm1.eps was not equal to </span><span class="si">{</span><span class="n">str_first_layer</span><span class="si">}</span><span class="s2">.norm2.eps&quot;</span>
         <span class="k">elif</span> <span class="ow">not</span> <span class="n">src</span><span class="o">.</span><span class="n">dim</span><span class="p">()</span> <span class="o">==</span> <span class="mi">3</span><span class="p">:</span>
             <span class="n">why_not_sparsity_fast_path</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;input not batched; expected src.dim() of 3 but got </span><span class="si">{</span><span class="n">src</span><span class="o">.</span><span class="n">dim</span><span class="p">()</span><span class="si">}</span><span class="s2">&quot;</span>
-        <span class="k">elif</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">enable_nested_tensor</span><span class="p">:</span>
-            <span class="n">why_not_sparsity_fast_path</span> <span class="o">=</span> <span class="s2">&quot;enable_nested_tensor was not True&quot;</span>
         <span class="k">elif</span> <span class="n">src_key_padding_mask</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">why_not_sparsity_fast_path</span> <span class="o">=</span> <span class="s2">&quot;src_key_padding_mask was None&quot;</span>
         <span class="k">elif</span> <span class="p">(((</span><span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;mask_check&quot;</span><span class="p">))</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">mask_check</span><span class="p">)</span>
@@ -740,8 +760,6 @@
             <span class="n">why_not_sparsity_fast_path</span> <span class="o">=</span> <span class="s2">&quot;NestedTensor input is not supported&quot;</span>
         <span class="k">elif</span> <span class="n">mask</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">why_not_sparsity_fast_path</span> <span class="o">=</span> <span class="s2">&quot;src_key_padding_mask and mask were both supplied&quot;</span>
-        <span class="k">elif</span> <span class="n">first_layer</span><span class="o">.</span><span class="n">self_attn</span><span class="o">.</span><span class="n">num_heads</span> <span class="o">%</span> <span class="mi">2</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
-            <span class="n">why_not_sparsity_fast_path</span> <span class="o">=</span> <span class="s2">&quot;num_head is odd&quot;</span>
         <span class="k">elif</span> <span class="n">torch</span><span class="o">.</span><span class="n">is_autocast_enabled</span><span class="p">():</span>
             <span class="n">why_not_sparsity_fast_path</span> <span class="o">=</span> <span class="s2">&quot;autocast is enabled&quot;</span>
 
@@ -880,6 +898,19 @@
 <span class="sd">    Lukasz Kaiser, and Illia Polosukhin. 2017. Attention is all you need. In Advances in</span>
 <span class="sd">    Neural Information Processing Systems, pages 6000-6010. Users may modify or implement</span>
 <span class="sd">    in a different way during application.</span>
+
+<span class="sd">    TransformerEncoderLayer can handle either traditional torch.tensor inputs,</span>
+<span class="sd">    or Nested Tensor inputs.  Derived classes are expected to similarly accept</span>
+<span class="sd">    both input formats.  (Not all combinations of inputs are currently</span>
+<span class="sd">    supported by TransformerEncoderLayer while Nested Tensor is in prototype</span>
+<span class="sd">    state.)</span>
+
+<span class="sd">    If you are implementing a custom layer, you may derive it either from</span>
+<span class="sd">    the Module or TransformerEncoderLayer class.  If your custom layer</span>
+<span class="sd">    supports both torch.Tensors and Nested Tensors inputs, make its</span>
+<span class="sd">    implementation a derived class of TransformerEncoderLayer. If your custom</span>
+<span class="sd">    Layer supports only torch.Tensor inputs, derive its implementation from</span>
+<span class="sd">    Module.</span>
 
 <span class="sd">    Args:</span>
 <span class="sd">        d_model: the number of expected features in the input (required).</span>
