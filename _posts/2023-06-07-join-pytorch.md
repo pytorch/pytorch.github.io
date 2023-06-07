@@ -69,6 +69,6 @@ Associate members are free to join and will receive support and participation op
 
 "As a leading Python-based AI framework, [PyTorch](https://www.nvidia.com/en-us/glossary/data-science/pytorch/) has been fundamental to the development of LLMs and GenAI. NVIDIA’s goal is to deepen our collaboration with the open-source AI community as part of the PyTorch Foundation, and help build the next wave of advanced, energy efficient, and cost-effective applications with [accelerated computing](https://www.nvidia.com/en-us/data-center/solutions/accelerated-computing/).”
 
-### Join today
+## Join today
 
 We are excited to see the PyTorch Foundation continue to grow alongside the community through neutral governance and support. We hope you’ll [join us as a member](/join)!
