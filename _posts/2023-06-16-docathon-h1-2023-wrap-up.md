@@ -1,6 +1,6 @@
 ---
 layout: blog_detail
-title: "🎉PyTorch Docathon H1 2023 Wrap-up 🎉"
+title: "🎉 PyTorch Docathon H1 2023 Wrap-up 🎉"
 ---
 
 Thank you to all who participated in our first ever PyTorch Docathon, the results have been nothing short of amazing! We want to extend our sincerest gratitude to all the participants who made this event a resounding success. Your passion, talent, and hard work have left an indelible mark on the PyTorch documentation.
