@@ -289,7 +289,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
                     <p class="author">
                       by
                       
-                        Pedro Cuenca, Patrick von Platen, Suraj Patil
+                        Pedro Cuenca, Patrick von Platen, Suraj Patil, Sayak Paul
                       
                     </p>
                     <p>PyTorch 2.0 has just been released. Its flagship new feature is <code class="language-plaintext highlighter-rouge">torch.compile()</code>, a one-line code change that promises to automatically improve performance across codebases. We have previously <a href="https://pytorch.org/blog/Accelerating-Hugging-Face-and-TIMM-models/">checked on that promise in Hugging Face Transformers and TIMM models</a>, and delved deep into its <a href="https://pytorch.org/get-started/pytorch-2.0/">motivation, architecture and the road ahead</a>.</p>
@@ -297,6 +297,8 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
 <p>As important as <code class="language-plaintext highlighter-rouge">torch.compile()</code> is, there’s much more to PyTorch 2.0. Notably, PyTorch 2.0 incorporates several strategies to accelerate transformer blocks, and these improvements are very relevant for diffusion models too. Techniques such as <a href="https://arxiv.org/abs/2205.14135">FlashAttention</a>, for example, have become very popular in the diffusion community thanks to their ability to significantly speed up Stable Diffusion and achieve larger batch sizes, and they are now part of PyTorch 2.0.</p>
 
 <p>In this post we discuss how attention layers are optimized in PyTorch 2.0 and how these optimization are applied to the popular <a href="https://github.com/huggingface/diffusers">🧨 Diffusers library</a>. We finish with a benchmark that shows how the use of PyTorch 2.0 and Diffusers immediately translates to significant performance improvements across different hardware.</p>
+
+<p>Update (June 2023): <a href="#compile-fixing-graph-breaks">a new section has been added</a> to show dramatic performance improvements of <code class="language-plaintext highlighter-rouge">torch.compile()</code> with the latest version of PyTorch (2.0.1), after going through the process of fixing graph breaks in the diffusers codebase. A more detailed analysis of how to find and fix graph breaks will be published in a separate post.</p>
 
 <h2 id="accelerating-transformer-blocks">Accelerating transformer blocks</h2>
 
@@ -352,7 +354,7 @@ image = pipe(prompt).images[0]
 
 <p>When compared with PyTorch 1.13.1 + xFormers, the new accelerated transformers implementation is still faster and requires no additional packages or dependencies. In this case we found moderate speedups of up to 2% on datacenter cards such as A100 or T4, but performance was great on the two last generations of consumer cards: up to 20% speed improvement on 3090 and between 10% and 45% on 4090, depending on batch size.</p>
 
-<p>When <code class="language-plaintext highlighter-rouge">torch.compile()</code> is used, we get an additional performance boost of (typically) 2% and 3% over the previous improvements. As compilation takes some time, this is better geared towards user-facing inference services or training.</p>
+<p>When <code class="language-plaintext highlighter-rouge">torch.compile()</code> is used, we get an additional performance boost of (typically) 2% and 3% over the previous improvements. As compilation takes some time, this is better geared towards user-facing inference services or training. <strong>Update</strong>: improvements achieved by <code class="language-plaintext highlighter-rouge">torch.compile()</code> are much larger when graph breaks are minimized, <a href="#compile-fixing-graph-breaks">see the new section for details</a>.</p>
 
 <h3 id="results-in-float16">Results in float16</h3>
 
@@ -365,6 +367,16 @@ image = pipe(prompt).images[0]
 <p><img src="/assets/images/3-16-accelerated-d/fig9-latest.png" alt="Diffusers Inference Speedup vs Vanilla and xFormers Attention (3090, float16)" width="100%" /></p>
 
 <p>When we consider <code class="language-plaintext highlighter-rouge">float16</code> inference, the performance improvements of the accelerated transformers implementation in PyTorch 2.0 are between 20% and 28% over standard attention, across all the GPUs we tested, except for the 4090, which belongs to the more modern Ada architecture. This GPU benefits from a dramatic performance improvement when using PyTorch 2.0 nightlies. With respect to optimized SDPA vs xFormers, results are usually on par for most GPUs, except again for the 4090. Adding <code class="language-plaintext highlighter-rouge">torch.compile()</code> to the mix boosts performance a few more percentage points across the board.</p>
+
+<h2 id="-performance-of-torchcompile-after-minimizing-graph-breaks"><a name="compile-fixing-graph-breaks"></a> Performance of <code class="language-plaintext highlighter-rouge">torch.compile()</code> after minimizing graph breaks</h2>
+
+<p>In the previous sections we saw that using the accelerated transformers implementation of PyTorch 2.0 provides important performance improvements with respect to earlier versions of PyTorch (with or without xFormers). However, <code class="language-plaintext highlighter-rouge">torch.compile()</code> only contributed modest marginal improvements. With the help of the PyTorch team we discovered that the reason for those moderate improvements was that some operations in the diffusers source code were causing graph breaks, which prevented <code class="language-plaintext highlighter-rouge">torch.compile()</code> from taking full advantage of graph optimizations.</p>
+
+<p>After fixing the graph breaks (see <a href="https://github.com/huggingface/diffusers/pull/3286">these</a> <a href="https://github.com/huggingface/diffusers/pull/3313">PRs</a> for details), we measured the additional improvement of <code class="language-plaintext highlighter-rouge">torch.compile()</code> vs the uncompiled version of PyTorch 2, and we saw very important incremental performance gains. The following chart was obtained using a nightly version of PyTorch 2 downloaded on May 1st, 2023, and it shows improvements in the range of ~13% to 22% for most workloads. The performance gains get better for modern GPU families, achieving more than 30% for A100. There are also two outliers in the chart. First, we see a performance decrease on T4 for a batch size of 16, which imposes a huge memory pressure on that card. At the opposite end of the spectrum, we see a performance increase on A100 of more than 100% when using a batch size of only 1, which is interesting but not representative of real-world use of a gpu with such large amount of RAM – larger batch sizes capable of serving multiple customers will usually be more interesting for service deployment on A100.</p>
+
+<p><img src="/assets/images/3-16-accelerated-d/fig10-latest.png" alt="Diffusers Speedup using torch.compile() in float16" width="100%" /></p>
+
+<p>To stress it again, these performance gains are <em>additional</em> to the ones achieved by migrating to PyTorch 2 and using the accelerated transformers scaled dot-product attention implementation. We recommend using <code class="language-plaintext highlighter-rouge">torch.compile()</code> when deploying diffusers in production.</p>
 
 <h2 id="conclusions">Conclusions</h2>
 
