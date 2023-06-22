@@ -1,7 +1,7 @@
 ---
 layout: blog_detail
 title: "Out of the box acceleration and memory savings of 🤗 decoder models with PyTorch 2.0"
-author: Felix Marty, Younes Belkada, Hamid Shojanazeri
+author: Felix Marty, Younes Belkada, Hamid Shojanazeri, Driss Guessous
 ---
 
 As part of PyTorch 2.0 release, an accelerated implementation of the attention mechanism as part of the “Better Transformer” project (and known in PyTorch as Accelerated Transformers) has been added natively into PyTorch as [`torch.nn.functional.scaled_dot_product_attention`](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention.html?highlight=scaled_dot_product_attention#torch.nn.functional.scaled_dot_product_attention). This implementation leverages fused kernels from [FlashAttention](https://arxiv.org/abs/2205.14135) and [Memory-efficient attention](https://arxiv.org/abs/2112.05682), and supports both training and inference. 
