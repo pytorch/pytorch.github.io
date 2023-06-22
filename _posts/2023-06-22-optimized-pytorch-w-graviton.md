@@ -16,7 +16,7 @@ As shown in the next graph, we measured up to 50% cost savings for PyTorch infer
 
 ![Relative cost of PyTorch inference running on different AWS instances](/assets/images/optimized/im2.png){:style="max-height:800px; width:100%"}
 
-<small style="line-height: 1.1"><em>**Image 2**: Relative cost of PyTorch inference running on different AWS instances (lower is better). Source: AWS ML Blog on [Graviton PyTorch2.0 inference performance](https://aws.amazon.com/blogs/machine-learning/optimized-pytorch-2-0-inference-with-aws-graviton-processors/)</em></small>
+<small style="line-height: 1.1"><em>**Image 2**: Relative cost of PyTorch inference running on different AWS instances (lower is better). <br/>Source: AWS ML Blog on [Graviton PyTorch2.0 inference performance](https://aws.amazon.com/blogs/machine-learning/optimized-pytorch-2-0-inference-with-aws-graviton-processors/).</em></small>
 
 
 
@@ -24,7 +24,7 @@ Similar to the preceding inference cost comparison graph, the following graph sh
 
 ![Relative latency (p90) of PyTorch inference running on different AWS instances](/assets/images/optimized/im3.png){:style="max-height:800px; width:100%"}
 
-<small style="line-height: 1.1"><em>**Image 3**: Relative latency (p90) of PyTorch inference running on different AWS instances (lower is better). Source: AWS ML Blog on [Graviton PyTorch2.0 inference performance](https://aws.amazon.com/blogs/machine-learning/optimized-pytorch-2-0-inference-with-aws-graviton-processors/)  </em></small>
+<small style="line-height: 1.1"><em>**Image 3**: Relative latency (p90) of PyTorch inference running on different AWS instances (lower is better). <br/>Source: AWS ML Blog on [Graviton PyTorch2.0 inference performance](https://aws.amazon.com/blogs/machine-learning/optimized-pytorch-2-0-inference-with-aws-graviton-processors/).</em></small>
 
 
 ## Optimization details
