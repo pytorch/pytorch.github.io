@@ -8,38 +8,23 @@ New generations of CPUs offer significant performance improvement in machine lea
 
 AWS, Arm, Meta, and others helped optimize the performance of PyTorch 2.0 inference for Arm-based processors. As a result, we are delighted to announce that Arm-based AWS Graviton instance inference performance for PyTorch 2.0 is up to 3.5 times the speed for ResNet-50 compared to the previous PyTorch release, and up to 1.4 times the speed for BERT, making Graviton-based instances the fastest compute optimized instances on AWS for these models (see the following graph).
 
-<p id="gdcalert1" ><span style="color: red; font-weight: bold">>>>>>  gd2md-html alert: inline image link here (to images/image1.png). Store image on your image server and adjust path/filename/extension if necessary. </span><br>(<a href="#">Back to top</a>)(<a href="#gdcalert2">Next alert</a>)<br><span style="color: red; font-weight: bold">>>>>> </span></p>
+![Relative speed improvement achieved by upgrading PyTorch to 2.0](/assets/images/optimized/im1.png){:style="max-height:800px; width:100%"}
 
-
-![alt_text](images/image1.png "image_tooltip")
-
-
-<small style="line-height: 1.1"><em>Image 1: Relative speed improvement achieved by upgrading from PyTorch version 1.13 to 2.0 (higher is better). The performance is measured on c7g.4xlarge instances.</em></small>
+<small style="line-height: 1.1"><em>**Image 1**: Relative speed improvement achieved by upgrading from PyTorch version 1.13 to 2.0 (higher is better). The performance is measured on c7g.4xlarge instances.</em></small>
 
 As shown in the next graph, we measured up to 50% cost savings for PyTorch inference with Graviton3-based c7g instances across Torch Hub ResNet-50 and multiple Hugging Face models compared to comparable x86-based compute optimized Amazon EC2 instances. For that graph, we first measured the cost per million inference for the five instance types. Then, we normalized the cost per million inference results to a c5.4xlarge instance, which is the baseline measure of “1” on the Y-axis of the chart. 
 
-<p id="gdcalert2" ><span style="color: red; font-weight: bold">>>>>>  gd2md-html alert: inline image link here (to images/image2.png). Store image on your image server and adjust path/filename/extension if necessary. </span><br>(<a href="#">Back to top</a>)(<a href="#gdcalert3">Next alert</a>)<br><span style="color: red; font-weight: bold">>>>>> </span></p>
+![Relative cost of PyTorch inference running on different AWS instances](/assets/images/optimized/im2.png){:style="max-height:800px; width:100%"}
+
+<small style="line-height: 1.1"><em>**Image 2**: Relative cost of PyTorch inference running on different AWS instances (lower is better). Source: AWS ML Blog on [Graviton PyTorch2.0 inference performance](https://aws.amazon.com/blogs/machine-learning/optimized-pytorch-2-0-inference-with-aws-graviton-processors/)</em></small>
 
 
-![alt_text](images/image2.png "image_tooltip")
-
-
-<small style="line-height: 1.1"><em>Image 2: Relative cost of PyTorch inference running on different AWS instances (lower is better)</em></small>
-
-Source: AWS ML Blog on [Graviton PyTorch2.0 inference performance](https://aws.amazon.com/blogs/machine-learning/optimized-pytorch-2-0-inference-with-aws-graviton-processors/)
 
 Similar to the preceding inference cost comparison graph, the following graph shows the model p90 latency for the same five instance types. We normalized the latency results to the c5.4xlarge instance, which is the baseline measure of “1” on the Y-axis of the chart. The c7g.4xlarge (AWS Graviton3) model inference latency is up to 50% better than the latencies measured on c5.4xlarge, c6i.4xlarge, and c6a.4xlarge. \
 
+![Relative latency (p90) of PyTorch inference running on different AWS instances](/assets/images/optimized/im3.png){:style="max-height:800px; width:100%"}
 
-<p id="gdcalert3" ><span style="color: red; font-weight: bold">>>>>>  gd2md-html alert: inline image link here (to images/image3.png). Store image on your image server and adjust path/filename/extension if necessary. </span><br>(<a href="#">Back to top</a>)(<a href="#gdcalert4">Next alert</a>)<br><span style="color: red; font-weight: bold">>>>>> </span></p>
-
-
-![alt_text](images/image3.png "image_tooltip")
- 
-
-<small style="line-height: 1.1"><em>Image 3: Relative latency (p90) of PyTorch inference running on different AWS instances (lower is better) </em></small>
-
-Source: AWS ML Blog on [Graviton PyTorch2.0 inference performance](https://aws.amazon.com/blogs/machine-learning/optimized-pytorch-2-0-inference-with-aws-graviton-processors/) 
+<small style="line-height: 1.1"><em>**Image 3**: Relative latency (p90) of PyTorch inference running on different AWS instances (lower is better). Source: AWS ML Blog on [Graviton PyTorch2.0 inference performance](https://aws.amazon.com/blogs/machine-learning/optimized-pytorch-2-0-inference-with-aws-graviton-processors/)  </em></small>
 
 
 ## Optimization details
@@ -51,13 +36,9 @@ PyTorch supports Compute Library for the Arm® Architecture (ACL) GEMM kernels v
 
 We extended the ATen CPU BLAS interface to accelerate more operators and tensor configurations via oneDNN backend for aarch64 platform. The following diagram highlights (in orange) the optimized components that improved the PyTorch inference performance on aarch64 platform.
 
-<p id="gdcalert4" ><span style="color: red; font-weight: bold">>>>>>  gd2md-html alert: inline image link here (to images/image4.png). Store image on your image server and adjust path/filename/extension if necessary. </span><br>(<a href="#">Back to top</a>)(<a href="#gdcalert5">Next alert</a>)<br><span style="color: red; font-weight: bold">>>>>> </span></p>
+![PyTorch software stack highlighting (in orange) the components optimized for inference performance improvement on AArch64 platform](/assets/images/optimized/im4.png){:style="max-height:800px; width:100%"}
 
-
-![alt_text](images/image4.png "image_tooltip")
-
-
-<small style="line-height: 1.1"><em>Image 4: PyTorch software stack highlighting (in orange) the components optimized for inference performance improvement on AArch64 platform</em></small>
+<small style="line-height: 1.1"><em>**Image 4**: PyTorch software stack highlighting (in orange) the components optimized for inference performance improvement on AArch64 platform</em></small>
 
 
 ### ACL kernels and BFloat16 FPmath mode
@@ -69,15 +50,9 @@ The ACL library provides Neon and SVE optimized GEMM kernels for both fp32 and b
 
 The following call sequence diagram shows how ACL operators are integrated into oneDNN backend. As shown in the diagram, ACL objects are handled as oneDNN resources instead of the primitive objects. This is because the ACL objects are stateful and mutable. Since the ACL objects are handled as resource objects, they are not cacheable with the default primitive caching feature supported in oneDNN. We implemented primitive caching at ideep operator level for “convolution”, “matmul” and “inner product” operators to avoid redundant GEMM kernel initialization and tensor allocation overhead. 
 
+![Call sequence diagram showing how the Compute Library for the Arm® Architecture (ACL) GEMM kernels are integrated into oneDNN backend](/assets/images/optimized/im5.png){:style="max-height:800px; width:100%"}
 
-
-<p id="gdcalert5" ><span style="color: red; font-weight: bold">>>>>>  gd2md-html alert: inline image link here (to images/image5.png). Store image on your image server and adjust path/filename/extension if necessary. </span><br>(<a href="#">Back to top</a>)(<a href="#gdcalert6">Next alert</a>)<br><span style="color: red; font-weight: bold">>>>>> </span></p>
-
-
-![alt_text](images/image5.png "image_tooltip")
-
-
-<small style="line-height: 1.1"><em>Image 5: Call sequence diagram showing how the Compute Library for the Arm® Architecture (ACL) GEMM kernels are integrated into oneDNN backend</em></small>
+<small style="line-height: 1.1"><em>**Image 5**: Call sequence diagram showing how the Compute Library for the Arm® Architecture (ACL) GEMM kernels are integrated into oneDNN backend</em></small>
 
 
 ## How to take advantage of the optimizations
@@ -183,27 +158,15 @@ http://localhost:6006/#pytorch_profiler
 
 The following diagram is the profiler ‘Trace’ view which shows the call stack along with the execution time of each function. In the profiler, we selected the forward() function to get the overall inference time. As shown in the diagram, the inference time for the ResNet-50 model on Graviton3-based c7g instance is around 3 times faster in PyTorch 2.0 compared to PyTorch 1.13.
 
+![Profiler Trace view: Forward pass wall duration on PyTorch 1.13 and PyTorch 2.0](/assets/images/optimized/im6.png){:style="max-height:800px; width:100%"}
 
-
-<p id="gdcalert6" ><span style="color: red; font-weight: bold">>>>>>  gd2md-html alert: inline image link here (to images/image6.png). Store image on your image server and adjust path/filename/extension if necessary. </span><br>(<a href="#">Back to top</a>)(<a href="#gdcalert7">Next alert</a>)<br><span style="color: red; font-weight: bold">>>>>> </span></p>
-
-
-![alt_text](images/image6.png "image_tooltip")
-
-
-<small style="line-height: 1.1"><em>Image 6: Profiler Trace view: Forward pass wall duration on PyTorch 1.13 and PyTorch 2.0</em></small>
+<small style="line-height: 1.1"><em>**Image 6**: Profiler Trace view: Forward pass wall duration on PyTorch 1.13 and PyTorch 2.0</em></small>
 
 The next diagram is the ‘Operator’ view which shows the list of PyTorch operators and their execution time. Similar to the preceding Trace view, the Operator view shows that the operator host duration for the ResNet-50 model on Graviton3-based c7g instance is around 3 times faster in PyTorch 2.0 compared to PyTorch 1.13.
 
+![Profiler Operator view: Forward operator Host duration on PyTorch 1.13 and PyTorch 2.0](/assets/images/optimized/im7.png){:style="max-height:800px; width:100%"}
 
-
-<p id="gdcalert7" ><span style="color: red; font-weight: bold">>>>>>  gd2md-html alert: inline image link here (to images/image7.png). Store image on your image server and adjust path/filename/extension if necessary. </span><br>(<a href="#">Back to top</a>)(<a href="#gdcalert8">Next alert</a>)<br><span style="color: red; font-weight: bold">>>>>> </span></p>
-
-
-![alt_text](images/image7.png "image_tooltip")
-
-
-<small style="line-height: 1.1"><em>Image 7: Profiler Operator view: Forward operator Host duration on PyTorch 1.13 and PyTorch 2.0</em></small>
+<small style="line-height: 1.1"><em>**Image 7**: Profiler Operator view: Forward operator Host duration on PyTorch 1.13 and PyTorch 2.0</em></small>
 
 
 ## Benchmarking Hugging Face models
