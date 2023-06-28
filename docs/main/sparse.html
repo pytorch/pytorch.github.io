@@ -231,7 +231,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href='https://pytorch.org/docs/versions.html'>main (2.1.0a0+git981f24e ) &#x25BC</a>
+      <a href='https://pytorch.org/docs/versions.html'>main (2.1.0a0+git298ff41 ) &#x25BC</a>
     </div>
     
 
@@ -492,7 +492,7 @@ processing algorithms that require fast access to elements.</p>
 matrices, pruned weights or points clouds by Tensors whose <em>elements are
 mostly zero valued</em>. We recognize these are important applications and aim
 to provide performance optimizations for these use cases via sparse storage formats.</p>
-<p>Various sparse storage formats such as COO, CSR/CSC, LIL, etc. have been
+<p>Various sparse storage formats such as COO, CSR/CSC, semi-structured, LIL, etc. have been
 developed over the years. While they differ in exact layouts, they all
 compress data through efficient representation of zero valued elements.
 We call the uncompressed values <em>specified</em> in contrast to <em>unspecified</em>,
@@ -528,7 +528,8 @@ indices of non-zero elements are stored in this case.</p>
 </pre></div>
 </div>
 <p>PyTorch currently supports <a class="reference internal" href="#sparse-coo-docs"><span class="std std-ref">COO</span></a>, <a class="reference internal" href="#sparse-csr-docs"><span class="std std-ref">CSR</span></a>,
-<a class="reference internal" href="#sparse-csc-docs"><span class="std std-ref">CSC</span></a>, <a class="reference internal" href="#sparse-bsr-docs"><span class="std std-ref">BSR</span></a>, and <a class="reference internal" href="#sparse-bsc-docs"><span class="std std-ref">BSC</span></a>.
+<a class="reference internal" href="#sparse-csc-docs"><span class="std std-ref">CSC</span></a>, <a class="reference internal" href="#sparse-bsr-docs"><span class="std std-ref">BSR</span></a>, and <a class="reference internal" href="#sparse-bsc-docs"><span class="std std-ref">BSC</span></a>.</p>
+<p>We also have a prototype implementation to support :ref: <cite>semi-structured sparsity&lt;sparse-semi-structured-docs&gt;</cite>.
 Please see the references for more details.</p>
 <p>Note that we provide slight generalizations of these formats.</p>
 <p>Batching: Devices such as GPUs require batching for optimal performance and
@@ -619,6 +620,145 @@ layouts can be very useful. A subsequent operation might significantly benefit f
 receiving a particular layout. We are working on an API to control the result layout
 and recognize it is an important feature to plan a more optimal path of execution for
 any given model.</p>
+</div>
+<div class="section" id="sparse-semi-structured-tensors">
+<span id="sparse-semi-structured-docs"></span><h2>Sparse Semi-Structured Tensors<a class="headerlink" href="#sparse-semi-structured-tensors" title="Permalink to this heading">¶</a></h2>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>Sparse semi-sturctured tensors are currently a prototype feature and subject to change. Please feel free to open an issue to report a bug or if you have feedback to share.</p>
+</div>
+<p>Semi-Structured sparsity is a sparse data layout that was first introduced in NVIDIA’s Ampere architecture. It is also referred to as <strong>fine-grained structured sparsity</strong> or <strong>2:4 structured sparsity</strong>.</p>
+<p>This sparse layout stores <cite>n</cite> elements out of every <cite>2n</cite> elements, with <cite>n</cite> being determined by the width of the Tensor’s data type (dtype). The most frequently used dtype is float16, where <cite>n=2</cite>, thus the term “2:4 structured sparsity.”</p>
+<p>Semi-structured sparsity is explained in greater detail in <a class="reference external" href="https://developer.nvidia.com/blog/exploiting-ampere-structured-sparsity-with-cusparselt">this NVIDIA blog post</a>.</p>
+<p>In PyTorch, semi-structured sparsity is implemented via a Tensor subclass.
+By subclassing, we can override <code class="docutils literal notranslate"><span class="pre">__torch_dispatch__</span></code> , allowing us to use faster sparse kernels when performing matrix multiplication.
+We can also store the tensor in it’s compressed form inside the subclass to reduce memory overhead.</p>
+<p>In this compressed form, the sparse tensor is stored by retaining only the <em>specified</em> elements and some metadata, which encodes the mask.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The specified elements and metadata mask of a semi-structured sparse tensor are stored together in a single
+flat compressed tensor. They are appended to each other to form a contiguous chunk of memory.</p>
+<p>compressed tensor = [ specified elements of original tensor |   metadata_mask ]</p>
+<p>For an original tensor of size <cite>(r, c)</cite> we expect the first <cite>m * k // 2</cite> elements to be the kept elements
+and the rest of the tensor is metadata.</p>
+<p>In order to make it easier for the user to view the specified elements
+and mask, one can use <code class="docutils literal notranslate"><span class="pre">.indices()</span></code> and <code class="docutils literal notranslate"><span class="pre">.values()</span></code> to access the mask and specified elements respectively.</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">.values()</span></code> returns the specified elements in a tensor of size <cite>(r, c//2)</cite> and with the same dtype as the dense matrix.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">.indices()</span></code> returns the metadata_mask in a tensor of size <cite>(r, c//2 )</cite> and with element type <code class="docutils literal notranslate"><span class="pre">torch.int16</span></code> if dtype is torch.float16 and element type <code class="docutils literal notranslate"><span class="pre">torch.int32</span></code> if dtype is torch.int8.</p></li>
+</ul>
+</div>
+<p>For 2:4 sparse tensors, the metadata overhead is minor - just 2 bits per specified element.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>It’s important to note that <code class="docutils literal notranslate"><span class="pre">torch.float32</span></code> is only supported for 1:2 sparsity. Therefore, it does not follow the same formula as above.</p>
+</div>
+<p>Here, we break down how to calculate the compression ratio ( size dense / size sparse) of a 2:4 sparse tensor.</p>
+<p>Let <cite>(r, c) = tensor.shape</cite> and <cite>e = bitwidth(tensor.dtype)</cite>, so <cite>e = 16</cite> for <code class="docutils literal notranslate"><span class="pre">torch.float16</span></code> and <code class="docutils literal notranslate"><span class="pre">torch.bfloat16</span></code> and <cite>e = 8</cite> for <code class="docutils literal notranslate"><span class="pre">torch.int8</span></code>.</p>
+<div class="math">
+<span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><msub><mi>M</mi><mrow><mi>d</mi><mi>e</mi><mi>n</mi><mi>s</mi><mi>e</mi></mrow></msub><mo>=</mo><mi>r</mi><mo>×</mo><mi>c</mi><mo>×</mo><mi>e</mi><mspace linebreak="newline"></mspace><msub><mi>M</mi><mrow><mi>s</mi><mi>p</mi><mi>a</mi><mi>r</mi><mi>s</mi><mi>e</mi></mrow></msub><mo>=</mo><msub><mi>M</mi><mrow><mi>s</mi><mi>p</mi><mi>e</mi><mi>c</mi><mi>i</mi><mi>f</mi><mi>i</mi><mi>e</mi><mi>d</mi></mrow></msub><mo>+</mo><msub><mi>M</mi><mrow><mi>m</mi><mi>e</mi><mi>t</mi><mi>a</mi><mi>d</mi><mi>a</mi><mi>t</mi><mi>a</mi></mrow></msub><mo>=</mo><mi>r</mi><mo>×</mo><mfrac><mi>c</mi><mn>2</mn></mfrac><mo>×</mo><mi>e</mi><mo>+</mo><mi>r</mi><mo>×</mo><mfrac><mi>c</mi><mn>2</mn></mfrac><mo>×</mo><mn>2</mn><mo>=</mo><mfrac><mrow><mi>r</mi><mi>c</mi><mi>e</mi></mrow><mn>2</mn></mfrac><mo>+</mo><mi>r</mi><mi>c</mi><mo>=</mo><mi>r</mi><mi>c</mi><mi>e</mi><mo stretchy="false">(</mo><mfrac><mn>1</mn><mn>2</mn></mfrac><mo>+</mo><mfrac><mn>1</mn><mi>e</mi></mfrac><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">M_{dense} = r \times c \times e \\
+M_{sparse} = M_{specified} + M_{metadata} = r \times \frac{c}{2} \times e + r \times \frac{c}{2} \times 2 = \frac{rce}{2} + rc =rce(\frac{1}{2} +\frac{1}{e})
+
+</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.8333em;vertical-align:-0.15em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.10903em;">M</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:-0.109em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">d</span><span class="mord mathnormal mtight">e</span><span class="mord mathnormal mtight">n</span><span class="mord mathnormal mtight">se</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.6667em;vertical-align:-0.0833em;"></span><span class="mord mathnormal" style="margin-right:0.02778em;">r</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.6667em;vertical-align:-0.0833em;"></span><span class="mord mathnormal">c</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.4306em;"></span><span class="mord mathnormal">e</span></span><span class="mspace newline"></span><span class="base"><span class="strut" style="height:0.9694em;vertical-align:-0.2861em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.10903em;">M</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.1514em;"><span style="top:-2.55em;margin-left:-0.109em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">s</span><span class="mord mathnormal mtight">p</span><span class="mord mathnormal mtight">a</span><span class="mord mathnormal mtight">rse</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.9694em;vertical-align:-0.2861em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.10903em;">M</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:-0.109em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">s</span><span class="mord mathnormal mtight">p</span><span class="mord mathnormal mtight">ec</span><span class="mord mathnormal mtight">i</span><span class="mord mathnormal mtight" style="margin-right:0.10764em;">f</span><span class="mord mathnormal mtight">i</span><span class="mord mathnormal mtight">e</span><span class="mord mathnormal mtight">d</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.8333em;vertical-align:-0.15em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.10903em;">M</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:-0.109em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">m</span><span class="mord mathnormal mtight">e</span><span class="mord mathnormal mtight">t</span><span class="mord mathnormal mtight">a</span><span class="mord mathnormal mtight">d</span><span class="mord mathnormal mtight">a</span><span class="mord mathnormal mtight">t</span><span class="mord mathnormal mtight">a</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.6667em;vertical-align:-0.0833em;"></span><span class="mord mathnormal" style="margin-right:0.02778em;">r</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:1.7936em;vertical-align:-0.686em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.1076em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">2</span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord mathnormal">c</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.686em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.6667em;vertical-align:-0.0833em;"></span><span class="mord mathnormal">e</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.6667em;vertical-align:-0.0833em;"></span><span class="mord mathnormal" style="margin-right:0.02778em;">r</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:1.7936em;vertical-align:-0.686em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.1076em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">2</span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord mathnormal">c</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.686em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.6444em;"></span><span class="mord">2</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:1.7936em;vertical-align:-0.686em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.1076em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">2</span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord mathnormal">rce</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.686em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.4306em;"></span><span class="mord mathnormal">rc</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:2.0074em;vertical-align:-0.686em;"></span><span class="mord mathnormal">rce</span><span class="mopen">(</span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.3214em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">2</span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">1</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.686em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:2.0074em;vertical-align:-0.686em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.3214em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord mathnormal">e</span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">1</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.686em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span><span class="mclose">)</span></span></span></span></span></div><p>Using these calculations, we can determine the total memory footprint for both the original dense and the new sparse representation.</p>
+<p>This gives us a simple formula for the compression ratio, which is dependent only on the bitwidth of the tensor datatype.</p>
+<div class="math">
+<span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mi>C</mi><mo>=</mo><mfrac><msub><mi>M</mi><mrow><mi>s</mi><mi>p</mi><mi>a</mi><mi>r</mi><mi>s</mi><mi>e</mi></mrow></msub><msub><mi>M</mi><mrow><mi>d</mi><mi>e</mi><mi>n</mi><mi>s</mi><mi>e</mi></mrow></msub></mfrac><mo>=</mo><mfrac><mn>1</mn><mn>2</mn></mfrac><mo>+</mo><mfrac><mn>1</mn><mi>e</mi></mfrac></mrow><annotation encoding="application/x-tex">C = \frac{M_{sparse}}{M_{dense}} =  \frac{1}{2} + \frac{1}{e}
+
+</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.07153em;">C</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:2.1963em;vertical-align:-0.836em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.3603em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord"><span class="mord mathnormal" style="margin-right:0.10903em;">M</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:-0.109em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">d</span><span class="mord mathnormal mtight">e</span><span class="mord mathnormal mtight">n</span><span class="mord mathnormal mtight">se</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord"><span class="mord mathnormal" style="margin-right:0.10903em;">M</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.1514em;"><span style="top:-2.55em;margin-left:-0.109em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">s</span><span class="mord mathnormal mtight">p</span><span class="mord mathnormal mtight">a</span><span class="mord mathnormal mtight">rse</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.836em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:2.0074em;vertical-align:-0.686em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.3214em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">2</span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">1</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.686em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:2.0074em;vertical-align:-0.686em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.3214em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord mathnormal">e</span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">1</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.686em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span></span></span></span></span></div><p>By using this formula, we find that the compression ratio is 56.25% for <code class="docutils literal notranslate"><span class="pre">torch.float16</span></code> and 62.5% for <code class="docutils literal notranslate"><span class="pre">torch.int8</span></code>.</p>
+<div class="section" id="constructing-sparse-semi-structured-tensors">
+<h3>Constructing Sparse Semi-Structured Tensors<a class="headerlink" href="#constructing-sparse-semi-structured-tensors" title="Permalink to this heading">¶</a></h3>
+<p>You can transform a dense tensor into a sparse semi-structured tensor by using the <code class="docutils literal notranslate"><span class="pre">torch.sparse.to_sparse_semi_structured</span></code> function.</p>
+<p>Please also note that we only support CUDA tensors since hardware compatibility for semi-structured sparsity is limited to NVIDIA GPUs.</p>
+<p>The following datatypes are supported for semi-structured sparsity. Note that each datatype has its own shape constraints and compression factor.</p>
+<table class="colwidths-given docutils colwidths-auto align-default">
+<colgroup>
+<col style="width: 19%" />
+<col style="width: 56%" />
+<col style="width: 13%" />
+<col style="width: 13%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>PyTorch dtype</p></th>
+<th class="head"><p>Shape Constraints</p></th>
+<th class="head"><p>Compression Factor</p></th>
+<th class="head"><p>Sparsity Pattern</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">torch.float16</span></code></p></td>
+<td><p>Tensor must be 2D and (r, c) must both be a positive multiple of 64</p></td>
+<td><p>9/16</p></td>
+<td><p>2:4</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">torch.int8</span></code></p></td>
+<td><p>Tensor must be 2D and (r, c) must both be a positive multiple of 128</p></td>
+<td><p>10/16</p></td>
+<td><p>2:4</p></td>
+</tr>
+</tbody>
+</table>
+<p>To construct a semi-structured sparse tensor, start by creating a regular dense tensor that adheres to a 2:4 (or semi-structured) sparse format.
+To do this we  tile a small 1x4 strip to create a 16x16 dense float16 tensor.
+Afterwards, we can call <code class="docutils literal notranslate"><span class="pre">to_sparse_semi_structured</span></code> on this matrix to compress it for accelerated inference.</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torch.sparse</span> <span class="kn">import</span> <span class="n">to_sparse_semi_structured</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">A</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">])</span><span class="o">.</span><span class="n">tile</span><span class="p">((</span><span class="mi">128</span><span class="p">,</span> <span class="mi">32</span><span class="p">))</span><span class="o">.</span><span class="n">half</span><span class="p">()</span><span class="o">.</span><span class="n">cuda</span><span class="p">()</span>
+<span class="go">tensor([[0., 0., 1.,  ..., 0., 1., 1.],</span>
+<span class="go">        [0., 0., 1.,  ..., 0., 1., 1.],</span>
+<span class="go">        [0., 0., 1.,  ..., 0., 1., 1.],</span>
+<span class="go">        ...,</span>
+<span class="go">        [0., 0., 1.,  ..., 0., 1., 1.],</span>
+<span class="go">        [0., 0., 1.,  ..., 0., 1., 1.],</span>
+<span class="go">        [0., 0., 1.,  ..., 0., 1., 1.]], device=&#39;cuda:0&#39;, dtype=torch.float16)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">A_sparse</span> <span class="o">=</span> <span class="n">to_sparse_semi_structured</span><span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="n">mask</span><span class="o">=</span><span class="n">A</span><span class="o">.</span><span class="n">bool</span><span class="p">())</span>
+<span class="go">SparseSemiStructuredTensor(shape=torch.Size([128, 128]), transposed=False, values=tensor([[1., 1., 1.,  ..., 1., 1., 1.],</span>
+<span class="go">        [1., 1., 1.,  ..., 1., 1., 1.],</span>
+<span class="go">        [1., 1., 1.,  ..., 1., 1., 1.],</span>
+<span class="go">        ...,</span>
+<span class="go">        [1., 1., 1.,  ..., 1., 1., 1.],</span>
+<span class="go">        [1., 1., 1.,  ..., 1., 1., 1.],</span>
+<span class="go">        [1., 1., 1.,  ..., 1., 1., 1.]], device=&#39;cuda:0&#39;, dtype=torch.float16), metadata=tensor([[-4370, -4370, -4370,  ..., -4370, -4370, -4370],</span>
+<span class="go">        [-4370, -4370, -4370,  ..., -4370, -4370, -4370],</span>
+<span class="go">        [-4370, -4370, -4370,  ..., -4370, -4370, -4370],</span>
+<span class="go">        ...,</span>
+<span class="go">        [-4370, -4370, -4370,  ..., -4370, -4370, -4370],</span>
+<span class="go">        [-4370, -4370, -4370,  ..., -4370, -4370, -4370],</span>
+<span class="go">        [-4370, -4370, -4370,  ..., -4370, -4370, -4370]], device=&#39;cuda:0&#39;,</span>
+<span class="go">dtype=torch.int16))</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="sparse-semi-structured-tensor-operations">
+<h3>Sparse Semi-Structured Tensor Operations<a class="headerlink" href="#sparse-semi-structured-tensor-operations" title="Permalink to this heading">¶</a></h3>
+<p>Currently, the following operations are supported for semi-structured sparse tensors:</p>
+<ul class="simple">
+<li><p>torch.addmm(bias, dense, sparse.t())</p></li>
+<li><p>torch.mm(dense, sparse)</p></li>
+<li><p>torch.mm(sparse, dense)</p></li>
+<li><p>aten.linear.default(dense, sparse, bias)</p></li>
+<li><p>aten.t.default(sparse)</p></li>
+<li><p>aten.t.detach(sparse)</p></li>
+</ul>
+<p>To use these ops, simply pass the output of <code class="docutils literal notranslate"><span class="pre">to_sparse_semi_structured(tensor)</span></code>  instead of using <code class="docutils literal notranslate"><span class="pre">tensor</span></code> once your tensor has 0s in a semi-structured sparse format, like this:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">a</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">])</span><span class="o">.</span><span class="n">tile</span><span class="p">((</span><span class="mi">64</span><span class="p">,</span> <span class="mi">16</span><span class="p">))</span><span class="o">.</span><span class="n">half</span><span class="p">()</span><span class="o">.</span><span class="n">cuda</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">b</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">rand</span><span class="p">(</span><span class="mi">64</span><span class="p">,</span> <span class="mi">64</span><span class="p">)</span><span class="o">.</span><span class="n">half</span><span class="p">()</span><span class="o">.</span><span class="n">cuda</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">c</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">mm</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">a_sparse</span> <span class="o">=</span> <span class="n">to_sparse_semi_structured</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">mask</span><span class="o">=</span><span class="n">a</span><span class="o">.</span><span class="n">bool</span><span class="p">())</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">torch</span><span class="o">.</span><span class="n">allclose</span><span class="p">(</span><span class="n">c</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">mm</span><span class="p">(</span><span class="n">a_sparse</span><span class="p">,</span> <span class="n">b</span><span class="p">))</span>
+<span class="go">True</span>
+</pre></div>
+</div>
+<p>Under the hood, SparseSemiStructuredTensor will call <code class="docutils literal notranslate"><span class="pre">torch._structured_sparse_linear</span></code> for accelerated inference using CUTLASS sparse kernels.</p>
+</div>
+<div class="section" id="accelerating-nn-linear-with-semi-structured-sparsity">
+<h3>Accelerating nn.Linear with semi-structured sparsity<a class="headerlink" href="#accelerating-nn-linear-with-semi-structured-sparsity" title="Permalink to this heading">¶</a></h3>
+<p>You can accelerate the linear layers in your model if the weights are already semi-structured sparse with just a few lines of code:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="nb">input</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">rand</span><span class="p">(</span><span class="mi">64</span><span class="p">,</span> <span class="mi">64</span><span class="p">)</span><span class="o">.</span><span class="n">half</span><span class="p">()</span><span class="o">.</span><span class="n">cuda</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">mask</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">])</span><span class="o">.</span><span class="n">tile</span><span class="p">((</span><span class="mi">64</span><span class="p">,</span> <span class="mi">16</span><span class="p">))</span><span class="o">.</span><span class="n">cuda</span><span class="p">()</span><span class="o">.</span><span class="n">bool</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">linear</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="mi">64</span><span class="p">,</span> <span class="mi">64</span><span class="p">)</span><span class="o">.</span><span class="n">half</span><span class="p">()</span><span class="o">.</span><span class="n">cuda</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">linear</span><span class="o">.</span><span class="n">weight</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Parameter</span><span class="p">(</span><span class="n">to_sparse_semi_structured</span><span class="p">(</span><span class="n">linear</span><span class="o">.</span><span class="n">weight</span><span class="p">,</span> <span class="n">mask</span><span class="o">=</span><span class="n">mask</span><span class="p">))</span>
+</pre></div>
+</div>
+</div>
 </div>
 <div class="section" id="sparse-coo-tensors">
 <span id="sparse-coo-docs"></span><h2>Sparse COO tensors<a class="headerlink" href="#sparse-coo-tensors" title="Permalink to this heading">¶</a></h2>
@@ -1423,9 +1563,25 @@ multiplication, and <code class="docutils literal notranslate"><span class="pre"
 <td><p>no</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">M[sparse_csr]</span> <span class="pre">&#64;</span> <span class="pre">M[strided]</span> <span class="pre">-&gt;</span> <span class="pre">M[strided]</span></code></p></td>
 </tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torch.matmul.html#torch.matmul" title="torch.matmul"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.matmul()</span></code></a></p></td>
+<td><p>no</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">M[SparseSemiStructured]</span> <span class="pre">&#64;</span> <span class="pre">M[strided]</span> <span class="pre">-&gt;</span> <span class="pre">M[strided]</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torch.matmul.html#torch.matmul" title="torch.matmul"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.matmul()</span></code></a></p></td>
+<td><p>no</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">M[strided]</span> <span class="pre">&#64;</span> <span class="pre">M[SparseSemiStructured]</span> <span class="pre">-&gt;</span> <span class="pre">M[strided]</span></code></p></td>
+</tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/torch.mm.html#torch.mm" title="torch.mm"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.mm()</span></code></a></p></td>
 <td><p>no</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">M[sparse_coo]</span> <span class="pre">&#64;</span> <span class="pre">M[strided]</span> <span class="pre">-&gt;</span> <span class="pre">M[strided]</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torch.mm.html#torch.mm" title="torch.mm"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.mm()</span></code></a></p></td>
+<td><p>no</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">M[SparseSemiStructured]</span> <span class="pre">&#64;</span> <span class="pre">M[strided]</span> <span class="pre">-&gt;</span> <span class="pre">M[strided]</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torch.mm.html#torch.mm" title="torch.mm"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.mm()</span></code></a></p></td>
+<td><p>no</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">M[strided]</span> <span class="pre">&#64;</span> <span class="pre">M[SparseSemiStructured]</span> <span class="pre">-&gt;</span> <span class="pre">M[strided]</span></code></p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/torch.sparse.mm.html#torch.sparse.mm" title="torch.sparse.mm"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.sparse.mm()</span></code></a></p></td>
 <td><p>yes</p></td>
@@ -1446,6 +1602,14 @@ multiplication, and <code class="docutils literal notranslate"><span class="pre"
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/torch.addmm.html#torch.addmm" title="torch.addmm"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.addmm()</span></code></a></p></td>
 <td><p>no</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">f</span> <span class="pre">*</span> <span class="pre">M[strided]</span> <span class="pre">+</span> <span class="pre">f</span> <span class="pre">*</span> <span class="pre">(M[sparse_coo]</span> <span class="pre">&#64;</span> <span class="pre">M[strided])</span> <span class="pre">-&gt;</span> <span class="pre">M[strided]</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torch.addmm.html#torch.addmm" title="torch.addmm"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.addmm()</span></code></a></p></td>
+<td><p>no</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">f</span> <span class="pre">*</span> <span class="pre">M[strided]</span> <span class="pre">+</span> <span class="pre">f</span> <span class="pre">*</span> <span class="pre">(M[SparseSemiStructured]</span> <span class="pre">&#64;</span> <span class="pre">M[strided])</span> <span class="pre">-&gt;</span> <span class="pre">M[strided]</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torch.addmm.html#torch.addmm" title="torch.addmm"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.addmm()</span></code></a></p></td>
+<td><p>no</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">f</span> <span class="pre">*</span> <span class="pre">M[strided]</span> <span class="pre">+</span> <span class="pre">f</span> <span class="pre">*</span> <span class="pre">(M[strided]</span> <span class="pre">&#64;</span> <span class="pre">M[SparseSemiStructured])</span> <span class="pre">-&gt;</span> <span class="pre">M[strided]</span></code></p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/torch.sparse.addmm.html#torch.sparse.addmm" title="torch.sparse.addmm"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.sparse.addmm()</span></code></a></p></td>
 <td><p>yes</p></td>
@@ -1809,6 +1973,12 @@ if (url)
 <li><a class="reference internal" href="#why-and-when-to-use-sparsity">Why and when to use sparsity</a></li>
 <li><a class="reference internal" href="#functionality-overview">Functionality overview</a></li>
 <li><a class="reference internal" href="#operator-overview">Operator overview</a></li>
+<li><a class="reference internal" href="#sparse-semi-structured-tensors">Sparse Semi-Structured Tensors</a><ul>
+<li><a class="reference internal" href="#constructing-sparse-semi-structured-tensors">Constructing Sparse Semi-Structured Tensors</a></li>
+<li><a class="reference internal" href="#sparse-semi-structured-tensor-operations">Sparse Semi-Structured Tensor Operations</a></li>
+<li><a class="reference internal" href="#accelerating-nn-linear-with-semi-structured-sparsity">Accelerating nn.Linear with semi-structured sparsity</a></li>
+</ul>
+</li>
 <li><a class="reference internal" href="#sparse-coo-tensors">Sparse COO tensors</a><ul>
 <li><a class="reference internal" href="#construction">Construction</a></li>
 <li><a class="reference internal" href="#sparse-hybrid-coo-tensors">Sparse hybrid COO tensors</a></li>
