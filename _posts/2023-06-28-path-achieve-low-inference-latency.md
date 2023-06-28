@@ -1,6 +1,6 @@
 ---
 layout: blog_detail
-title: "The Path to Achieve Ultra-Low Inference Latency With LLaMA 65B"
+title: "The Path to Achieve Ultra-Low Inference Latency With LLaMA 65B on PyTorch/XLA"
 author: Milad Mohammadi, Jiewen Tan, Liyang Lu, Siyuan Liu, Yeounoh Chung,  Wonjoo Lee, Manfei Bai, Steven Krawczyk, Shauheen Zahirazami, Alex Wertheim, Meghan Cowan, Jack Cao,  Joe Spisak
 ---
 
@@ -317,7 +317,7 @@ PyTorch/XLA:GPU performance is better than PyTorch:GPU eager and similar to PyTo
 <small style="line-height: 1.1"><em>**Figure 2**: LLaMA Inference Performance on GPU A100 hardware</em></small>
 
 
-As the batch size increases, we observe a sublinear increase in per-roken latency highlighting the tradeoff between hardware utilization and latency.
+As the batch size increases, we observe a sublinear increase in per-token latency highlighting the tradeoff between hardware utilization and latency.
 
 ![Figure 3: LLaMA Inference Performance across different batch sizes](/assets/images/low-latency/im3.svg){:style="max-height:800px; width:100%"}
 
