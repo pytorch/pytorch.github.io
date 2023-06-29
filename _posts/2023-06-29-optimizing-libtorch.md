@@ -57,8 +57,7 @@ To test if LibTorch’s parallel default implementation settings had a counter e
 
 <small style="line-height: 1.1"><em>**Figure 3**: CPU Utilization for different number of engine threads</em></small>
 
-
-![Figure 4: Processing times for different number of engine threads](/assets/images/optimizing-libtorch/im4.jpg){:style="max-height:800px; width:100%"}
+![Figure 4: Processing times for different number of engine threads](/assets/images/optimizing-libtorch/im4.jpg){:style="max-height:800px; width:100%; margin-top: 4rem;"}
 
 <small style="line-height: 1.1"><em>**Figure 4**: Processing times for different number of engine threads</em></small>
 
@@ -71,9 +70,10 @@ Using too many threads with a global thread pool led to performance degradation 
 
 Disabling the LibTorch global thread pool is as simple as setting the intra-op/inter-op parallelism threads to 1, as shown here:
 
-at::set_num_threads(1)           // Disables the intraop thread pool. \
-at::set_num_interop_threads(1). // Disables the interop thread pool. \
-
+```
+at::set_num_threads(1)           // Disables the intraop thread pool.
+at::set_num_interop_threads(1). // Disables the interop thread pool.
+```
 
 As shown in Figure 4, the lowest processing time was measured when the LibTorch global thread pool was disabled.
 
