@@ -4,7 +4,7 @@
   <generator uri="https://jekyllrb.com/" version="3.9.0">Jekyll</generator>
   <link href="https://pytorch.org/feed.xml" rel="self" type="application/atom+xml" />
   <link href="https://pytorch.org/" rel="alternate" type="text/html" />
-  <updated>2023-06-28T18:05:44-07:00</updated>
+  <updated>2023-06-29T08:41:19-07:00</updated>
   <id>https://pytorch.org/feed.xml</id>
 
   
@@ -29,6 +29,115 @@
 
   
   
+  
+    <entry>
+      <title type="html">Optimizing LibTorch-based inference engine memory usage and thread-pooling</title>
+      <link href="https://pytorch.org/blog/optimizing-libtorch/" rel="alternate" type="text/html" title="Optimizing LibTorch-based inference engine memory usage and thread-pooling" />
+      <published>2023-06-29T00:00:00-07:00</published>
+      <updated>2023-06-29T00:00:00-07:00</updated>
+      <id>https://pytorch.org/blog/optimizing-libtorch</id>
+      <content type="html" xml:base="https://pytorch.org/blog/optimizing-libtorch/">&lt;h2 id=&quot;outline&quot;&gt;Outline&lt;/h2&gt;
+
+&lt;p&gt;In this blog post we show how to optimize LibTorch-based inference engine to maximize throughput by reducing memory usage and optimizing the thread-pooling strategy. We apply these optimizations to Pattern Recognition engines for audio data, for example, music and speech recognition or acoustic fingerprinting. The optimizations discussed in this blog post allow for memory usage reduction by 50% and reduction in end-to-end latency for Inference by 37.5%. These optimizations are applicable to computer vision and natural language processing.&lt;/p&gt;
+
+&lt;h2 id=&quot;audio-recognition-inferencing&quot;&gt;Audio Recognition Inferencing&lt;/h2&gt;
+
+&lt;p&gt;Audio Recognition (AR) engines can be used to recognize and identify sound patterns. As an example, identifying the type and species of a bird from audio recordings, distinguishing music from the singer’s voice, or detecting an abnormal sound indicating a breach in a building. To identify sounds of interest, AR engines process audio through 4 stages:&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;&lt;strong&gt;File Validation&lt;/strong&gt;: The AR engine validates the input audio file.&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;Feature Extraction&lt;/strong&gt;: Features are extracted from each segment within the audio file.&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;Inference&lt;/strong&gt;: LibTorch performs inference using CPUs or accelerators. In our case Intel processors on an Elastic Cloud Compute (EC2) instance.&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;Post-processing&lt;/strong&gt;: A post-processing model decodes the results and calculates scores that are used to convert inference output into tags or transcripts.&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;Of these 4 steps, inference is the most computationally intensive and can take up to 50% of the pipeline processing time depending on the model complexity. This means that any optimization at this stage has a significant impact on the overall pipeline. &lt;/p&gt;
+
+&lt;h2 id=&quot;optimizing-the-audio-recognition-engine-with-concurrencyis-not-so-simple&quot;&gt;Optimizing the Audio Recognition engine with concurrency…is not so simple&lt;/h2&gt;
+
+&lt;p&gt;Our objective for this processing pipeline is to extract audio segments into tags or transcripts through a processing. The input data is an audio file composed of several short sound segments (S1 to S6 in Figure 1). The output data corresponds to tags or transcripts ordered by timestamps.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/optimizing-libtorch/im1.jpg&quot; alt=&quot;Figure 1: Example audio file with segment boundaries&quot; style=&quot;max-height:800px; width:100%&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;small style=&quot;line-height: 1.1&quot;&gt;&lt;em&gt;&lt;strong&gt;Figure 1&lt;/strong&gt;: Example audio file with segment boundaries&lt;/em&gt;&lt;/small&gt;&lt;/p&gt;
+
+&lt;p&gt;Each segment can be processed independently and in an out-of-order fashion. This offers the opportunity to process segments concurrently and in parallel to optimize the overall inference throughput as well as maximize the usage of the resources.&lt;/p&gt;
+
+&lt;p&gt;Parallelization on an instance can be achieved through multi-threading (pThreads, std::threads, OpenMP) or multi-processing. The advantage of multi-threading over multi-processing is the ability to use shared memory. It enables developers to minimize data duplication across threads by sharing data across threads; the AR models in our case (&lt;em&gt;Figure 2&lt;/em&gt;). Furthermore, a reduction in memory allows us to run more pipelines in parallel by increasing the number of engine threads in order to utilize all vCPUs on our Amazon EC2 instance (&lt;a href=&quot;https://aws.amazon.com/ec2/instance-types/c5/&quot;&gt;c5.4xlarge&lt;/a&gt; in our case, it offers 16 vCPUs). In theory, we expect to see higher hardware utilization and higher throughput for our AR engine as a result.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/optimizing-libtorch/im2.jpg&quot; alt=&quot;Figure 2: Multi-threaded AR Engine&quot; style=&quot;max-height:800px; width:100%&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;small style=&quot;line-height: 1.1&quot;&gt;&lt;em&gt;&lt;strong&gt;Figure 2&lt;/strong&gt;: Multi-threaded AR Engine&lt;/em&gt;&lt;/small&gt;&lt;/p&gt;
+
+&lt;p&gt;But we found these assumptions to be wrong. Indeed, we found that increasing the number of threads of the application led to an increase of the end-to-end latency for each audio segment and to a decrease of the engine throughput. For example, increasing the concurrency from 1 to 5 threads led to an increase of the latency by 4x which had a proportional effect on decreasing the throughput. In fact, metrics showed that within the pipeline, the latency of the inference stage alone was 3x higher than it’s single thread baseline. &lt;/p&gt;
+
+&lt;p&gt;Using a profiler, we found that the CPU &lt;a href=&quot;https://www.intel.com/content/www/us/en/develop/documentation/vtune-help/top/reference/cpu-metrics-reference.html#cpu-metrics-reference_SPIN-AND-OVERHEAD-TIME&quot;&gt;Spin Time&lt;/a&gt; increased, potentially due to CPU oversubscription which impacts system and application performance. Given our control over the application’s multi-thread implementation, we chose to dive deeper into the stack and identify potential conflicts with LibTorch’s default settings.&lt;/p&gt;
+
+&lt;h3 id=&quot;diving-deeper-on-libtorchs-multi-threading-and-its-impact-on-concurrency&quot;&gt;Diving deeper on LibTorch’s multi-threading and its impact on concurrency&lt;/h3&gt;
+
+&lt;p&gt;LibTorch’s parallel implementations on CPU for inference are based on  &lt;a href=&quot;https://pytorch.org/docs/stable/notes/cpu_threading_torchscript_inference.html#cpu-threading-and-torchscript-inference&quot;&gt;global thread pools&lt;/a&gt;. Examples of implementations are Inter-op and intra-op parallelism, which can be chosen depending on the model’s properties. In both cases, it is possible to set &lt;a href=&quot;https://pytorch.org/docs/stable/notes/cpu_threading_torchscript_inference.html#tuning-the-number-of-threads&quot;&gt;the number of threads&lt;/a&gt; in each thread-poll to optimize the latency and throughput. &lt;/p&gt;
+
+&lt;p&gt;To test if LibTorch’s parallel default implementation settings had a counter effect on our inference latency, we ran an experiment on a 16 vCPus machine with a 35-minute audio file, keeping the LibTorch inter-threads constant at 1 (because our models didn’t utilize the inter-op thread pool). We collected the following data as shown in Figure 3 and 4. &lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/optimizing-libtorch/im3.jpg&quot; alt=&quot;Figure 3: CPU Utilization for different number of engine threads&quot; style=&quot;max-height:800px; width:100%&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;small style=&quot;line-height: 1.1&quot;&gt;&lt;em&gt;&lt;strong&gt;Figure 3&lt;/strong&gt;: CPU Utilization for different number of engine threads&lt;/em&gt;&lt;/small&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/optimizing-libtorch/im4.jpg&quot; alt=&quot;Figure 4: Processing times for different number of engine threads&quot; style=&quot;max-height:800px; width:100%; margin-top: 4rem;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;small style=&quot;line-height: 1.1&quot;&gt;&lt;em&gt;&lt;strong&gt;Figure 4&lt;/strong&gt;: Processing times for different number of engine threads&lt;/em&gt;&lt;/small&gt;&lt;/p&gt;
+
+&lt;p&gt;Execution time in Figure 4 is the end-to-end processing time for processing all the segments of the given audio file. We have 4 different configurations of LibTorch intra-threads which are 1, 4, 8, 16 and we change the number of engine threads from 1 to 16 for each intra-thread LibTorch configuration. As we see in Figure 3, CPU utilization increases with an increase in the number of engine threads for all LibTorch intra-thread configurations. But as we see in Figure 4, an increase in CPU utilization doesn’t translate into lower execution time. We found out that in all but one case, as the number of engine threads shot up, so did execution time. The one exception was the case where the intra-thread pool size was 1.&lt;/p&gt;
+
+&lt;h3 id=&quot;resolving-the-global-thread-pool-issue&quot;&gt;Resolving the global thread pool issue&lt;/h3&gt;
+
+&lt;p&gt;Using too many threads with a global thread pool led to performance degradation and caused an over-subscription problem. Without disabling&lt;a href=&quot;https://pytorch.org/docs/stable/notes/cpu_threading_torchscript_inference.html&quot;&gt; LibTorch global thread pools&lt;/a&gt;, it was difficult to match the performance of the multi-process engine.&lt;/p&gt;
+
+&lt;p&gt;Disabling the LibTorch global thread pool is as simple as setting the intra-op/inter-op parallelism threads to 1, as shown here:&lt;/p&gt;
+
+&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;at::set_num_threads(1)           // Disables the intraop thread pool.
+at::set_num_interop_threads(1). // Disables the interop thread pool.
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;As shown in Figure 4, the lowest processing time was measured when the LibTorch global thread pool was disabled.&lt;/p&gt;
+
+&lt;p&gt;This solution improved AR engine throughput in several cases. However, when evaluating long datasets (audio files longer than 2 hours in load test), we found that the memory footprint of the engine gradually started to increase.&lt;/p&gt;
+
+&lt;h3 id=&quot;optimizing-memory-usage&quot;&gt;Optimizing memory usage&lt;/h3&gt;
+
+&lt;p&gt;We ran a load-test on the system with two hours long audio files and found out that the observed memory increase was the result of memory fragmentation within a multi-threaded LibTorch inference. We resolved this using&lt;a href=&quot;https://github.com/jemalloc/jemalloc&quot;&gt; jemalloc&lt;/a&gt;, which is a general purpose malloc(3) implementation that emphasizes fragmentation avoidance and scalable concurrency support. &lt;a href=&quot;https://pytorch.org/tutorials/recipes/recipes/tuning_guide.html#switch-memory-allocator&quot;&gt;Using jemalloc&lt;/a&gt;, our peak memory usage decreased by an average of 34% and average memory usage decreased by 53%.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/optimizing-libtorch/im5.jpg&quot; alt=&quot;Figure 5: Memory usage over time using the same input file with and without jemalloc&quot; style=&quot;max-height:800px; width:100%&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;small style=&quot;line-height: 1.1&quot;&gt;&lt;em&gt;&lt;strong&gt;Figure 5&lt;/strong&gt;: Memory usage over time using the same input file with and without jemalloc&lt;/em&gt;&lt;/small&gt;&lt;/p&gt;
+
+&lt;h2 id=&quot;summary&quot;&gt;Summary&lt;/h2&gt;
+
+&lt;p&gt;To optimize the performance of multi-threaded LibTorch-based inference engines, we recommend verifying that there is no oversubscription problem in LibTorch. In our case, all threads in the multi-threaded engine were sharing the LibTorch global thread pool, which caused an oversubscription problem. This was remedied by disabling the global thread pool: we disabled the interop and intraop global thread pool by setting threads to 1. To optimize the memory of a multi-threaded engine, we recommend using Jemalloc as a memory allocator tool rather than the default malloc function.&lt;/p&gt;</content>
+
+      
+      
+      
+      
+      
+
+      <author>
+          <name>Himalay Mohanlal Joriwal, Pierre-Yves Aquilanti, Vivek Govindan, Hamid Shojanazeri, Ankith Gunapal, Tristan Rice</name>
+        
+        
+      </author>
+
+      
+
+      
+
+      
+        <summary type="html">Outline</summary>
+      
+
+      
+      
+    </entry>
   
     <entry>
       <title type="html">The Path to Achieve Ultra-Low Inference Latency With LLaMA 65B on PyTorch/XLA</title>
@@ -1541,155 +1650,6 @@ model = ipex.optimize(model, dtype = torch.bfloat16)
 
       
         <summary type="html">Using Intel® Extension for PyTorch to Boost Image Processing Performance</summary>
-      
-
-      
-      
-    </entry>
-  
-    <entry>
-      <title type="html">Introducing Hidet: A Deep Learning Compiler for Efficient Model Serving</title>
-      <link href="https://pytorch.org/blog/introducing-hidet/" rel="alternate" type="text/html" title="Introducing Hidet: A Deep Learning Compiler for Efficient Model Serving" />
-      <published>2023-04-27T00:00:00-07:00</published>
-      <updated>2023-04-27T00:00:00-07:00</updated>
-      <id>https://pytorch.org/blog/introducing-hidet</id>
-      <content type="html" xml:base="https://pytorch.org/blog/introducing-hidet/">&lt;p&gt;&lt;a href=&quot;https://github.com/hidet-org/hidet&quot;&gt;Hidet&lt;/a&gt; is a powerful deep learning compiler that simplifies the process of implementing high-performing deep learning operators on modern accelerators (e.g., NVIDIA GPUs). With the new feature of &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;torch.compile(...)&lt;/code&gt; in PyTorch 2.0, integrating a novel compiler into PyTorch is easier than ever - Hidet now can be used as a &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;torch.compile(...)&lt;/code&gt; backend to accelerate PyTorch models, making it an attractive option for PyTorch users who want to improve the inference performance of their models, especially for those who also need to implement extremely optimized custom operators.&lt;/p&gt;
-
-&lt;h2 id=&quot;using-hidet-to-compile-a-pytorch-model&quot;&gt;Using Hidet to Compile A PyTorch Model&lt;/h2&gt;
-
-&lt;p&gt;To use Hidet in PyTorch, you need to first install the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;hidet&lt;/code&gt; package via pip:&lt;/p&gt;
-
-&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;pip install hidet
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;Hidet is integrated with PyTorch as a &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;torch.compile(...)&lt;/code&gt; backend following the &lt;a href=&quot;https://pytorch.org/docs/stable/dynamo/custom-backends.html&quot;&gt;Custom Backends tutorial&lt;/a&gt;. You can specify &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;hidet&lt;/code&gt; as the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;backend&lt;/code&gt; when you compile a model. (Note: requires PyTorch version 2.0+):&lt;/p&gt;
-
-&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;torch.compile(..., backend='hidet')
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;Hidet converts the given PyTorch model in the torch.fx.Graph format into its internal graph representation, and conducts a series of optimizations. Hidet provides a few options to configure the optimizations. For example, we can use &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;hidet.torch.dynamo_config.use_tensor_core(True)&lt;/code&gt; to allow Hidet to generate CUDA kernels that leverage the &lt;a href=&quot;https://www.nvidia.com/en-us/data-center/tensor-cores/&quot;&gt;Tensor Cores on NVIDIA GPUs&lt;/a&gt;, and use &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;hidet.torch.dynamo_config.search_space(2)&lt;/code&gt; to allow Hidet to search for the best operator schedule specific for your hardware and input sizes. More configurations can be found in &lt;a href=&quot;https://docs.hidet.org/stable/gallery/tutorials/optimize-pytorch-model.html&quot;&gt;Hidet’s documentation&lt;/a&gt;.&lt;/p&gt;
-
-&lt;p&gt;Here’s a complete example of how to use Hidet to compile and optimize a pre-trained ResNet50 model from &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;torchvision&lt;/code&gt;:&lt;/p&gt;
-
-&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;import hidet
-import torch
-
-# Load a pre-trained ResNet50 model
-x = torch.randn(1, 3, 224, 224, device='cuda').half()
-model = torch.hub.load(
-    'pytorch/vision:v0.6.0', 'resnet50', pretrained=True
-).cuda().half().eval()
-
-# Configure hidet to use tensor core and enable tuning
-hidet.torch.dynamo_config.use_tensor_core(True)
-hidet.torch.dynamo_config.search_space(2) 
-
-# Compile the model using Hidet
-model_opt = torch.compile(model, backend='hidet')
-
-# Check correctness
-torch.testing.assert_close(actual=model_opt(x), expected=model(x), rtol=1e-2, atol=1e-2)
-
-# Benchmark
-from hidet.utils import benchmark_func
-print('eager: {:2f}'.format(benchmark_func(lambda: model(x))))
-print('hidet: {:2f}'.format(benchmark_func(lambda: model_opt(x))))
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;We encourage you to try out the above script on your own NVIDIA GPU(s)! If you run this script on an &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;aws.g5.2xlarge&lt;/code&gt; instance, you would get the result shown in the following figure. Hidet achieves the speedup because it could automatically fuse multiple operators, tune operator schedules, and use CUDA Graph to reduce framework-level overhead. More results can be found in the &lt;a href=&quot;https://dl.acm.org/doi/10.1145/3575693.3575702&quot;&gt;ASPLOS’23 publication of Hidet&lt;/a&gt; and our &lt;a href=&quot;https://github.com/hidet-org/hidet/issues/154&quot;&gt;performance tracking&lt;/a&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/2023-4-27-hidet.png&quot; alt=&quot;Eager vs Hidet latency&quot; style=&quot;max-height:800px; width:100%&quot; /&gt;&lt;/p&gt;
-
-&lt;h2 id=&quot;using-hidet-script-to-write-custom-operators&quot;&gt;Using Hidet Script to Write Custom Operators&lt;/h2&gt;
-
-&lt;p&gt;Hidet Script is one approach to implement tensor operators in Python. The following example shows how to implement a naive matrix multiplication using Hidet Script and integrate it as a PyTorch operator.&lt;/p&gt;
-
-&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;import torch
-import hidet
-
-
-def matmul(m_size, n_size, k_size):
-    from hidet.lang import f32, attr
-    from hidet.lang.cuda import threadIdx, blockIdx, blockDim
-
-    with hidet.script_module() as script_module:
-        @hidet.script
-        def matmul(
-            a: f32[m_size, k_size],
-            b: f32[k_size, n_size],
-            c: f32[m_size, n_size]
-        ):
-            attr.cuda_grid_dim = ((m_size + 31) // 32, (n_size + 31) // 32)
-            attr.cuda_block_dim = (32, 32)
-            i = threadIdx.x + blockIdx.x * blockDim.x
-            j = threadIdx.y + blockIdx.y * blockDim.y
-            if i &amp;lt; m_size and j &amp;lt; n_size:
-                c[i, j] = 0.0
-                for k in range(k_size):
-                    c[i, j] += a[i, k] * b[k, j]
-
-    ir_module = script_module.ir_module()
-    func = hidet.driver.build_ir_module(ir_module)
-    return func
-
-
-class NaiveMatmul(torch.autograd.Function):
-    @staticmethod
-    def forward(ctx, a, b):
-        m, k = a.shape
-        k, n = b.shape
-        c = torch.empty([m, n], dtype=a.dtype, device=a.device)
-        func = matmul(m, n, k)
-        func(a, b, c)
-        return c
-
-
-a = torch.randn([3, 4], device='cuda')
-b = torch.randn([4, 5], device='cuda')
-c = NaiveMatmul.apply(a, b)
-cc = torch.matmul(a, b)
-torch.testing.assert_close(c, cc)
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;More optimizations can be applied, see the &lt;a href=&quot;https://docs.hidet.org/stable/gallery/developer-guides/hidet-script-dynamic-kernel.html&quot;&gt;example&lt;/a&gt; in our documentation to learn more.&lt;/p&gt;
-
-&lt;p&gt;&lt;strong&gt;Hidet Script vs. Triton&lt;/strong&gt;: Triton greatly simplifies the CUDA programming by introducing the tile-based programming model where the parallel execution unit is thread blocks instead of threads. However, this simplification also prevents the tensor program developers from manipulating the fine-grained computation and memory resources (e.g., warps, shared memory) in their preferred ways. It would be challenging to implement an optimization that requires fine-grained control of these resources using Triton if it has not been implemented by the Triton compiler itself. Hidet Script, on the other hand, simplifies tensor programming while still enabling users to implement their own optimizations with extensive flexibility. It’s worth noting that the more granular control of Hidet Script also brings added complexity compared to Triton.&lt;/p&gt;
-
-&lt;h2 id=&quot;more-about-hidet&quot;&gt;More about Hidet&lt;/h2&gt;
-
-&lt;p&gt;Hidet originates from a research project led by the &lt;a href=&quot;https://www.cs.toronto.edu/ecosystem/&quot;&gt;EcoSystem lab&lt;/a&gt; at the University of Toronto (UofT) and AWS. The authors propose a new way, named the task-mapping programming paradigm, to construct tensor programs. It aims to simplify the tensor programming without sacrificing any optimization opportunity. Now, Hidet is an open-source project, jointly supported by &lt;a href=&quot;https://centml.ai/&quot;&gt;CentML&lt;/a&gt; and the EcoSystem lab, that aims to provide an efficient solution to end-to-end inference on modern accelerators (e.g., NVIDIA GPUs).&lt;/p&gt;
-
-&lt;h3 id=&quot;additional-resources&quot;&gt;Additional Resources&lt;/h3&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;GitHub Repository: &lt;a href=&quot;https://github.com/hidet-org/hidet&quot;&gt;https://github.com/hidet-org/hidet&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;Hidet’s Documentation: &lt;a href=&quot;https://docs.hidet.org&quot;&gt;https://docs.hidet.org&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;ASPLOS ’23 Publication: &lt;a href=&quot;https://dl.acm.org/doi/10.1145/3575693.3575702&quot;&gt;https://dl.acm.org/doi/10.1145/3575693.3575702&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;ASPLOS ’23 Tutorial: &lt;a href=&quot;https://centml.github.io/asplos23-tutorial/&quot;&gt;https://centml.github.io/asplos23-tutorial/&lt;/a&gt;&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;h2 id=&quot;acknowledgement&quot;&gt;Acknowledgement&lt;/h2&gt;
-
-&lt;p&gt;We would like to thank Jerry Park, Mark Saroufim, Jason Liang and Helen Suk for their valuable help on preparing the blog post and feedback on the text. We also would like to thank Nikita Shulga, Jason Ansel, and Dmytro Dzhulgakov for reviewing and improving our PR https://github.com/pytorch/pytorch/pull/93873 on the 3rd-party dynamo backend registration.&lt;/p&gt;</content>
-
-      
-      
-      
-      
-      
-
-      <author>
-          <name>Team Hidet</name>
-        
-        
-      </author>
-
-      
-
-      
-
-      
-        <summary type="html">Hidet is a powerful deep learning compiler that simplifies the process of implementing high-performing deep learning operators on modern accelerators (e.g., NVIDIA GPUs). With the new feature of torch.compile(...) in PyTorch 2.0, integrating a novel compiler into PyTorch is easier than ever - Hidet now can be used as a torch.compile(...) backend to accelerate PyTorch models, making it an attractive option for PyTorch users who want to improve the inference performance of their models, especially for those who also need to implement extremely optimized custom operators.</summary>
       
 
       
