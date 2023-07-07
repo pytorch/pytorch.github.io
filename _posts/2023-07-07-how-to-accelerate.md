@@ -20,7 +20,7 @@ Message passing refers to the process of nodes exchanging information with their
 3. **Scatter**: Aggregate to node-level information, e.g., via a particular reduce function such as sum, mean, or max.
 
 
-![Figure 1: The message passing paradigm](/assets/images/how-to-accelerate/f1-pyg-message-passing-paradigm.png){:style="max-height:620px; width:100%"}
+![Figure 1: The message passing paradigm](/assets/images/how-to-accelerate/f1-pyg-message-passing-paradigm.png){:style="max-width:620px; width:100%; display: block; margin-left: auto; margin-right: auto"}
 
 <small style="line-height: 1.1"><em>**Figure 1**: The message passing paradigm (Source: [Matthias Fey](http://github.com/rusty1s))</em></small>
 
@@ -38,7 +38,7 @@ Message passing performance is highly related to the storage format of the adjac
 The pattern of scatter-reduce is parallel in nature, which updates values of a **self** tensor using values from a **src** tensor at the entries specified by **index**. Ideally, parallelizing on the outer dimension would be most performant. However, direct parallelization leads to write conflicts, as different threads might try to update the same entry simultaneously.
 
 
-![Figure 2: Scatter-reduce and its optimization scheme](/assets/images/how-to-accelerate/f2-scatter-reduce-scheme.png){:style="max-height:620px; width:100%"}
+![Figure 2: Scatter-reduce and its optimization scheme](/assets/images/how-to-accelerate/f2-scatter-reduce-scheme.png){:style="max-width:620px; width:100%; display: block; margin-left: auto; margin-right: auto"}
 
 <small style="line-height: 1.1"><em>**Figure 2**: Scatter-reduce and its optimization scheme (Source: Mingfei Ma)</em></small>
 
@@ -59,7 +59,7 @@ Sparse matrix-matrix reduction is a fundamental operator in GNNs, where **A** is
 
 
 
-![Figure 3: SpMM optimization scheme](/assets/images/how-to-accelerate/f3-spmm-optimization-scheme.png){:style="max-height:620px; width:100%"}
+![Figure 3: SpMM optimization scheme](/assets/images/how-to-accelerate/f3-spmm-optimization-scheme.png){:style="max-width:620px; width:100%; display: block; margin-left: auto; margin-right: auto"}
 
 
 <small style="line-height: 1.1"><em>**Figure 3**: SpMM optimization scheme (Source: Mingfei Ma)</em></small>
@@ -183,7 +183,7 @@ The PyTorch2.0 flagship feature torch.compile is fully compatible with PyG 2.3 r
 
 
 
-![Figure 4: Performance Speedup with Torch Compile](/assets/images/how-to-accelerate/f4-torch-compile-performance-speedup.png){:style="max-height:620px; width:100%"}
+![Figure 4: Performance Speedup with Torch Compile](/assets/images/how-to-accelerate/f4-torch-compile-performance-speedup.png){:style="max-width:620px; width:100%; display: block; margin-left: auto; margin-right: auto"}
 
 <small style="line-height: 1.1"><em>**Figure 4**: Performance Speedup with Torch Compile</em></small>
 
