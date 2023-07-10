@@ -4,7 +4,7 @@
   <generator uri="https://jekyllrb.com/" version="3.9.0">Jekyll</generator>
   <link href="https://pytorch.org/feed.xml" rel="self" type="application/atom+xml" />
   <link href="https://pytorch.org/" rel="alternate" type="text/html" />
-  <updated>2023-07-09T17:58:00-07:00</updated>
+  <updated>2023-07-10T09:01:36-07:00</updated>
   <id>https://pytorch.org/feed.xml</id>
 
   
@@ -29,6 +29,235 @@
 
   
   
+  
+    <entry>
+      <title type="html">How to Accelerate PyTorch Geometric on Intel® CPUs</title>
+      <link href="https://pytorch.org/blog/how-to-accelerate/" rel="alternate" type="text/html" title="How to Accelerate PyTorch Geometric on Intel® CPUs" />
+      <published>2023-07-10T00:00:00-07:00</published>
+      <updated>2023-07-10T00:00:00-07:00</updated>
+      <id>https://pytorch.org/blog/how-to-accelerate</id>
+      <content type="html" xml:base="https://pytorch.org/blog/how-to-accelerate/">&lt;h2 id=&quot;overview&quot;&gt;Overview&lt;/h2&gt;
+
+&lt;p&gt;The Intel PyTorch team has been collaborating with the PyTorch Geometric (PyG) community to provide CPU performance optimizations for Graph Neural Network (GNN) and PyG workloads. In the PyTorch 2.0 release, several critical optimizations were introduced to improve GNN training and inference performance on CPU. Developers and researchers can now take advantage of &lt;a href=&quot;https://www.intel.com/content/www/us/en/developer/tools/frameworks/overview.html&quot;&gt;Intel’s AI/ML Framework optimizations&lt;/a&gt; for significantly faster model training and inference, which unlocks the ability for GNN workflows directly using PyG.&lt;/p&gt;
+
+&lt;p&gt;In this blog, we will perform a deep dive on how to optimize PyG performance for both training and inference while using the PyTorch 2.0 flagship torch.compile feature to speed up PyG models.&lt;/p&gt;
+
+&lt;h2 id=&quot;message-passing-paradigm&quot;&gt;Message Passing Paradigm&lt;/h2&gt;
+
+&lt;p&gt;Message passing refers to the process of nodes exchanging information with their respective neighbors by sending messages to one another. In PyG, the process of message passing can be generalized into three steps:&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;&lt;strong&gt;Gather&lt;/strong&gt;: Collect edge-level information of adjacent nodes and edges.&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;Apply&lt;/strong&gt;: Update the collected information with user-defined functions (UDFs).&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;Scatter&lt;/strong&gt;: Aggregate to node-level information, e.g., via a particular reduce function such as sum, mean, or max.&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/how-to-accelerate/f1-pyg-message-passing-paradigm.png&quot; alt=&quot;Figure 1: The message passing paradigm&quot; style=&quot;max-width:620px; width:100%; display: block; margin-left: auto; margin-right: auto&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;small style=&quot;line-height: 1.1&quot;&gt;&lt;em&gt;&lt;strong&gt;Figure 1&lt;/strong&gt;: The message passing paradigm (Source: &lt;a href=&quot;http://github.com/rusty1s&quot;&gt;Matthias Fey&lt;/a&gt;)&lt;/em&gt;&lt;/small&gt;&lt;/p&gt;
+
+&lt;p&gt;Message passing performance is highly related to the storage format of the adjacency matrix of the graph, which records how pairs of nodes are connected. Two methods for the storage format are:&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;strong&gt;Adjacency matrix in COO (Coordinate Format):&lt;/strong&gt; The graph data is physically stored in a two-dimensional tensor shape of &lt;strong&gt;[2, num_edges]&lt;/strong&gt;, which maps each connection of source and destination nodes. The performance hotspot is scatter-reduce.&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;Adjacency matrix in CSR (Compressed Sparse Row):&lt;/strong&gt; Similar format to COO, but compressed on the row indices. This format allows for more efficient row access and faster sparse matrix-matrix multiplication (SpMM). The performance hotspot is sparse matrix related reduction ops.&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h2 id=&quot;scatter-reduce&quot;&gt;Scatter-Reduce&lt;/h2&gt;
+
+&lt;p&gt;The pattern of scatter-reduce is parallel in nature, which updates values of a &lt;strong&gt;self&lt;/strong&gt; tensor using values from a &lt;strong&gt;src&lt;/strong&gt; tensor at the entries specified by &lt;strong&gt;index&lt;/strong&gt;. Ideally, parallelizing on the outer dimension would be most performant. However, direct parallelization leads to write conflicts, as different threads might try to update the same entry simultaneously.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/how-to-accelerate/f2-scatter-reduce-scheme.png&quot; alt=&quot;Figure 2: Scatter-reduce and its optimization scheme&quot; style=&quot;max-width:620px; width:100%; display: block; margin-left: auto; margin-right: auto&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;small style=&quot;line-height: 1.1&quot;&gt;&lt;em&gt;&lt;strong&gt;Figure 2&lt;/strong&gt;: Scatter-reduce and its optimization scheme (Source: Mingfei Ma)&lt;/em&gt;&lt;/small&gt;&lt;/p&gt;
+
+&lt;p&gt;To optimize this kernel, we use sorting followed by a reduction:&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;strong&gt;Sorting:&lt;/strong&gt; Sort the &lt;strong&gt;index&lt;/strong&gt; tensor in ascending order with parallel radix sort, such that indices pointing to the same entry in the &lt;strong&gt;self&lt;/strong&gt; tensor are managed in the same thread.&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;Reduction:&lt;/strong&gt; Paralleled on the outer dimension of &lt;strong&gt;self&lt;/strong&gt;, and do vectorized reduction for each indexed &lt;strong&gt;src&lt;/strong&gt; entry.&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;For its backward path during the training process (i.e., gather), sorting is not needed because its memory access pattern will not lead to any write conflicts.&lt;/p&gt;
+
+&lt;h2 id=&quot;spmm-reduce&quot;&gt;SpMM-Reduce&lt;/h2&gt;
+
+&lt;p&gt;Sparse matrix-matrix reduction is a fundamental operator in GNNs, where &lt;strong&gt;A&lt;/strong&gt; is sparse adjacency matrix in CSR format and &lt;strong&gt;B&lt;/strong&gt; is a dense feature matrix where the reduction type could be &lt;em&gt;sum&lt;/em&gt;, &lt;em&gt;mean&lt;/em&gt; or &lt;em&gt;max&lt;/em&gt;.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/how-to-accelerate/f3-spmm-optimization-scheme.png&quot; alt=&quot;Figure 3: SpMM optimization scheme&quot; style=&quot;max-width:620px; width:100%; display: block; margin-left: auto; margin-right: auto&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;small style=&quot;line-height: 1.1&quot;&gt;&lt;em&gt;&lt;strong&gt;Figure 3&lt;/strong&gt;: SpMM optimization scheme (Source: Mingfei Ma)&lt;/em&gt;&lt;/small&gt;&lt;/p&gt;
+
+&lt;p&gt;The biggest challenge when optimizing this kernel is how to balance thread payload when parallelizing along rows of the sparse matrix &lt;strong&gt;A&lt;/strong&gt;. Each row in &lt;strong&gt;A&lt;/strong&gt; corresponds to a node, and its number of connections may vary vastly from one to another; this results in thread payload imbalance. One technique to address such issues is to do payload scanning before thread partition. Aside from that, other techniques are also introduced to further exploit CPU performance such as vectorization and unrolling and blocking.&lt;/p&gt;
+
+&lt;p&gt;These optimizations are done via &lt;strong&gt;torch.sparse.mm&lt;/strong&gt; using the reduce flags of &lt;em&gt;amax&lt;/em&gt;, &lt;em&gt;amin&lt;/em&gt;, &lt;em&gt;mean&lt;/em&gt;, &lt;em&gt;sum&lt;/em&gt;.&lt;/p&gt;
+
+&lt;h2 id=&quot;performance-gains-up-to-41x-speedup&quot;&gt;Performance Gains: Up to 4.1x Speedup&lt;/h2&gt;
+
+&lt;p&gt;We collected benchmark performance for both inference and training in &lt;a href=&quot;http://github.com/pyg-team/pytorch_geometric/tree/master/benchmark&quot;&gt;pytorch_geometric/benchmark&lt;/a&gt; and in the &lt;a href=&quot;http://github.com/snap-stanford/ogb&quot;&gt;Open Graph Benchmark (OGB)&lt;/a&gt; to demonstrate the performance improvement from the above-mentioned methods on Intel® Xeon® Platinum 8380 Processor.&lt;/p&gt;
+
+&lt;table class=&quot;table table-bordered&quot;&gt;
+&lt;thead&gt;
+
+  &lt;tr&gt;
+   &lt;td&gt;&lt;strong&gt;Model – Dataset&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;Option&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;Speedup ratio&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+&lt;/thead&gt;
+  &lt;tr&gt;
+   &lt;td rowspan=&quot;4&quot;&gt; 
+        GCN-Reddit (inference)
+   &lt;/td&gt;
+   &lt;td&gt;512-2-64-dense
+   &lt;/td&gt;
+   &lt;td&gt;1.22x
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;1024-3-128-dense
+   &lt;/td&gt;
+   &lt;td&gt;1.25x
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;512-2-64-sparse
+   &lt;/td&gt;
+   &lt;td&gt;1.31x
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;1024-3-128-sparse
+   &lt;/td&gt;
+   &lt;td&gt;1.68x
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td rowspan=&quot;4&quot;&gt; 
+        GraphSage-ogbn-products (inference)
+   &lt;/td&gt;
+   &lt;td&gt;1024-3-128-dense
+   &lt;/td&gt;
+   &lt;td&gt;1.15x
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;512-2-64-sparse
+   &lt;/td&gt;
+   &lt;td&gt;1.20x
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;1024-3-128-sparse
+   &lt;/td&gt;
+   &lt;td&gt;1.33x
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;full-batch-sparse
+   &lt;/td&gt;
+   &lt;td&gt;4.07x
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;GCN-PROTEINS (training)
+   &lt;/td&gt;
+   &lt;td&gt;3-32
+   &lt;/td&gt;
+   &lt;td&gt;1.67x
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;GCN-REDDIT-BINARY (training)
+   &lt;/td&gt;
+   &lt;td&gt;3-32
+   &lt;/td&gt;
+   &lt;td&gt;1.67x
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td rowspan=&quot;2&quot;&gt;GCN-Reddit (training)
+   &lt;/td&gt;
+   &lt;td&gt;512-2-64-dense
+   &lt;/td&gt;
+   &lt;td&gt;1.20x
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;1024-3-128-dense
+   &lt;/td&gt;
+   &lt;td&gt;1.12x
+   &lt;/td&gt;
+  &lt;/tr&gt;
+&lt;/table&gt;
+
+&lt;p&gt;&lt;small style=&quot;line-height: 1.1&quot;&gt;&lt;em&gt;&lt;strong&gt;Table 1&lt;/strong&gt;: Performance Speedup on PyG Benchmark&lt;sup&gt;1&lt;/sup&gt;&lt;/em&gt;&lt;/small&gt;&lt;/p&gt;
+
+&lt;p&gt;From the benchmark results, we can see that our optimizations in PyTorch and PyG achieved &lt;strong&gt;1.1x-4.1x speed-up&lt;/strong&gt; for inference and training.&lt;/p&gt;
+
+&lt;h2 id=&quot;torchcompile-for-pyg&quot;&gt;torch.compile for PyG&lt;/h2&gt;
+
+&lt;p&gt;The PyTorch2.0 flagship feature torch.compile is fully compatible with PyG 2.3 release, bringing additional speed-up in PyG model inference/training over imperative mode, thanks to TorchInductor C++/OpenMP backend for CPUs. In particular, &lt;strong&gt;a 3.0x – 5.4x performance speed-up&lt;/strong&gt; is measured on &lt;a href=&quot;http://github.com/pyg-team/pytorch_geometric/blob/master/test/nn/models/test_basic_gnn.py&quot;&gt;basic GNN models&lt;/a&gt; with Intel Xeon Platinum 8380 Processor on model training&lt;sup&gt;2&lt;/sup&gt;.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/how-to-accelerate/f4-torch-compile-performance-speedup.png&quot; alt=&quot;Figure 4: Performance Speedup with Torch Compile&quot; style=&quot;max-width:620px; width:100%; display: block; margin-left: auto; margin-right: auto&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;small style=&quot;line-height: 1.1&quot;&gt;&lt;em&gt;&lt;strong&gt;Figure 4&lt;/strong&gt;: Performance Speedup with Torch Compile&lt;/em&gt;&lt;/small&gt;&lt;/p&gt;
+
+&lt;p&gt;Torch.compile can fuse the multiple stages of message passing into a single kernel, which provides significant speedup due to the saved memory bandwidth. Refer to this &lt;a href=&quot;http://pytorch-geometric.readthedocs.io/en/latest/tutorial/compile.html&quot;&gt;pytorch geometric tutorial&lt;/a&gt; for additional support.&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Please note&lt;/strong&gt; that torch.compile within PyG is in beta mode and under active development. Currently, some features do not yet work together seamlessly such as torch.compile(model, dynamic=True), but fixes are on the way from Intel.&lt;/p&gt;
+
+&lt;h2 id=&quot;conclusion--future-work&quot;&gt;Conclusion &amp;amp; Future Work&lt;/h2&gt;
+
+&lt;p&gt;In this blog, we introduced the GNN performance optimizations included in PyTorch 2.0 on CPU. We are closely collaborating with the PyG community for future optimization work, which will focus on in-depth optimizations from torch.compile, sparse optimization, and distributed training.&lt;/p&gt;
+
+&lt;h3 id=&quot;acknowledgement&quot;&gt;Acknowledgement&lt;/h3&gt;
+
+&lt;p&gt;The results presented in this blog is a joint effort of Intel PyTorch team and Kumo. Special thanks to &lt;a href=&quot;http://github.com/rusty1s&quot;&gt;Matthias Fey&lt;/a&gt; (Kumo), &lt;a href=&quot;http://github.com/pearu&quot;&gt;Pearu Peterson&lt;/a&gt; (Quansight) and &lt;a href=&quot;http://www.linkedin.com/in/christianpuhrsch/&quot;&gt;Christian Puhrsch&lt;/a&gt; (Meta) who spent precious time and gave substantial assistance! Together, we made one more step forward on the path of improving the PyTorch CPU ecosystem.&lt;/p&gt;
+
+&lt;h3 id=&quot;references&quot;&gt;References&lt;/h3&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;a href=&quot;http://www.pyg.org/ns-newsarticle-accelerating-pyg-on-intel-cpus&quot;&gt;Accelerating PyG on Intel CPUs&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;http://github.com/pyg-team/pytorch_geometric/releases/tag/2.3.0&quot;&gt;PyG 2.3.0&lt;/a&gt;: PyTorch 2.0 support, native sparse tensor support, explainability and accelerations&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h3 id=&quot;footnotes&quot;&gt;Footnotes&lt;/h3&gt;
+
+&lt;h4 id=&quot;product-and-performance-information&quot;&gt;Product and Performance Information&lt;/h4&gt;
+
+&lt;p&gt;&lt;sup&gt;1&lt;/sup&gt;Platinum 8380: 1-node, 2x Intel Xeon Platinum 8380 processor with 256GB (16 slots/ 16GB/3200) total DDR4 memory, uCode 0xd000389, HT on, Turbo on, Ubuntu 20.04.5 LTS,  5.4.0-146-generic, INTEL SSDPE2KE016T8 1.5T; GCN + Reddit FP32 inference, GCN+Reddit FP32 training, GraphSAGE + ogbn-products FP32 inference, GCN-PROTAIN, GCN-REDDIT-BINARY FP32 training; Software: PyTorch 2.1.0.dev20230302+cpu, pytorch_geometric 2.3.0, torch-scatter 2.1.0, torch-sparse 0.6.16, test by Intel on 3/02/2023.&lt;/p&gt;
+
+&lt;p&gt;&lt;sup&gt;2&lt;/sup&gt;Platinum 8380: 1-node, 2x Intel Xeon Platinum 8380 processor with 256GB (16 slots/ 16GB/3200) total DDR4 memory, uCode 0xd000389, HT on, Turbo on, Ubuntu 20.04.5 LTS,  5.4.0-146-generic, INTEL SSDPE2KE016T8 1.5T; GCN, GraphSAGE, GIN and EdgeCNN, FP32; Software: PyTorch 2.1.0.dev20230411+cpu, pytorch_geometric 2.4.0, torch-scatter 2.1.1+pt20cpu, torch-sparse 0.6.17+pt20cpu, test by Intel on 4/11/2023.&lt;/p&gt;
+
+&lt;p&gt;&lt;sup&gt;3&lt;/sup&gt;Performance varies by use, configuration and other factors. Learn more at www.Intel.com/PerformanceIndex.&lt;/p&gt;</content>
+
+      
+      
+      
+      
+      
+
+      <author>
+          <name>Intel</name>
+        
+        
+      </author>
+
+      
+
+      
+
+      
+        <summary type="html">Overview</summary>
+      
+
+      
+      
+    </entry>
   
     <entry>
       <title type="html">Optimizing LibTorch-based inference engine memory usage and thread-pooling</title>
@@ -1385,271 +1614,6 @@ prediction = self.model_int8(signal)
 
       
         <summary type="html"></summary>
-      
-
-      
-      
-    </entry>
-  
-    <entry>
-      <title type="html">Accelerated Image Segmentation using PyTorch</title>
-      <link href="https://pytorch.org/blog/accelerated-image-seg/" rel="alternate" type="text/html" title="Accelerated Image Segmentation using PyTorch" />
-      <published>2023-05-02T00:00:00-07:00</published>
-      <updated>2023-05-02T00:00:00-07:00</updated>
-      <id>https://pytorch.org/blog/accelerated-image-seg</id>
-      <content type="html" xml:base="https://pytorch.org/blog/accelerated-image-seg/">&lt;p&gt;&lt;em&gt;Using Intel® Extension for PyTorch to Boost Image Processing Performance&lt;/em&gt;&lt;/p&gt;
-
-&lt;p&gt;PyTorch delivers great CPU performance, and it can be further accelerated with Intel® Extension for PyTorch. I trained an AI image segmentation model using PyTorch 1.13.1 (with ResNet34 + UNet architecture) to identify roads and speed limits from satellite images, all on the 4th Gen Intel® Xeon® Scalable processor.&lt;/p&gt;
-
-&lt;p&gt;I will walk you through the steps to work with a satellite image dataset called SpaceNet5 and how I optimized the code to make deep learning workloads feasible on CPUs just by flipping a few key switches.&lt;/p&gt;
-
-&lt;p&gt;&lt;strong&gt;Before we get started, some housekeeping…&lt;/strong&gt;&lt;/p&gt;
-
-&lt;p&gt;The code accompanying this article is available in the examples folder in the &lt;a href=&quot;http://github.com/intel/intel-extension-for-pytorch/tree/master/examples/cpu/usecase_spacenet5&quot;&gt;Intel Extension for PyTorch repository&lt;/a&gt;. I borrowed heavily from the &lt;a href=&quot;http://github.com/avanetten/cresi/&quot;&gt;City-Scale Road Extraction from Satellite Imagery (CRESI) repository&lt;/a&gt;. I adapted it for the 4th Gen Intel Xeon processors with PyTorch optimizations and &lt;a href=&quot;http://github.com/intel/intel-extension-for-pytorch&quot;&gt;Intel Extension for PyTorch&lt;/a&gt; optimizations. In particular, I was able to piece together a workflow using the &lt;a href=&quot;http://github.com/avanetten/cresi/tree/main/notebooks&quot;&gt;notebooks here&lt;/a&gt;.&lt;/p&gt;
-
-&lt;p&gt;You can find the accompanying talk I gave &lt;a href=&quot;http://www.youtube.com/watch?v=LVZWm5GFvAw&quot;&gt;on YouTube&lt;/a&gt;.&lt;/p&gt;
-
-&lt;p&gt;I also highly recommend these articles for a detailed explanation of how to get started with the SpaceNet5 data:&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;&lt;a href=&quot;http://medium.com/the-downlinq/the-spacenet-5-baseline-part-1-imagery-and-label-preparation-598af46d485e&quot;&gt;The SpaceNet 5 Baseline — Part 1: Imagery and Label Preparation&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;http://medium.com/the-downlinq/the-spacenet-5-baseline-part-2-training-a-road-speed-segmentation-model-2bc93de564d7&quot;&gt;The SpaceNet 5 Baseline — Part 2: Training a Road Speed Segmentation Model&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://medium.com/the-downlinq/the-spacenet-5-baseline-part-3-extracting-road-speed-vectors-from-satellite-imagery-5d07cd5e1d21&quot;&gt;The SpaceNet 5 Baseline — Part 3: Extracting Road Speed Vectors from Satellite Imagery&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;http://medium.com/the-downlinq/spacenet-5-winning-model-release-end-of-the-road-fd02e00b826c&quot;&gt;SpaceNet 5 Winning Model Release: End of the Road&lt;/a&gt;&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;I referenced two Hugging Face blogs by Julien Simon; he ran his tests on the AWS instance &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;r7iz.metal-16xl&lt;/code&gt;:&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;&lt;a href=&quot;http://huggingface.co/blog/intel-sapphire-rapids&quot;&gt;Accelerating PyTorch Transformers with Intel Sapphire Rapids, part 1&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;http://huggingface.co/blog/intel-sapphire-rapids-inference&quot;&gt;Accelerating PyTorch Transformers with Intel Sapphire Rapids, part 2&lt;/a&gt;&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;The potential cost savings from using a CPU instance instead of a GPU instance on the major cloud service providers (CSP) can be significant. The latest processors are still being rolled out to the CSPs, so I’m using a 4th Gen Intel Xeon processor that is hosted on the Intel® Developer Cloud (you can sign up for the Beta here: &lt;a href=&quot;http://cloud.intel.com/&quot;&gt;cloud.intel.com&lt;/a&gt;).&lt;/p&gt;
-
-&lt;p&gt;On AWS, you can select from the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;r7iz.*&lt;/code&gt; EC2 instances after you &lt;a href=&quot;http://pages.awscloud.com/R7iz-Preview.html&quot;&gt;sign up for the preview here&lt;/a&gt; (Figure 1). At the time of writing, the new AI-acceleration engine, Intel® Advanced Matrix Extensions (Intel® AMX), is only available on bare metal but it should soon be enabled on the virtual machines.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/f1-4th-gen-xeon-aws-instances.png&quot; alt=&quot;List of 4th Gen Xeon  instances on AWS EC2&quot; style=&quot;max-height:800px; max-width: 100%; display: block; margin-left: auto; margin-right: auto&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;small style=&quot;line-height: 1.1&quot;&gt;&lt;em&gt;&lt;strong&gt;Figure 1&lt;/strong&gt;. List of 4th Gen Xeon  instances on AWS EC2 (image by author)&lt;/em&gt;&lt;/small&gt;&lt;/p&gt;
-
-&lt;p&gt;On Google Cloud* Platform, you can select from the 4th Gen Xeon Scalable processors C3 VMs (Figure 2).&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/f2-4th-gen-xeon-googlecloud-instances.png&quot; alt=&quot;List of 4th Gen Intel Xeon Scalable processor instances on Google Cloud Platform&quot; style=&quot;max-height:800px; max-width: 100%; display: block; margin-left: auto; margin-right: auto&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;small style=&quot;line-height: 1.1&quot;&gt;&lt;em&gt;&lt;strong&gt;Figure 2&lt;/strong&gt;. List of 4th Gen Intel Xeon Scalable processor instances on Google Cloud Platform (image by author)&lt;/em&gt;&lt;/small&gt;&lt;/p&gt;
-
-&lt;h2 id=&quot;hardware-introduction-and-optimizations&quot;&gt;Hardware Introduction and Optimizations&lt;/h2&gt;
-
-&lt;p&gt;The 4th Gen Intel Xeon processors were released January 2023, and the bare-metal instance I am using has two sockets (each with 56 physical cores), 504 GB of memory, and Intel AMX acceleration. I installed a few key libraries in the backend to take control and monitor the sockets, memory, and cores that I am using on the CPU:&lt;/p&gt;
-
-&lt;p&gt;&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;numactl&lt;/code&gt; (with &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;sudo apt-get install numactl&lt;/code&gt;)&lt;/p&gt;
-
-&lt;p&gt;&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;libjemalloc-dev&lt;/code&gt; (with &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;sudo apt-get install libjemalloc&lt;/code&gt;)&lt;/p&gt;
-
-&lt;p&gt;&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;intel-openmp&lt;/code&gt; (with &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;conda install intel-openmp&lt;/code&gt;)&lt;/p&gt;
-
-&lt;p&gt;&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;gperftools&lt;/code&gt; (with &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;conda install gperftools -c conda-forge&lt;/code&gt;)&lt;/p&gt;
-
-&lt;p&gt;Both PyTorch and Intel Extension for PyTorch have helper scripts so that one does not need to explicitly use &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;intel-openmp&lt;/code&gt; and &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;numactl&lt;/code&gt;, but they do need to be installed in the backend. In case you want to set them up for other work, here is what I used for OpenMP* …&lt;/p&gt;
-
-&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;export OMP_NUM_THREADS=36
-export KMP_AFFINITY=granularity=fine,compact,1,0
-export KMP_BLOCKTIME=1
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;… where &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;OMP_NUM_THREADS&lt;/code&gt; is the number of threads allocated to the job, &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;KMP_AFFINITY&lt;/code&gt; affects thread affinity settings (including packing threads close to each other, the state of pinning threads), and &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;KMP_BLOCKTIME&lt;/code&gt; sets the time in milliseconds that an idle thread should wait before going to sleep.&lt;/p&gt;
-
-&lt;p&gt;Here’s what I used for &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;numactl&lt;/code&gt; …&lt;/p&gt;
-
-&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;numactl -C 0-35 --membind=0 train.py
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;…where &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;-C&lt;/code&gt; specifies which cores to use and &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;--membind&lt;/code&gt; instructs the program to only use one socket (socket 0 in this case).&lt;/p&gt;
-
-&lt;h2 id=&quot;spacenet-data&quot;&gt;SpaceNet Data&lt;/h2&gt;
-
-&lt;p&gt;I am using a satellite image dataset from the &lt;a href=&quot;http://spacenet.ai/sn5-challenge/&quot;&gt;SpaceNet 5 Challenge&lt;/a&gt;. Different cities can be downloaded for free from an AWS S3 bucket:&lt;/p&gt;
-
-&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;aws s3 ls s3://spacenet-dataset/spacenet/SN5_roads/tarballs/ --human-readable
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;2019-09-03 20:59:32    5.8 GiB SN5_roads_test_public_AOI_7_Moscow.tar.gz
-2019-09-24 08:43:02    3.2 GiB SN5_roads_test_public_AOI_8_Mumbai.tar.gz
-2019-09-24 08:43:47    4.9 GiB SN5_roads_test_public_AOI_9_San_Juan.tar.gz
-2019-09-14 13:13:26   35.0 GiB SN5_roads_train_AOI_7_Moscow.tar.gz
-2019-09-14 13:13:34   18.5 GiB SN5_roads_train_AOI_8_Mumbai.tar.gz
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;You can use the following commands to download and unpack a file:&lt;/p&gt;
-
-&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;aws s3 cp s3://spacenet-dataset/spacenet/SN5_roads/tarballs/SN5_roads_train_AOI_7_Moscow.tar.gz .
-tar -xvzf ~/spacenet5data/moscow/SN5_roads_train_AOI_7_Moscow.tar.gz
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;h3 id=&quot;dataset-preparation&quot;&gt;Dataset Preparation&lt;/h3&gt;
-
-&lt;p&gt;I used the Moscow satellite image dataset, which consists of 1,352 images of 1,300 by 1,300 pixels with corresponding street labels in separate text files. The dataset contains both 8-band multispectral images and 3-band RGB images. Figure 3 shows four sample RGB satellite images and their corresponding generated masks. I used the &lt;a href=&quot;http://github.com/avanetten/cresi/blob/main/cresi/data_prep/speed_masks.py&quot;&gt;speed_masks.py&lt;/a&gt; script from the CRESI repository to generate the segmentation masks.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/f3-moscow-satellite-image-dataset.png&quot; alt=&quot;Satellite image 3-channel RGB chips from Moscow (top row) and corresponding pixel segmentation masks with varying speed limits&quot; style=&quot;max-height:800px; max-width: 100%; display: block; margin-left: auto; margin-right: auto&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;small style=&quot;line-height: 1.1&quot;&gt;&lt;em&gt;&lt;strong&gt;Figure 3&lt;/strong&gt;. Satellite image 3-channel RGB chips from Moscow (top row) and corresponding pixel segmentation masks with varying speed limits (bottom row) (image by author)&lt;/em&gt;&lt;/small&gt;&lt;/p&gt;
-
-&lt;p&gt;There is a JSON configuration file that must be updated for all remaining components: training and validation split, training, and inference. &lt;a href=&quot;http://github.com/avanetten/cresi/blob/main/cresi/configs/sn5_baseline_aws.json.&quot;&gt;An example configuration can be found here&lt;/a&gt;. I perform an 80:20 training/validation split, making sure to point to the correct folder of satellite images and corresponding masks for training. The configuration parameters are explained in more in the &lt;a href=&quot;http://github.com/intel/intel-extension-for-pytorch/tree/master/examples/cpu/usecase_spacenet5&quot;&gt;notebook under examples in GitHub for Intel Extension for PyTorch here&lt;/a&gt;.&lt;/p&gt;
-
-&lt;h3 id=&quot;training-a-resnet34--unet-model&quot;&gt;Training a ResNet34 + UNet Model&lt;/h3&gt;
-
-&lt;p&gt;I made some changes to the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;cresi&lt;/code&gt; code described below in order to run on a CPU and optimize the training. To run natively on a CPU, replace &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;self.model = nn.DataParallel(model).cuda()&lt;/code&gt; with &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;self.model = nn.DataParallel(model)&lt;/code&gt; in the &lt;a href=&quot;https://github.com/avanetten/cresi/blob/main/cresi/net/pytorch_utils/train.py&quot;&gt;train.py&lt;/a&gt; script. In the &lt;a href=&quot;https://github.com/avanetten/cresi/blob/main/cresi/01_train.py&quot;&gt;01_train.py&lt;/a&gt; script, remove &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;torch.randn(10).cuda()&lt;/code&gt;.&lt;/p&gt;
-
-&lt;p&gt;To optimize training, add &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;import intel_extension_for_pytorch as ipex&lt;/code&gt; to the import statements in the &lt;a href=&quot;https://github.com/avanetten/cresi/blob/main/cresi/net/pytorch_utils/train.py&quot;&gt;train.py&lt;/a&gt; script. Just after defining the model and optimizer as follows:&lt;/p&gt;
-
-&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;self.model = nn.DataParallel(model)
-self.optimizer = optimizer(self.model.parameters(), lr=config.lr)
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;Add the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;ipex.optimize&lt;/code&gt; line to use BF16 precision, instead of FP32: \&lt;/p&gt;
-
-&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;self.model, self.optimizer = ipex.optimize(self.model, 
-    optimizer=self.optimizer,dtype=torch.bfloat16)
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;Add a line to do mixed-precision training just before running a forward pass and calculating the loss function:&lt;/p&gt;
-
-&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;with torch.cpu.amp.autocast():
-    if verbose:
-        print(&quot;input.shape, target.shape:&quot;, input.shape, target.shape)
-    output = self.model(input)
-    meter = self.calculate_loss_single_channel(output, target, meter, training, iter_size)
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;Now that we have optimized our training code, we can move onto training our model.&lt;/p&gt;
-
-&lt;p&gt;Like the &lt;a href=&quot;https://medium.com/the-downlinq/spacenet-5-winning-model-release-end-of-the-road-fd02e00b826c&quot;&gt;winner of the SpaceNet 5 competition&lt;/a&gt;, I trained a ResNet34 encoder + UNet decoder model. It is pretrained from ImageNet weights, and the backbone is left completely unfrozen during training. The training can be run with the &lt;a href=&quot;https://github.com/avanetten/cresi/blob/main/cresi/01_train.py&quot;&gt;01_train.py&lt;/a&gt; script, but in order to control the use of hardware I used a helper script. There are actually two helper scripts: one that comes with stock PyTorch and one that comes with Intel Extension for PyTorch. They both accomplish the same thing, but the first one from stock is &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;torch.backends.xeon.run_cpu&lt;/code&gt;, and the second one from Intel Extension for PyTorch is &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;ipexrun&lt;/code&gt;.&lt;/p&gt;
-
-&lt;p&gt;Here is what I ran in the command-line:&lt;/p&gt;
-
-&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;python -m torch.backends.xeon.run_cpu --ninstances 1 \
-  --ncores_per_instance 32 \
-  --log_path /home/devcloud/spacenet5data/moscow/v10_xeon4_devcloud22.04/logs/run_cpu_logs \
-  /home/devcloud/cresi/cresi/01_train.py \
-  /home/devcloud/cresi/cresi/configs/ben/v10_xeon4_baseline_ben.json --fold=0
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;ipexrun --ninstances 1 \
---ncore_per_instance 32 \
-/home/devcloud/cresi/cresi/01_train.py \
-/home/devcloud/cresi/cresi/configs/ben/v10_xeon4_baseline_ben.json --fold=0
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;In both cases, I am asking PyTorch to run training on one socket with 32 cores. Upon running, I get a printout of what environment variables get set in the backend to understand how PyTorch is using the hardware:&lt;/p&gt;
-
-&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;INFO - Use TCMalloc memory allocator
-INFO - OMP_NUM_THREADS=32
-INFO - Using Intel OpenMP
-INFO - KMP_AFFINITY=granularity=fine,compact,1,0
-INFO - KMP_BLOCKTIME=1
-INFO - LD_PRELOAD=/home/devcloud/.conda/envs/py39/lib/libiomp5.so:/home/devcloud/.conda/envs/py39/lib/libtcmalloc.so
-INFO - numactl -C 0-31 -m 0 /home/devcloud/.conda/envs/py39/bin/python -u 01_train.py configs/ben/v10_xeon4_baseline_ben.json --fold=0
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;During training, I make sure that my total loss function is decreasing (i.e., the model is converging on a solution).&lt;/p&gt;
-
-&lt;h3 id=&quot;inference&quot;&gt;Inference&lt;/h3&gt;
-
-&lt;p&gt;After training a model, we can start to make predictions from satellite images alone. In the eval.py inference script, add import intel_extension_for_pytorch as ipex to the import statements. After loading the PyTorch model, use Intel Extension for PyTorch to optimize the model for BF16 inference:&lt;/p&gt;
-
-&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;model = torch.load(os.path.join(path_model_weights, 
-    'fold{}_best.pth'.format(fold)), 
-    map_location = lambda storage, 
-    loc: storage)
-model.eval()
-model = ipex.optimize(model, dtype = torch.bfloat16)
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;Just prior to running prediction, add two lines for mixed precision:&lt;/p&gt;
-
-&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;with torch.no_grad():
-    with torch.cpu.amp.autocast():
-        for data in pbar:
-            samples = torch.autograd.Variable(data['image'], volatile=True)
-            predicted = predict(model, samples, flips=self.flips)
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;To run inference, we can use the &lt;a href=&quot;https://github.com/avanetten/cresi/blob/main/cresi/02_eval.py&quot;&gt;02_eval.py&lt;/a&gt; script. Now that we have a trained model, we can make predictions on satellite images (Figure 4). We can see that it does seem to map the roads closely to the image!&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/f4-moscow-satellite-image-complete.png&quot; alt=&quot;Moscow satellite image and accompanying prediction of roads&quot; style=&quot;max-height:800px; max-width: 100%; display: block; margin-left: auto; margin-right: auto&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;small style=&quot;line-height: 1.1&quot;&gt;&lt;em&gt;&lt;strong&gt;Figure 4&lt;/strong&gt;. Moscow satellite image and accompanying prediction of roads (image by author)&lt;/em&gt;&lt;/small&gt;&lt;/p&gt;
-
-&lt;p&gt;I realize that the model I’ve trained is overfit to the Moscow image data and probably won’t generalize well to other cities. However, the &lt;a href=&quot;http://medium.com/the-downlinq/spacenet-5-winning-model-release-end-of-the-road-fd02e00b826c&quot;&gt;winning solution to this challenge&lt;/a&gt; used data from six cities (Las Vegas, Paris, Shanghai, Khartoum, Moscow, Mumbai) and performs well on new cities. In the future, one thing that would be worth testing is training on all six cities and running inference on another city to reproduce their results.&lt;/p&gt;
-
-&lt;h2 id=&quot;note-on-post-processing&quot;&gt;Note on Post-Processing&lt;/h2&gt;
-
-&lt;p&gt;There are further post-processing steps that can be performed to add the mask as graph features to maps. You can read more about the post-processing steps here:&lt;/p&gt;
-
-&lt;p&gt;&lt;a href=&quot;http://medium.com/the-downlinq/the-spacenet-5-baseline-part-3-extracting-road-speed-vectors-from-satellite-imagery-5d07cd5e1d21&quot;&gt;The SpaceNet 5 Baseline — Part 3: Extracting Road Speed Vectors from Satellite Imagery&lt;/a&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;a href=&quot;https://github.com/avanetten/cresi/tree/main/cresi&quot;&gt;Post-processing scripts&lt;/a&gt;&lt;/p&gt;
-
-&lt;h2 id=&quot;conclusions&quot;&gt;Conclusions&lt;/h2&gt;
-
-&lt;p&gt;In summary, we:&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;Created 1,352 image training masks (with speed limits) to correspond to our training satellite image data (from .geojson text file labels)&lt;/li&gt;
-  &lt;li&gt;Defined our configuration file for training and inference&lt;/li&gt;
-  &lt;li&gt;Split up our data into training and validation sets&lt;/li&gt;
-  &lt;li&gt;Optimized our code for CPU training, including using Intel Extension for PyTorch and BF16&lt;/li&gt;
-  &lt;li&gt;Trained a performant ResNet34 + UNet model on a 4th Gen Intel Xeon CPU&lt;/li&gt;
-  &lt;li&gt;Ran initial inference to see the prediction of a speed limit mask&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;You can find &lt;a href=&quot;http://edc.intel.com/content/www/us/en/products/performance/benchmarks/4th-generation-intel-xeon-scalable-processors/&quot;&gt;detailed benchmarks here for the 4th Gen Intel Xeon CPU here&lt;/a&gt;.&lt;/p&gt;
-
-&lt;h2 id=&quot;next-steps&quot;&gt;Next Steps&lt;/h2&gt;
-
-&lt;p&gt;Extend the optimizations on an Intel CPU by using the Intel Extension for PyTorch:&lt;/p&gt;
-
-&lt;p&gt;&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;pip install intel-extension-for-pytorch&lt;/code&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;git clone https://github.com/intel/intel-extension-for-pytorch&lt;/code&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;a href=&quot;http://linkedin.com/in/bconsolvo&quot;&gt;Get in touch with me on LinkedIn&lt;/a&gt; if you have any more questions!&lt;/p&gt;
-
-&lt;p&gt;More information about the Intel Extension for PyTorch &lt;a href=&quot;https://www.intel.com/content/www/us/en/developer/tools/oneapi/optimization-for-pytorch.html&quot;&gt;can be found here&lt;/a&gt;.&lt;/p&gt;
-
-&lt;h3 id=&quot;get-the-software&quot;&gt;Get the Software&lt;/h3&gt;
-
-&lt;p&gt;I encourage you to check out Intel’s other &lt;strong&gt;&lt;a href=&quot;https://www.intel.com/content/www/us/en/developer/topic-technology/artificial-intelligence/tools.html&quot;&gt;AI Tools&lt;/a&gt;&lt;/strong&gt; and &lt;strong&gt;&lt;a href=&quot;https://www.intel.com/content/www/us/en/developer/tools/frameworks/overview.html&quot;&gt;Framework&lt;/a&gt;&lt;/strong&gt; optimizations and learn about the open, standards-based &lt;strong&gt;&lt;a href=&quot;https://www.intel.com/content/www/us/en/developer/tools/oneapi/overview.html&quot;&gt;oneAPI&lt;/a&gt;&lt;/strong&gt; multiarchitecture, multivendor programming model that forms the foundation of Intel’s AI software portfolio.&lt;/p&gt;
-
-&lt;p&gt;For more details about 4th Gen Intel Xeon Scalable processor, visit &lt;strong&gt;&lt;a href=&quot;https://www.intel.com/content/www/us/en/developer/topic-technology/artificial-intelligence/platform.html&quot;&gt;AI Platform&lt;/a&gt;&lt;/strong&gt; where you can learn about how Intel is empowering developers to run high-performance, efficient end-to-end AI pipelines.&lt;/p&gt;
-
-&lt;h3 id=&quot;pytorch-resources&quot;&gt;PyTorch Resources&lt;/h3&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;&lt;a href=&quot;http://pytorch.org/get-started/pytorch-2.0/&quot;&gt;PyTorch Get Started&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://dev-discuss.pytorch.org/t/pytorch-release-2-0-execution-update/1077&quot;&gt;Dev Discussions&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;http://pytorch.org/docs/2.0/&quot;&gt;Documentation&lt;/a&gt;&lt;/li&gt;
-&lt;/ul&gt;</content>
-
-      
-      
-      
-      
-      
-
-      <author>
-          <name>Intel</name>
-        
-        
-      </author>
-
-      
-
-      
-
-      
-        <summary type="html">Using Intel® Extension for PyTorch to Boost Image Processing Performance</summary>
       
 
       
