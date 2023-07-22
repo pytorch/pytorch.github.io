@@ -230,7 +230,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href='https://pytorch.org/docs/versions.html'>main (2.1.0a0+git980fb94 ) &#x25BC</a>
+      <a href='https://pytorch.org/docs/versions.html'>main (2.1.0a0+gita6b8c30 ) &#x25BC</a>
     </div>
     
 
@@ -332,6 +332,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../../../amp.html">torch.amp</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../autograd.html">torch.autograd</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../library.html">torch.library</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../cpu.html">torch.cpu</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../cuda.html">torch.cuda</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../mps.html">torch.mps</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../backends.html">torch.backends</a></li>
@@ -477,55 +478,32 @@
              <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
               
   <h1>Source code for torch.optim.optimizer</h1><div class="highlight"><pre>
-<span></span><span class="kn">import</span> <span class="nn">math</span>
-<span class="kn">import</span> <span class="nn">functools</span>
-<span class="kn">import</span> <span class="nn">warnings</span>
-<span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">OrderedDict</span><span class="p">,</span> <span class="n">defaultdict</span>
+<span></span><span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">OrderedDict</span><span class="p">,</span> <span class="n">defaultdict</span><span class="p">,</span> <span class="n">abc</span> <span class="k">as</span> <span class="n">container_abcs</span>
+<span class="kn">import</span> <span class="nn">torch</span>
 <span class="kn">from</span> <span class="nn">copy</span> <span class="kn">import</span> <span class="n">deepcopy</span>
 <span class="kn">from</span> <span class="nn">itertools</span> <span class="kn">import</span> <span class="n">chain</span>
-<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="p">(</span>
-    <span class="n">Any</span><span class="p">,</span>
-    <span class="n">Callable</span><span class="p">,</span>
-    <span class="n">DefaultDict</span><span class="p">,</span>
-    <span class="n">Dict</span><span class="p">,</span>
-    <span class="n">Hashable</span><span class="p">,</span>
-    <span class="n">Iterable</span><span class="p">,</span>
-    <span class="n">List</span><span class="p">,</span>
-    <span class="n">Optional</span><span class="p">,</span>
-    <span class="n">Set</span><span class="p">,</span>
-    <span class="n">Tuple</span><span class="p">,</span>
-    <span class="n">TypeVar</span><span class="p">,</span>
-    <span class="n">Union</span><span class="p">,</span>
-    <span class="n">cast</span><span class="p">,</span>
-    <span class="n">overload</span><span class="p">,</span>
-<span class="p">)</span>
-<span class="kn">from</span> <span class="nn">typing_extensions</span> <span class="kn">import</span> <span class="n">ParamSpec</span><span class="p">,</span> <span class="n">Self</span><span class="p">,</span> <span class="n">TypeAlias</span>
+<span class="kn">import</span> <span class="nn">warnings</span>
+<span class="kn">import</span> <span class="nn">functools</span>
+<span class="kn">import</span> <span class="nn">math</span>
 
-<span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Optional</span>
+<span class="kn">from</span> <span class="nn">torch</span> <span class="kn">import</span> <span class="n">Tensor</span>
+
 <span class="kn">import</span> <span class="nn">torch.utils.hooks</span> <span class="k">as</span> <span class="nn">hooks</span>
 <span class="kn">from</span> <span class="nn">torch.utils.hooks</span> <span class="kn">import</span> <span class="n">RemovableHandle</span>
-<span class="kn">from</span> <span class="nn">torch.utils._foreach_utils</span> <span class="kn">import</span> <span class="p">(</span>
-    <span class="n">Indices</span><span class="p">,</span>
-    <span class="n">TensorListList</span><span class="p">,</span>
-    <span class="n">_get_foreach_kernels_supported_devices</span><span class="p">,</span>
-    <span class="n">_get_fused_kernels_supported_devices</span><span class="p">,</span>
-<span class="p">)</span>
+<span class="kn">from</span> <span class="nn">torch.utils._foreach_utils</span> <span class="kn">import</span> <span class="p">(</span><span class="n">_get_fused_kernels_supported_devices</span><span class="p">,</span>
+                                        <span class="n">_get_foreach_kernels_supported_devices</span><span class="p">)</span>
 <span class="kn">from</span> <span class="nn">torch._utils</span> <span class="kn">import</span> <span class="n">is_compiling</span>
 <span class="kn">from</span> <span class="nn">torch.utils._foreach_utils</span> <span class="kn">import</span> <span class="n">_group_tensors_by_device_and_dtype</span>
 
-<span class="n">Args</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span>
-<span class="n">Kwargs</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span>
-<span class="n">GlobalOptimizerPreHook</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">Callable</span><span class="p">[[</span><span class="s2">&quot;Optimizer&quot;</span><span class="p">,</span> <span class="n">Args</span><span class="p">,</span> <span class="n">Kwargs</span><span class="p">],</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="n">Args</span><span class="p">,</span> <span class="n">Kwargs</span><span class="p">]]]</span>
-<span class="n">GlobalOptimizerPostHook</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">Callable</span><span class="p">[[</span><span class="s2">&quot;Optimizer&quot;</span><span class="p">,</span> <span class="n">Args</span><span class="p">,</span> <span class="n">Kwargs</span><span class="p">],</span> <span class="kc">None</span><span class="p">]</span>
-
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;Optimizer&#39;</span><span class="p">,</span> <span class="s1">&#39;register_optimizer_step_pre_hook&#39;</span><span class="p">,</span> <span class="s1">&#39;register_optimizer_step_post_hook&#39;</span><span class="p">]</span>
-<span class="n">_global_optimizer_pre_hooks</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">GlobalOptimizerPreHook</span><span class="p">]</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">()</span>
-<span class="n">_global_optimizer_post_hooks</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">GlobalOptimizerPostHook</span><span class="p">]</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">()</span>
+<span class="n">_global_optimizer_pre_hooks</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">Callable</span><span class="p">]</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">()</span>
+<span class="n">_global_optimizer_post_hooks</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">Callable</span><span class="p">]</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">()</span>
 <span class="n">_foreach_supported_types</span> <span class="o">=</span> <span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">parameter</span><span class="o">.</span><span class="n">Parameter</span><span class="p">]</span>
 
 <span class="k">class</span> <span class="nc">_RequiredParameter</span><span class="p">:</span>
-    <span class="sd">&quot;&quot;&quot;Singleton class representing a required parameter for an Optimizer.&quot;&quot;&quot;</span>
-    <span class="k">def</span> <span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Singleton class representing a required parameter for an Optimizer.&quot;&quot;&quot;</span>
+    <span class="k">def</span> <span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">return</span> <span class="s2">&quot;&lt;required parameter&gt;&quot;</span>
 
 <span class="n">required</span> <span class="o">=</span> <span class="n">_RequiredParameter</span><span class="p">()</span>
@@ -644,8 +622,8 @@
 <span class="s2">            objective, instead of minimizing (default: False)&quot;&quot;&quot;</span>
 
 
-<span class="k">def</span> <span class="nf">register_optimizer_step_pre_hook</span><span class="p">(</span><span class="n">hook</span><span class="p">:</span> <span class="n">GlobalOptimizerPreHook</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">RemovableHandle</span><span class="p">:</span>
-    <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Register a pre hook common to all optimizers. The hook should have the following</span>
+<span class="k">def</span> <span class="nf">register_optimizer_step_pre_hook</span><span class="p">(</span><span class="n">hook</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="kc">None</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">RemovableHandle</span><span class="p">:</span>
+<span class="w">    </span><span class="sa">r</span><span class="sd">&quot;&quot;&quot;Register a pre hook common to all optimizers. The hook should have the following</span>
 <span class="sd">    signature::</span>
 
 <span class="sd">        hook(optimizer, args, kwargs) -&gt; None or modified args and kwargs</span>
@@ -654,7 +632,7 @@
 <span class="sd">        hook (Callable): A user defined hook which is registered on all optimizers.</span>
 
 <span class="sd">    Returns:</span>
-<span class="sd">        :class:`torch.utils.hooks.RemovableHandle`:</span>
+<span class="sd">        :class:`torch.utils.hooks.RemoveableHandle`:</span>
 <span class="sd">            a handle that can be used to remove the added hook by calling</span>
 <span class="sd">            ``handle.remove()``</span>
 <span class="sd">    &quot;&quot;&quot;</span>
@@ -663,8 +641,8 @@
     <span class="k">return</span> <span class="n">handle</span>
 
 
-<span class="k">def</span> <span class="nf">register_optimizer_step_post_hook</span><span class="p">(</span><span class="n">hook</span><span class="p">:</span> <span class="n">GlobalOptimizerPostHook</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">RemovableHandle</span><span class="p">:</span>
-    <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Register a post hook common to all optimizers. The hook should have the following</span>
+<span class="k">def</span> <span class="nf">register_optimizer_step_post_hook</span><span class="p">(</span><span class="n">hook</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="kc">None</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">RemovableHandle</span><span class="p">:</span>
+<span class="w">    </span><span class="sa">r</span><span class="sd">&quot;&quot;&quot;Register a post hook common to all optimizers. The hook should have the following</span>
 <span class="sd">    signature::</span>
 
 <span class="sd">        hook(optimizer, args, kwargs) -&gt; None</span>
@@ -673,7 +651,7 @@
 <span class="sd">        hook (Callable): A user defined hook which is registered on all optimizers.</span>
 
 <span class="sd">    Returns:</span>
-<span class="sd">        :class:`torch.utils.hooks.RemovableHandle`:</span>
+<span class="sd">        :class:`torch.utils.hooks.RemoveableHandle`:</span>
 <span class="sd">            a handle that can be used to remove the added hook by calling</span>
 <span class="sd">            ``handle.remove()``</span>
 <span class="sd">    &quot;&quot;&quot;</span>
@@ -681,15 +659,9 @@
     <span class="n">_global_optimizer_post_hooks</span><span class="p">[</span><span class="n">handle</span><span class="o">.</span><span class="n">id</span><span class="p">]</span> <span class="o">=</span> <span class="n">hook</span>
     <span class="k">return</span> <span class="n">handle</span>
 
-<span class="n">params_t</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">Union</span><span class="p">[</span><span class="n">Iterable</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">],</span> <span class="n">Iterable</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]]</span>
-
-<span class="n">_P</span> <span class="o">=</span> <span class="n">ParamSpec</span><span class="p">(</span><span class="s2">&quot;_P&quot;</span><span class="p">)</span>
-<span class="n">R</span> <span class="o">=</span> <span class="n">TypeVar</span><span class="p">(</span><span class="s2">&quot;R&quot;</span><span class="p">)</span>
-<span class="n">T</span> <span class="o">=</span> <span class="n">TypeVar</span><span class="p">(</span><span class="s2">&quot;T&quot;</span><span class="p">)</span>
-
 
 <div class="viewcode-block" id="Optimizer"><a class="viewcode-back" href="../../../optim.html#torch.optim.Optimizer">[docs]</a><span class="k">class</span> <span class="nc">Optimizer</span><span class="p">:</span>
-    <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Base class for all optimizers.</span>
+<span class="w">    </span><span class="sa">r</span><span class="sd">&quot;&quot;&quot;Base class for all optimizers.</span>
 
 <span class="sd">    .. warning::</span>
 <span class="sd">        Parameters need to be specified as collections that have a deterministic</span>
@@ -703,19 +675,11 @@
 <span class="sd">            options (used when a parameter group doesn&#39;t specify them).</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
-    <span class="n">OptimizerPreHook</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">Callable</span><span class="p">[</span>
-        <span class="p">[</span><span class="n">Self</span><span class="p">,</span> <span class="n">Args</span><span class="p">,</span> <span class="n">Kwargs</span><span class="p">],</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="n">Args</span><span class="p">,</span> <span class="n">Kwargs</span><span class="p">]]</span>  <span class="c1"># type: ignore[valid-type]</span>
-    <span class="p">]</span>
-    <span class="n">OptimizerPostHook</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Self</span><span class="p">,</span> <span class="n">Args</span><span class="p">,</span> <span class="n">Kwargs</span><span class="p">],</span> <span class="kc">None</span><span class="p">]</span>  <span class="c1"># type: ignore[valid-type]</span>
-
-    <span class="n">_optimizer_step_pre_hooks</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">OptimizerPreHook</span><span class="p">]</span>
-    <span class="n">_optimizer_step_post_hooks</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">OptimizerPostHook</span><span class="p">]</span>
-
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">params</span><span class="p">:</span> <span class="n">params_t</span><span class="p">,</span> <span class="n">defaults</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">params</span><span class="p">,</span> <span class="n">defaults</span><span class="p">):</span>
         <span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">_log_api_usage_once</span><span class="p">(</span><span class="s2">&quot;python.optimizer&quot;</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">defaults</span> <span class="o">=</span> <span class="n">defaults</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_optimizer_step_pre_hooks</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_optimizer_step_post_hooks</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_optimizer_step_pre_hooks</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">Callable</span><span class="p">]</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_optimizer_step_post_hooks</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">Callable</span><span class="p">]</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">()</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_patch_step_function</span><span class="p">()</span>
 
@@ -724,8 +688,8 @@
                             <span class="s2">&quot;an iterable of Tensors or dicts, but got &quot;</span> <span class="o">+</span>
                             <span class="n">torch</span><span class="o">.</span><span class="n">typename</span><span class="p">(</span><span class="n">params</span><span class="p">))</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">state</span><span class="p">:</span> <span class="n">DefaultDict</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="n">defaultdict</span><span class="p">(</span><span class="nb">dict</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">param_groups</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">state</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="n">defaultdict</span><span class="p">(</span><span class="nb">dict</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">param_groups</span> <span class="o">=</span> <span class="p">[]</span>
 
         <span class="n">param_groups</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">params</span><span class="p">)</span>
         <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">param_groups</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
@@ -734,21 +698,22 @@
             <span class="n">param_groups</span> <span class="o">=</span> <span class="p">[{</span><span class="s1">&#39;params&#39;</span><span class="p">:</span> <span class="n">param_groups</span><span class="p">}]</span>
 
         <span class="k">for</span> <span class="n">param_group</span> <span class="ow">in</span> <span class="n">param_groups</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">add_param_group</span><span class="p">(</span><span class="n">cast</span><span class="p">(</span><span class="nb">dict</span><span class="p">,</span> <span class="n">param_group</span><span class="p">))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">add_param_group</span><span class="p">(</span><span class="n">param_group</span><span class="p">)</span>
 
         <span class="c1"># Allows _cuda_graph_capture_health_check to rig a poor man&#39;s TORCH_WARN_ONCE in python,</span>
         <span class="c1"># which I don&#39;t think exists</span>
         <span class="c1"># https://github.com/pytorch/pytorch/issues/72948</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_warned_capturable_if_run_uncaptured</span> <span class="o">=</span> <span class="kc">True</span>
 
-    <span class="k">def</span> <span class="nf">__getstate__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+
+    <span class="k">def</span> <span class="nf">__getstate__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">return</span> <span class="p">{</span>
             <span class="s1">&#39;defaults&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">defaults</span><span class="p">,</span>
             <span class="s1">&#39;state&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">state</span><span class="p">,</span>
             <span class="s1">&#39;param_groups&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">param_groups</span><span class="p">,</span>
         <span class="p">}</span>
 
-    <span class="k">def</span> <span class="nf">__setstate__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">def</span> <span class="nf">__setstate__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">state</span><span class="p">)</span>
         <span class="k">if</span> <span class="s1">&#39;_optimizer_step_pre_hooks&#39;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_optimizer_step_pre_hooks</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">()</span>
@@ -757,19 +722,19 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_patch_step_function</span><span class="p">()</span>  <span class="c1"># To support multiprocessing pickle/unpickle</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">defaults</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s1">&#39;differentiable&#39;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
 
-    <span class="k">def</span> <span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+    <span class="k">def</span> <span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="n">format_string</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span> <span class="o">+</span> <span class="s1">&#39; (&#39;</span>
         <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">group</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">param_groups</span><span class="p">):</span>
             <span class="n">format_string</span> <span class="o">+=</span> <span class="s1">&#39;</span><span class="se">\n</span><span class="s1">&#39;</span>
-            <span class="n">format_string</span> <span class="o">+=</span> <span class="s1">&#39;Parameter Group </span><span class="si">{0}</span><span class="se">\n</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">i</span><span class="p">)</span>
+            <span class="n">format_string</span> <span class="o">+=</span> <span class="sa">f</span><span class="s1">&#39;Parameter Group </span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="se">\n</span><span class="s1">&#39;</span>
             <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">group</span><span class="o">.</span><span class="n">keys</span><span class="p">()):</span>
                 <span class="k">if</span> <span class="n">key</span> <span class="o">!=</span> <span class="s1">&#39;params&#39;</span><span class="p">:</span>
-                    <span class="n">format_string</span> <span class="o">+=</span> <span class="s1">&#39;    </span><span class="si">{0}</span><span class="s1">: </span><span class="si">{1}</span><span class="se">\n</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">group</span><span class="p">[</span><span class="n">key</span><span class="p">])</span>
+                    <span class="n">format_string</span> <span class="o">+=</span> <span class="sa">f</span><span class="s1">&#39;    </span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s1">: </span><span class="si">{</span><span class="n">group</span><span class="p">[</span><span class="n">key</span><span class="p">]</span><span class="si">}</span><span class="se">\n</span><span class="s1">&#39;</span>
         <span class="n">format_string</span> <span class="o">+=</span> <span class="s1">&#39;)&#39;</span>
         <span class="k">return</span> <span class="n">format_string</span>
 
     <span class="c1"># Currently needed by Adam and AdamW</span>
-    <span class="k">def</span> <span class="nf">_cuda_graph_capture_health_check</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">def</span> <span class="nf">_cuda_graph_capture_health_check</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="c1"># Note [torch.compile x capturable]</span>
         <span class="c1"># If we are compiling, we try to take the capturable path automatically by</span>
         <span class="c1"># setting the flag to True during tracing. Due to this, we skip all the checks</span>
@@ -800,8 +765,8 @@
                 <span class="p">)</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_warned_capturable_if_run_uncaptured</span> <span class="o">=</span> <span class="kc">True</span>
 
-    <span class="k">def</span> <span class="nf">_optimizer_step_code</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="sd">&quot;&quot;&quot;Entry point for `torch.profile.profiler`.</span>
+    <span class="k">def</span> <span class="nf">_optimizer_step_code</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Entry point for `torch.profile.profiler`.</span>
 
 <span class="sd">        When python tracing is enabled the profiler will hook into this</span>
 <span class="sd">        function at the CPython level to inspect the optimizer&#39;s parameters and</span>
@@ -814,23 +779,22 @@
         <span class="k">pass</span>
 
     <span class="nd">@staticmethod</span>
-    <span class="k">def</span> <span class="nf">profile_hook_step</span><span class="p">(</span><span class="n">func</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[</span><span class="n">_P</span><span class="p">,</span> <span class="n">R</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Callable</span><span class="p">[</span><span class="n">_P</span><span class="p">,</span> <span class="n">R</span><span class="p">]:</span>
+    <span class="k">def</span> <span class="nf">profile_hook_step</span><span class="p">(</span><span class="n">func</span><span class="p">):</span>
 
         <span class="nd">@functools</span><span class="o">.</span><span class="n">wraps</span><span class="p">(</span><span class="n">func</span><span class="p">)</span>
-        <span class="k">def</span> <span class="nf">wrapper</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">_P</span><span class="o">.</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">_P</span><span class="o">.</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">R</span><span class="p">:</span>
-            <span class="bp">self</span> <span class="o">=</span> <span class="n">cast</span><span class="p">(</span><span class="n">Optimizer</span><span class="p">,</span> <span class="n">args</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
-            <span class="n">profile_name</span> <span class="o">=</span> <span class="s2">&quot;Optimizer.step#</span><span class="si">{}</span><span class="s2">.step&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="p">)</span>
+        <span class="k">def</span> <span class="nf">wrapper</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+            <span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">_</span> <span class="o">=</span> <span class="n">args</span>
+            <span class="n">profile_name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;Optimizer.step#</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">.step&quot;</span>
             <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">autograd</span><span class="o">.</span><span class="n">profiler</span><span class="o">.</span><span class="n">record_function</span><span class="p">(</span><span class="n">profile_name</span><span class="p">):</span>
                 <span class="c1"># call optimizer step pre hooks</span>
                 <span class="k">for</span> <span class="n">pre_hook</span> <span class="ow">in</span> <span class="n">chain</span><span class="p">(</span><span class="n">_global_optimizer_pre_hooks</span><span class="o">.</span><span class="n">values</span><span class="p">(),</span> <span class="bp">self</span><span class="o">.</span><span class="n">_optimizer_step_pre_hooks</span><span class="o">.</span><span class="n">values</span><span class="p">()):</span>
                     <span class="n">result</span> <span class="o">=</span> <span class="n">pre_hook</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">)</span>
                     <span class="k">if</span> <span class="n">result</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">result</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">result</span><span class="p">)</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
-                            <span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span> <span class="o">=</span> <span class="n">result</span>  <span class="c1"># type: ignore[assignment]</span>
+                            <span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span> <span class="o">=</span> <span class="n">result</span>
                         <span class="k">else</span><span class="p">:</span>
-                            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
-                                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">func</span><span class="si">}</span><span class="s2"> must return None or a tuple of (new_args, new_kwargs), but got </span><span class="si">{</span><span class="n">result</span><span class="si">}</span><span class="s2">.&quot;</span>
-                            <span class="p">)</span>
+                            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">func</span><span class="si">}</span><span class="s2"> must return None or a tuple of (new_args, new_kwargs),&quot;</span>
+                                               <span class="sa">f</span><span class="s2">&quot;but got </span><span class="si">{</span><span class="n">result</span><span class="si">}</span><span class="s2">.&quot;</span><span class="p">)</span>
 
                 <span class="n">out</span> <span class="o">=</span> <span class="n">func</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_optimizer_step_code</span><span class="p">()</span>
@@ -844,29 +808,23 @@
         <span class="k">return</span> <span class="n">wrapper</span>
 
     <span class="nd">@staticmethod</span>
-    <span class="k">def</span> <span class="nf">_group_tensors_by_device_and_dtype</span><span class="p">(</span>
-        <span class="n">tensorlistlist</span><span class="p">:</span> <span class="n">TensorListList</span><span class="p">,</span>
-        <span class="n">with_indices</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span>
-        <span class="n">Dict</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">],</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">TensorListList</span><span class="p">,</span> <span class="n">Indices</span><span class="p">]],</span>
-        <span class="n">Dict</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">dtype</span><span class="p">],</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">TensorListList</span><span class="p">,</span> <span class="n">Indices</span><span class="p">]],</span>
-    <span class="p">]:</span>
-        <span class="sd">&quot;&quot;&quot;Groups a list of lists of tensors by device and dtype.</span>
+    <span class="k">def</span> <span class="nf">_group_tensors_by_device_and_dtype</span><span class="p">(</span><span class="n">tensorlistlist</span><span class="p">,</span> <span class="n">with_indices</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Groups a list of lists of tensors by device and dtype.</span>
 <span class="sd">        Skips this step if we are compiling since this will occur during inductor lowering.&quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="n">is_compiling</span><span class="p">():</span>
             <span class="k">return</span> <span class="p">{(</span><span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">):</span> <span class="p">(</span><span class="n">tensorlistlist</span><span class="p">,</span> <span class="nb">list</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">tensorlistlist</span><span class="p">[</span><span class="mi">0</span><span class="p">]))))}</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="k">return</span> <span class="n">_group_tensors_by_device_and_dtype</span><span class="p">(</span><span class="n">tensorlistlist</span><span class="p">,</span> <span class="n">with_indices</span><span class="p">)</span>
 
-    <span class="k">def</span> <span class="nf">_patch_step_function</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_zero_grad_profile_name</span> <span class="o">=</span> <span class="s2">&quot;Optimizer.zero_grad#</span><span class="si">{}</span><span class="s2">.zero_grad&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="p">)</span>
+    <span class="k">def</span> <span class="nf">_patch_step_function</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_zero_grad_profile_name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;Optimizer.zero_grad#</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">.zero_grad&quot;</span>
         <span class="n">hooked</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="n">step</span><span class="p">,</span> <span class="s2">&quot;hooked&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">hooked</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="n">step</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">profile_hook_step</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="n">step</span><span class="p">)</span>  <span class="c1"># type: ignore[assignment]</span>
+            <span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="n">step</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">profile_hook_step</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="n">step</span><span class="p">)</span>  <span class="c1"># type: ignore[method-assign]</span>
             <span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="n">step</span><span class="o">.</span><span class="n">hooked</span> <span class="o">=</span> <span class="kc">True</span>  <span class="c1"># type: ignore[attr-defined]</span>
 
-    <span class="k">def</span> <span class="nf">register_step_pre_hook</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">hook</span><span class="p">:</span> <span class="n">OptimizerPreHook</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">RemovableHandle</span><span class="p">:</span>
-        <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Register an optimizer step pre hook which will be called before</span>
+    <span class="k">def</span> <span class="nf">register_step_pre_hook</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">hook</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="kc">None</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">RemovableHandle</span><span class="p">:</span>
+<span class="w">        </span><span class="sa">r</span><span class="sd">&quot;&quot;&quot;Register an optimizer step pre hook which will be called before</span>
 <span class="sd">        optimizer step. It should have the following signature::</span>
 
 <span class="sd">            hook(optimizer, args, kwargs) -&gt; None or modified args and kwargs</span>
@@ -879,7 +837,7 @@
 <span class="sd">            hook (Callable): The user defined hook to be registered.</span>
 
 <span class="sd">        Returns:</span>
-<span class="sd">            :class:`torch.utils.hooks.RemovableHandle`:</span>
+<span class="sd">            :class:`torch.utils.hooks.RemoveableHandle`:</span>
 <span class="sd">                a handle that can be used to remove the added hook by calling</span>
 <span class="sd">                ``handle.remove()``</span>
 <span class="sd">        &quot;&quot;&quot;</span>
@@ -887,8 +845,8 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_optimizer_step_pre_hooks</span><span class="p">[</span><span class="n">handle</span><span class="o">.</span><span class="n">id</span><span class="p">]</span> <span class="o">=</span> <span class="n">hook</span>
         <span class="k">return</span> <span class="n">handle</span>
 
-    <span class="k">def</span> <span class="nf">register_step_post_hook</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">hook</span><span class="p">:</span> <span class="n">OptimizerPostHook</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">RemovableHandle</span><span class="p">:</span>
-        <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Register an optimizer step post hook which will be called after optimizer step.</span>
+    <span class="k">def</span> <span class="nf">register_step_post_hook</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">hook</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="kc">None</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">RemovableHandle</span><span class="p">:</span>
+<span class="w">        </span><span class="sa">r</span><span class="sd">&quot;&quot;&quot;Register an optimizer step post hook which will be called after optimizer step.</span>
 <span class="sd">        It should have the following signature::</span>
 
 <span class="sd">            hook(optimizer, args, kwargs) -&gt; None</span>
@@ -899,7 +857,7 @@
 <span class="sd">            hook (Callable): The user defined hook to be registered.</span>
 
 <span class="sd">        Returns:</span>
-<span class="sd">            :class:`torch.utils.hooks.RemovableHandle`:</span>
+<span class="sd">            :class:`torch.utils.hooks.RemoveableHandle`:</span>
 <span class="sd">                a handle that can be used to remove the added hook by calling</span>
 <span class="sd">                ``handle.remove()``</span>
 <span class="sd">        &quot;&quot;&quot;</span>
@@ -908,8 +866,8 @@
         <span class="k">return</span> <span class="n">handle</span>
 
 <div class="viewcode-block" id="Optimizer.state_dict"><a class="viewcode-back" href="../../../generated/torch.optim.Optimizer.state_dict.html#torch.optim.Optimizer.state_dict">[docs]</a>    <span class="nd">@torch</span><span class="o">.</span><span class="n">_disable_dynamo</span>
-    <span class="k">def</span> <span class="nf">state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
-        <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Returns the state of the optimizer as a :class:`dict`.</span>
+    <span class="k">def</span> <span class="nf">state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sa">r</span><span class="sd">&quot;&quot;&quot;Returns the state of the optimizer as a :class:`dict`.</span>
 
 <span class="sd">        It contains two entries:</span>
 
@@ -919,10 +877,10 @@
 <span class="sd">            parameter group is a dict</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="c1"># Save order indices instead of Tensors</span>
-        <span class="n">param_mappings</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">param_mappings</span> <span class="o">=</span> <span class="p">{}</span>
         <span class="n">start_index</span> <span class="o">=</span> <span class="mi">0</span>
 
-        <span class="k">def</span> <span class="nf">pack_group</span><span class="p">(</span><span class="n">group</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+        <span class="k">def</span> <span class="nf">pack_group</span><span class="p">(</span><span class="n">group</span><span class="p">):</span>
             <span class="k">nonlocal</span> <span class="n">start_index</span>
             <span class="n">packed</span> <span class="o">=</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">v</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">group</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">k</span> <span class="o">!=</span> <span class="s1">&#39;params&#39;</span><span class="p">}</span>
             <span class="n">param_mappings</span><span class="o">.</span><span class="n">update</span><span class="p">({</span><span class="nb">id</span><span class="p">(</span><span class="n">p</span><span class="p">):</span> <span class="n">i</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">p</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">group</span><span class="p">[</span><span class="s1">&#39;params&#39;</span><span class="p">],</span> <span class="n">start_index</span><span class="p">)</span>
@@ -940,19 +898,15 @@
         <span class="p">}</span></div>
 
     <span class="nd">@staticmethod</span>
-    <span class="k">def</span> <span class="nf">_process_value_according_to_param_policy</span><span class="p">(</span>
-        <span class="n">param</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
-        <span class="n">value</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
-        <span class="n">param_id</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
-        <span class="n">param_groups</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="n">Any</span><span class="p">]],</span>
-        <span class="n">key</span><span class="p">:</span> <span class="n">Hashable</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+    <span class="k">def</span> <span class="nf">_process_value_according_to_param_policy</span><span class="p">(</span><span class="n">param</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span> <span class="n">param_id</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+                                                 <span class="n">param_groups</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tensor</span><span class="p">:</span>
         <span class="c1"># Floating-point types are a bit special here. They are the only ones</span>
         <span class="c1"># that are assumed to always match the type of params.</span>
         <span class="c1"># Make sure state[&#39;step&#39;] is not casted https://github.com/pytorch/pytorch/issues/74424</span>
         <span class="c1"># UNLESS fused or capturable, see note [special device hosting for step]</span>
         <span class="n">fused</span> <span class="o">=</span> <span class="kc">False</span>
         <span class="n">capturable</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="k">assert</span> <span class="n">param_groups</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
         <span class="k">for</span> <span class="n">pg</span> <span class="ow">in</span> <span class="n">param_groups</span><span class="p">:</span>
             <span class="k">if</span> <span class="n">param_id</span> <span class="ow">in</span> <span class="n">pg</span><span class="p">[</span><span class="s2">&quot;params&quot;</span><span class="p">]:</span>
                 <span class="n">fused</span> <span class="o">=</span> <span class="n">pg</span><span class="p">[</span><span class="s2">&quot;fused&quot;</span><span class="p">]</span> <span class="k">if</span> <span class="s2">&quot;fused&quot;</span> <span class="ow">in</span> <span class="n">pg</span> <span class="k">else</span> <span class="kc">False</span>
@@ -971,8 +925,8 @@
                 <span class="k">return</span> <span class="n">value</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="n">param</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
 
 <div class="viewcode-block" id="Optimizer.load_state_dict"><a class="viewcode-back" href="../../../generated/torch.optim.Optimizer.load_state_dict.html#torch.optim.Optimizer.load_state_dict">[docs]</a>    <span class="nd">@torch</span><span class="o">.</span><span class="n">_disable_dynamo</span>
-    <span class="k">def</span> <span class="nf">load_state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state_dict</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Loads the optimizer state.</span>
+    <span class="k">def</span> <span class="nf">load_state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state_dict</span><span class="p">):</span>
+<span class="w">        </span><span class="sa">r</span><span class="sd">&quot;&quot;&quot;Loads the optimizer state.</span>
 
 <span class="sd">        Args:</span>
 <span class="sd">            state_dict (dict): optimizer state. Should be an object returned</span>
@@ -994,33 +948,33 @@
                              <span class="s2">&quot;that doesn&#39;t match the size of optimizer&#39;s group&quot;</span><span class="p">)</span>
 
         <span class="c1"># Update the state</span>
-        <span class="n">id_map</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="n">chain</span><span class="o">.</span><span class="n">from_iterable</span><span class="p">((</span><span class="n">g</span><span class="p">[</span><span class="s1">&#39;params&#39;</span><span class="p">]</span> <span class="k">for</span> <span class="n">g</span> <span class="ow">in</span> <span class="n">saved_groups</span><span class="p">)),</span>
-                      <span class="n">chain</span><span class="o">.</span><span class="n">from_iterable</span><span class="p">((</span><span class="n">g</span><span class="p">[</span><span class="s1">&#39;params&#39;</span><span class="p">]</span> <span class="k">for</span> <span class="n">g</span> <span class="ow">in</span> <span class="n">groups</span><span class="p">))))</span>
+        <span class="n">id_map</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="n">chain</span><span class="o">.</span><span class="n">from_iterable</span><span class="p">(</span><span class="n">g</span><span class="p">[</span><span class="s1">&#39;params&#39;</span><span class="p">]</span> <span class="k">for</span> <span class="n">g</span> <span class="ow">in</span> <span class="n">saved_groups</span><span class="p">),</span>
+                      <span class="n">chain</span><span class="o">.</span><span class="n">from_iterable</span><span class="p">(</span><span class="n">g</span><span class="p">[</span><span class="s1">&#39;params&#39;</span><span class="p">]</span> <span class="k">for</span> <span class="n">g</span> <span class="ow">in</span> <span class="n">groups</span><span class="p">)))</span>
 
-        <span class="k">def</span> <span class="nf">_cast</span><span class="p">(</span><span class="n">param</span><span class="p">,</span> <span class="n">value</span><span class="p">,</span> <span class="n">param_id</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">param_groups</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
-            <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Make a deep copy of value, casting all tensors to device of param.&quot;&quot;&quot;</span>
+        <span class="k">def</span> <span class="nf">cast</span><span class="p">(</span><span class="n">param</span><span class="p">,</span> <span class="n">value</span><span class="p">,</span> <span class="n">param_id</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">param_groups</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">            </span><span class="sa">r</span><span class="sd">&quot;&quot;&quot;Make a deep copy of value, casting all tensors to device of param.&quot;&quot;&quot;</span>
             <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
                 <span class="k">return</span> <span class="n">Optimizer</span><span class="o">.</span><span class="n">_process_value_according_to_param_policy</span><span class="p">(</span><span class="n">param</span><span class="p">,</span> <span class="n">value</span><span class="p">,</span> <span class="n">param_id</span><span class="p">,</span> <span class="n">param_groups</span><span class="p">,</span> <span class="n">key</span><span class="p">)</span>
             <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
-                <span class="k">return</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">_cast</span><span class="p">(</span><span class="n">param</span><span class="p">,</span> <span class="n">v</span><span class="p">,</span> <span class="n">param_id</span><span class="o">=</span><span class="n">param_id</span><span class="p">,</span> <span class="n">param_groups</span><span class="o">=</span><span class="n">param_groups</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="n">k</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">value</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
-            <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">Iterable</span><span class="p">):</span>
-                <span class="k">return</span> <span class="nb">type</span><span class="p">(</span><span class="n">value</span><span class="p">)(</span><span class="n">_cast</span><span class="p">(</span><span class="n">param</span><span class="p">,</span> <span class="n">v</span><span class="p">,</span> <span class="n">param_id</span><span class="o">=</span><span class="n">param_id</span><span class="p">,</span> <span class="n">param_groups</span><span class="o">=</span><span class="n">param_groups</span><span class="p">)</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">value</span><span class="p">)</span>  <span class="c1"># type: ignore[call-arg]</span>
+                <span class="k">return</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">cast</span><span class="p">(</span><span class="n">param</span><span class="p">,</span> <span class="n">v</span><span class="p">,</span> <span class="n">param_id</span><span class="o">=</span><span class="n">param_id</span><span class="p">,</span> <span class="n">param_groups</span><span class="o">=</span><span class="n">param_groups</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="n">k</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">value</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
+            <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">container_abcs</span><span class="o">.</span><span class="n">Iterable</span><span class="p">):</span>
+                <span class="k">return</span> <span class="nb">type</span><span class="p">(</span><span class="n">value</span><span class="p">)(</span><span class="n">cast</span><span class="p">(</span><span class="n">param</span><span class="p">,</span> <span class="n">v</span><span class="p">,</span> <span class="n">param_id</span><span class="o">=</span><span class="n">param_id</span><span class="p">,</span> <span class="n">param_groups</span><span class="o">=</span><span class="n">param_groups</span><span class="p">)</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">value</span><span class="p">)</span>  <span class="c1"># type: ignore[call-arg]</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="k">return</span> <span class="n">value</span>
 
         <span class="c1"># Copy state assigned to params (and cast tensors to appropriate types).</span>
         <span class="c1"># State that is not assigned to params is copied as is (needed for</span>
         <span class="c1"># backward compatibility).</span>
-        <span class="n">state</span><span class="p">:</span> <span class="n">DefaultDict</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="n">defaultdict</span><span class="p">(</span><span class="nb">dict</span><span class="p">)</span>
+        <span class="n">state</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="n">defaultdict</span><span class="p">(</span><span class="nb">dict</span><span class="p">)</span>
         <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">state_dict</span><span class="p">[</span><span class="s1">&#39;state&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
             <span class="k">if</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">id_map</span><span class="p">:</span>
                 <span class="n">param</span> <span class="o">=</span> <span class="n">id_map</span><span class="p">[</span><span class="n">k</span><span class="p">]</span>
-                <span class="n">state</span><span class="p">[</span><span class="n">param</span><span class="p">]</span> <span class="o">=</span> <span class="n">_cast</span><span class="p">(</span><span class="n">param</span><span class="p">,</span> <span class="n">v</span><span class="p">,</span> <span class="n">param_id</span><span class="o">=</span><span class="n">k</span><span class="p">,</span> <span class="n">param_groups</span><span class="o">=</span><span class="n">state_dict</span><span class="p">[</span><span class="s1">&#39;param_groups&#39;</span><span class="p">])</span>
+                <span class="n">state</span><span class="p">[</span><span class="n">param</span><span class="p">]</span> <span class="o">=</span> <span class="n">cast</span><span class="p">(</span><span class="n">param</span><span class="p">,</span> <span class="n">v</span><span class="p">,</span> <span class="n">param_id</span><span class="o">=</span><span class="n">k</span><span class="p">,</span> <span class="n">param_groups</span><span class="o">=</span><span class="n">state_dict</span><span class="p">[</span><span class="s1">&#39;param_groups&#39;</span><span class="p">])</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="n">state</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">v</span>
 
         <span class="c1"># Update parameter groups, setting their &#39;params&#39; value</span>
-        <span class="k">def</span> <span class="nf">update_group</span><span class="p">(</span><span class="n">group</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="n">new_group</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+        <span class="k">def</span> <span class="nf">update_group</span><span class="p">(</span><span class="n">group</span><span class="p">,</span> <span class="n">new_group</span><span class="p">):</span>
             <span class="n">new_group</span><span class="p">[</span><span class="s1">&#39;params&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">group</span><span class="p">[</span><span class="s1">&#39;params&#39;</span><span class="p">]</span>
             <span class="k">return</span> <span class="n">new_group</span>
         <span class="n">param_groups</span> <span class="o">=</span> <span class="p">[</span>
@@ -1028,8 +982,8 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">__setstate__</span><span class="p">({</span><span class="s1">&#39;state&#39;</span><span class="p">:</span> <span class="n">state</span><span class="p">,</span> <span class="s1">&#39;param_groups&#39;</span><span class="p">:</span> <span class="n">param_groups</span><span class="p">})</span></div>
 
 <div class="viewcode-block" id="Optimizer.zero_grad"><a class="viewcode-back" href="../../../generated/torch.optim.Optimizer.zero_grad.html#torch.optim.Optimizer.zero_grad">[docs]</a>    <span class="nd">@torch</span><span class="o">.</span><span class="n">_disable_dynamo</span>
-    <span class="k">def</span> <span class="nf">zero_grad</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">set_to_none</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Resets the gradients of all optimized :class:`torch.Tensor` s.</span>
+    <span class="k">def</span> <span class="nf">zero_grad</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">set_to_none</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">):</span>
+<span class="w">        </span><span class="sa">r</span><span class="sd">&quot;&quot;&quot;Resets the gradients of all optimized :class:`torch.Tensor` s.</span>
 
 <span class="sd">        Args:</span>
 <span class="sd">            set_to_none (bool): instead of setting to zero, set the grads to None.</span>
@@ -1047,13 +1001,8 @@
 
         <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_zero_grad_profile_name&quot;</span><span class="p">):</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_patch_step_function</span><span class="p">()</span>
-
-        <span class="n">per_device_and_dtype_grads</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">DefaultDict</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">DefaultDict</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]]]]</span>
         <span class="k">if</span> <span class="n">foreach</span><span class="p">:</span>
-            <span class="n">per_device_and_dtype_grads</span> <span class="o">=</span> <span class="n">defaultdict</span><span class="p">(</span><span class="k">lambda</span><span class="p">:</span> <span class="n">defaultdict</span><span class="p">(</span><span class="nb">list</span><span class="p">))</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">per_device_and_dtype_grads</span> <span class="o">=</span> <span class="kc">None</span>
-
+            <span class="n">per_device_and_dtype_grads</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="n">Any</span><span class="p">]]]</span> <span class="o">=</span> <span class="n">defaultdict</span><span class="p">(</span><span class="k">lambda</span><span class="p">:</span> <span class="n">defaultdict</span><span class="p">(</span><span class="nb">list</span><span class="p">))</span>
         <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">autograd</span><span class="o">.</span><span class="n">profiler</span><span class="o">.</span><span class="n">record_function</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_zero_grad_profile_name</span><span class="p">):</span>
             <span class="k">for</span> <span class="n">group</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">param_groups</span><span class="p">:</span>
                 <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">group</span><span class="p">[</span><span class="s1">&#39;params&#39;</span><span class="p">]:</span>
@@ -1068,24 +1017,14 @@
                             <span class="k">if</span> <span class="p">(</span><span class="ow">not</span> <span class="n">foreach</span> <span class="ow">or</span> <span class="n">p</span><span class="o">.</span><span class="n">grad</span><span class="o">.</span><span class="n">is_sparse</span><span class="p">):</span>
                                 <span class="n">p</span><span class="o">.</span><span class="n">grad</span><span class="o">.</span><span class="n">zero_</span><span class="p">()</span>
                             <span class="k">else</span><span class="p">:</span>
-                                <span class="k">assert</span> <span class="n">per_device_and_dtype_grads</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
                                 <span class="n">per_device_and_dtype_grads</span><span class="p">[</span><span class="n">p</span><span class="o">.</span><span class="n">grad</span><span class="o">.</span><span class="n">device</span><span class="p">][</span><span class="n">p</span><span class="o">.</span><span class="n">grad</span><span class="o">.</span><span class="n">dtype</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">grad</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">foreach</span><span class="p">:</span>
-                <span class="k">assert</span> <span class="n">per_device_and_dtype_grads</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
                 <span class="k">for</span> <span class="n">per_dtype_grads</span> <span class="ow">in</span> <span class="n">per_device_and_dtype_grads</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
                     <span class="k">for</span> <span class="n">grads</span> <span class="ow">in</span> <span class="n">per_dtype_grads</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
                         <span class="n">torch</span><span class="o">.</span><span class="n">_foreach_zero_</span><span class="p">(</span><span class="n">grads</span><span class="p">)</span></div>
 
-    <span class="nd">@overload</span>
-    <span class="k">def</span> <span class="nf">step</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">closure</span><span class="p">:</span> <span class="kc">None</span> <span class="o">=</span> <span class="o">...</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="o">...</span>
-
-    <span class="nd">@overload</span>
-    <span class="k">def</span> <span class="nf">step</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">closure</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="nb">float</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
-        <span class="o">...</span>
-
-<div class="viewcode-block" id="Optimizer.step"><a class="viewcode-back" href="../../../generated/torch.optim.Optimizer.step.html#torch.optim.Optimizer.step">[docs]</a>    <span class="k">def</span> <span class="nf">step</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">closure</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Callable</span><span class="p">[[],</span> <span class="nb">float</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]:</span>
-        <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Performs a single optimization step (parameter update).</span>
+<div class="viewcode-block" id="Optimizer.step"><a class="viewcode-back" href="../../../generated/torch.optim.Optimizer.step.html#torch.optim.Optimizer.step">[docs]</a>    <span class="k">def</span> <span class="nf">step</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">closure</span><span class="p">):</span>
+<span class="w">        </span><span class="sa">r</span><span class="sd">&quot;&quot;&quot;Performs a single optimization step (parameter update).</span>
 
 <span class="sd">        Args:</span>
 <span class="sd">            closure (Callable): A closure that reevaluates the model and</span>
@@ -1098,8 +1037,8 @@
         <span class="k">raise</span> <span class="ne">NotImplementedError</span></div>
 
 <div class="viewcode-block" id="Optimizer.add_param_group"><a class="viewcode-back" href="../../../generated/torch.optim.Optimizer.add_param_group.html#torch.optim.Optimizer.add_param_group">[docs]</a>    <span class="nd">@torch</span><span class="o">.</span><span class="n">_disable_dynamo</span>
-    <span class="k">def</span> <span class="nf">add_param_group</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">param_group</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Add a param group to the :class:`Optimizer` s `param_groups`.</span>
+    <span class="k">def</span> <span class="nf">add_param_group</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">param_group</span><span class="p">):</span>
+<span class="w">        </span><span class="sa">r</span><span class="sd">&quot;&quot;&quot;Add a param group to the :class:`Optimizer` s `param_groups`.</span>
 
 <span class="sd">        This can be useful when fine tuning a pre-trained network as frozen layers can be made</span>
 <span class="sd">        trainable and added to the :class:`Optimizer` as training progresses.</span>
@@ -1108,8 +1047,7 @@
 <span class="sd">            param_group (dict): Specifies what Tensors should be optimized along with group</span>
 <span class="sd">                specific optimization options.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">param_group</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
-            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;param_group must be a dict, but got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">param_group</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">param_group</span><span class="p">,</span> <span class="nb">dict</span><span class="p">),</span> <span class="s2">&quot;param group must be a dict&quot;</span>
 
         <span class="n">params</span> <span class="o">=</span> <span class="n">param_group</span><span class="p">[</span><span class="s1">&#39;params&#39;</span><span class="p">]</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">params</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
@@ -1129,7 +1067,8 @@
 
         <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">default</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">defaults</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
             <span class="k">if</span> <span class="n">default</span> <span class="ow">is</span> <span class="n">required</span> <span class="ow">and</span> <span class="n">name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">param_group</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;parameter group didn&#39;t specify a value of required optimization parameter </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;parameter group didn&#39;t specify a value of required optimization parameter &quot;</span> <span class="o">+</span>
+                                 <span class="n">name</span><span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="n">param_group</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">default</span><span class="p">)</span>
 
@@ -1139,7 +1078,7 @@
                           <span class="s2">&quot;in future, this will cause an error; &quot;</span>
                           <span class="s2">&quot;see github.com/pytorch/pytorch/issues/40967 for more information&quot;</span><span class="p">,</span> <span class="n">stacklevel</span><span class="o">=</span><span class="mi">3</span><span class="p">)</span>
 
-        <span class="n">param_set</span><span class="p">:</span> <span class="n">Set</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+        <span class="n">param_set</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
         <span class="k">for</span> <span class="n">group</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">param_groups</span><span class="p">:</span>
             <span class="n">param_set</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">group</span><span class="p">[</span><span class="s1">&#39;params&#39;</span><span class="p">]))</span>
 
