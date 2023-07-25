@@ -77,24 +77,24 @@ The S3 data in the test is a sharded text dataset. Each shard has about 100,000 
 The following chart reports the throughput comparison for various batch sizes for **num_workers=0**, the data loader runs in the main process. **S3FileLoader** has higher queries per second (QPS). It is 90% higher than **fsspec** at batch size 512.
 
 
-(/assets/images/2023-7-25-announcing-ccp-based-s3-io-datapipes-1.png){:style="max-width:620px; width:100%; display: block; margin-left: auto; margin-right: auto"}
+![Batch Sizes 1](/assets/images/2023-7-25-announcing-ccp-based-s3-io-datapipes-1.png){:style="max-width:620px; width:100%; display: block; margin-left: auto; margin-right: auto"}
 
 The following chart reports the results for **num_workers=4**, the data loaders runs in the main process. **S3FileLoader** is 59.8% higher than **fsspec** at batch size 512.
 
 
-(/assets/images/2023-7-25-announcing-ccp-based-s3-io-datapipes-5.png){:style="max-width:620px; width:100%; display: block; margin-left: auto; margin-right: auto"}
+![Batch Sizes 2](/assets/images/2023-7-25-announcing-ccp-based-s3-io-datapipes-5.png){:style="max-width:620px; width:100%; display: block; margin-left: auto; margin-right: auto"}
 
 ### Training ResNet50 Model against Boto3
 For the following chart, we trained a ResNet50 model on a cluster of 4 p3.16xlarge instances with a total 32 GPUs. The training dataset is ImageNet with 1.2 million images organized into 1,000-image shards. The training batch size is 64. The training time is measured in seconds. For eight epochs, **S3FileLoader** is 7.5% faster than Boto3.
 
 
-(/assets/images/2023-7-25-announcing-ccp-based-s3-io-datapipes-2.png){:style="max-width:620px; width:100%; display: block; margin-left: auto; margin-right: auto"}
+![Boto3](/assets/images/2023-7-25-announcing-ccp-based-s3-io-datapipes-2.png){:style="max-width:620px; width:100%; display: block; margin-left: auto; margin-right: auto"}
 
 ### Training a Bert model against Boto3
 For the following cart, we trained a Bert model on a cluster of 4 p3.16xlarge instances with a total 32 GPUs. The training corpus has 1474 files. Each file has around 150,000 samples. To run a shorter epoch, we use 0.05% (approximately 75 samples) per file. The batch size is 2,048. The training time is measured in seconds. For one epoch, **S3FileLoader** is 7% faster than Boto3.
 
 
-(/assets/images/2023-7-25-announcing-ccp-based-s3-io-datapipes-3.png){:style="max-width:620px; width:100%; display: block; margin-left: auto; margin-right: auto"}
+![Boto3 2](/assets/images/2023-7-25-announcing-ccp-based-s3-io-datapipes-3.png){:style="max-width:620px; width:100%; display: block; margin-left: auto; margin-right: auto"}
 
 ### Comparison against the original PyTorch S3 plugin
 The new PyTorch S3 DataPipes perform substantially better than the original [PyTorch S3 plugin](https://github.com/aws/amazon-s3-plugin-for-pytorch). We have tuned the internal buffer size for **S3FileLoader**. The loading time is measured in seconds.
@@ -105,7 +105,7 @@ For the 10 sharded charades files (approximately 1.5 GiB each), **S3FileLoader**
 Training large deep learning models may require a massive compute cluster with tens or even hundreds of nodes. Each node in the cluster may generate a large number of data loading requests that hit a specific S3 shard. To avoid throttle, we recommend sharding training data across S3 buckets and S3 folders.
 
 
-(/assets/images/2023-7-25-announcing-ccp-based-s3-io-datapipes-4.png){:style="max-width:620px; width:100%; display: block; margin-left: auto; margin-right: auto"}
+![Best Practices](/assets/images/2023-7-25-announcing-ccp-based-s3-io-datapipes-4.png){:style="max-width:620px; width:100%; display: block; margin-left: auto; margin-right: auto"}
 
 To achieve good performance, it helps to have file sizes that are big enough to parallelize across a given file, but not so big that we hit the limits of throughput on that object on Amazon S3 depending on the training job. The optimal size can be between 50–200 MB.
 
