@@ -6,7 +6,7 @@ author: Team PyTorch
 
 The PyTorch Foundation, part of The Linux Foundation, is pleased to announce that IBM has joined as a premier member.
 
-![IBM Logo](/assets/images/pytorch-ibm-logo.png)]{:style="width:100%; display: block; margin-left: auto; margin-right: auto"}
+![IBM Logo](/assets/images/pytorch-ibm-logo.png){:style="max-width:250px; width:100%; display: block; margin-left: auto; margin-right: auto"}
 
 The foundation serves as a neutral space for the deep learning community to collaborate on the open source PyTorch framework and ecosystem. With its extensive industry expertise and leadership in open source and AI, IBM is committed to actively contributing to the PyTorch community.
 
@@ -20,7 +20,7 @@ IBM and PyTorch have already collaborated on two projects. The first enables fou
 
 As a premier member, IBM  is granted one seat to the PyTorch Foundation Governing Board. The Board sets policy through our bylaws, mission and vision statements, describing the overarching scope of foundation initiatives, technical vision, and direction.
 
-![Raghu Ganti Headshot](/assets/images/pytorch-ibm-headshot.png)]{:style="width:100%; display: block; margin-left: auto; margin-right: auto"}
+![Raghu Ganti Headshot](/assets/images/pytorch-ibm-headshot.png){:style="max-width:250px; width:100%; display: block; margin-left: auto; margin-right: auto"}
 
 We’re happy to welcome Raghu Ganti, Principal Research Scientist at IBM Research, to our board.  Raghu co-leads IBM Research’s foundation model training and validation platform, built on Red Hat OpenShift. His team primarily contributes to the PyTorch training components, with the mission of democratizing training and validation of foundation models.
 
