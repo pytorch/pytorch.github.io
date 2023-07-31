@@ -45,9 +45,7 @@ With this option as the new default, DCP now creates a single file per rank duri
 
 By combining sharded_state_dict support with single filer per rank writer, distributed checkpoint was able to accelerate checkpoint saving time over 72x vs the original PyTorch 1.13 save speed, and enable rapid checkpointing for models sizes over 15B which would previously simply time out. 
 
-_"Looking back, it’s really astounding the speedups we’ve seen, handling training for many of these models. We went from taking almost half an hour to write a single 11B checkpoint in PyTorch 1.13, to being able to handle a 30B parameter model, with optimizer and dataloader state - so that’s over eight times the raw data - in just over 3 minutes. That’s done wonders for both the stability and efficiency of our jobs, as we scale up training to hundreds of gpus." 
-
-– **Davis Wertheimer, IBM Research**_
+_"Looking back, it’s really astounding the speedups we’ve seen, handling training for many of these models. We went from taking almost half an hour to write a single 11B checkpoint in PyTorch 1.13, to being able to handle a 30B parameter model, with optimizer and dataloader state - so that’s over eight times the raw data - in just over 3 minutes. That’s done wonders for both the stability and efficiency of our jobs, as we scale up training to hundreds of gpus."  – **Davis Wertheimer, IBM Research**_
 
 IBM’s adoption has also helped us validate and improve our solutions in a real world, large-scale training environment. As an example, IBM discovered that DCP was working well for them on a single node with multiple GPUs, but erred out when used on multiple nodes.
 
