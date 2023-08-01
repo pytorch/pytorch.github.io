@@ -31,7 +31,7 @@ A major improvement from 1.13 to 2.0 includes adding sharded_state_dict support 
 
 Another major change is that we decouple the storage layer from the checkpoint planning layer and separate implementation from the interface for both layers. With this change, users can now specify how their state_dict should be chunked or transformed during the checkpoint planning phase. Additionally, the customizable storage layer can easily accommodate different backends.
 
-More information on the Distributed Checkpoint package can be found [here](https://fb.workplace.com/notes/1247127459498709).
+More information on the Distributed Checkpoint package can be found [here](https://pytorch.org/docs/stable/distributed.checkpoint.html).
 
 ## Performant Distributed checkpointing in Production with IBM
 
