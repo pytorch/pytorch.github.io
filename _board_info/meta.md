@@ -2,8 +2,8 @@
 title: Meta
 summary: ''
 link: https://meta.com
-image: /assets/images/announcement-logo-meta.jpg
+image: /assets/images/members/meta-logo.svg
 class: pytorch-resource
-order: 4
+order: 6
 featured-home: true
 ---

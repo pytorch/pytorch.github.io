@@ -2,8 +2,8 @@
 title: Nvidia
 summary: ''
 link: https://www.nvidia.com/en-us/ai-data-science/
-image: /assets/images/announcement-logo-nvidia.jpg
+image: /assets/images/members/nvidia-logo.svg
 class: pytorch-resource
-order: 5
+order: 8
 featured-home: true
 ---
