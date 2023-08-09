@@ -5,7 +5,7 @@
 # Used with their MIT license https://github.com/eldarlabs/ghpages-deploy-script/blob/master/LICENSE
 
 # abort the script if there is a non-zero error
-set -euxo pipefail
+set -ex
 
 # initialize hub submodule
 git submodule deinit -f . && git submodule update --init --recursive
@@ -57,6 +57,7 @@ git add -A
 # now commit, ignoring branch master doesn't seem to work, so trying skip
 git commit --allow-empty -m "Deploy to GitHub Pages on master [ci skip]"
 # and push, but send any output to /dev/null to hide anything sensitive
+echo "logging stuff"
 echo "$PYTORCHBOT_TOKEN"
 echo "$CIRCLECI_PUBLISH_TOKEN"
 git push --force --quiet https://pytorchbot:$PYTORCHBOT_TOKEN@github.com/pytorch/pytorch.github.io.git master
