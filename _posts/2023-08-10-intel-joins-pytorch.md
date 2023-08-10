@@ -23,7 +23,7 @@ We’re happy to welcome Wei Li, Vice President and General Manager of Artificia
 
 To learn more about how you can be a part of the PyTorch Foundation, visit our [website](https://pytorch.org/join).
 
-Read more about Intel’s commitment to the PyTorch Community [here](https://www.intel.com/content/www/us/en/developer/articles/technical/ai-everywhere-intel-joins-pytorch-foundation).
+Read more about Intel’s commitment to the PyTorch Community [here](https://www.intel.com/content/www/us/en/developer/articles/technical/ai-everywhere-intel-joins-pytorch-foundation.html#gs.4984sj).
 
 ## About Intel
 
