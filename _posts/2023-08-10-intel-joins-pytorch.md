@@ -5,7 +5,7 @@ title: "Intel Joins the PyTorch Foundation as a Premier Member"
 
 ![Intel logo](/assets/images/intel-new-logo.svg){:style="max-width:250px;float:right;margin: 20px;"}
 
-The PyTorch Foundation, a neutral home for the deep learning community to collaborate on the open source PyTorch framework and ecosystem, is announcing today that Intel has joined as a premier member. 
+The PyTorch Foundation, a neutral home for the deep learning community to collaborate on the open source PyTorch framework and ecosystem, is announcing today that Intel has joined as a premier member.
 
 “The PyTorch Foundation is thrilled to welcome Intel as a premier member, marking a significant milestone in our mission to empower the global AI community. Intel's extensive expertise and commitment to advancing cutting-edge technologies align perfectly with our vision of fostering open-source innovation,” said PyTorch Foundation Executive Director Ibrahim Haddad. “Together, we will accelerate the development and democratization of PyTorch, and use the collaboration to shape a vibrant future of AI for all.”
 
