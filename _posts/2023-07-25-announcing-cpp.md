@@ -1,7 +1,7 @@
 ---
 layout: blog_detail
 title: "Announcing CPP-based S3 IO DataPipes"
-author: John He, Khaled ElGalaind Roshani Nagmote, Daiming Yang
+author: John He, Khaled ElGalaind, Roshani Nagmote, Daiming Yang
 ---
 
 Training large deep learning models requires large datasets. [Amazon Simple Storage Service](https://aws.amazon.com/s3/) (Amazon S3) is a scalable cloud object store service used for storing large training datasets. Machine learning (ML) practitioners need an efficient data pipe that can download data from Amazon S3, transform the data, and feed the data to GPUs for training models with high throughput and low latency.
@@ -48,7 +48,7 @@ The following code snippet provides a typical usage of `load_files_by_s3()`:
 from torch.utils.data import DataLoader 
 from torchdata.datapipes.iter import IterableWrapper  
 
-s3_shard_urls = IterableWrapper(["s3://bucket/prefix/",]) 
+s3_shard_urls = IterableWrapper(["s3://bucket/prefix/",]) .list_files_by_s3()
 s3_shards = s3_shard_urls.load_files_by_s3() 
 # text data 
 training_data = s3_shards.readlines(return_path=False) 
