@@ -4,7 +4,7 @@ title: Try Now via CoLab
 permalink: /get-started/colab/
 background-class: get-started-background
 body-class: get-started
-order: 3
+order: 10
 ---
 
 ## Try Now via CoLab
@@ -45,3 +45,4 @@ Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu 
 <script page-id="get-started-via-colab" src="{{ site.baseurl }}/assets/menu-tab-selection.js"></script>
 <script src="{{ site.baseurl }}/assets/quick-start-module.js"></script>
 <script src="{{ site.baseurl }}/assets/show-screencast.js"></script>
+<script src="{{ site.baseurl }}/assets/get-started-sidebar.js"></script>

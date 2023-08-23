@@ -1,21 +1,19 @@
 # Installing on macOS
 {:.no_toc}
 
-PyTorch can be installed and used on macOS. Depending on your system and compute requirements, your experience with PyTorch on a Mac may vary in terms of processing time. It is recommended, but not required, that your Mac have an NVIDIA GPU in order to harness the full power of PyTorch's [CUDA](https://developer.nvidia.com/cuda-zone) [support](https://pytorch.org/tutorials/beginner/blitz/tensor_tutorial.html?highlight=cuda#cuda-tensors).
-
-> Currently, CUDA support on macOS is only available by [building PyTorch from source](#mac-from-source)
+PyTorch can be installed and used on macOS. Depending on your system and GPU capabilities, your experience with PyTorch on a Mac may vary in terms of processing time. 
 
 ## Prerequisites
 {: #mac-prerequisites}
 
 ### macOS Version
 
-PyTorch is supported on macOS 10.10 (Yosemite) or above.
+PyTorch is supported on macOS 10.15 (Catalina) or above.
 
 ### Python
 {: #mac-python}
 
-It is recommended that you use Python 3.7 or greater, which can be installed either through the Anaconda package manager (see [below](#anaconda)), [Homebrew](https://brew.sh/), or the [Python website](https://www.python.org/downloads/mac-osx/).
+It is recommended that you use Python 3.8 or greater, which can be installed either through the Anaconda package manager (see [below](#anaconda)), [Homebrew](https://brew.sh/), or the [Python website](https://www.python.org/downloads/mac-osx/).
 
 ### Package Manager
 {: #mac-package-manager}
@@ -24,7 +22,7 @@ To install the PyTorch binaries, you will need to use one of two supported packa
 
 #### Anaconda
 
-To install Anaconda, you can [download graphical installer](https://www.anaconda.com/download/#macos) or use the command-line installer. If you use the command-line installer, you can right-click on the installer link, select `Copy Link Address`, and then use the following commands:
+To install Anaconda, you can [download graphical installer](https://www.anaconda.com/download/#macos) or use the command-line installer. If you use the command-line installer, you can right-click on the installer link, select `Copy Link Address`, or use the following commands on Intel Mac:
 
 ```bash
 # The version of Anaconda may be different depending on when you are installing`
@@ -32,7 +30,13 @@ curl -O https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-x86_64.sh
 sh Miniconda3-latest-MacOSX-x86_64.sh
 # and follow the prompts. The defaults are generally good.`
 ```
-
+or following commands on M1 Mac:
+```bash
+# The version of Anaconda may be different depending on when you are installing`
+curl -O https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-arm64.sh
+sh Miniconda3-latest-MacOSX-arm64.sh
+# and follow the prompts. The defaults are generally good.`
+```
 #### pip
 
 *Python 3*
@@ -89,13 +93,10 @@ tensor([[0.3380, 0.3845, 0.3217],
 
 For the majority of PyTorch users, installing from a pre-built binary via a package manager will provide the best experience. However, there are times when you may want to install the bleeding edge PyTorch code, whether for testing or actual development on the PyTorch core. To install the latest PyTorch code, you will need to [build PyTorch from source](https://github.com/pytorch/pytorch#from-source).
 
-> You will also need to build from source if you want CUDA support.
-
 ### Prerequisites
 {: #mac-prerequisites-2}
 
-1. Install [Anaconda](#anaconda)
-2. Install [CUDA](https://developer.nvidia.com/cuda-downloads), if your machine has a [CUDA-enabled GPU](https://developer.nvidia.com/cuda-gpus).
-3. Follow the steps described here: [https://github.com/pytorch/pytorch#from-source](https://github.com/pytorch/pytorch#from-source)
+1. [Optional] Install [Anaconda](#anaconda)
+2. Follow the steps described here: [https://github.com/pytorch/pytorch#from-source](https://github.com/pytorch/pytorch#from-source)
 
 You can verify the installation as described [above](#mac-verification).

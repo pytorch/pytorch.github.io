@@ -5,24 +5,25 @@ var supportedOperatingSystems = new Map([
   ['win', 'windows'],
 ]);
 
-var supportedComputePlatforms = new Map([
-  ['cuda10.2', new Set(['linux', 'windows'])],
-  ['cuda11.x', new Set(['linux', 'windows'])],
-  ['rocm4.x', new Set(['linux'])],
-  ['accnone', new Set(['linux', 'macos', 'windows'])],
+var archInfoMap = new Map([
+  ['cuda', {title: "CUDA", platforms: new Set(['linux', 'windows'])}],
+  ['rocm', {title: "ROCm", platforms: new Set(['linux'])}],
+  ['accnone', {title: "CPU", platforms: new Set(['linux', 'macos', 'windows'])}]
 ]);
+
+let version_map={{ ACC ARCH MAP }}
+let stable_version={{ VERSION }};
 
 var default_selected_os = getAnchorSelectedOS() || getDefaultSelectedOS();
 var opts = {
   cuda: getPreferredCuda(default_selected_os),
   os: default_selected_os,
-  pm: 'conda',
+  pm: 'pip',
   language: 'python',
   ptbuild: 'stable',
 };
 
 var supportedCloudPlatforms = [
-  'alibaba',
   'aws',
   'google-cloud',
   'microsoft-azure',
@@ -99,51 +100,55 @@ function getPreferredCuda(os) {
   if (os == 'macos') {
     return 'accnone';
   }
-  return 'cuda10.2';
+  return 'cuda.x';
 }
 
 // Disable compute platform not supported on OS
 function disableUnsupportedPlatforms(os) {
-  supportedComputePlatforms.forEach( (oses, platform, arr) => {
-    var element = document.getElementById(platform);
-    if (element == null) {
-      console.log("Failed to find element for platform " + platform);
+  for (const [arch_key, info] of archInfoMap) {
+    var elems = document.querySelectorAll('[id^="'+arch_key+'"]');
+    if (elems == null) {
+      console.log("Failed to find element for architecture " + arch_key);
       return;
     }
-    var supported = oses.has(os);
-    element.style.textDecoration = supported ? "" : "line-through";
-  });
+    for (var i=0; i < elems.length;i++) {
+      var supported = info.platforms.has(os);
+      elems[i].style.textDecoration = supported ? "" : "line-through";
+    }
+  }
 }
 
-// Change compute versiosn depending on build type
-function changeCUDAVersion(ptbuild) {
-  var cuda_element = document.getElementById("cuda11.x");
-  var rocm_element = document.getElementById("rocm4.x");
-  if (cuda_element == null) {
-    console.log("Failed to find cuda11.x element");
+// Change compute versions depending on build type
+function changeVersion(ptbuild) {
+
+  if(ptbuild == "preview")
+    archMap = version_map.nightly
+  else
+    archMap = version_map.release
+
+  for (const [arch_key, info] of archInfoMap) {
+    var elems = document.querySelectorAll('[id^="'+arch_key+'"]');
+    for (var i=0; i < elems.length;i++) {
+      elems[i].children[0].textContent = info.title + " " + archMap[elems[i].id][1]
+    }
+  }
+  var stable_element = document.getElementById("stable");
+  stable_element.children[0].textContent = stable_version;
+}
+
+
+
+// Change accnone name depending on OS type
+function changeAccNoneName(osname) {
+  var accnone_element = document.getElementById("accnone");
+  if (accnone_element == null) {
+    console.log("Failed to find accnone element");
     return;
   }
-  if (cuda_element.childElementCount != 1) {
-    console.log("Unexpected number of children for cuda11.x element");
-    return;
-  }
-  if (rocm_element == null) {
-    console.log("Failed to find rocm4.x element");
-    return;
-  }
-  if (rocm_element.childElementCount != 1) {
-    console.log("Unexpected number of children for rocm4.x element");
-    return;
-  }
-  if (ptbuild == "preview") {
-    rocm_element.children[0].textContent = "ROCM 5.1.1 (beta)";
-    cuda_element.children[0].textContent = "CUDA 11.3";
-  } else if (ptbuild == "stable") {
-    rocm_element.children[0].textContent = "ROCM 4.5.2 (beta)";
-    cuda_element.children[0].textContent = "CUDA 11.3";
+  if (osname == "macos") {
+    accnone_element.children[0].textContent = "Default";
   } else {
-    rocm_element.children[0].textContent = "ROCM 4.5.2 (beta)";
-    cuda_element.children[0].textContent = "CUDA 11.1";
+    accnone_element.children[0].textContent = "CPU";
   }
 }
 
@@ -184,13 +189,14 @@ function selectedOption(option, selection, category) {
       }
     }
   } else if (category == "ptbuild") {
-    changeCUDAVersion(opts.ptbuild);
+    changeVersion(opts.ptbuild);
   }
   commandMessage(buildMatcher());
   if (category === "os") {
     disableUnsupportedPlatforms(opts.os);
     display(opts.os, 'installation', 'os');
   }
+  changeAccNoneName(opts.os);
 }
 
 function display(selection, id, category) {
@@ -243,15 +249,17 @@ $("[data-toggle='cloud-dropdown']").on("click", function(e) {
 
 function commandMessage(key) {
   var object = {{ installMatrix }};
-  var lts_notice = "<div class='alert-secondary'><b>Note</b>: Additional support for these binaries may be provided by <a href='/enterprise-support-program' style='font-size:100%'>PyTorch Enterprise Support Program Participants</a>.</div>";
 
   if (!object.hasOwnProperty(key)) {
     $("#command").html(
       "<pre> # Follow instructions at this URL: https://github.com/pytorch/pytorch#from-source </pre>"
     );
   } else if (key.indexOf("lts") == 0  && key.indexOf('rocm') < 0) {
-    $("#command").html("<pre>" + object[key] + "</pre>" + lts_notice);
+    $("#command").html("<pre>" + object[key] + "</pre>");
   } else {
     $("#command").html("<pre>" + object[key] + "</pre>");
   }
 }
+
+// Set cuda version right away
+changeVersion("stable")

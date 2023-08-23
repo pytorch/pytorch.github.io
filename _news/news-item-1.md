@@ -1,5 +1,5 @@
 ---
-order: 1
-link: https://pytorch.org/blog/pytorch-1.11-released
-summary: NEW! PyTorch 1.11, TorchData, and functorch are now available
+order: 2
+link: /get-started/pytorch-2.0/#ask-the-engineers-20-live-qa-series
+summary: "Ask the Engineers: 2.0 Live Q&A Series"
 ---
