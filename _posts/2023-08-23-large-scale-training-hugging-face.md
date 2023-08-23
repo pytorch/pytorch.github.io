@@ -116,7 +116,7 @@ Unset
      }
 ```
 
-5. Now, it’s time to train your model! First, ensure that you have your PyTorch/XLA runtime set up appropriately by setting|
+Now, it’s time to train your model! First, ensure that you have your PyTorch/XLA runtime set up appropriately by setting|
 
 ```
 Unset
@@ -211,9 +211,7 @@ Among these configurations, MFU peaks at 45.1% for the 20B parameter model on v4
 
 There are two actionable insights from these experiments:
 
-First, simply increasing the number of chips without increasing the batch size generally means lower FLOPS utilization, because more time is spent on sharing the model shards. FSDP uses all-reduce communication collectives which are not asynchronous, which means that
-
-chip-to-chip communication cannot be overlapped with computation. As the number of chips increases, the number of model shards that must be communicated increases, and so we should expect the portion of the step time spent on communication to increase with the number of chips.
+First, simply increasing the number of chips without increasing the batch size generally means lower FLOPS utilization, because more time is spent on sharing the model shards. FSDP uses all-reduce communication collectives which are not asynchronous, which means that chip-to-chip communication cannot be overlapped with computation. As the number of chips increases, the number of model shards that must be communicated increases, and so we should expect the portion of the step time spent on communication to increase with the number of chips.
 
 Second, increasing the batch size generally means better FLOPS utilization. As the number of chips increases, the memory footprint of the model decreases, which often frees up high bandwidth memory (HBM) to scale up the global batch size. With a larger global batch size, the number of tokens processed in each step increases, and thus, so does the FLOPS per step. As long as the step time does not increase proportionally, we expect a larger global batch size to improve MFU.
 
