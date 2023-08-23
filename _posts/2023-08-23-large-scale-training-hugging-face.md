@@ -19,7 +19,7 @@ We built PyTorch/XLA FSDP support directly into the Hugging Face Trainer class, 
 
 ## Configuring PyTorch/XLA FSDP in the Hugging Face Trainer ##
 
-1. First, follow your preferred method to create your TPU(s) and install PyTorch and PyTorch/XLA. You need versions >= 2.0 for PyTorch and PyTorch/XLA.
+First, follow your preferred method to create your TPU(s) and install PyTorch and PyTorch/XLA. You need versions >= 2.0 for PyTorch and PyTorch/XLA.
 
 ```
 Unset
@@ -29,7 +29,7 @@ pip3 install https://storage.googleapis.com/tpu-pytorch/wheels/tpuvm/torc h-2.0-
 pip3 install https://storage.googleapis.com/tpu-pytorch/wheels/tpuvm/torc h_xla-2.0-cp38-cp38-linux_x86_64.whl
 ```
 
-2. Next, clone and install the Hugging Face Transformers repo. Install all necessary dependencies (e.g., datasets, evaluate, scikit-learn, accelerate).
+Next, clone and install the Hugging Face Transformers repo. Install all necessary dependencies (e.g., datasets, evaluate, scikit-learn, accelerate).
 
 ```
 Unset
@@ -47,7 +47,7 @@ pip3 install datasets evaluate scikit-learn
 pip3 install accelerate==0.21.0
 ```
 
-3. In `$HOME/transformers`, create any model-specific configuration files you might need. Here is an example of a configuration file for a GPT-2 model with 2B parameters, which we later refer to as `gpt2_config.json`:
+In `$HOME/transformers`, create any model-specific configuration files you might need. Here is an example of a configuration file for a GPT-2 model with 2B parameters, which we later refer to as `gpt2_config.json`:
 
 ```
 Unset
@@ -85,7 +85,7 @@ Unset
 
 With PyTorch/XLA FSDP, it is possible to train model sizes much bigger than this on large accelerator slices. We have trained GPT-2 models as large as 128B parameters with these techniques; for expert tips on how to replicate this scale, see the appendix.
 
-4. In `$HOME/transformers`, create your FSDP configuration file, a JSON file containing all of the configurable aspects of your XLA FSDP wrapping stored as a dictionary. Following the [official Hugging Face Transformers XLA FSDP documentation](https://huggingface.co/docs/transformers/main_classes/trainer#pytorchxla-fully-sharded-data-parallel), the following arguments are available to set:
+In `$HOME/transformers`, create your FSDP configuration file, a JSON file containing all of the configurable aspects of your XLA FSDP wrapping stored as a dictionary. Following the [official Hugging Face Transformers XLA FSDP documentation](https://huggingface.co/docs/transformers/main_classes/trainer#pytorchxla-fully-sharded-data-parallel), the following arguments are available to set:
 - `xla (`bool`, \*optional\*, defaults to `False`)`: This is a boolean which determines whether or not you use XLA FSDP. Make sure to set this to `true`.
 - `xla_fsdp_settings (`dict`, \*optional\*)`: This is a dictionary which stores all of the XLA FSDP wrapping parameters you want to set; note that you do not have to specify settings for parameters where you are using the default value. For a complete list of settings, see [here](https://github.com/pytorch/xla/blob/master/torch_xla/distributed/fsdp/xla_fully_sharded_data_parallel.py).
 
@@ -237,7 +237,7 @@ pip3 install torch_xla[torchdistx] -f https://storage.googleapis.com/tpu-pytorch
 
 Next, apply the following changes to your local copy of Hugging Face Transformers:
 
-1. In `src/transformers/trainer.py`, add the following function in `_wrap_model` on the line immediately prior to PyTorch/XLA FSDP wrapping:
+In `src/transformers/trainer.py`, add the following function in `_wrap_model` on the line immediately prior to PyTorch/XLA FSDP wrapping:
 
 
 ```
@@ -254,7 +254,7 @@ return not isinstance(k, FSDP) deferred_init.materialize_module(module, check_fn
 
 The function `materialize_module` will initialize the model tensors if `check_fn` returns `True`. In this case, `check_fn` checks whether the module has been FSDP wrapped.
 
-2. Within `_wrap_model`, modify your FSDP wrapping to accept the additional argument `param_init_fn=_init_with_torchdistX`:
+Within `_wrap_model`, modify your FSDP wrapping to accept the additional argument `param_init_fn=_init_with_torchdistX`:
 
 ```
 Python
@@ -268,7 +268,7 @@ auto_wrap_policy=auto_wrap_policy, auto_wrapper_callable=auto_wrapper_callable, 
 )
 ```
 
-3. In `examples/pytorch/language-modeling/run_clm.py`, add the following import statement at the beginning of the file:
+In `examples/pytorch/language-modeling/run_clm.py`, add the following import statement at the beginning of the file:
 
 
 ```
@@ -299,7 +299,7 @@ Note that this assumes you are supplying your own model configuration file. Othe
 You should also comment out these two lines which immediately follow the line above:
 
 ```
-Python)
+Python
 
 n_params = sum({p.data_ptr(): p.numel() for p in model.parameters()}.values()) logger.info(f"Training new model from scratch - Total size={n_params/2\*\*20:.2f}M params")
 ```
