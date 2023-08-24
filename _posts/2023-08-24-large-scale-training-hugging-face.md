@@ -13,7 +13,7 @@ We are excited to announce that PyTorch/XLA FSDP has [landed](https://github.com
 
 We built PyTorch/XLA FSDP support directly into the Hugging Face Trainer class, so that any model using Trainer can leverage FSDP. And with the [addition of automatic wrapping to PyTorch/XLA FSDP](https://pytorch.org/blog/pytorch-2.0-xla/#fsdp-beta), nested FSDP wrapping is both flexible and simple to apply. These new features make it easy to train a wide range of Hugging Face models at large scales. In this guide, we demonstrate training GPT-2 models with up to 128B parameters on Google Cloud TPUs. PyTorch/XLA FSDP training on TPUs is highly efficient, achieving up to 45.1% model FLOPS utilization (MFU) for GPT-2:
 
-![Figure 1: Model FLOPS utilization for Hugging Face GPT-2 on Google Cloud TPU v4](/assets/images/hugging_face_transformers.jpg){:style="width:100%; margin-top: 4em;"}
+![Figure 1: Model FLOPS utilization for Hugging Face GPT-2 on Google Cloud TPU v4](/assets/images/hugging_face_transformers.svg){:style="width:100%; margin-top: 4em;"}
 
 <small style="line-height: 1.1"><em>**Figure 1**: Model FLOPS utilization for Hugging Face GPT-2 on Google Cloud TPU v4</em></small>
 
@@ -22,105 +22,87 @@ We built PyTorch/XLA FSDP support directly into the Hugging Face Trainer class, 
 First, follow your preferred method to create your TPU(s) and install PyTorch and PyTorch/XLA. You need versions >= 2.0 for PyTorch and PyTorch/XLA.
 
 ```
-Unset
+    pip3 install https://storage.googleapis.com/tpu-pytorch/wheels/tpuvm/torc h-2.0-cp38-cp38-linux_x86_64.whl --user
 
-pip3 install https://storage.googleapis.com/tpu-pytorch/wheels/tpuvm/torc h-2.0-cp38-cp38-linux_x86_64.whl --user
-
-pip3 install https://storage.googleapis.com/tpu-pytorch/wheels/tpuvm/torc h_xla-2.0-cp38-cp38-linux_x86_64.whl
+    pip3 install https://storage.googleapis.com/tpu-pytorch/wheels/tpuvm/torc h_xla-2.0-cp38-cp38-linux_x86_64.whl
 ```
 
 Next, clone and install the Hugging Face Transformers repo. Install all necessary dependencies (e.g., datasets, evaluate, scikit-learn, accelerate).
 
 ```
-Unset
-
-cd $HOME
-
-git clone https://github.com/huggingface/transformers.git cd transformers
-
-git checkout v4.31-release
-
-pip3 install -e .
-
-pip3 install datasets evaluate scikit-learn
-
-pip3 install accelerate==0.21.0
+    cd $HOME
+    git clone https://github.com/huggingface/transformers.git cd transformers
+    git checkout v4.31-release
+    pip3 install -e .
+    pip3 install datasets evaluate scikit-learn
+    pip3 install accelerate==0.21.0
 ```
 
 In `$HOME/transformers`, create any model-specific configuration files you might need. Here is an example of a configuration file for a GPT-2 model with 2B parameters, which we later refer to as `gpt2_config.json`:
 
 ```
-Unset
-
 {
-
-"activation_function": "gelu_new", "architectures": [
-
-"GPT2LMHeadModel"
-
-],
-
-"attn_pdrop": 0.1,
-
-"bos_token_id": 50256, "embd_pdrop": 0.1, "eos_token_id": 50256, "initializer_range": 0.02, "layer_norm_epsilon": 1e-05, "model_type": "gpt2",
-
-"n_embd": 3072,
-
-"n_head": 24,
-
-"n_layer": 18,
-
-"n_positions": 1024, "resid_pdrop": 0.1, "summary_activation": null, "summary_first_dropout": 0.1, "summary_proj_to_labels": true, "summary_type": "cls_index", "summary_use_proj": true,
-
-"task_specific_params": { "text-generation":![ref1] { "do_sample": true, "max_length": 50
-
-}
-
-},
-
-"vocab_size": 50257
-
+    "activation_function": "gelu_new", 
+    "architectures": [
+        "GPT2LMHeadModel"
+    ],
+    "attn_pdrop": 0.1,
+    "bos_token_id": 50256, "embd_pdrop": 0.1, "eos_token_id": 50256, "initializer_range": 0.02, "layer_norm_epsilon": 1e-05, "model_type": "gpt2",
+    "n_embd": 3072,
+    "n_head": 24,
+    "n_layer": 18,
+    "n_positions": 1024,
+    "resid_pdrop": 0.1,
+    "summary_activation": null,
+    "summary_first_dropout": 0.1,
+    "summary_proj_to_labels": true,
+    "summary_type": "cls_index",
+    "summary_use_proj": true,
+    "task_specific_params": {
+        "text-generation": {
+            "do_sample": true,
+            "max_length": 50
+        }
+    },
+    "vocab_size": 50257
 }
 ```
 
 With PyTorch/XLA FSDP, it is possible to train model sizes much bigger than this on large accelerator slices. We have trained GPT-2 models as large as 128B parameters with these techniques; for expert tips on how to replicate this scale, see the appendix.
 
 In `$HOME/transformers`, create your FSDP configuration file, a JSON file containing all of the configurable aspects of your XLA FSDP wrapping stored as a dictionary. Following the [official Hugging Face Transformers XLA FSDP documentation](https://huggingface.co/docs/transformers/main_classes/trainer#pytorchxla-fully-sharded-data-parallel), the following arguments are available to set:
-- `xla (`bool`, \*optional\*, defaults to `False`)`: This is a boolean which determines whether or not you use XLA FSDP. Make sure to set this to `true`.
-- `xla_fsdp_settings (`dict`, \*optional\*)`: This is a dictionary which stores all of the XLA FSDP wrapping parameters you want to set; note that you do not have to specify settings for parameters where you are using the default value. For a complete list of settings, see [here](https://github.com/pytorch/xla/blob/master/torch_xla/distributed/fsdp/xla_fully_sharded_data_parallel.py).
+- `xla (bool, \*optional\*, defaults to False)`: This is a boolean which determines whether or not you use XLA FSDP. Make sure to set this to `true`.
+- `xla_fsdp_settings (dict, \*optional\*)`: This is a dictionary which stores all of the XLA FSDP wrapping parameters you want to set; note that you do not have to specify settings for parameters where you are using the default value. For a complete list of settings, see [here](https://github.com/pytorch/xla/blob/master/torch_xla/distributed/fsdp/xla_fully_sharded_data_parallel.py).
 
 For `compute_dtype` and `buffer_dtype`, enter these as strings which contain the corresponding torch data type, e.g. `bfloat16`.
 
-- `fsdp_min_num_params (`int`, \*optional\*, defaults to `0`)`: An integer which sets the minimum number of parameters for size-based auto wrapping. Every module with at least as many parameters as `fsdp_min_num_params` will be XLA FSDP wrapped.
-- `fsdp_transformer_layer_cls_to_wrap (`List[str]`, \*optional\*)`: A list of (case-sensitive) transformer layer class names to wrap. Note that this is mutually exclusive with `fsdp_min_num_params`. Example: `["GPT2Block", "GPT2MLP"]`.
-- `xla_fsdp_grad_ckpt (`bool`, \*optional\*, defaults to `False`)`: This is a boolean which determines whether to use gradient checkpointing over each nested XLA FSDP wrapped layer. This setting can only be used when the `xla` flag is set to true, and an auto wrapping policy is specified through `fsdp_min_num_params` or `fsdp_transformer_layer_cls_to_wrap`.
+- `fsdp_min_num_params (int, \*optional\*, defaults to 0)`: An integer which sets the minimum number of parameters for size-based auto wrapping. Every module with at least as many parameters as `fsdp_min_num_params` will be XLA FSDP wrapped.
+- `fsdp_transformer_layer_cls_to_wrap (List[str], \*optional\*)`: A list of (case-sensitive) transformer layer class names to wrap. Note that this is mutually exclusive with `fsdp_min_num_params`. Example: `["GPT2Block", "GPT2MLP"]`.
+- `xla_fsdp_grad_ckpt (bool, \*optional\*, defaults to False)`: This is a boolean which determines whether to use gradient checkpointing over each nested XLA FSDP wrapped layer. This setting can only be used when the `xla` flag is set to true, and an auto wrapping policy is specified through `fsdp_min_num_params` or `fsdp_transformer_layer_cls_to_wrap`.
 
 **Note:** For transformer-based models, use `fsdp_transformer_layer_cls_to_wrap` instead of `fsdp_min_num_params` when performing automatic nested FSDP wrapping. Layers which share weights should not belong to separate FSDP wrapped units, and the input and output embedding layers in transformer-based models share weights.
 
 For this GPT-2 example, here is what the corresponding `fsdp_config.json` file looks like:
 
 ```
-Unset
-
-{
-  "fsdp_transformer_layer_cls_to_wrap": [
-    "GPT2Block"
-  ],
-  "xla": true,
-  "xla_fsdp_settings": {
-    "compute_dtype": "bfloat16",
-    "shard_param_on_dim_0": true,
-    "pin_layout_in_collective_ops": true
-},
+    {
+        "fsdp_transformer_layer_cls_to_wrap": [
+            "GPT2Block"
+        ],
+        "xla": true,
+        "xla_fsdp_settings": {
+            "compute_dtype": "bfloat16",
+            "shard_param_on_dim_0": true,
+            "pin_layout_in_collective_ops": true
+        },
        "xla_fsdp_grad_ckpt": true
-     }
+    }
 ```
 
 Now, it’s time to train your model! First, ensure that you have your PyTorch/XLA runtime set up appropriately by setting|
 
 ```
-Unset
-  export PJRT_DEVICE=TPU
+    export PJRT_DEVICE=TPU
 ```
 
 
@@ -132,41 +114,24 @@ b) `--fsdp_config fsdp_config.json`
 where you should replace `fsdp_config.json` with whatever you named your FSDP configuration file. Here is a sample command to train our example 2B GPT-2 model, where training is started by `xla_spawn.py`, a [launcher script for](https://github.com/huggingface/transformers/blob/main/examples/pytorch/xla_spawn.py) distributed TPU training.
 
 ```
-Unset
-
-python3 -u examples/pytorch/xla_spawn.py --num_cores 4 examples/pytorch/language-modeling/run_clm.py \ --num_train_epochs 1 \
-
---dataset_name wikitext \
-
---dataset_config_name wikitext-2-raw-v1 \ --per_device_train_batch_size 32 \ --per_device_eval_batch_size 32 \
-
---do_train \
-
---do_eval \
-
---output_dir /tmp/test-clm \
-
---overwrite_output_dir \
-
---config_name gpt2_config.json \
-
---cache_dir /tmp \
-
---tokenizer_name gpt2 \
-
---block_size 1024 \
-
---optim adafactor \
-
---adafactor true \
-
---save_strategy no \
-
---logging_strategy no \
-
---fsdp "full_shard" \
-
---fsdp_config fsdp_config.json
+    python3 -u examples/pytorch/xla_spawn.py --num_cores 4 examples/pytorch/language-modeling/run_clm.py \
+    --num_train_epochs 1 \
+    --dataset_name wikitext \
+    --dataset_config_name wikitext-2-raw-v1 \ --per_device_train_batch_size 32 \ --per_device_eval_batch_size 32 \
+    --do_train \
+    --do_eval \
+    --output_dir /tmp/test-clm \
+    --overwrite_output_dir \
+    --config_name gpt2_config.json \
+    --cache_dir /tmp \
+    --tokenizer_name gpt2 \
+    --block_size 1024 \
+    --optim adafactor \
+    --adafactor true \
+    --save_strategy no \
+    --logging_strategy no \
+    --fsdp "full_shard" \
+    --fsdp_config fsdp_config.json
 ```
 
 ## Measuring Model FLOPS Utilization (MFU) for GPT-2 ##
@@ -174,8 +139,6 @@ python3 -u examples/pytorch/xla_spawn.py --num_cores 4 examples/pytorch/language
 Model FLOPS are the floating point operations required to perform a single forward and backward pass. Model FLOPS are hardware- and implementation- independent, and only depend on the underlying model. In each step, the number of FLOPS is computed via the following formulas:
 
 ```
-Unset
-
 tokens_per_batch = global_batch_size \* seq_len
 
 FLOPS_per_step = 6 \* tokens_per_batch \* num_params
@@ -186,8 +149,6 @@ where `seq_len` is the sequence length and `num_params` is the number of paramet
 Based on the step time and the hardware details (numbers of chips and the peak FLOPS per chip), we can compute Model FLOPS Utilization (MFU), which measures how effectively our implementation is using the underlying hardware. Achieving 100% MFU means that the hardware is being used perfectly by that model. We calculate MFU using the following formula:
 
 ```
-Unset
-
 model_FLOPS_utilization = FLOPS_per_step / step_time(s) / chip_count / FLOPS_per_chip
 ```
 
@@ -226,10 +187,7 @@ Below, we explain how to modify a local copy of the Hugging Face transformers re
 First, using the commands below, install torchdistX, which is a library containing experimental PyTorch Distributed features. This is the engine behind deferred initialization, and allows you to create tensors that don’t require immediate storage and can be materialized later. You also need to install a specific PyTorch/XLA 2.0 version that takes advantage of this package; note that you must uninstall PyTorch and PyTorch/XLA first, if you installed them earlier.
 
 ```
-Unset
-
-pip3 install torch==2.0 --index-url [https://download.pytorch.org/whl/test/cpu --user](https://download.pytorch.org/whl/test/cpu)
-
+pip3 install torch==2.0 --index-url [https://download.pytorch.org/whl/test/cpu](https://download.pytorch.org/whl/test/cpu) --user
 pip3 install torch_xla[torchdistx] -f https://storage.googleapis.com/tpu-pytorch/wheels/tpuvm/experimen tal/torch_xla-2.0-cp38-cp38-linux_x86_64.whl
 ```
 
@@ -239,15 +197,12 @@ In `src/transformers/trainer.py`, add the following function in `_wrap_model` on
 
 
 ```
-Python
-
 from torchdistx import deferred_init
 
 def _init_with_torchdistX(module):
-
-def check_fn(k):
-
-return not isinstance(k, FSDP) deferred_init.materialize_module(module, check_fn=check_fn)
+    def check_fn(k):
+        return not isinstance(k, FSDP)
+    deferred_init.materialize_module(module, check_fn=check_fn)
 ```
 
 The function `materialize_module` will initialize the model tensors if `check_fn` returns `True`. In this case, `check_fn` checks whether the module has been FSDP wrapped.
@@ -255,23 +210,19 @@ The function `materialize_module` will initialize the model tensors if `check_fn
 Within `_wrap_model`, modify your FSDP wrapping to accept the additional argument `param_init_fn=_init_with_torchdistX`:
 
 ```
-Python
-
 self.model = model = FSDP(
-
-model,
-
-auto_wrap_policy=auto_wrap_policy, auto_wrapper_callable=auto_wrapper_callable, param_init_fn=_init_with_torchdistX, \*\*fsdp_kwargs,
-
-)
+        model,
+        auto_wrap_policy=auto_wrap_policy,
+        auto_wrapper_callable=auto_wrapper_callable,
+        param_init_fn=_init_with_torchdistX,
+        \*\*fsdp_kwargs,
+    )
 ```
 
 In `examples/pytorch/language-modeling/run_clm.py`, add the following import statement at the beginning of the file:
 
 
 ```
-Python
-
 from torchdistx import deferred_init
 ```
 
@@ -279,16 +230,12 @@ Edit the model initialization so that the model is wrapped with `deferred_init.d
 
 
 ```
-Python
-
 model = AutoModelForCausalLM.from_config(config)
 ```
 
 with
 
 ```
-Python
-
 model = deferred_init.deferred_init(AutoModelForCausalLM.from_config, config)
 ```
 
@@ -297,8 +244,6 @@ Note that this assumes you are supplying your own model configuration file. Othe
 You should also comment out these two lines which immediately follow the line above:
 
 ```
-Python
-
 n_params = sum({p.data_ptr(): p.numel() for p in model.parameters()}.values()) logger.info(f"Training new model from scratch - Total size={n_params/2\*\*20:.2f}M params")
 ```
 
