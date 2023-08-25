@@ -144,7 +144,7 @@ tokens_per_batch = global_batch_size \* seq_len
 FLOPS_per_step = 6 \* tokens_per_batch \* num_params
 ```
 
-where `seq_len` is the sequence length and `num_params` is the number of parameters in the model. We note that this estimation assumes that d_model >> sequence length. If this assumption is violated the self-attention FLOPs start to be significant enough and this expression.
+where `seq_len` is the sequence length and `num_params` is the number of parameters in the model. We note that this estimation assumes that the input dimensionality is much larger than the input sequence length (`d_model >> seq_len`). If this assumption is violated the self-attention FLOPs start to be significant enough and this expression will underestimate the true MFU.
 
 Based on the step time and the hardware details (numbers of chips and the peak FLOPS per chip), we can compute Model FLOPS Utilization (MFU), which measures how effectively our implementation is using the underlying hardware. Achieving 100% MFU means that the hardware is being used perfectly by that model. We calculate MFU using the following formula:
 
