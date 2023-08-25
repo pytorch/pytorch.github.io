@@ -231,7 +231,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href='https://pytorch.org/docs/versions.html'>main (2.1.0a0+git3828cd4 ) &#x25BC</a>
+      <a href='https://pytorch.org/docs/versions.html'>main (2.1.0a0+git7dd1113 ) &#x25BC</a>
     </div>
     
 
@@ -313,6 +313,10 @@
 <li class="toctree-l1"><a class="reference internal" href="../library.html">torch.library</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../cpu.html">torch.cpu</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../cuda.html">torch.cuda</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../torch_cuda_memory.html">Understanding CUDA Memory Usage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../torch_cuda_memory.html#generating-a-snapshot">Generating a Snapshot</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../torch_cuda_memory.html#using-the-visualizer">Using the visualizer</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../torch_cuda_memory.html#snapshot-api-reference">Snapshot API Reference</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../mps.html">torch.mps</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../backends.html">torch.backends</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../export.html">torch.export</a></li>
@@ -769,6 +773,8 @@ managed by the caching allocator. Calling <a class="reference internal" href="..
 releases all <strong>unused</strong> cached memory from PyTorch so that those can be used
 by other GPU applications. However, the occupied GPU memory by tensors will not
 be freed so it can not increase the amount of GPU memory available for PyTorch.</p>
+<p>To better understand how CUDA memory is being used over time,
+<a class="reference internal" href="../torch_cuda_memory.html#torch-cuda-memory"><span class="std std-ref">Understanding CUDA Memory Usage</span></a> describes tools for capturing and visualizing traces of memory use.</p>
 <p>For more advanced users, we offer more comprehensive memory benchmarking via
 <a class="reference internal" href="../generated/torch.cuda.memory_stats.html#torch.cuda.memory_stats" title="torch.cuda.memory_stats"><code class="xref py py-meth docutils literal notranslate"><span class="pre">memory_stats()</span></code></a>. We also offer the capability to capture a
 complete snapshot of the memory allocator state via
@@ -783,7 +789,7 @@ underlying allocation patterns produced by your code.</p>
 <code class="docutils literal notranslate"><span class="pre">PYTORCH_CUDA_ALLOC_CONF</span></code>.
 The format is <code class="docutils literal notranslate"><span class="pre">PYTORCH_CUDA_ALLOC_CONF=&lt;option&gt;:&lt;value&gt;,&lt;option2&gt;:&lt;value2&gt;...</span></code>
 Available options:</p>
-<ul class="simple">
+<ul>
 <li><p><code class="docutils literal notranslate"><span class="pre">backend</span></code> allows selecting the underlying allocator implementation.
 Currently, valid options are <code class="docutils literal notranslate"><span class="pre">native</span></code>, which uses PyTorch’s native
 implementation, and <code class="docutils literal notranslate"><span class="pre">cudaMallocAsync</span></code>, which uses
@@ -823,12 +829,6 @@ for allocations between 512MB and 1GB and 8 divisions for any larger allocations
 set the knob value to: [256:1,512:2,1024:4,&gt;:8].
 <code class="docutils literal notranslate"><span class="pre">roundup_power2_divisions</span></code> is only meaningful with <code class="docutils literal notranslate"><span class="pre">backend:native</span></code>.
 With <code class="docutils literal notranslate"><span class="pre">backend:cudaMallocAsync</span></code>, <code class="docutils literal notranslate"><span class="pre">roundup_power2_divisions</span></code> is ignored.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">roundup_bypass_threshold_mb</span></code> bypass rounding the requested allocation size,
-for allocation requests larger than the threshold value (in MB). This can help
-reduce the memory footprint when making large allocations that are expected to
-be persistent or have a large lifetime.
-<code class="docutils literal notranslate"><span class="pre">roundup_bypass_threshold_mb</span></code> is only meaningful with <code class="docutils literal notranslate"><span class="pre">backend:native</span></code>.
-With <code class="docutils literal notranslate"><span class="pre">backend:cudaMallocAsync</span></code>, <code class="docutils literal notranslate"><span class="pre">roundup_bypass_threshold_mb</span></code> is ignored.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">garbage_collection_threshold</span></code> helps actively reclaiming unused GPU memory to
 avoid triggering expensive sync-and-reclaim-all operation (release_cached_blocks),
 which can be unfavorable to latency-critical GPU applications (e.g., servers).
@@ -839,6 +839,38 @@ to free old &amp; unused blocks first to avoid freeing blocks that are actively 
 reused. The threshold value should be between greater than 0.0 and less than 1.0.
 <code class="docutils literal notranslate"><span class="pre">garbage_collection_threshold</span></code> is only meaningful with <code class="docutils literal notranslate"><span class="pre">backend:native</span></code>.
 With <code class="docutils literal notranslate"><span class="pre">backend:cudaMallocAsync</span></code>, <code class="docutils literal notranslate"><span class="pre">garbage_collection_threshold</span></code> is ignored.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">expandable_segments</span></code> (experimental, default: <cite>False</cite>) If set to <cite>True</cite>, this setting instructs
+the allocator to create CUDA allocations that can later be expanded to better handle cases
+where a job changing allocation sizes frequently, such as having a changing batch size.
+Normally for large (&gt;2MB) allocations, the allocator calls cudaMalloc to get allocations
+that are the same size as what the user requests. In the future, parts of these
+allocations can be reused for other requests if they are free. This works well
+when the program makes many requests of exactly the same size or of sizes that
+even multiples of that size. Many deep learning models follow this behavior.
+However, one common exception is when the batch size changes slightly from one
+iteration to the next, e.g. in batched inference. When the program runs
+initially with batch size <cite>N</cite>, it will make allocations appropriate for that size.
+If in the future, it runs at size <cite>N - 1</cite>, the existing allocations will still be
+big enough. However, if it runs at size <cite>N + 1</cite>, then it will have to make new
+allocations that are slightly larger. Not all the tensors are the same size.
+Some might be <cite>(N + 1)*A</cite> and others <cite>(N + 1)*A*B</cite> where <cite>A</cite> and <cite>B</cite> are some non-batch
+dimensions in the model. Because the allocator reuses existing allocations when
+they are big enough, some number of <cite>(N + 1)*A</cite> allocations will actually fit in
+the already existing <cite>N*B*A</cite> segments, though not perfectly. As the model runs it
+will partially fill up all of these segments leaving unusable free slices of
+memory at the end of these segments. The allocator at some point will need to
+<cite>cudaMalloc</cite> a new <cite>(N + 1)*A*B</cite> segment. If there is not enough memory, there is
+now no way to recover the slices of memory that are free at the end of existing
+segments. With models 50+ layers deep, this pattern might repeat 50+ times
+creating many slivers.</p>
+<p><cite>expandable_segments</cite> allows the allocator to create a segment initially and then
+expand its size later when more memory is needed. Instead of making one segment
+per allocation, it tries to make one segment (per stream) that grows as
+necessary. Now when the <cite>N + 1</cite> case runs, the allocations will tile nicely into
+the one large segment until it fills up. Then more memory is requested and
+appended to the end of the segment. This process does not create as many slivers
+of unusable memory, so it is more likely to succeed at finding this memory.</p>
+</li>
 </ul>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
