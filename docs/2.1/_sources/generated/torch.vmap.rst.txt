@@ -1,0 +1,6 @@
+﻿torch.vmap
+==========
+
+.. currentmodule:: torch
+
+.. autofunction:: vmap
