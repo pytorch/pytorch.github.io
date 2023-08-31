@@ -4,7 +4,7 @@
   <generator uri="https://jekyllrb.com/" version="3.9.0">Jekyll</generator>
   <link href="https://pytorch.org/feed.xml" rel="self" type="application/atom+xml" />
   <link href="https://pytorch.org/" rel="alternate" type="text/html" />
-  <updated>2023-08-30T17:57:32-07:00</updated>
+  <updated>2023-08-31T10:32:44-07:00</updated>
   <id>https://pytorch.org/feed.xml</id>
 
   
@@ -29,6 +29,203 @@
 
   
   
+  
+    <entry>
+      <title type="html">PyTorch/XLA SPMD: Scale Up Model Training and Serving with Automatic Parallelization</title>
+      <link href="https://pytorch.org/blog/pytorch-xla-spmd/" rel="alternate" type="text/html" title="PyTorch/XLA SPMD: Scale Up Model Training and Serving with Automatic Parallelization" />
+      <published>2023-08-31T00:00:00-07:00</published>
+      <updated>2023-08-31T00:00:00-07:00</updated>
+      <id>https://pytorch.org/blog/pytorch-xla-spmd</id>
+      <content type="html" xml:base="https://pytorch.org/blog/pytorch-xla-spmd/">&lt;p&gt;Today, we are delighted to announce PyTorch/XLA SPMD: the integration of &lt;a href=&quot;https://arxiv.org/pdf/2105.04663.pdf&quot;&gt;GSPMD&lt;/a&gt; into PyTorch with an easy to use API. PyTorch developers seeking superior performance and scale can train and serve the largest neural networks while maximizing utilization of AI accelerators, such as Google Cloud TPUs.&lt;/p&gt;
+
+&lt;h2 id=&quot;introduction&quot;&gt;Introduction&lt;/h2&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://arxiv.org/abs/2105.04663&quot;&gt;GSPMD&lt;/a&gt; is an automatic parallelization system for ML workloads. The XLA compiler transforms the single device program into a partitioned one with proper collectives, based on the user provided sharding hints. This allows developers to write PyTorch programs as if they are on a single large device without any custom sharded computation and/or collective communication ops to scale models.&lt;/p&gt;
+
+&lt;p&gt;PyTorch/XLA SPMD allows PyTorch users to parallelize their ML workloads with GSPMD with less effort and with better performance. Some of the key highlights are:&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;Better developer experience. Everything happens with a few &lt;a href=&quot;#simple-example-with-sharding-annotation&quot;&gt;sharding annotations&lt;/a&gt; from the user, and PyTorch/XLA SPMD achieves comparable performance to the most efficient PyTorch sharding implementation (see the Examples and Results section below). PyTorch/XLA SPMD separates the task of programming an ML model from the challenge of parallelization. Its automated approach to model sharding frees up the user from implementing the sharded version of ops with proper collectives in place.&lt;/li&gt;
+  &lt;li&gt;A single API that enables a large variety of parallelism algorithms (including data parallelism, fully sharded data parallelism, spatial partitioning tensor and pipeline parallelism, as well as combinations of these algorithms) for different ML workloads and model architectures.&lt;/li&gt;
+  &lt;li&gt;Industry-leading performance in large model training. PyTorch/XLA SPMD brings the powerful XLA GSPMD to PyTorch, enabling users to harness the full power of Google Cloud TPUs.&lt;/li&gt;
+  &lt;li&gt;Enabling PyTorch and JAX developers take advantage of the same underlying XLA API to scale models.&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h2 id=&quot;key-concepts&quot;&gt;Key Concepts&lt;/h2&gt;
+
+&lt;p&gt;The key concepts behind the sharding annotation API are: 1) Mesh, 2) Partition Spec, and 3) &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;mark_sharding&lt;/code&gt; API to express sharding intent using Mesh and Partition Spec. A more detailed design overview is available as a user guide &lt;a href=&quot;https://github.com/pytorch/xla/blob/master/docs/spmd.md&quot;&gt;here&lt;/a&gt;.&lt;/p&gt;
+
+&lt;h3 id=&quot;mesh&quot;&gt;Mesh&lt;/h3&gt;
+
+&lt;p&gt;For a given cluster of devices, a physical mesh is a representation of the interconnect topology.&lt;/p&gt;
+
+&lt;p&gt;We derive a logical mesh based on this topology to create sub-groups of devices which can be used for partitioning different axes of tensors in a model. We apply sharding annotations to map the program across the logical mesh; this automatically inserts communication collectives in the program graph to support functional correctness (see the figure below).&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/pytorch-xla-spmd/fig1.png&quot; alt=&quot;SPMD on PyTorch/XLA&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;We abstract logical mesh with &lt;a href=&quot;https://github.com/pytorch/xla/blob/028df4da388468fa9a41b1f98ea08bfce13b4c63/torch_xla/experimental/xla_sharding.py#L16&quot;&gt;Mesh API&lt;/a&gt;. The axes of the logical Mesh can be named. Here is an example:&lt;/p&gt;
+
+&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;import numpy as np
+import torch_xla.runtime as xr
+from torch_xla.experimental.xla_sharding import Mesh
+
+# Assuming you are running on a TPU host that has 8 devices attached
+num_devices = xr.global_runtime_device_count()
+# mesh shape will be (4,2) in this example
+mesh_shape = (num_devices // 2, 2)
+device_ids = np.array(range(num_devices))
+# axis_names 'x' nad 'y' are optional
+mesh = Mesh(device_ids, mesh_shape, ('x', 'y'))
+
+mesh.get_logical_mesh()
+&amp;gt;&amp;gt; array([[0, 1],
+          [2, 3],
+          [4, 5],
+          [6, 7]])
+mesh.shape()
+&amp;gt;&amp;gt; OrderedDict([('x', 4), ('y', 2)])
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;h3 id=&quot;partition-spec&quot;&gt;Partition Spec&lt;/h3&gt;
+
+&lt;p&gt;partition_spec has the same rank as the input tensor. Each dimension describes how the corresponding input tensor dimension is sharded across the device mesh (logically defined by mesh_shape). &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;partition_spec&lt;/code&gt; is a tuple of &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;device_mesh&lt;/code&gt; dimension &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;index&lt;/code&gt;, None, or a tuple of mesh dimension indices. The &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;index&lt;/code&gt; can be an &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;int&lt;/code&gt; or &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;str&lt;/code&gt; if the corresponding mesh dimension is named. This specifies how each input rank is sharded (&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;index&lt;/code&gt; to &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;mesh_shape&lt;/code&gt;) or replicated (&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;None&lt;/code&gt;).&lt;/p&gt;
+
+&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;# Provide optional mesh axis names and use them in the partition spec
+mesh = Mesh(device_ids, (4, 2), ('data', 'model'))
+partition_spec = ('model', 'data')
+xs.mark_sharding(input_tensor, mesh, partition_spec)
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;We support all three types of sharding described in the original &lt;a href=&quot;https://arxiv.org/abs/2105.04663&quot;&gt;GSPMD&lt;/a&gt; paper. For instance, one can specify partial replication like this:&lt;/p&gt;
+
+&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;# Provide optional mesh axis names and use them in the partition spec
+mesh = Mesh(device_ids, (2, 2, 2), ('x', 'y', 'z'))
+
+# evenly shard across x and z and replicate among y
+partition_spec = ('x', 'z')  # equivalent to ('x', None, 'z')
+xs.mark_sharding(input_tensor, mesh, partition_spec)
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;h3 id=&quot;simple-example-with-sharding-annotation&quot;&gt;Simple Example With Sharding Annotation&lt;/h3&gt;
+
+&lt;p&gt;Users can annotate native PyTorch tensors using the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;mark_sharding&lt;/code&gt; API (&lt;a href=&quot;https://github.com/pytorch/xla/blob/9a5fdf3920c18275cf7dba785193636f1b39ced9/torch_xla/experimental/xla_sharding.py#L388&quot;&gt;src&lt;/a&gt;). This takes &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;torch.Tensor&lt;/code&gt; as input and returns a &lt;a href=&quot;https://github.com/pytorch/xla/blob/03991d44a0a0297ced3ba9fc10ba451a4b6c94ab/torch_xla/experimental/xla_sharded_tensor.py#L55-L62&quot;&gt;XLAShardedTensor&lt;/a&gt; as output.&lt;/p&gt;
+
+&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;def mark_sharding(t: Union[torch.Tensor, XLAShardedTensor], mesh: Mesh, partition_spec: Tuple[Union[int, None]]) -&amp;gt; XLAShardedTensor
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Invoking &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;mark_sharding&lt;/code&gt; API takes a user defined logical &lt;a href=&quot;#mesh&quot;&gt;mesh&lt;/a&gt; and &lt;a href=&quot;#partition-spec&quot;&gt;partition_spec&lt;/a&gt; and generates a sharding annotation for the XLA compiler. The sharding specification is attached to the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;XLATensor&lt;/code&gt;, as well as the original input tensor. Here is a simple usage example from the [&lt;a href=&quot;https://github.com/pytorch/xla/issues/3871&quot;&gt;RFC&lt;/a&gt;], to illustrate how the sharding annotation API works:&lt;/p&gt;
+
+&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;import numpy as np
+import torch
+import torch_xla.core.xla_model as xm
+import torch_xla.runtime as xr
+import torch_xla.experimental.xla_sharding as xs
+from torch_xla.experimental.xla_sharded_tensor import XLAShardedTensor
+from torch_xla.experimental.xla_sharding import Mesh
+
+# Enable XLA SPMD execution mode.
+xr.use_spmd()
+
+# Device mesh, this and partition spec as well as the input tensor shape define the individual shard shape.
+num_devices = xr.global_runtime_device_count()
+mesh_shape = (2, num_devicese // 2)  # 2x4 on v3-8, 2x2 on v4-8  
+device_ids = np.array(range(num_devices))
+mesh = Mesh(device_ids, mesh_shape, ('x', 'y'))
+
+t = torch.randn(8, 4).to(xm.xla_device())
+
+# Mesh partitioning, each device holds 1/8-th of the input
+partition_spec = (0, 1)
+m1_sharded = xs.mark_sharding(t, mesh, partition_spec)
+assert isinstance(m1_sharded, XLAShardedTensor) == True
+# Note that the sharding annotation is also in-placed updated to t
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;We can annotate different tensors in the PyTorch program to enable different parallelism techniques, as described in the comment below:&lt;/p&gt;
+
+&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;# Sharding annotate the linear layer weights.
+model = SimpleLinear().to(xm.xla_device())
+xs.mark_sharding(model.fc1.weight, mesh, partition_spec)
+
+# Training loop
+model.train()
+for step, (data, target) in enumerate(loader):
+  # Assumes `loader` returns data, target on XLA device
+  optimizer.zero_grad()
+  # Sharding annotate input data, we can shard any input
+  # dimensions. Sharding the batch dimension enables 
+  # data parallelism, sharding the feature dimension enables
+  # spatial partitioning.
+  xs.mark_sharding(data, mesh, partition_spec)
+  ouput = model(data)
+  loss = loss_fn(output, target)
+  optimizer.step()
+  xm.mark_step()
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;More complete unit test cases and integration test examples are available in the PyTorch/XLA &lt;a href=&quot;https://github.com/pytorch/xla/tree/r2.0/test/spmd&quot;&gt;repo&lt;/a&gt;.&lt;/p&gt;
+
+&lt;h2 id=&quot;results&quot;&gt;Results&lt;/h2&gt;
+
+&lt;h3 id=&quot;performance&quot;&gt;Performance&lt;/h3&gt;
+
+&lt;p&gt;We measured the performance of PyTorch/XLA SPMD using a GPT-2 model (&lt;a href=&quot;https://github.com/pytorch-tpu/transformers/tree/yeounoh_gpt2_spmd&quot;&gt;src&lt;/a&gt;) and compared it with &lt;a href=&quot;https://pytorch.org/blog/scaling-pytorch-models-on-cloud-tpus-with-fsdp/&quot;&gt;user-mode FSDP&lt;/a&gt;.&lt;/p&gt;
+
+&lt;p&gt;Here, SPMD applies the same sharding scheme as the FSDP plot (i.e. 1D sharding). Users are expected to achieve better MFU results by exploring more advanced SPMD sharding schemes.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/pytorch-xla-spmd/fig2.png&quot; alt=&quot;SPMD vs. FSDP&quot; style=&quot;width:100%; max-width: 600px; display: block; margin-left: auto; margin-right: auto&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;We use Model FLOPS Utilization (MFU) as a metric for comparison. MFU is “the ratio of the observed throughput relative to the theoretical maximum throughput of a system operating at peak FLOPs” (&lt;a href=&quot;https://arxiv.org/pdf/2204.02311.pdf&quot;&gt;PaLM paper&lt;/a&gt;).&lt;/p&gt;
+
+&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;flops_per_step = 6 * global_batch_size * seq_len * num_params
+model_flops_utilization = flops_per_step / step_time(s) / chip_count / flops_per_chip
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;This estimation assumes that the input dimensionality is much larger than the input sequence length (d_model » seq_len). If this assumption is violated the self-attention FLOPs start to be significant enough and this expression will underestimate the true MFU.&lt;/p&gt;
+
+&lt;h3 id=&quot;scalability&quot;&gt;Scalability&lt;/h3&gt;
+
+&lt;p&gt;One of the core benefits of SPMD is the flexible partitioning which can be used to save accelerator memory (HBM) usage and improve scalability. For scalability analysis, we present two studies: 1) we examine the peak HBM across 4 model sizes using Hugging Face transformers (GPT-2) as the base implementation; 2) we examine the peak HBM usage with &lt;a href=&quot;https://cloud.google.com/blog/products/ai-machine-learning/train-ml-models-on-large-images-and-3d-volumes-with-spatial-partitioning-on-cloud-tpus&quot;&gt;spatial partitioning&lt;/a&gt;.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/pytorch-xla-spmd/fig3.png&quot; alt=&quot;Peak HBM Utilization&quot; style=&quot;width:100%; max-width: 600px; display: block; margin-left: auto; margin-right: auto&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;The above figure illustrates the unsharded 2B parameters model peak memory footprint stands at 26GB (red dashed line). harding model weights (model parallelism) reduces the peak memory footprint, and thus, enables larger model training with a given TPU pod slice. In  these experiments, we achieved up to 39.75% MFU on a 4B parameters model on Google Cloud TPU v4-16.&lt;/p&gt;
+
+&lt;p&gt;We also ran an input batch scalability test using &lt;a href=&quot;https://cloud.google.com/blog/products/ai-machine-learning/train-ml-models-on-large-images-and-3d-volumes-with-spatial-partitioning-on-cloud-tpus&quot;&gt;spatial partitioning&lt;/a&gt; and a simple ResNet50 example (&lt;a href=&quot;https://github.com/pytorch/xla/blob/master/test/spmd/test_train_spmd_imagenet.py&quot;&gt;src&lt;/a&gt;) on Cloud TPU v4-8. Input batch is commonly sharded across the batch dimension for data parallelism (DDP, FSDP), but PyTorch/XLA SPMD enables input sharding across input feature dimensions for spatial sharding. As shown in the below figure, one can push the per-device batch size to 512 with spatial partitioning which is not possible with other data parallelism techniques.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/pytorch-xla-spmd/fig4.png&quot; alt=&quot;Batch size scaling with spatial partitioning&quot; style=&quot;width:100%; max-width: 741px; display: block; margin-left: auto; margin-right: auto&quot; /&gt;&lt;/p&gt;
+
+&lt;h2 id=&quot;the-road-forward-for-pytorchxla-spmd&quot;&gt;The Road Forward for PyTorch/XLA SPMD&lt;/h2&gt;
+
+&lt;p&gt;We are ecstatic about what’s ahead for PyTorch/XLA and invite the community to join us. SPMD is still experimental, and we continuously add new features to it. In future releases, we plan to address async dataloading, partially replicated sharding, and other improvements. We’d love to &lt;a href=&quot;https://github.com/pytorch/xla#providing-feedback&quot;&gt;hear from you&lt;/a&gt;, answer your questions about PyTorch/XLA SPMD, and learn how you use SPMD.&lt;/p&gt;
+
+&lt;p&gt;Cheers!&lt;/p&gt;
+
+&lt;p&gt;The PyTorch/XLA Team at Google&lt;/p&gt;</content>
+
+      
+      
+      
+      
+      
+
+      <author>
+          <name>Yeounoh Chung, Jon Bolin, Milad Mohammadi, Jiewen Tan, Jack Cao, Joe Spisak, Alex Spiridonov, Shauheen Zahirazami, Steven Krawczyk, Wonjoo Lee Mohit Khatwani, Wanchao Liang, Vaibhav Singh</name>
+        
+        
+      </author>
+
+      
+
+      
+
+      
+        <summary type="html">Today, we are delighted to announce PyTorch/XLA SPMD: the integration of GSPMD into PyTorch with an easy to use API. PyTorch developers seeking superior performance and scale can train and serve the largest neural networks while maximizing utilization of AI accelerators, such as Google Cloud TPUs.</summary>
+      
+
+      
+      
+    </entry>
   
     <entry>
       <title type="html">Large Scale Training of Hugging Face Transformers on TPUs With PyTorch/XLA FSDP</title>
@@ -1164,115 +1361,6 @@ for epoch in range(epochs): 
 
       
         <summary type="html">Overview</summary>
-      
-
-      
-      
-    </entry>
-  
-    <entry>
-      <title type="html">Optimizing LibTorch-based inference engine memory usage and thread-pooling</title>
-      <link href="https://pytorch.org/blog/optimizing-libtorch/" rel="alternate" type="text/html" title="Optimizing LibTorch-based inference engine memory usage and thread-pooling" />
-      <published>2023-06-29T00:00:00-07:00</published>
-      <updated>2023-06-29T00:00:00-07:00</updated>
-      <id>https://pytorch.org/blog/optimizing-libtorch</id>
-      <content type="html" xml:base="https://pytorch.org/blog/optimizing-libtorch/">&lt;h2 id=&quot;outline&quot;&gt;Outline&lt;/h2&gt;
-
-&lt;p&gt;In this blog post we show how to optimize LibTorch-based inference engine to maximize throughput by reducing memory usage and optimizing the thread-pooling strategy. We apply these optimizations to Pattern Recognition engines for audio data, for example, music and speech recognition or acoustic fingerprinting. The optimizations discussed in this blog post allow for memory usage reduction by 50% and reduction in end-to-end latency for Inference by 37.5%. These optimizations are applicable to computer vision and natural language processing.&lt;/p&gt;
-
-&lt;h2 id=&quot;audio-recognition-inferencing&quot;&gt;Audio Recognition Inferencing&lt;/h2&gt;
-
-&lt;p&gt;Audio Recognition (AR) engines can be used to recognize and identify sound patterns. As an example, identifying the type and species of a bird from audio recordings, distinguishing music from the singer’s voice, or detecting an abnormal sound indicating a breach in a building. To identify sounds of interest, AR engines process audio through 4 stages:&lt;/p&gt;
-
-&lt;ol&gt;
-  &lt;li&gt;&lt;strong&gt;File Validation&lt;/strong&gt;: The AR engine validates the input audio file.&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;Feature Extraction&lt;/strong&gt;: Features are extracted from each segment within the audio file.&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;Inference&lt;/strong&gt;: LibTorch performs inference using CPUs or accelerators. In our case Intel processors on an Elastic Cloud Compute (EC2) instance.&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;Post-processing&lt;/strong&gt;: A post-processing model decodes the results and calculates scores that are used to convert inference output into tags or transcripts.&lt;/li&gt;
-&lt;/ol&gt;
-
-&lt;p&gt;Of these 4 steps, inference is the most computationally intensive and can take up to 50% of the pipeline processing time depending on the model complexity. This means that any optimization at this stage has a significant impact on the overall pipeline. &lt;/p&gt;
-
-&lt;h2 id=&quot;optimizing-the-audio-recognition-engine-with-concurrencyis-not-so-simple&quot;&gt;Optimizing the Audio Recognition engine with concurrency…is not so simple&lt;/h2&gt;
-
-&lt;p&gt;Our objective for this processing pipeline is to extract audio segments into tags or transcripts through a processing. The input data is an audio file composed of several short sound segments (S1 to S6 in Figure 1). The output data corresponds to tags or transcripts ordered by timestamps.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/optimizing-libtorch/im1.jpg&quot; alt=&quot;Figure 1: Example audio file with segment boundaries&quot; style=&quot;max-height:800px; width:100%&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;small style=&quot;line-height: 1.1&quot;&gt;&lt;em&gt;&lt;strong&gt;Figure 1&lt;/strong&gt;: Example audio file with segment boundaries&lt;/em&gt;&lt;/small&gt;&lt;/p&gt;
-
-&lt;p&gt;Each segment can be processed independently and in an out-of-order fashion. This offers the opportunity to process segments concurrently and in parallel to optimize the overall inference throughput as well as maximize the usage of the resources.&lt;/p&gt;
-
-&lt;p&gt;Parallelization on an instance can be achieved through multi-threading (pThreads, std::threads, OpenMP) or multi-processing. The advantage of multi-threading over multi-processing is the ability to use shared memory. It enables developers to minimize data duplication across threads by sharing data across threads; the AR models in our case (&lt;em&gt;Figure 2&lt;/em&gt;). Furthermore, a reduction in memory allows us to run more pipelines in parallel by increasing the number of engine threads in order to utilize all vCPUs on our Amazon EC2 instance (&lt;a href=&quot;https://aws.amazon.com/ec2/instance-types/c5/&quot;&gt;c5.4xlarge&lt;/a&gt; in our case, it offers 16 vCPUs). In theory, we expect to see higher hardware utilization and higher throughput for our AR engine as a result.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/optimizing-libtorch/im2.jpg&quot; alt=&quot;Figure 2: Multi-threaded AR Engine&quot; style=&quot;max-height:800px; width:100%&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;small style=&quot;line-height: 1.1&quot;&gt;&lt;em&gt;&lt;strong&gt;Figure 2&lt;/strong&gt;: Multi-threaded AR Engine&lt;/em&gt;&lt;/small&gt;&lt;/p&gt;
-
-&lt;p&gt;But we found these assumptions to be wrong. Indeed, we found that increasing the number of threads of the application led to an increase of the end-to-end latency for each audio segment and to a decrease of the engine throughput. For example, increasing the concurrency from 1 to 5 threads led to an increase of the latency by 4x which had a proportional effect on decreasing the throughput. In fact, metrics showed that within the pipeline, the latency of the inference stage alone was 3x higher than it’s single thread baseline. &lt;/p&gt;
-
-&lt;p&gt;Using a profiler, we found that the CPU &lt;a href=&quot;https://www.intel.com/content/www/us/en/develop/documentation/vtune-help/top/reference/cpu-metrics-reference.html#cpu-metrics-reference_SPIN-AND-OVERHEAD-TIME&quot;&gt;Spin Time&lt;/a&gt; increased, potentially due to CPU oversubscription which impacts system and application performance. Given our control over the application’s multi-thread implementation, we chose to dive deeper into the stack and identify potential conflicts with LibTorch’s default settings.&lt;/p&gt;
-
-&lt;h3 id=&quot;diving-deeper-on-libtorchs-multi-threading-and-its-impact-on-concurrency&quot;&gt;Diving deeper on LibTorch’s multi-threading and its impact on concurrency&lt;/h3&gt;
-
-&lt;p&gt;LibTorch’s parallel implementations on CPU for inference are based on  &lt;a href=&quot;https://pytorch.org/docs/stable/notes/cpu_threading_torchscript_inference.html#cpu-threading-and-torchscript-inference&quot;&gt;global thread pools&lt;/a&gt;. Examples of implementations are Inter-op and intra-op parallelism, which can be chosen depending on the model’s properties. In both cases, it is possible to set &lt;a href=&quot;https://pytorch.org/docs/stable/notes/cpu_threading_torchscript_inference.html#tuning-the-number-of-threads&quot;&gt;the number of threads&lt;/a&gt; in each thread-poll to optimize the latency and throughput. &lt;/p&gt;
-
-&lt;p&gt;To test if LibTorch’s parallel default implementation settings had a counter effect on our inference latency, we ran an experiment on a 16 vCPus machine with a 35-minute audio file, keeping the LibTorch inter-threads constant at 1 (because our models didn’t utilize the inter-op thread pool). We collected the following data as shown in Figure 3 and 4. &lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/optimizing-libtorch/im3.jpg&quot; alt=&quot;Figure 3: CPU Utilization for different number of engine threads&quot; style=&quot;max-height:800px; width:100%&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;small style=&quot;line-height: 1.1&quot;&gt;&lt;em&gt;&lt;strong&gt;Figure 3&lt;/strong&gt;: CPU Utilization for different number of engine threads&lt;/em&gt;&lt;/small&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/optimizing-libtorch/im4.jpg&quot; alt=&quot;Figure 4: Processing times for different number of engine threads&quot; style=&quot;max-height:800px; width:100%; margin-top: 4rem;&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;small style=&quot;line-height: 1.1&quot;&gt;&lt;em&gt;&lt;strong&gt;Figure 4&lt;/strong&gt;: Processing times for different number of engine threads&lt;/em&gt;&lt;/small&gt;&lt;/p&gt;
-
-&lt;p&gt;Execution time in Figure 4 is the end-to-end processing time for processing all the segments of the given audio file. We have 4 different configurations of LibTorch intra-threads which are 1, 4, 8, 16 and we change the number of engine threads from 1 to 16 for each intra-thread LibTorch configuration. As we see in Figure 3, CPU utilization increases with an increase in the number of engine threads for all LibTorch intra-thread configurations. But as we see in Figure 4, an increase in CPU utilization doesn’t translate into lower execution time. We found out that in all but one case, as the number of engine threads shot up, so did execution time. The one exception was the case where the intra-thread pool size was 1.&lt;/p&gt;
-
-&lt;h3 id=&quot;resolving-the-global-thread-pool-issue&quot;&gt;Resolving the global thread pool issue&lt;/h3&gt;
-
-&lt;p&gt;Using too many threads with a global thread pool led to performance degradation and caused an over-subscription problem. Without disabling&lt;a href=&quot;https://pytorch.org/docs/stable/notes/cpu_threading_torchscript_inference.html&quot;&gt; LibTorch global thread pools&lt;/a&gt;, it was difficult to match the performance of the multi-process engine.&lt;/p&gt;
-
-&lt;p&gt;Disabling the LibTorch global thread pool is as simple as setting the intra-op/inter-op parallelism threads to 1, as shown here:&lt;/p&gt;
-
-&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;at::set_num_threads(1)           // Disables the intraop thread pool.
-at::set_num_interop_threads(1). // Disables the interop thread pool.
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;As shown in Figure 4, the lowest processing time was measured when the LibTorch global thread pool was disabled.&lt;/p&gt;
-
-&lt;p&gt;This solution improved AR engine throughput in several cases. However, when evaluating long datasets (audio files longer than 2 hours in load test), we found that the memory footprint of the engine gradually started to increase.&lt;/p&gt;
-
-&lt;h3 id=&quot;optimizing-memory-usage&quot;&gt;Optimizing memory usage&lt;/h3&gt;
-
-&lt;p&gt;We ran a load-test on the system with two hours long audio files and found out that the observed memory increase was the result of memory fragmentation within a multi-threaded LibTorch inference. We resolved this using&lt;a href=&quot;https://github.com/jemalloc/jemalloc&quot;&gt; jemalloc&lt;/a&gt;, which is a general purpose malloc(3) implementation that emphasizes fragmentation avoidance and scalable concurrency support. &lt;a href=&quot;https://pytorch.org/tutorials/recipes/recipes/tuning_guide.html#switch-memory-allocator&quot;&gt;Using jemalloc&lt;/a&gt;, our peak memory usage decreased by an average of 34% and average memory usage decreased by 53%.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/optimizing-libtorch/im5.jpg&quot; alt=&quot;Figure 5: Memory usage over time using the same input file with and without jemalloc&quot; style=&quot;max-height:800px; width:100%&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;small style=&quot;line-height: 1.1&quot;&gt;&lt;em&gt;&lt;strong&gt;Figure 5&lt;/strong&gt;: Memory usage over time using the same input file with and without jemalloc&lt;/em&gt;&lt;/small&gt;&lt;/p&gt;
-
-&lt;h2 id=&quot;summary&quot;&gt;Summary&lt;/h2&gt;
-
-&lt;p&gt;To optimize the performance of multi-threaded LibTorch-based inference engines, we recommend verifying that there is no oversubscription problem in LibTorch. In our case, all threads in the multi-threaded engine were sharing the LibTorch global thread pool, which caused an oversubscription problem. This was remedied by disabling the global thread pool: we disabled the interop and intraop global thread pool by setting threads to 1. To optimize the memory of a multi-threaded engine, we recommend using Jemalloc as a memory allocator tool rather than the default malloc function.&lt;/p&gt;</content>
-
-      
-      
-      
-      
-      
-
-      <author>
-          <name>Himalay Mohanlal Joriwal, Pierre-Yves Aquilanti, Vivek Govindan, Hamid Shojanazeri, Ankith Gunapal, Tristan Rice</name>
-        
-        
-      </author>
-
-      
-
-      
-
-      
-        <summary type="html">Outline</summary>
       
 
       
