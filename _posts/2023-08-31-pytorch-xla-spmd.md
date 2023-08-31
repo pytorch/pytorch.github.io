@@ -152,7 +152,7 @@ More complete unit test cases and integration test examples are available in the
 
 We measured the performance of PyTorch/XLA SPMD using a GPT-2 model ([src](https://github.com/pytorch-tpu/transformers/tree/yeounoh_gpt2_spmd)) and compared it with [user-mode FSDP](https://pytorch.org/blog/scaling-pytorch-models-on-cloud-tpus-with-fsdp/).
 
-
+Here, SPMD applies the same sharding scheme as the FSDP plot (i.e. 1D sharding). Users are expected to achieve better MFU results by exploring more advanced SPMD sharding schemes.
 
 ![SPMD vs. FSDP](/assets/images/pytorch-xla-spmd/fig2.png){:style="width:100%; max-width: 600px; display: block; margin-left: auto; margin-right: auto"}
 
