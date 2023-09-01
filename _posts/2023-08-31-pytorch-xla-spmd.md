@@ -41,7 +41,11 @@ We abstract logical mesh with [Mesh API](https://github.com/pytorch/xla/blob/028
 ```
 import numpy as np
 import torch_xla.runtime as xr
+import torch_xla.experimental.xla_sharding as xs
 from torch_xla.experimental.xla_sharding import Mesh
+
+# Enable XLA SPMD execution mode.
+xr.use_spmd()
 
 # Assuming you are running on a TPU host that has 8 devices attached
 num_devices = xr.global_runtime_device_count()
@@ -122,7 +126,7 @@ assert isinstance(m1_sharded, XLAShardedTensor) == True
 We can annotate different tensors in the PyTorch program to enable different parallelism techniques, as described in the comment below:
 
 ```
-# Sharding annotate the linear layer weights.
+# Sharding annotate the linear layer weights. SimpleLinear() is a nn.Module.
 model = SimpleLinear().to(xm.xla_device())
 xs.mark_sharding(model.fc1.weight, mesh, partition_spec)
 
