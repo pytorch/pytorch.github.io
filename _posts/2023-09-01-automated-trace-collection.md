@@ -31,7 +31,9 @@ The diagram below shares an overview of how the toolchain works together.
 
 ![Figure 1: Dynolog, PyTorch Profiler and HTA toolchain workflow](/assets/images/dyno_hta.png){:style="width:100%; max-width: 662px; display: block; margin-left: auto; margin-right: auto"}
 
-<small style="line-height: 1.1"><em>**Figure 1**: Dynolog, PyTorch Profiler and HTA toolchain workflow</em></small>
+<div class="mb-3" style="text-align: center">
+<small style="line-height: 1.1"><em><strong>Figure 1</strong>: Dynolog, PyTorch Profiler and HTA toolchain workflow</em></small>
+</div>
 
 Let’s dig a bit deeper in each of the components. 
 
