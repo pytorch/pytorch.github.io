@@ -115,8 +115,3 @@ docker build -f /path/to/dynolog_repo/dynolog_hta.dockerfile -t <image_name:tag>
 _Q. How can I run the docker image?_ 
 
 You can refer to this [cheat sheet](https://gist.github.com/anupambhatnagar/07ebff374bc45e4b63eb42893cca7e87) to run the Docker image.
-
-
-## Acknowledgements
-
-We would like to thank Adnan Aziz, Jay Chae, Aaron Shi, Taylor Robie, [Zachary Jones](https://fb.workplace.com/profile.php?id=100077524366680),[ William Sumendap](https://fb.workplace.com/profile.php?id=100082129373899),[ Jakob Johnson](https://fb.workplace.com/profile.php?id=100066941321730),[ Hao Wang](https://fb.workplace.com/profile.php?id=100026637916393),[ David Carrillo Cisneros](https://fb.workplace.com/profile.php?id=100029299094057),[ Alston Tang](https://fb.workplace.com/profile.php?id=100024201729857) and Parth Malani for supporting this work.
