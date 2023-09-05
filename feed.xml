@@ -4,7 +4,7 @@
   <generator uri="https://jekyllrb.com/" version="3.9.0">Jekyll</generator>
   <link href="https://pytorch.org/feed.xml" rel="self" type="application/atom+xml" />
   <link href="https://pytorch.org/" rel="alternate" type="text/html" />
-  <updated>2023-09-04T17:59:50-07:00</updated>
+  <updated>2023-09-05T07:48:00-07:00</updated>
   <id>https://pytorch.org/feed.xml</id>
 
   
@@ -29,6 +29,142 @@
 
   
   
+  
+    <entry>
+      <title type="html">Automated trace collection and analysis</title>
+      <link href="https://pytorch.org/blog/automated-trace-collection/" rel="alternate" type="text/html" title="Automated trace collection and analysis" />
+      <published>2023-09-05T00:00:00-07:00</published>
+      <updated>2023-09-05T00:00:00-07:00</updated>
+      <id>https://pytorch.org/blog/automated-trace-collection</id>
+      <content type="html" xml:base="https://pytorch.org/blog/automated-trace-collection/">&lt;p&gt;In this blog, we share how we enabled the collection and analysis of PyTorch Profiler traces for training workloads &lt;strong&gt;without any user side code instrumentation&lt;/strong&gt;. We leveraged Dynolog - an open source daemon for CPU and GPU telemetry to collect PyTorch Profiler traces, and analyzed the collected traces using Holistic Trace Analysis - an open source library for analyzing PyTorch Profiler traces. This toolchain has allowed engineers at Meta to accelerate their performance optimization workflows. The keystone to our solution was implementing pre and post hooks for the base Optimizer class in PyTorch. We demo PyTorch trace collection using Dynolog in a short video.&lt;/p&gt;
+
+&lt;h2 id=&quot;problem&quot;&gt;Problem&lt;/h2&gt;
+
+&lt;p&gt;Software developers at Meta run a large number of distributed training runs daily. In order to ensure that GPUs are being used effectively it is necessary to measure and analyze GPU performance for all jobs. Moreover, developers need the capability to introspect models and understand how CPUs and GPUs interact to debug performance issues. Developers build initial prototypes using a handful of GPUs and the production versions scale out to hundreds or thousands of GPUs, serving numerous business use cases such as generative AI, recommendation systems, ad ranking etc.&lt;/p&gt;
+
+&lt;p&gt;Given the scale at Meta, it is necessary to have toolchains for performance measurement and monitoring which have low overhead and operate seamlessly with each other, to maintain high developer efficiency.&lt;/p&gt;
+
+&lt;p&gt;In this blog, we describe how we use the PyTorch Profiler, Dynolog (a telemetry daemon) and Holistic Trace Analysis (a performance debugging library) to collect traces without any user side code instrumentation and analyze them to identify jobs with low GPU utilization.&lt;/p&gt;
+
+&lt;h2 id=&quot;solution&quot;&gt;Solution&lt;/h2&gt;
+
+&lt;p&gt;The diagram below shares an overview of how the toolchain works together.&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;User launches a PyTorch application.&lt;/li&gt;
+  &lt;li&gt;A training service or user triggers a profiling session using the Dynolog CLI which sends a request over the network to the Dynolog daemon.&lt;/li&gt;
+  &lt;li&gt;Dynolog daemon relays the profiling configuration to the PyTorch application, setting it temporarily in a profiling mode.&lt;/li&gt;
+  &lt;li&gt;PyTorch Profiler collects a trace and stores it to the database (e.g., network file system or S3 bucket).&lt;/li&gt;
+  &lt;li&gt;The collected traces are then analyzed using Holistic Trace Analysis (HTA).&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/dyno_hta.png&quot; alt=&quot;Figure 1: Dynolog, PyTorch Profiler and HTA toolchain workflow&quot; style=&quot;width:100%; max-width: 662px; display: block; margin-left: auto; margin-right: auto&quot; /&gt;&lt;/p&gt;
+
+&lt;div class=&quot;mb-3&quot; style=&quot;text-align: center&quot;&gt;
+&lt;small style=&quot;line-height: 1.1&quot;&gt;&lt;em&gt;&lt;strong&gt;Figure 1&lt;/strong&gt;: Dynolog, PyTorch Profiler and HTA toolchain workflow&lt;/em&gt;&lt;/small&gt;
+&lt;/div&gt;
+
+&lt;p&gt;Let’s dig a bit deeper in each of the components.&lt;/p&gt;
+
+&lt;h3 id=&quot;dynolog&quot;&gt;Dynolog&lt;/h3&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://developers.facebook.com/blog/post/2022/11/16/dynolog-open-source-system-observability/&quot;&gt;Dynolog&lt;/a&gt; is a lightweight monitoring daemon for heterogeneous CPU-GPU systems. It supports continuous monitoring of &lt;a href=&quot;https://github.com/facebookincubator/dynolog/blob/main/docs/Metrics.md&quot;&gt;performance metrics&lt;/a&gt; from the CPU (utilization, network bandwidth, instructions/second) and GPU (SM Occupancy, DRAM bandwidth, GPU power draw). Additionally, dynolog exports APIs to collect deep-dive profiling data that can be accessed via the dyno CLI.&lt;/p&gt;
+
+&lt;p&gt;One of the chief integrations Dynolog offers is interfacing with the &lt;a href=&quot;https://pytorch.org/tutorials/recipes/recipes/profiler_recipe.html&quot;&gt;PyTorch Profiler&lt;/a&gt;. This enables &lt;a href=&quot;https://pytorch.org/blog/performance-debugging-of-production-pytorch-models-at-meta/&quot;&gt;on-demand remote tracing &lt;/a&gt;using a single command to trace thousands of servers. This can be accomplished by using the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;dyno gputrace&lt;/code&gt; command.&lt;/p&gt;
+
+&lt;h3 id=&quot;pytorch-profiler&quot;&gt;PyTorch Profiler&lt;/h3&gt;
+
+&lt;p&gt;GPU kernels execute asynchronously, and GPU-side support is needed to create the trace. NVIDIA provides this visibility via the CUPTI library. Kineto is the subsystem within Profiler that interfaces with CUPTI. The &lt;a href=&quot;https://pytorch.org/blog/introducing-pytorch-profiler-the-new-and-improved-performance-tool/&quot;&gt;PyTorch Profiler&lt;/a&gt; leverages the &lt;a href=&quot;https://github.com/pytorch/kineto&quot;&gt;Kineto library&lt;/a&gt; to collect GPU traces. To enable automated profiling of training workloads at scale &lt;strong&gt;without any user side code instrumentation&lt;/strong&gt; we made a few fundamental changes to PyTorch. These changes enable trace collection without any user intervention.&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;Registration:** **First, we modified PyTorch to register with the Dynolog daemon on start up. This feature is switched on by setting the environment variable KINETO_USE_DAEMON=True. With this environment variable set to True, the PyTorch Profiler periodically polls Dynolog to check for on-demand tracing requests.&lt;/li&gt;
+  &lt;li&gt;Iteration hooks: Then, we &lt;a href=&quot;https://github.com/pytorch/pytorch/pull/89176&quot;&gt;implemented pre and post hooks for the base Optimizer class&lt;/a&gt;. This allowed us to annotate start/end of training iterations. The profiler is then aware of the iteration count and can safely capture a fixed number of iterations in the trace.&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h3 id=&quot;holistic-trace-analysis-hta&quot;&gt;Holistic Trace Analysis (HTA)&lt;/h3&gt;
+
+&lt;p&gt;ML researchers and engineers often struggle to computationally scale up their models as they are unaware of the performance bottlenecks in their workloads. Large distributed training jobs could generate thousands of traces, containing way too much data for a human to inspect. This is where &lt;a href=&quot;https://pytorch.org/blog/trace-analysis-for-masses/&quot;&gt;Holistic Trace Analysis&lt;/a&gt; comes in. HTA is an open source library for performance analysis - it takes as input PyTorch Profiler traces and up-levels the performance information contained in them. Its goal is to help researchers and engineers achieve the best performance from the hardware stack. To aid performance debugging HTA provides the following features (partial list):&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;a href=&quot;https://hta.readthedocs.io/en/latest/source/features/temporal_breakdown.html&quot;&gt;Temporal Breakdown&lt;/a&gt;: Breakdown of GPU time in terms of time spent in computation, communication, memory events, and idle time on a single node and across all ranks.&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://hta.readthedocs.io/en/latest/source/features/idle_time_breakdown.html&quot;&gt;Idle Time Breakdown&lt;/a&gt;: Breakdown of GPU idle time into waiting for the host, waiting for another kernel or attributed to an unknown cause.&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://hta.readthedocs.io/en/latest/source/features/kernel_breakdown.html&quot;&gt;Kernel Breakdown&lt;/a&gt;: Find kernels with the longest duration on each rank.&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://hta.readthedocs.io/en/latest/source/features/kernel_breakdown.html#kernel-duration-distribution&quot;&gt;Kernel Duration Distribution&lt;/a&gt;: Distribution of average time taken by longest kernels across different ranks.&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://hta.readthedocs.io/en/latest/source/features/comm_comp_overlap.html&quot;&gt;Communication Computation Overlap&lt;/a&gt;: Calculate the percentage of time when communication overlaps computation.&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;We invite you to check out these &lt;a href=&quot;https://github.com/facebookresearch/HolisticTraceAnalysis/tree/main/examples&quot;&gt;Jupyter notebooks&lt;/a&gt; to see what HTA can do for you. If you are a first time user we recommend starting with the &lt;a href=&quot;https://github.com/facebookresearch/HolisticTraceAnalysis/blob/main/examples/trace_analysis_demo.ipynb&quot;&gt;trace_analysis_demo&lt;/a&gt; notebook.&lt;/p&gt;
+
+&lt;p&gt;To summarize, Dynolog allows us to collect PyTorch Profiler traces on-the-fly in a scalable manner. Furthermore, by leveraging HTA we can automate performance analysis and identify bottlenecks. At Meta, we use the Dynolog, PyTorch Profiler and HTA toolchain to accelerate our performance optimization workflows.&lt;/p&gt;
+
+&lt;h2 id=&quot;demo&quot;&gt;Demo&lt;/h2&gt;
+
+&lt;p&gt;We share a screencast showcasing trace collection without any user side code instrumentation for a toy PyTorch program. The demo runs in a docker container and the trace collection is triggered using Dynolog. HTA can be used to subsequently analyze the collected trace.&lt;/p&gt;
+
+&lt;iframe width=&quot;560&quot; height=&quot;315&quot; src=&quot;https://www.youtube.com/embed/FjmHYMJLIdw?si=xahelamoBIja94Ox&quot; title=&quot;YouTube video player&quot; frameborder=&quot;0&quot; allow=&quot;accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share&quot; allowfullscreen=&quot;&quot;&gt;&lt;/iframe&gt;
+
+&lt;h2 id=&quot;faqs&quot;&gt;FAQs&lt;/h2&gt;
+
+&lt;p&gt;&lt;em&gt;Q. What else can &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;dyno gputrace&lt;/code&gt; do for me?&lt;/em&gt;&lt;/p&gt;
+
+&lt;p&gt;The &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;dyno gputrace&lt;/code&gt; command supports several custom PyTorch Profiler options:&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;capturing python stacks&lt;/li&gt;
+  &lt;li&gt;memory profiling&lt;/li&gt;
+  &lt;li&gt;record input shapes&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;Please run &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;dyno gputrace --help&lt;/code&gt; for all the options.&lt;/p&gt;
+
+&lt;p&gt;&lt;em&gt;Q. Does Dynolog collect hardware performance metrics?&lt;/em&gt;&lt;/p&gt;
+
+&lt;p&gt;Dynolog can also be used for always-on monitoring:&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;It incorporates out-of-box &lt;a href=&quot;https://github.com/facebookincubator/dynolog/tree/main#gpu-monitoring&quot;&gt;GPU performance monitoring&lt;/a&gt; for NVIDIA GPUs using &lt;a href=&quot;https://docs.nvidia.com/datacenter/dcgm/latest/user-guide/index.html#&quot;&gt;DCGM&lt;/a&gt;.&lt;/li&gt;
+  &lt;li&gt;Dynolog provides basic Linux kernel &lt;a href=&quot;https://github.com/facebookincubator/dynolog/blob/main/docs/Metrics.md&quot;&gt;performance metrics&lt;/a&gt; including CPU, network and IO resource usage.&lt;/li&gt;
+  &lt;li&gt;Dynolog manages hardware performance counters for micro-architecture specific events related to CPU Cache, TLBs etc on Intel and AMD CPUs.&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;&lt;em&gt;Q: How can I build the Docker image used in the demo?&lt;/em&gt;&lt;/p&gt;
+
+&lt;p&gt;The dockerfile is available &lt;a href=&quot;https://github.com/facebookincubator/dynolog/blob/main/dynolog_hta.dockerfile&quot;&gt;here&lt;/a&gt;. Use the command below to build the Docker image.&lt;/p&gt;
+
+&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;docker build -f /path/to/dynolog_repo/dynolog_hta.dockerfile -t &amp;lt;image_name:tag&amp;gt; .
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;&lt;em&gt;Q. How can I run the docker image?&lt;/em&gt;&lt;/p&gt;
+
+&lt;p&gt;You can refer to this &lt;a href=&quot;https://gist.github.com/anupambhatnagar/07ebff374bc45e4b63eb42893cca7e87&quot;&gt;cheat sheet&lt;/a&gt; to run the Docker image.&lt;/p&gt;
+
+&lt;h2 id=&quot;acknowledgements&quot;&gt;Acknowledgements&lt;/h2&gt;
+
+&lt;p&gt;We would like to thank Adnan Aziz, Jay Chae, Aaron Shi, Taylor Robie, &lt;a href=&quot;https://fb.workplace.com/profile.php?id=100077524366680&quot;&gt;Zachary Jones&lt;/a&gt;,&lt;a href=&quot;https://fb.workplace.com/profile.php?id=100082129373899&quot;&gt; William Sumendap&lt;/a&gt;,&lt;a href=&quot;https://fb.workplace.com/profile.php?id=100066941321730&quot;&gt; Jakob Johnson&lt;/a&gt;,&lt;a href=&quot;https://fb.workplace.com/profile.php?id=100026637916393&quot;&gt; Hao Wang&lt;/a&gt;,&lt;a href=&quot;https://fb.workplace.com/profile.php?id=100029299094057&quot;&gt; David Carrillo Cisneros&lt;/a&gt;,&lt;a href=&quot;https://fb.workplace.com/profile.php?id=100024201729857&quot;&gt; Alston Tang&lt;/a&gt; and Parth Malani for supporting this work.&lt;/p&gt;</content>
+
+      
+      
+      
+      
+      
+
+      <author>
+          <name>Anupam Bhatnagar, Brian Coutinho</name>
+        
+        
+      </author>
+
+      
+
+      
+
+      
+        <summary type="html">In this blog, we share how we enabled the collection and analysis of PyTorch Profiler traces for training workloads without any user side code instrumentation. We leveraged Dynolog - an open source daemon for CPU and GPU telemetry to collect PyTorch Profiler traces, and analyzed the collected traces using Holistic Trace Analysis - an open source library for analyzing PyTorch Profiler traces. This toolchain has allowed engineers at Meta to accelerate their performance optimization workflows. The keystone to our solution was implementing pre and post hooks for the base Optimizer class in PyTorch. We demo PyTorch trace collection using Dynolog in a short video.</summary>
+      
+
+      
+      
+    </entry>
   
     <entry>
       <title type="html">PyTorch/XLA SPMD: Scale Up Model Training and Serving with Automatic Parallelization</title>
@@ -1136,235 +1272,6 @@ for epoch in range(epochs): 
 
       
         <summary type="html">Training large deep learning models requires large datasets. Amazon Simple Storage Service (Amazon S3) is a scalable cloud object store service used for storing large training datasets. Machine learning (ML) practitioners need an efficient data pipe that can download data from Amazon S3, transform the data, and feed the data to GPUs for training models with high throughput and low latency. In this post, we introduce the new S3 IO DataPipes for PyTorch, S3FileLister and S3FileLoader. For memory efficiency and fast runs, the new DataPipes use the C++ extension to access Amazon S3. Benchmarking shows that S3FileLoader is 59.8% faster than FSSpecFileOpener for downloading a natural language processing (NLP) dataset from Amazon S3. You can build IterDataPipe training pipelines with the new DataPipes. We also demonstrate that the new DataPipe can reduce overall Bert and ResNet50 training time by 7%. The new DataPipes have been upstreamed to the open-source TorchData 0.4.0 with PyTorch 1.12.0.</summary>
-      
-
-      
-      
-    </entry>
-  
-    <entry>
-      <title type="html">How to Accelerate PyTorch Geometric on Intel® CPUs</title>
-      <link href="https://pytorch.org/blog/how-to-accelerate/" rel="alternate" type="text/html" title="How to Accelerate PyTorch Geometric on Intel® CPUs" />
-      <published>2023-07-10T00:00:00-07:00</published>
-      <updated>2023-07-10T00:00:00-07:00</updated>
-      <id>https://pytorch.org/blog/how-to-accelerate</id>
-      <content type="html" xml:base="https://pytorch.org/blog/how-to-accelerate/">&lt;h2 id=&quot;overview&quot;&gt;Overview&lt;/h2&gt;
-
-&lt;p&gt;The Intel PyTorch team has been collaborating with the PyTorch Geometric (PyG) community to provide CPU performance optimizations for Graph Neural Network (GNN) and PyG workloads. In the PyTorch 2.0 release, several critical optimizations were introduced to improve GNN training and inference performance on CPU. Developers and researchers can now take advantage of &lt;a href=&quot;https://www.intel.com/content/www/us/en/developer/tools/frameworks/overview.html&quot;&gt;Intel’s AI/ML Framework optimizations&lt;/a&gt; for significantly faster model training and inference, which unlocks the ability for GNN workflows directly using PyG.&lt;/p&gt;
-
-&lt;p&gt;In this blog, we will perform a deep dive on how to optimize PyG performance for both training and inference while using the PyTorch 2.0 flagship torch.compile feature to speed up PyG models.&lt;/p&gt;
-
-&lt;h2 id=&quot;message-passing-paradigm&quot;&gt;Message Passing Paradigm&lt;/h2&gt;
-
-&lt;p&gt;Message passing refers to the process of nodes exchanging information with their respective neighbors by sending messages to one another. In PyG, the process of message passing can be generalized into three steps:&lt;/p&gt;
-
-&lt;ol&gt;
-  &lt;li&gt;&lt;strong&gt;Gather&lt;/strong&gt;: Collect edge-level information of adjacent nodes and edges.&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;Apply&lt;/strong&gt;: Update the collected information with user-defined functions (UDFs).&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;Scatter&lt;/strong&gt;: Aggregate to node-level information, e.g., via a particular reduce function such as sum, mean, or max.&lt;/li&gt;
-&lt;/ol&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/how-to-accelerate/f1-pyg-message-passing-paradigm.png&quot; alt=&quot;Figure 1: The message passing paradigm&quot; style=&quot;max-width:620px; width:100%; display: block; margin-left: auto; margin-right: auto&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;small style=&quot;line-height: 1.1&quot;&gt;&lt;em&gt;&lt;strong&gt;Figure 1&lt;/strong&gt;: The message passing paradigm (Source: &lt;a href=&quot;http://github.com/rusty1s&quot;&gt;Matthias Fey&lt;/a&gt;)&lt;/em&gt;&lt;/small&gt;&lt;/p&gt;
-
-&lt;p&gt;Message passing performance is highly related to the storage format of the adjacency matrix of the graph, which records how pairs of nodes are connected. Two methods for the storage format are:&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;&lt;strong&gt;Adjacency matrix in COO (Coordinate Format):&lt;/strong&gt; The graph data is physically stored in a two-dimensional tensor shape of &lt;strong&gt;[2, num_edges]&lt;/strong&gt;, which maps each connection of source and destination nodes. The performance hotspot is scatter-reduce.&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;Adjacency matrix in CSR (Compressed Sparse Row):&lt;/strong&gt; Similar format to COO, but compressed on the row indices. This format allows for more efficient row access and faster sparse matrix-matrix multiplication (SpMM). The performance hotspot is sparse matrix related reduction ops.&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;h2 id=&quot;scatter-reduce&quot;&gt;Scatter-Reduce&lt;/h2&gt;
-
-&lt;p&gt;The pattern of scatter-reduce is parallel in nature, which updates values of a &lt;strong&gt;self&lt;/strong&gt; tensor using values from a &lt;strong&gt;src&lt;/strong&gt; tensor at the entries specified by &lt;strong&gt;index&lt;/strong&gt;. Ideally, parallelizing on the outer dimension would be most performant. However, direct parallelization leads to write conflicts, as different threads might try to update the same entry simultaneously.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/how-to-accelerate/f2-scatter-reduce-scheme.png&quot; alt=&quot;Figure 2: Scatter-reduce and its optimization scheme&quot; style=&quot;max-width:620px; width:100%; display: block; margin-left: auto; margin-right: auto&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;small style=&quot;line-height: 1.1&quot;&gt;&lt;em&gt;&lt;strong&gt;Figure 2&lt;/strong&gt;: Scatter-reduce and its optimization scheme (Source: Mingfei Ma)&lt;/em&gt;&lt;/small&gt;&lt;/p&gt;
-
-&lt;p&gt;To optimize this kernel, we use sorting followed by a reduction:&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;&lt;strong&gt;Sorting:&lt;/strong&gt; Sort the &lt;strong&gt;index&lt;/strong&gt; tensor in ascending order with parallel radix sort, such that indices pointing to the same entry in the &lt;strong&gt;self&lt;/strong&gt; tensor are managed in the same thread.&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;Reduction:&lt;/strong&gt; Paralleled on the outer dimension of &lt;strong&gt;self&lt;/strong&gt;, and do vectorized reduction for each indexed &lt;strong&gt;src&lt;/strong&gt; entry.&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;For its backward path during the training process (i.e., gather), sorting is not needed because its memory access pattern will not lead to any write conflicts.&lt;/p&gt;
-
-&lt;h2 id=&quot;spmm-reduce&quot;&gt;SpMM-Reduce&lt;/h2&gt;
-
-&lt;p&gt;Sparse matrix-matrix reduction is a fundamental operator in GNNs, where &lt;strong&gt;A&lt;/strong&gt; is sparse adjacency matrix in CSR format and &lt;strong&gt;B&lt;/strong&gt; is a dense feature matrix where the reduction type could be &lt;em&gt;sum&lt;/em&gt;, &lt;em&gt;mean&lt;/em&gt; or &lt;em&gt;max&lt;/em&gt;.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/how-to-accelerate/f3-spmm-optimization-scheme.png&quot; alt=&quot;Figure 3: SpMM optimization scheme&quot; style=&quot;max-width:620px; width:100%; display: block; margin-left: auto; margin-right: auto&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;small style=&quot;line-height: 1.1&quot;&gt;&lt;em&gt;&lt;strong&gt;Figure 3&lt;/strong&gt;: SpMM optimization scheme (Source: Mingfei Ma)&lt;/em&gt;&lt;/small&gt;&lt;/p&gt;
-
-&lt;p&gt;The biggest challenge when optimizing this kernel is how to balance thread payload when parallelizing along rows of the sparse matrix &lt;strong&gt;A&lt;/strong&gt;. Each row in &lt;strong&gt;A&lt;/strong&gt; corresponds to a node, and its number of connections may vary vastly from one to another; this results in thread payload imbalance. One technique to address such issues is to do payload scanning before thread partition. Aside from that, other techniques are also introduced to further exploit CPU performance such as vectorization and unrolling and blocking.&lt;/p&gt;
-
-&lt;p&gt;These optimizations are done via &lt;strong&gt;torch.sparse.mm&lt;/strong&gt; using the reduce flags of &lt;em&gt;amax&lt;/em&gt;, &lt;em&gt;amin&lt;/em&gt;, &lt;em&gt;mean&lt;/em&gt;, &lt;em&gt;sum&lt;/em&gt;.&lt;/p&gt;
-
-&lt;h2 id=&quot;performance-gains-up-to-41x-speedup&quot;&gt;Performance Gains: Up to 4.1x Speedup&lt;/h2&gt;
-
-&lt;p&gt;We collected benchmark performance for both inference and training in &lt;a href=&quot;http://github.com/pyg-team/pytorch_geometric/tree/master/benchmark&quot;&gt;pytorch_geometric/benchmark&lt;/a&gt; and in the &lt;a href=&quot;http://github.com/snap-stanford/ogb&quot;&gt;Open Graph Benchmark (OGB)&lt;/a&gt; to demonstrate the performance improvement from the above-mentioned methods on Intel® Xeon® Platinum 8380 Processor.&lt;/p&gt;
-
-&lt;table class=&quot;table table-bordered&quot;&gt;
-&lt;thead&gt;
-
-  &lt;tr&gt;
-   &lt;td&gt;&lt;strong&gt;Model – Dataset&lt;/strong&gt;
-   &lt;/td&gt;
-   &lt;td&gt;&lt;strong&gt;Option&lt;/strong&gt;
-   &lt;/td&gt;
-   &lt;td&gt;&lt;strong&gt;Speedup ratio&lt;/strong&gt;
-   &lt;/td&gt;
-  &lt;/tr&gt;
-&lt;/thead&gt;
-  &lt;tr&gt;
-   &lt;td rowspan=&quot;4&quot;&gt; 
-        GCN-Reddit (inference)
-   &lt;/td&gt;
-   &lt;td&gt;512-2-64-dense
-   &lt;/td&gt;
-   &lt;td&gt;1.22x
-   &lt;/td&gt;
-  &lt;/tr&gt;
-  &lt;tr&gt;
-   &lt;td&gt;1024-3-128-dense
-   &lt;/td&gt;
-   &lt;td&gt;1.25x
-   &lt;/td&gt;
-  &lt;/tr&gt;
-  &lt;tr&gt;
-   &lt;td&gt;512-2-64-sparse
-   &lt;/td&gt;
-   &lt;td&gt;1.31x
-   &lt;/td&gt;
-  &lt;/tr&gt;
-  &lt;tr&gt;
-   &lt;td&gt;1024-3-128-sparse
-   &lt;/td&gt;
-   &lt;td&gt;1.68x
-   &lt;/td&gt;
-  &lt;/tr&gt;
-  &lt;tr&gt;
-   &lt;td rowspan=&quot;4&quot;&gt; 
-        GraphSage-ogbn-products (inference)
-   &lt;/td&gt;
-   &lt;td&gt;1024-3-128-dense
-   &lt;/td&gt;
-   &lt;td&gt;1.15x
-   &lt;/td&gt;
-  &lt;/tr&gt;
-  &lt;tr&gt;
-   &lt;td&gt;512-2-64-sparse
-   &lt;/td&gt;
-   &lt;td&gt;1.20x
-   &lt;/td&gt;
-  &lt;/tr&gt;
-  &lt;tr&gt;
-   &lt;td&gt;1024-3-128-sparse
-   &lt;/td&gt;
-   &lt;td&gt;1.33x
-   &lt;/td&gt;
-  &lt;/tr&gt;
-  &lt;tr&gt;
-   &lt;td&gt;full-batch-sparse
-   &lt;/td&gt;
-   &lt;td&gt;4.07x
-   &lt;/td&gt;
-  &lt;/tr&gt;
-  &lt;tr&gt;
-   &lt;td&gt;GCN-PROTEINS (training)
-   &lt;/td&gt;
-   &lt;td&gt;3-32
-   &lt;/td&gt;
-   &lt;td&gt;1.67x
-   &lt;/td&gt;
-  &lt;/tr&gt;
-  &lt;tr&gt;
-   &lt;td&gt;GCN-REDDIT-BINARY (training)
-   &lt;/td&gt;
-   &lt;td&gt;3-32
-   &lt;/td&gt;
-   &lt;td&gt;1.67x
-   &lt;/td&gt;
-  &lt;/tr&gt;
-  &lt;tr&gt;
-   &lt;td rowspan=&quot;2&quot;&gt;GCN-Reddit (training)
-   &lt;/td&gt;
-   &lt;td&gt;512-2-64-dense
-   &lt;/td&gt;
-   &lt;td&gt;1.20x
-   &lt;/td&gt;
-  &lt;/tr&gt;
-  &lt;tr&gt;
-   &lt;td&gt;1024-3-128-dense
-   &lt;/td&gt;
-   &lt;td&gt;1.12x
-   &lt;/td&gt;
-  &lt;/tr&gt;
-&lt;/table&gt;
-
-&lt;p&gt;&lt;small style=&quot;line-height: 1.1&quot;&gt;&lt;em&gt;&lt;strong&gt;Table 1&lt;/strong&gt;: Performance Speedup on PyG Benchmark&lt;sup&gt;1&lt;/sup&gt;&lt;/em&gt;&lt;/small&gt;&lt;/p&gt;
-
-&lt;p&gt;From the benchmark results, we can see that our optimizations in PyTorch and PyG achieved &lt;strong&gt;1.1x-4.1x speed-up&lt;/strong&gt; for inference and training.&lt;/p&gt;
-
-&lt;h2 id=&quot;torchcompile-for-pyg&quot;&gt;torch.compile for PyG&lt;/h2&gt;
-
-&lt;p&gt;The PyTorch2.0 flagship feature torch.compile is fully compatible with PyG 2.3 release, bringing additional speed-up in PyG model inference/training over imperative mode, thanks to TorchInductor C++/OpenMP backend for CPUs. In particular, &lt;strong&gt;a 3.0x – 5.4x performance speed-up&lt;/strong&gt; is measured on &lt;a href=&quot;http://github.com/pyg-team/pytorch_geometric/blob/master/test/nn/models/test_basic_gnn.py&quot;&gt;basic GNN models&lt;/a&gt; with Intel Xeon Platinum 8380 Processor on model training&lt;sup&gt;2&lt;/sup&gt;.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/how-to-accelerate/f4-torch-compile-performance-speedup.png&quot; alt=&quot;Figure 4: Performance Speedup with Torch Compile&quot; style=&quot;max-width:620px; width:100%; display: block; margin-left: auto; margin-right: auto&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;small style=&quot;line-height: 1.1&quot;&gt;&lt;em&gt;&lt;strong&gt;Figure 4&lt;/strong&gt;: Performance Speedup with Torch Compile&lt;/em&gt;&lt;/small&gt;&lt;/p&gt;
-
-&lt;p&gt;Torch.compile can fuse the multiple stages of message passing into a single kernel, which provides significant speedup due to the saved memory bandwidth. Refer to this &lt;a href=&quot;http://pytorch-geometric.readthedocs.io/en/latest/tutorial/compile.html&quot;&gt;pytorch geometric tutorial&lt;/a&gt; for additional support.&lt;/p&gt;
-
-&lt;p&gt;&lt;strong&gt;Please note&lt;/strong&gt; that torch.compile within PyG is in beta mode and under active development. Currently, some features do not yet work together seamlessly such as torch.compile(model, dynamic=True), but fixes are on the way from Intel.&lt;/p&gt;
-
-&lt;h2 id=&quot;conclusion--future-work&quot;&gt;Conclusion &amp;amp; Future Work&lt;/h2&gt;
-
-&lt;p&gt;In this blog, we introduced the GNN performance optimizations included in PyTorch 2.0 on CPU. We are closely collaborating with the PyG community for future optimization work, which will focus on in-depth optimizations from torch.compile, sparse optimization, and distributed training.&lt;/p&gt;
-
-&lt;h3 id=&quot;acknowledgement&quot;&gt;Acknowledgement&lt;/h3&gt;
-
-&lt;p&gt;The results presented in this blog is a joint effort of Intel PyTorch team and Kumo. Special thanks to &lt;a href=&quot;http://github.com/rusty1s&quot;&gt;Matthias Fey&lt;/a&gt; (Kumo), &lt;a href=&quot;http://github.com/pearu&quot;&gt;Pearu Peterson&lt;/a&gt; (Quansight) and &lt;a href=&quot;http://www.linkedin.com/in/christianpuhrsch/&quot;&gt;Christian Puhrsch&lt;/a&gt; (Meta) who spent precious time and gave substantial assistance! Together, we made one more step forward on the path of improving the PyTorch CPU ecosystem.&lt;/p&gt;
-
-&lt;h3 id=&quot;references&quot;&gt;References&lt;/h3&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;&lt;a href=&quot;http://www.pyg.org/ns-newsarticle-accelerating-pyg-on-intel-cpus&quot;&gt;Accelerating PyG on Intel CPUs&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;http://github.com/pyg-team/pytorch_geometric/releases/tag/2.3.0&quot;&gt;PyG 2.3.0&lt;/a&gt;: PyTorch 2.0 support, native sparse tensor support, explainability and accelerations&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;h3 id=&quot;footnotes&quot;&gt;Footnotes&lt;/h3&gt;
-
-&lt;h4 id=&quot;product-and-performance-information&quot;&gt;Product and Performance Information&lt;/h4&gt;
-
-&lt;p&gt;&lt;sup&gt;1&lt;/sup&gt;Platinum 8380: 1-node, 2x Intel Xeon Platinum 8380 processor with 256GB (16 slots/ 16GB/3200) total DDR4 memory, uCode 0xd000389, HT on, Turbo on, Ubuntu 20.04.5 LTS,  5.4.0-146-generic, INTEL SSDPE2KE016T8 1.5T; GCN + Reddit FP32 inference, GCN+Reddit FP32 training, GraphSAGE + ogbn-products FP32 inference, GCN-PROTAIN, GCN-REDDIT-BINARY FP32 training; Software: PyTorch 2.1.0.dev20230302+cpu, pytorch_geometric 2.3.0, torch-scatter 2.1.0, torch-sparse 0.6.16, test by Intel on 3/02/2023.&lt;/p&gt;
-
-&lt;p&gt;&lt;sup&gt;2&lt;/sup&gt;Platinum 8380: 1-node, 2x Intel Xeon Platinum 8380 processor with 256GB (16 slots/ 16GB/3200) total DDR4 memory, uCode 0xd000389, HT on, Turbo on, Ubuntu 20.04.5 LTS,  5.4.0-146-generic, INTEL SSDPE2KE016T8 1.5T; GCN, GraphSAGE, GIN and EdgeCNN, FP32; Software: PyTorch 2.1.0.dev20230411+cpu, pytorch_geometric 2.4.0, torch-scatter 2.1.1+pt20cpu, torch-sparse 0.6.17+pt20cpu, test by Intel on 4/11/2023.&lt;/p&gt;
-
-&lt;p&gt;&lt;sup&gt;3&lt;/sup&gt;Performance varies by use, configuration and other factors. Learn more at www.Intel.com/PerformanceIndex.&lt;/p&gt;</content>
-
-      
-      
-      
-      
-      
-
-      <author>
-          <name>Intel</name>
-        
-        
-      </author>
-
-      
-
-      
-
-      
-        <summary type="html">Overview</summary>
       
 
       
