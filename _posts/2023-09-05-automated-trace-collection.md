@@ -42,7 +42,7 @@ Let’s dig a bit deeper in each of the components.
 
 [Dynolog](https://developers.facebook.com/blog/post/2022/11/16/dynolog-open-source-system-observability/) is a lightweight monitoring daemon for heterogeneous CPU-GPU systems. It supports continuous monitoring of [performance metrics](https://github.com/facebookincubator/dynolog/blob/main/docs/Metrics.md) from the CPU (utilization, network bandwidth, instructions/second) and GPU (SM Occupancy, DRAM bandwidth, GPU power draw). Additionally, dynolog exports APIs to collect deep-dive profiling data that can be accessed via the dyno CLI.
 
-One of the chief integrations Dynolog offers is interfacing with the [PyTorch Profiler](https://pytorch.org/tutorials/recipes/recipes/profiler_recipe.html). This enables [on-demand remote tracing ](https://pytorch.org/blog/performance-debugging-of-production-pytorch-models-at-meta/)using a single command to trace thousands of servers. This can be accomplished by using the `dyno gputrace` command.
+One of the chief integrations Dynolog offers is interfacing with the [PyTorch Profiler](https://pytorch.org/tutorials/recipes/recipes/profiler_recipe.html). This enables [on-demand remote tracing](https://pytorch.org/blog/performance-debugging-of-production-pytorch-models-at-meta/) using a single command to trace thousands of servers. This can be accomplished by using the `dyno gputrace` command.
 
 
 ### PyTorch Profiler
