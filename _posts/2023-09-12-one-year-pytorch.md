@@ -9,12 +9,9 @@ In its inaugural year, the PyTorch Foundation made a significant impact by launc
 
 **A few milestones in the past year include:**
 
-💻 Over 600,000 repositories on GitHub
-
-✅ 60% of AI implementations choosing PyTorch
-
-📈 More than 20% year over year growth in new repositories
-
+💻 Over 600,000 repositories on GitHub  
+✅ 60% of AI implementations choosing PyTorch  
+📈 More than 20% year over year growth in new repositories  
 🤝 Over 12,000 commits since last year
 
 **And a look at what the foundation has been up to this past year:**
@@ -27,6 +24,5 @@ We invite you to join us at this year's [PyTorch Conference](https://events.linu
 
 Join us to stay informed about the latest announcements and have the opportunity to connect with both the founding members and new additions to the PyTorch community.
 
-With thanks and gratitude,
-
+With thanks and gratitude,  
 The PyTorch Foundation Team
