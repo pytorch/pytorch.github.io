@@ -61,7 +61,7 @@ Overall, these optimizations help to ensure that the C++/OpenMP backend provides
 +----------+------------+-------------+-------------+
 | Compiler | torchbench | huggingface | timm_models |
 +----------+------------+-------------+-------------+
-| inductor |   1.39x	|	1.20x	|	1.73x	|
+| inductor |   1.39x    |    1.20x    |    1.73x    |
 +----------+------------+-------------+-------------+
 ```
 
@@ -94,7 +94,7 @@ Overall, these optimizations help to ensure that the C++/OpenMP backend provides
 +----------+------------+-------------+-------------+
 | Compiler | torchbench | huggingface | timm_models |
 +----------+------------+-------------+-------------+
-| inductor |   1.29x	|	1.15x	|	1.37x	|
+| inductor |    1.29x   |    1.15x    |    1.37x    |
 +----------+------------+-------------+-------------+
 ```
 
