@@ -230,7 +230,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href='https://pytorch.org/docs/versions.html'>main (2.2.0a0+git4e3b032 ) &#x25BC</a>
+      <a href='https://pytorch.org/docs/versions.html'>main (2.2.0a0+git84a67c0 ) &#x25BC</a>
     </div>
     
 
@@ -463,10 +463,12 @@
               
   <h1>Source code for torch.utils.checkpoint</h1><div class="highlight"><pre>
 <span></span><span class="kn">import</span> <span class="nn">contextlib</span>
+<span class="kn">import</span> <span class="nn">platform</span>
 <span class="kn">import</span> <span class="nn">uuid</span>
 <span class="kn">import</span> <span class="nn">warnings</span>
 <span class="kn">import</span> <span class="nn">weakref</span>
 <span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">defaultdict</span>
+<span class="kn">from</span> <span class="nn">itertools</span> <span class="kn">import</span> <span class="n">count</span>
 <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">Any</span><span class="p">,</span>
     <span class="n">Callable</span><span class="p">,</span>
@@ -479,10 +481,12 @@
     <span class="n">Tuple</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span> <span class="nn">weakref</span> <span class="kn">import</span> <span class="n">ReferenceType</span>
-<span class="kn">from</span> <span class="nn">torch.testing._internal.logging_tensor</span> <span class="kn">import</span> <span class="n">LoggingTensorMode</span><span class="p">,</span> <span class="n">capture_logs</span>
-<span class="kn">import</span> <span class="nn">platform</span>
 
 <span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">import</span> <span class="nn">torch.fx.traceback</span> <span class="k">as</span> <span class="nn">fx_traceback</span>
+<span class="kn">from</span> <span class="nn">torch.utils._pytree</span> <span class="kn">import</span> <span class="n">tree_map</span>
+<span class="kn">from</span> <span class="nn">torch.testing._internal.logging_tensor</span> <span class="kn">import</span> <span class="n">capture_logs</span><span class="p">,</span> <span class="n">LoggingTensorMode</span>
+<span class="kn">from</span> <span class="nn">torch.utils._python_dispatch</span> <span class="kn">import</span> <span class="n">TorchDispatchMode</span>
 
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
     <span class="s2">&quot;checkpoint&quot;</span><span class="p">,</span>
@@ -496,6 +500,7 @@
     <span class="s2">&quot;noop_context_fn&quot;</span><span class="p">,</span>
     <span class="s2">&quot;set_checkpoint_early_stop&quot;</span><span class="p">,</span>
     <span class="s2">&quot;DefaultDeviceType&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;context_fn_gen&quot;</span><span class="p">,</span>
 <span class="p">]</span>
 
 <span class="n">_DEFAULT_DETERMINISM_MODE</span> <span class="o">=</span> <span class="s2">&quot;default&quot;</span>
@@ -1562,6 +1567,162 @@
             <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">pack_hook</span><span class="p">,</span> <span class="n">unpack_hook</span><span class="p">)</span>
 
 
+<span class="k">def</span> <span class="nf">_is_compiling</span><span class="p">(</span><span class="n">func</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">):</span>
+    <span class="c1"># Check if we are under AOTAutograd tracing</span>
+    <span class="k">for</span> <span class="n">arg</span> <span class="ow">in</span> <span class="n">args</span><span class="p">:</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">arg</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">torch</span><span class="o">.</span><span class="n">_is_functional_tensor</span><span class="p">(</span><span class="n">arg</span><span class="p">):</span>
+                <span class="n">arg</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">_from_functional_tensor</span><span class="p">(</span><span class="n">arg</span><span class="p">)</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">arg</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">_subclasses</span><span class="o">.</span><span class="n">FakeTensor</span><span class="p">):</span>
+                <span class="k">return</span> <span class="kc">True</span>
+    <span class="k">return</span> <span class="kc">False</span>
+
+
+<span class="k">def</span> <span class="nf">_detach</span><span class="p">(</span><span class="n">x</span><span class="p">):</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">x</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span>
+    <span class="k">return</span> <span class="n">x</span>
+
+
+<span class="n">uid</span> <span class="o">=</span> <span class="n">count</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+
+
+<span class="c1"># NOTE: torch.utils.checkpoint internal logic will call these two functions unknown number of times</span>
+<span class="c1"># (i.e. there could be _CachedTorchDispatchMode calls that doesn&#39;t map to a _CachingTorchDispatchMode call),</span>
+<span class="c1"># so we ignore these ops and just always recompute them.</span>
+<span class="n">_ignored_ops</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="n">torch</span><span class="o">.</span><span class="n">ops</span><span class="o">.</span><span class="n">prim</span><span class="o">.</span><span class="n">device</span><span class="o">.</span><span class="n">default</span><span class="p">,</span>
+    <span class="n">torch</span><span class="o">.</span><span class="n">ops</span><span class="o">.</span><span class="n">aten</span><span class="o">.</span><span class="n">detach</span><span class="o">.</span><span class="n">default</span><span class="p">,</span>
+<span class="p">}</span>
+
+
+<span class="k">class</span> <span class="nc">_CachingTorchDispatchMode</span><span class="p">(</span><span class="n">TorchDispatchMode</span><span class="p">):</span>
+<span class="w">    </span><span class="sa">r</span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    A :class:`TorchDispatchMode` to implement selective activation checkpointing</span>
+<span class="sd">    that&#39;s compatible with torch.compile. Used together with _CachedTorchDispatchMode.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">policy_fn</span><span class="p">,</span> <span class="n">storage</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">policy_fn</span> <span class="o">=</span> <span class="n">policy_fn</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">storage</span> <span class="o">=</span> <span class="n">storage</span>
+
+    <span class="k">def</span> <span class="nf">push_into_storage</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">out</span><span class="p">,</span> <span class="n">func</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">):</span>
+        <span class="n">out_detached</span> <span class="o">=</span> <span class="n">tree_map</span><span class="p">(</span><span class="n">_detach</span><span class="p">,</span> <span class="n">out</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">storage</span><span class="p">[</span><span class="n">func</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">out_detached</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_handle_compile_in_forward_ctx</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">should_not_recompute</span><span class="p">,</span> <span class="n">func</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">func</span> <span class="ow">in</span> <span class="n">_ignored_ops</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">func</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">should_not_recompute</span><span class="p">:</span>
+            <span class="n">fx_traceback</span><span class="o">.</span><span class="n">current_meta</span><span class="p">[</span><span class="s2">&quot;recompute&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="c1"># NOTE: Here we just store and reuse output of all ops, since in torch.compile mode</span>
+        <span class="c1"># we decide and handle recomputation in the partitioner.</span>
+        <span class="n">out</span> <span class="o">=</span> <span class="n">func</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">push_into_storage</span><span class="p">(</span><span class="n">out</span><span class="p">,</span> <span class="n">func</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">out</span>
+
+    <span class="k">def</span> <span class="nf">__torch_dispatch__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">func</span><span class="p">,</span> <span class="n">types</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="p">(),</span> <span class="n">kwargs</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">kwargs</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">kwargs</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">should_not_recompute</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">policy_fn</span><span class="p">(</span><span class="s2">&quot;forward&quot;</span><span class="p">,</span> <span class="n">func</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">_is_compiling</span><span class="p">(</span><span class="n">func</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">):</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_handle_compile_in_forward_ctx</span><span class="p">(</span><span class="n">should_not_recompute</span><span class="p">,</span> <span class="n">func</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">should_not_recompute</span><span class="p">:</span>
+                <span class="n">out</span> <span class="o">=</span> <span class="n">func</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">push_into_storage</span><span class="p">(</span><span class="n">out</span><span class="p">,</span> <span class="n">func</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">out</span> <span class="o">=</span> <span class="n">func</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">out</span>
+
+
+<span class="k">class</span> <span class="nc">_CachedTorchDispatchMode</span><span class="p">(</span><span class="n">TorchDispatchMode</span><span class="p">):</span>
+<span class="w">    </span><span class="sa">r</span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    A :class:`TorchDispatchMode` to implement selective activation checkpointing</span>
+<span class="sd">    that&#39;s compatible with torch.compile. Used together with _CachingTorchDispatchMode.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">policy_fn</span><span class="p">,</span> <span class="n">storage</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">policy_fn</span> <span class="o">=</span> <span class="n">policy_fn</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">storage</span> <span class="o">=</span> <span class="n">storage</span>
+
+    <span class="k">def</span> <span class="nf">pop_from_storage</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">func</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">):</span>
+        <span class="k">assert</span> <span class="n">func</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">storage</span>
+        <span class="n">out</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">storage</span><span class="p">[</span><span class="n">func</span><span class="p">]</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">out</span>
+
+    <span class="k">def</span> <span class="nf">_handle_compile_in_recompute_ctx</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">should_not_recompute</span><span class="p">,</span> <span class="n">func</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">func</span> <span class="ow">in</span> <span class="n">_ignored_ops</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">func</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="n">out</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">pop_from_storage</span><span class="p">(</span><span class="n">func</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">out</span>
+
+    <span class="k">def</span> <span class="nf">__torch_dispatch__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">func</span><span class="p">,</span> <span class="n">types</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="p">(),</span> <span class="n">kwargs</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">kwargs</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">kwargs</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">should_not_recompute</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">policy_fn</span><span class="p">(</span><span class="s2">&quot;recompute&quot;</span><span class="p">,</span> <span class="n">func</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">_is_compiling</span><span class="p">(</span><span class="n">func</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">):</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_handle_compile_in_recompute_ctx</span><span class="p">(</span><span class="n">should_not_recompute</span><span class="p">,</span> <span class="n">func</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">should_not_recompute</span><span class="p">:</span>
+                <span class="n">out</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">pop_from_storage</span><span class="p">(</span><span class="n">func</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">out</span> <span class="o">=</span> <span class="n">func</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">out</span>
+
+
+<span class="k">def</span> <span class="nf">context_fn_gen</span><span class="p">(</span><span class="n">policy_fn</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    A helper function to generate a pair of contexts to be later passed into</span>
+<span class="sd">    `torch.utils.checkpoint` API. Useful for implementing selective checkpointing + torch.compile</span>
+<span class="sd">    because the context functions need special logic to work with torch.compile.</span>
+<span class="sd">    The generated context functions also work in eager mode.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        policy_fn (Callable[[Callable, List[Any], Dict[str, Any]], bool]): Policy function</span>
+<span class="sd">            to decide whether a particular op should be recomputed in backward pass or not.</span>
+<span class="sd">            In eager mode:</span>
+<span class="sd">                If policy_fn(...) returns True, the op is guaranteed to NOT be recomputed.</span>
+<span class="sd">                If policy_fn(...) returns False, the op is guaranteed to be recomputed.</span>
+<span class="sd">            In torch.compile mode:</span>
+<span class="sd">                If policy_fn(...) returns True, the op is guaranteed to NOT be recomputed.</span>
+<span class="sd">                If policy_fn(...) returns False, the op may or may not be recomputed</span>
+<span class="sd">                (it&#39;s up to the partitioner to decide).</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        A pair of generated contexts.</span>
+
+<span class="sd">    Example:</span>
+<span class="sd">        &gt;&gt;&gt; # xdoctest: +REQUIRES(LINUX)</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; def get_custom_policy():</span>
+<span class="sd">        &gt;&gt;&gt;     no_recompute_list = [</span>
+<span class="sd">        &gt;&gt;&gt;         torch.ops.aten.mm.default,</span>
+<span class="sd">        &gt;&gt;&gt;     ]</span>
+<span class="sd">        &gt;&gt;&gt;     def custom_policy(mode, func, *args, **kwargs):</span>
+<span class="sd">        &gt;&gt;&gt;         return func in no_recompute_list</span>
+<span class="sd">        &gt;&gt;&gt;     return custom_policy</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; def selective_checkpointing_context_fn():</span>
+<span class="sd">        &gt;&gt;&gt;     return context_fn_gen(get_custom_policy())</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; def gn(x, y):</span>
+<span class="sd">        &gt;&gt;&gt;     return torch.sigmoid(torch.matmul(torch.matmul(x, y), y)) * y</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; def fn(x, y):</span>
+<span class="sd">        &gt;&gt;&gt;     return torch.utils.checkpoint.checkpoint(</span>
+<span class="sd">        &gt;&gt;&gt;         gn, x, y,</span>
+<span class="sd">        &gt;&gt;&gt;         use_reentrant=False,</span>
+<span class="sd">        &gt;&gt;&gt;         context_fn=selective_checkpointing_context_fn,</span>
+<span class="sd">        &gt;&gt;&gt;     )</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; x = torch.randn(4, 4, requires_grad=True)</span>
+<span class="sd">        &gt;&gt;&gt; y = torch.randn(4, 4, requires_grad=True)</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; compiled_fn = torch.compile(fn)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">storage</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="n">defaultdict</span><span class="p">(</span><span class="nb">list</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">_CachingTorchDispatchMode</span><span class="p">(</span><span class="n">policy_fn</span><span class="p">,</span> <span class="n">storage</span><span class="p">),</span> <span class="n">_CachedTorchDispatchMode</span><span class="p">(</span><span class="n">policy_fn</span><span class="p">,</span> <span class="n">storage</span><span class="p">)</span>
+
+
 <span class="c1"># NB: this helper wraps fn before calling checkpoint_impl. kwargs and</span>
 <span class="c1">#     saving/restoring of global state is handled here.</span>
 
@@ -1620,6 +1781,13 @@
     <span class="n">device</span> <span class="o">=</span> <span class="n">_infer_device_type</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">)</span>
     <span class="n">device_module</span> <span class="o">=</span> <span class="n">_get_device_module</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
     <span class="n">forward_context</span><span class="p">,</span> <span class="n">recompute_context</span> <span class="o">=</span> <span class="n">context_fn</span><span class="p">()</span>
+    <span class="k">if</span> <span class="n">_is_compiling</span><span class="p">(</span><span class="n">fn</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">)</span> <span class="ow">and</span> <span class="n">context_fn</span> <span class="o">!=</span> <span class="n">noop_context_fn</span><span class="p">:</span>
+        <span class="k">assert</span> <span class="p">(</span>
+            <span class="nb">isinstance</span><span class="p">(</span><span class="n">forward_context</span><span class="p">,</span> <span class="n">TorchDispatchMode</span><span class="p">)</span> <span class="ow">and</span>
+            <span class="nb">isinstance</span><span class="p">(</span><span class="n">recompute_context</span><span class="p">,</span> <span class="n">TorchDispatchMode</span><span class="p">)</span>
+        <span class="p">),</span> \
+            <span class="s2">&quot;In torch.compile mode, `context_fn` arg passed to `torch.utils.checkpoint` &quot;</span> <span class="o">+</span> \
+            <span class="s2">&quot;must generate a tuple of two `TorchDispatchMode`s.&quot;</span>
     <span class="c1"># Accommodates the (remote) possibility that autocast is enabled for cpu AND gpu.</span>
     <span class="n">device_autocast_kwargs</span><span class="p">,</span> <span class="n">cpu_autocast_kwargs</span> <span class="o">=</span> <span class="n">_get_autocast_kwargs</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
 
