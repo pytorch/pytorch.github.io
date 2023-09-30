@@ -114,7 +114,7 @@ We now show the number of tokens generated per second for the Llama-2 7B and 13B
 
 **Cost**
 
-For latency-first applications, we show the cost of hosting Llama-2 models on the inf2.48xlarge instance, $0.011 per 1000 tokens and $0.016 per 1000 tokens for the 7B and 13B models, respectively, which achieve 3x cost saving over other comparable inference-optimized EC2 instances. Note that we report the cost based on [3-year reserved instance price](https://aws.amazon.com/ec2/instance-types/inf2/) which is what customers use for large production deployments.
+For latency-first applications, we show the cost of hosting Llama-2 models on the inf2.48xlarge instance, **$**0.011 per 1000 tokens and **$**0.016 per 1000 tokens for the 7B and 13B models, respectively, which achieve 3x cost saving over other comparable inference-optimized EC2 instances. Note that we report the cost based on [3-year reserved instance price](https://aws.amazon.com/ec2/instance-types/inf2/) which is what customers use for large production deployments.
 
 
 ![Cost on inf2](/assets/images/high-performance-llama/cost_vs_output_token_length_7b_13b.jpg){:style="width:100%"}
