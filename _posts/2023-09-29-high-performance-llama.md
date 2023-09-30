@@ -215,7 +215,7 @@ torchserve --ncs --start --model-store model_store --models llama-2-13b-neuronx-
 ```
 
 
-Once the log shows “**_WORKER_MODEL_LOADED_**“, the pre-compiled model should be saved in the folder `llama-2-13b-neuronx-b1/neuron_cache`, which is tightly coupled with Neuron SDK version. Then, upload the folder `llama-2-13b-neuronx-b1` to your S3 bucket for later use in the product deployment. The Llama-2 13B model artifacts in this blog can be found [here](https://torchserve.s3.amazonaws.com/mar_files/sm-neuronx/llama-2-13b-neuronx-b1/), which is associated with Neuron SDK 2.13.2, in the TorchServe model zoo.
+Once the log shows "**_WORKER_MODEL_LOADED_**", the pre-compiled model should be saved in the folder `llama-2-13b-neuronx-b1/neuron_cache`, which is tightly coupled with Neuron SDK version. Then, upload the folder `llama-2-13b-neuronx-b1` to your S3 bucket for later use in the product deployment. The Llama-2 13B model artifacts in this blog can be found [here](https://torchserve.s3.amazonaws.com/mar_files/sm-neuronx/llama-2-13b-neuronx-b1/), which is associated with Neuron SDK 2.13.2, in the TorchServe model zoo.
 
 
 ## Deploy Llama-2 13B model on SageMaker Inf2 instance using TorchServe 
