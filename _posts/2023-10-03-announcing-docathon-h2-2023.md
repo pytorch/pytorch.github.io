@@ -1,6 +1,6 @@
 ---
 layout: blog_detail
-title: "Announcing PyTorch Docathon H2’ 2023"
+title: "Announcing PyTorch Docathon H2 2023"
 ---
 
 We are excited to announce that we will be holding a Docathon for PyTorch on November 1, 2023! This event is an opportunity for our community to come together and improve the quality of our documentation.
