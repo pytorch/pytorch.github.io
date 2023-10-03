@@ -6,7 +6,7 @@ author: Mike Zhang, Li Ning, Sergey Ivanov, Naman Nandan, Hamid Shojanazeri, Gee
 
 Recently, [Llama 2](https://ai.meta.com/llama/) was released and has attracted a lot of interest from the machine learning community. [Amazon EC2 Inf2 instances](https://aws.amazon.com/ec2/instance-types/inf2/), powered by [AWS Inferentia2](https://aws.amazon.com/machine-learning/inferentia/), now support training and inference of Llama 2 models. In this post, we show low-latency and cost-effective inference of Llama-2 models on Amazon EC2 Inf2 instances using the latest [AWS Neuron SDK](https://aws.amazon.com/machine-learning/neuron/) release.  We first introduce how to create, compile and deploy the Llama-2 model and explain the optimization techniques introduced by AWS Neuron SDK to achieve high performance at low cost. We then present our benchmarking results. Lastly, we show how the Llama-2 model can be deployed through Amazon SageMaker using TorchServe on an Inf2 instance. 
 
-![Llama 2 is an auto-regressive language model that uses an optimized transformer architecture](/assets/images/high-performance-llama/software_stack_inf2.jpg){:style="width:100%; max-width: 580px; display: block; margin-left: auto; margin-right: auto"}
+![Llama 2 is an auto-regressive language model that uses an optimized transformer architecture](/assets/images/high-performance-llama/software_stack_inf2.jpg){:style="width:100%; max-width: 420px; display: block; margin-left: auto; margin-right: auto"}
 
 
 ## What is Llama 2
@@ -22,14 +22,14 @@ Large language model (LLM) inference is a memory bound workload, performance sca
 
 Inferentia2 supports FP32, TF32, BF16, FP16, UINT8, and the new configurable FP8 (cFP8) data type. AWS Neuron can take high-precision FP32 and FP16 models and autocast them to lower-precision data types while optimizing accuracy and performance. Autocasting reduces time to market by removing the need for lower-precision retraining and enabling higher-performance inference with smaller data types. 
 
-To make it flexible and extendable to deploy constantly evolving DL models, Inf2 instances have hardware optimizations and software support for dynamic input shapes as well as custom operators written in C++ through the standard PyTorch custom operator programming interfaces.
+To make it flexible and extendable to deploy constantly evolving deep learning models, Inf2 instances have hardware optimizations and software support for dynamic input shapes as well as custom operators written in C++ through the standard PyTorch custom operator programming interfaces.
 
 
 ## Transformers Neuron (transformers-neuronx)
 
 [Transformers Neuron](https://github.com/aws-neuron/transformers-neuronx) is a software package that enables PyTorch users to deploy performance optimized LLM inference. It has an optimized version of transformer models implemented with XLA high level operators (HLO), which enables sharding tensors across multiple NeuronCores, a.k.a. tensor parallelism, and performance optimizations such as parallel context encoding and KV caching for Neuron hardware. The Llama 2 source code in XLA HLOs can be found [here](https://github.com/aws-neuron/transformers-neuronx/blob/main/src/transformers_neuronx/llama/model.py).
 
-Llama 2 is supported in Transformers Neuron through the _[LlamaForSampling](https://github.com/aws-neuron/transformers-neuronx/blob/33fa412447a4028edb252fd06aae9ed93086a450/src/transformers_neuronx/llama/model.py#L29)_ class. Transformers Neuron provides a seamless user experience with Hugging Face models to provide optimized inference on Inf2 instances. More details can be found from the [Transforms Neuron Developer Guide](https://awsdocs-neuron.readthedocs-hosted.com/en/latest/libraries/transformers-neuronx/transformers-neuronx-developer-guide.html#transformers-neuronx-developer-guide). In the following section, we will explain how to deploy the Llama-2 13B model using Transformers Neuron. And, this example also applies to other Llama-based models.
+Llama 2 is supported in Transformers Neuron through the [LlamaForSampling](https://github.com/aws-neuron/transformers-neuronx/blob/33fa412447a4028edb252fd06aae9ed93086a450/src/transformers_neuronx/llama/model.py#L29) class. Transformers Neuron provides a seamless user experience with Hugging Face models to provide optimized inference on Inf2 instances. More details can be found from the [Transforms Neuron Developer Guide](https://awsdocs-neuron.readthedocs-hosted.com/en/latest/libraries/transformers-neuronx/transformers-neuronx-developer-guide.html#transformers-neuronx-developer-guide). In the following section, we will explain how to deploy the Llama-2 13B model using Transformers Neuron. And, this example also applies to other Llama-based models.
 
 
 ## Llama 2 model inference with Transformers Neuron
@@ -47,7 +47,7 @@ model_cpu = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-13b-hf", lo
 model_dir = "./llama-2-13b-split"
 save_pretrained_split(model_cpu, model_dir)
 ```
-2. Load and compile model from the local directory that you saved serialized checkpoints using the following:
+2. Load and compile model from the local directory that you saved serialized checkpoints using the following.
 To load the Llama 2 model, we use `LlamaForSampling` from Transformers Neuron. Note that the environment variable `NEURON_RT_NUM_CORES` specifies the number of NeuronCores to be used at runtime and it should match the tensor parallelism (TP) degree specified for the model. Also, `NEURON_CC_FLAGS` enables compiler optimization on decoder-only LLM models.
 ```
 from transformers_neuronx.llama.model import LlamaForSampling
@@ -75,7 +75,7 @@ outputs = model.sample(inputs, seq_len, top_k=1)
 
 
 
-### Inference Optimizations in Transformers Neuron
+### Inference optimizations in Transformers Neuron
 
 **Tensor parallelism**
 
@@ -215,7 +215,7 @@ torchserve --ncs --start --model-store model_store --models llama-2-13b-neuronx-
 ```
 
 
-Once the log shows "**_WORKER_MODEL_LOADED_**", the pre-compiled model should be saved in the folder `llama-2-13b-neuronx-b1/neuron_cache`, which is tightly coupled with Neuron SDK version. Then, upload the folder `llama-2-13b-neuronx-b1` to your S3 bucket for later use in the product deployment. The Llama-2 13B model artifacts in this blog can be found [here](https://torchserve.s3.amazonaws.com/mar_files/sm-neuronx/llama-2-13b-neuronx-b1/), which is associated with Neuron SDK 2.13.2, in the TorchServe model zoo.
+Once the log shows "**WORKER_MODEL_LOADED**", the pre-compiled model should be saved in the folder `llama-2-13b-neuronx-b1/neuron_cache`, which is tightly coupled with Neuron SDK version. Then, upload the folder `llama-2-13b-neuronx-b1` to your S3 bucket for later use in the product deployment. The Llama-2 13B model artifacts in this blog can be found [here](https://torchserve.s3.amazonaws.com/mar_files/sm-neuronx/llama-2-13b-neuronx-b1/), which is associated with Neuron SDK 2.13.2, in the TorchServe model zoo.
 
 
 ## Deploy Llama-2 13B model on SageMaker Inf2 instance using TorchServe 
