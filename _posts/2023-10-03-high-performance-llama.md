@@ -40,6 +40,7 @@ Llama 2 is supported in Transformers Neuron through the [LlamaForSampling](https
 We have three simple steps here to create, compile and deploy the model on Inf2 instances.
 
 1. Create a CPU model, use this [script](https://github.com/pytorch/serve/blob/d0ae857abfe6d36813c88e531316149a5a354a93/examples/large_models/inferentia2/llama2/Readme.md?plain=1#L71) or the following code snippet to serialize and save checkpoints in a local directory.
+
 ```
 from transformers import AutoModelForCausalLM
 from transformers_neuronx.module import save_pretrained_split
@@ -47,6 +48,8 @@ model_cpu = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-13b-hf", lo
 model_dir = "./llama-2-13b-split"
 save_pretrained_split(model_cpu, model_dir)
 ```
+
+{:start="2"}
 2. Load and compile model from the local directory that you saved serialized checkpoints using the following.
 To load the Llama 2 model, we use `LlamaForSampling` from Transformers Neuron. Note that the environment variable `NEURON_RT_NUM_CORES` specifies the number of NeuronCores to be used at runtime and it should match the tensor parallelism (TP) degree specified for the model. Also, `NEURON_CC_FLAGS` enables compiler optimization on decoder-only LLM models.
 
@@ -71,6 +74,7 @@ model.to_neuron()
 
 {:start="3"}
 3. Finally let's run the inference on the compiled model. Note that both input and output of the `sample` function are a sequence of tokens.
+
 ```
 inputs = torch.tensor([[1, 16644, 31844, 312, 31876, 31836, 260, 3067, 2228, 31844]])
 seq_len = 16
@@ -174,10 +178,12 @@ Custom handler in Torchserve is a simple Python script that lets you define the 
 
 1. The [initialize](https://github.com/pytorch/serve/blob/d0ae857abfe6d36813c88e531316149a5a354a93/examples/large_models/inferentia2/llama2/inf2_handler.py#L33) function is used to load the model. Here, Neuron SDK will compile the model for the first time and save the precompiled model in the directory as enabled by `NEURONX_CACHE` in the directory specified by `NEURONX_DUMP_TO`. After the first time, subsequent runs will check if there are already pre-compiled model artifacts. If so, it will skip model compilation.
 Once the model is loaded, we initiate warm-up inference requests so that the compiled version is cached. When the [neuron persistent cache ](https://awsdocs-neuron.readthedocs-hosted.com/en/latest/general/arch/neuron-features/neuron-caching.html)is utilized, it can significantly reduce the model loading latency, ensuring that the subsequent inference runs swiftly.
+
 ```
 os.environ["NEURONX_CACHE"] = "on"
 os.environ["NEURONX_DUMP_TO"] = f"{model_dir}/neuron_cache"
 ```
+
 TorchServe `TextIteratorStreamerBatch` extends Hugging Face transformers `BaseStreamer` to support response streaming when `batchSize` is larger than 1. 
 
 ```
