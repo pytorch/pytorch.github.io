@@ -184,7 +184,7 @@ os.environ["NEURONX_CACHE"] = "on"
 os.environ["NEURONX_DUMP_TO"] = f"{model_dir}/neuron_cache"
 ```
 
-TorchServe `TextIteratorStreamerBatch` extends Hugging Face transformers `BaseStreamer` to support response streaming when `batchSize` is larger than 1. 
+<p style="padding-left:6.25rem">TorchServe `TextIteratorStreamerBatch` extends Hugging Face transformers `BaseStreamer` to support response streaming when `batchSize` is larger than 1. </p>
 
 ```
 self.output_streamer = TextIteratorStreamerBatch(
