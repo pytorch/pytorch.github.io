@@ -175,14 +175,18 @@ os.environ["NEURONX_CACHE"] = "on"
 os.environ["NEURONX_DUMP_TO"] = f"{model_dir}/neuron_cache"
 ```
 TorchServe `TextIteratorStreamerBatch` extends Hugging Face transformers `BaseStreamer` to support response streaming when `batchSize` is larger than 1. 
+
 ```
 self.output_streamer = TextIteratorStreamerBatch(
-            self.tokenizer,
-            batch_size=self.mb_handle.micro_batch_size,
-            skip_special_tokens=True,
-        )
+    self.tokenizer,
+    batch_size=self.handle.micro_batch_size,
+    skip_special_tokens=True,
+)
 ```
+
+{:start="2"}
 2. The [inference](https://github.com/pytorch/serve/blob/d0ae857abfe6d36813c88e531316149a5a354a93/examples/large_models/inferentia2/llama2/inf2_handler.py#L124) function calls send_intermediate_predict_response to send the streaming response.
+
 ```
 for new_text in self.output_streamer:
     logger.debug("send response stream")
@@ -223,18 +227,20 @@ Once the log shows "**WORKER_MODEL_LOADED**", the pre-compiled model should be s
 In this section, we deploy the Llama-2 13B model using a [PyTorch Neuronx container](https://github.com/aws/deep-learning-containers/blob/master/available_images.md#neuron-containers) on a SageMaker endpoint with an ml.inf2.24xlarge hosting instance, which has 6 Inferentia2 accelerators corresponding to our model configuration `model_config.yaml` handler’s setting - `tp_degree: 12`. Given that we have packaged all the model artifacts into a folder using [torch-model-archiver](https://github.com/pytorch/serve/blob/master/model-archiver/README.md) and uploaded to S3 bucket, we will now use the SageMaker Python SDK to create a SageMaker model and deploy it to a SageMaker real-time endpoint using the deploy [uncompressed model method](https://docs.aws.amazon.com/sagemaker/latest/dg/large-model-inference-uncompressed.html). Speed is the key benefit to deploying in this manner with SageMaker and you get a fully functional production ready endpoint complete with a secure RESTful endpoint without any effort spent on infrastructure. There are 3 steps to deploying the model and running inference on SageMaker. The notebook example can be found [here](https://github.com/aws/amazon-sagemaker-examples-community/blob/main/torchserve/inf2/llama2/llama-2-13b.ipynb).
 
 1. Create a SageMaker model
+
 ```
 from datetime import datetime
+
 instance_type = "ml.inf2.24xlarge"
 endpoint_name = sagemaker.utils.name_from_base("ts-inf2-llama2-13b-b1")
-s3_uri = f"{output_path}/llama-2-13b-neuronx-b1/"
+
 model = Model(
     name="torchserve-inf2-llama2-13b" + datetime.now().strftime("%Y-%m-%d-%H-%M-%S"),
+    # Enable SageMaker uncompressed model artifacts
     model_data={
         "S3DataSource": {
                 "S3Uri": s3_uri,
                 "S3DataType": "S3Prefix",
-                # use uncompressed model artifacts
                 "CompressionType": "None",
         }
     },
@@ -245,24 +251,27 @@ model = Model(
 )
 ```
 
+{:start="2"}
 2. Deploy a SageMaker model
+
 ```
 model.deploy(
     initial_instance_count=1,
     instance_type=instance_type,
     endpoint_name=endpoint_name,
-    # increase the size to store large model
-    volume_size=512, 
-    # increase the timeout to download large model
-    model_data_download_timeout=3600,
-    # increase the timeout to load large model
-    container_startup_health_check_timeout=600,
+    volume_size=512, # increase the size to store large model
+    model_data_download_timeout=3600, # increase the timeout to download large model
+    container_startup_health_check_timeout=600, # increase the timeout to load large model
 )
 ```
+
+{:start="3"}
 3. Run streaming response inference on SageMaker
 When the endpoint is in service, you can use the `invoke_endpoint_with_response_stream` API call to invoke the model. This feature enables the return of each generated token to the user, enhancing the user experience. It's especially beneficial when generating an entire sequence is time-consuming.
+
 ```
 import json
+
 body = "Today the weather is really nice and I am planning on".encode('utf-8')
 resp = smr.invoke_endpoint_with_response_stream(EndpointName=endpoint_name, Body=body, ContentType="application/json")
 event_stream = resp['Body']
