@@ -46,7 +46,7 @@ Please refer to <https://pytorch.org/audio/2.1/tutorials/squim_tutorial.html> fo
 
 \`torchaudio.models.decoder.CUCTCDecoder\` performs CTC beam search in CUDA devices. The beam search is fast. It eliminates the need to move data from CUDA device to CPU when performing automatic speech recognition. With PyTorch's CUDA support, it is now possible to perform the entire speech recognition pipeline in CUDA.
 
-Please refer to <https://pytorch.org/audio/master/tutorials/asr_inference_with_cuda_ctc_decoder_tutorial.html> for the detail.
+Please refer to <https://pytorch.org/audio/2.1/tutorials/asr_inference_with_cuda_ctc_decoder_tutorial.html> for the detail.
 
 **\[Prototype] Utilities for AI music generation**
 
@@ -77,7 +77,7 @@ Please refer to <https://pytorch.org/audio/2.1/installation.html#optional-depend
 
 TorchAudio now depends on libsox installed separately from torchaudio. Sox I/O backend no longer supports file-like objects. (This is supported by FFmpeg backend and soundfile.)
 
-Please refer to <https://pytorch.org/audio/master/installation.html#optional-dependencies> for the details.
+Please refer to <https://pytorch.org/audio/2.1/installation.html#optional-dependencies> for the details.
 
 ## TorchRL
 
