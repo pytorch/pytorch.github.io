@@ -67,7 +67,7 @@ model = LlamaForSampling.from_pretrained(
     )
 ```
 
-Now let's compile the model and load model weights into device memory with a one liner API.
+<p style="padding-left:6.25rem">Now let's compile the model and load model weights into device memory with a one liner API.</p>
 ```
 model.to_neuron()
 ```
