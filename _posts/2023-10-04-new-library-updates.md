@@ -12,7 +12,7 @@ Along with 2.1, we are also releasing a series of beta updates to the PyTorch do
 
 | Latest Stable Library Versions  |([Full List](https://pytorch.org/docs/stable/index.html))*                  |                             |
 |--------------------------------------------|------------------|-----------------------------|
-| TorchArrow 0.1.0                           | TorchRec 0.4.0   | TorchVision 0.16            |
+| TorchArrow 0.1.0                           | TorchRec 0.5.0   | TorchVision 0.16            |
 | TorchAudio 2.1                             | TorchServe 0.8.2 | TorchX 0.5.0                |
 | TorchData 0.7.0                            | TorchText 0.16.0 | PyTorch on XLA Devices 1.14 |
 
