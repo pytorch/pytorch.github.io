@@ -49,6 +49,7 @@ save_pretrained_split(model_cpu, model_dir)
 ```
 2. Load and compile model from the local directory that you saved serialized checkpoints using the following.
 To load the Llama 2 model, we use `LlamaForSampling` from Transformers Neuron. Note that the environment variable `NEURON_RT_NUM_CORES` specifies the number of NeuronCores to be used at runtime and it should match the tensor parallelism (TP) degree specified for the model. Also, `NEURON_CC_FLAGS` enables compiler optimization on decoder-only LLM models.
+
 ```
 from transformers_neuronx.llama.model import LlamaForSampling
 os.environ['NEURON_RT_NUM_CORES'] = '24'
@@ -62,10 +63,13 @@ model = LlamaForSampling.from_pretrained(
         context_length_estimate=[8]
     )
 ```
+
 Now let's compile the model and load model weights into device memory with a one liner API.
 ```
 model.to_neuron()
 ```
+
+{:start="3"}
 3. Finally let's run the inference on the compiled model. Note that both input and output of the `sample` function are a sequence of tokens.
 ```
 inputs = torch.tensor([[1, 16644, 31844, 312, 31876, 31836, 260, 3067, 2228, 31844]])
