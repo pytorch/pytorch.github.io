@@ -1,0 +1,39 @@
+---
+layout: executorch
+title: Home
+permalink: /executorch/home/
+background-class: mobile-background
+body-class: mobile
+order: 1
+published: true
+redirect_from: "/executorch/"
+---
+
+# ExecuTorch Overview
+
+**IMPORTANT NOTE: This is a preview version of Executorch and should be used for testing and evaluation purposes only. It is not recommended for use in production settings. We welcome any feedback, suggestions, and bug reports from the community to help us improve the technology.**
+
+## What is ExecuTorch?
+ExecuTorch is an end-to-end solution for enabling on-device inference capabilities across mobile and edge devices including wearables, embedded devices and microcontrollers. It is part of the PyTorch Edge ecosystem and enables efficient deployment of PyTorch models to edge devices. Key value propositions of ExecuTorch are:
+
+* **Portability**: Compatibility with a wide variety of computing platforms, from high-end mobile phones to highly constrained embedded systems and microcontrollers.
+* **Productivity**: Enabling developers to use the same toolchains and SDK from PyTorch model authoring and conversion, to debugging and deployment to a wide variety of platforms.
+* **Performance**: Providing end users with a seamless and high-performance experience due to a lightweight runtime and utilizing full hardware capabilities such as CPUs, NPUs and DSPs.
+
+## Explore ExecuTorch
+
+We are excited to see how the community leverages our all new on-device AI stack. You can learn more about  [key components](https://resplendent-gnome-14e531.netlify.app/getting-started-architecture) of ExecuTorch and its architecture, [how it works](https://resplendent-gnome-14e531.netlify.app/intro-how-it-works), and explore [documentation page](https://resplendent-gnome-14e531.netlify.app/) and [detailed tutorials](https://resplendent-gnome-14e531.netlify.app/tutorials/).
+
+**[ExecuTorch Documentation](/executorch/documentation)**
+
+## Why ExecuTorch?
+
+Supporting on-device AI presents unique challenges with diverse hardware, critical power requirements, low/no internet connectivity, and realtime processing needs. These constraints have historically prevented or slowed down the creation of scalable and performant on-device AI solutions. We designed ExecuTorch, backed by our industry partners like Meta, Arm, Apple, and Qualcomm, to be highly portable and provide superior developer productivity without losing on performance.
+
+## How is ExecuTorch Different from [PyTorch Mobile (Lite Interpreter)](/mobile/home/)?
+
+PyTorch Mobile uses TorchScript to allow PyTorch models to run on devices with limited resources. ExecuTorch has a significantly smaller memory size and a dynamic memory footprint resulting in superior performance compared to PyTorch Mobile. Also ExecuTorch does not rely on TorchScript, and instead leverages PyTorch 2.0 compiler and export functionality for on-device execution of PyTorch models. 
+
+<!-- Do not remove the below script -->
+
+<script page-id="home" src="{{ site.baseurl }}/assets/menu-tab-selection.js"></script>
