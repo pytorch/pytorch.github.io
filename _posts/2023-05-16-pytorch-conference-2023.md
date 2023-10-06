@@ -6,7 +6,7 @@ title: "PyTorch Conference 2023: Join us in San Francisco October 16-17"
 ![PyTorch Conference 2023](/assets/images/pytorch-conf-2023.png){:style="max-height:800px; width:100%"}   
 
 
-We’re thrilled to announce the upcoming [PyTorch Conference 2023](https://events.linuxfoundation.org/pytorch-conference/)! On October 16-17, the conference will showcase PyTorch 2.0, the next-generation release of the popular machine learning framework. As part of the Linux Foundation, the PyTorch Foundation Conference continues the tradition of bringing together leading researchers, developers, and academic communities to advance the education and development of end-to-end machine learning.
+We’re thrilled to announce the upcoming [PyTorch Conference 2023](https://events.linuxfoundation.org/pytorch-conference/)! On October 16-17, the conference will showcase PyTorch 2.1, the next-generation release of the popular machine learning framework. As part of the Linux Foundation, the PyTorch Foundation Conference continues the tradition of bringing together leading researchers, developers, and academic communities to advance the education and development of end-to-end machine learning.
 
 The conference agenda features an engaging lineup of events, including an opening reception, engaging community and partner discussions, informative panels, poster sessions, enlightening use cases and community stories, as well as discussions on the latest trends in machine learning and deep learning development and deployment.
 
