@@ -12,7 +12,7 @@ published: true
 
 **IMPORTANT NOTE: This is a preview version of Executorch and should be used for testing and evaluation purposes only. It is not recommended for use in production settings. We welcome any feedback, suggestions, and bug reports from the community to help us improve the technology.**
 
-[ExecuTorch](/executorch) is a PyTorch platform that provides infrastructure to run PyTorch programs everywhere from AR/VR wearables to standard on-device iOS and Android mobile deployments. One of the main goals for ExecuTorch is to extend PyTorch’s customization and deployment capabilities to edge devices, including embedded.
+[ExecuTorch](/executorch/home) is a PyTorch platform that provides infrastructure to run PyTorch programs everywhere from AR/VR wearables to standard on-device iOS and Android mobile deployments. One of the main goals for ExecuTorch is to extend PyTorch’s customization and deployment capabilities to edge devices, including embedded.
 
 ExecuTorch heavily relies on such PyTorch technologies as TorchDynamo and torch.export. If you are not familiar with these APIs, you might want to read about them in the PyTorch documentation before diving into the ExecuTorch documentation. You may also check out the [ExecuTorch Concepts](https://docs.google.com/document/d/1eKsC-YZrvIsJwRmY6-mI5zVCsGKxm1r3_kYW4PnUtv4/edit) page to learn more about relevant background and key concepts related to ExecuTorch. 
 
