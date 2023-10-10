@@ -19,7 +19,7 @@ In the future, speech recognition systems are expected to power applications in 
 
 ![Fig. 1 The pipeline for audio-visual speech recognition system](/assets/images/real-time-speech-rec/pipeline.jpg){:style="width:100%;"}
 
-<small style="line-height: 1.1"><em>**Fig. 1**: The pipeline for audio-visual speech recognition system</em></small>
+<p style="line-height: 1.05"><small><em><strong>Fig. 1</strong>: The pipeline for audio-visual speech recognition system</em></small></p>
 
 
 Our real-time AV-ASR system is presented in Fig. 1. It consists of three components, a data collection module, a pre-processing module and an end-to-end model. The data collection module comprises hardware devices, such as a microphone and camera. Its role is to collect information from the real world. Once the information is collected, the pre-processing module location and crop out face. Next, we feed the raw audio stream and the pre-processed video stream into our end-to-end model for inference.
@@ -71,7 +71,7 @@ Before feeding the raw stream into our model, each video sequence has to undergo
   </tr>
 </table>
 
-<small style="line-height: 1.1"><em>**Table 1**: Preprocessing pipeline.</em></small>
+<p style="line-height: 1.05"><small><em><strong>Table 1</strong>: Preprocessing pipeline.</em></small></p>
 
 
 ## Model
@@ -80,7 +80,7 @@ Before feeding the raw stream into our model, each video sequence has to undergo
 
 ![Fig. 2 The architecture for the audio-visual speech recognition system.](/assets/images/real-time-speech-rec/model.jpg){:style="width:100%;"}
 
-<small style="line-height: 1.1"><em>**Fig. 2**: The architecture for the audio-visual speech recognition system</em></small>
+<p style="line-height: 1.05"><small><em><strong>Fig. 2</strong>: The architecture for the audio-visual speech recognition system</em></small></p>
 
 
 
@@ -145,7 +145,7 @@ We consider two configurations: Small with 12 Emformer blocks and Large with 28,
   </tr>
 </table>
 
-<small style="line-height: 1.1"><em>**Table 2**: Non-streaming evaluation results for audio-visual models on the LRS3 dataset.</em></small>
+<p style="line-height: 1.05"><small><em><strong>Table 2</strong>: Non-streaming evaluation results for audio-visual models on the LRS3 dataset.</em></small></p>
 
 **Noisy experiments.** During training, 16 different noise types are randomly injected to audio waveforms, including 13 types from [Demand](https://zenodo.org/record/1227121) database, 'DLIVING','DKITCHEN', 'OMEETING', 'OOFFICE', 'PCAFETER', 'PRESTO', 'PSTATION', 'STRAFFIC',  'SPSQUARE', 'SCAFE', 'TMETRO', 'TBUS’ and 'TCAR’, two more types of noise from [speech commands](https://arxiv.org/abs/1804.03209) database, white and pink and one more type of noise from [NOISEX-92](https://www.sciencedirect.com/science/article/abs/pii/0167639393900953) database, babble noise. SNR levels in the range of [clean, 7.5dB, 2.5dB, -2.5dB, -7.5dB] are selected from with a uniform distribution. Results of ASR and AV-ASR models, when tested with babble noise, are shown in Table 3. With increasing noise level, the performance advantage of our audio-visual model over our audio-only model grows, indicating that incorporating visual data improves noise robustness.
 
@@ -201,13 +201,13 @@ We consider two configurations: Small with 12 Emformer blocks and Large with 28,
   </tr>
 </table>
 
-<small style="line-height: 1.1"><em>**Table 3**: Streaming evaluation WER (%) results at various signal-to-noise ratios for our audio-only (A) and audio-visual (A+V) models on the LRS3 dataset under 0.80-second latency constraints.</em></small>
+<p style="line-height: 1.05"><small><em><strong>Table 3</strong>: Streaming evaluation WER (%) results at various signal-to-noise ratios for our audio-only (A) and audio-visual (A+V) models on the LRS3 dataset under 0.80-second latency constraints.</em></small></p>
 
 
 **Real-time factor**. The real-time factor (RTF) is an important measure of a system's ability to process real-time tasks efficiently. An RTF value of less than 1 indicates that the system meets real-time requirements. We measure RTF using a laptop with an Intel® Core™ i7-12700 CPU running at 2.70 GHz and an NVIDIA 3070 GeForce RTX 3070 Ti GPU. To the best of our knowledge, this is the first AV-ASR model that reports RTFs on the LRS3 benchmark. The Small model achieves a WER of 2.6% and an RTF of 0.87 on CPU (Table 4), demonstrating its potential for real-time on-device inference applications.
 
 
-<table class="table table-bordered">
+<table class="table table-bordered text-center">
   <tr>
    <td><strong>Model</strong>
    </td>
@@ -246,7 +246,7 @@ We consider two configurations: Small with 12 Emformer blocks and Large with 28,
   </tr>
 </table>
 
-<small style="line-height: 1.1"><em>**Table 4**: Impact of AV-ASR model size and device on WER and RTF. Note that the RTF calculation includes the pre-processing step wherein the Ultra-Lightweight Face Detection Slim 320 model is used to generate face bounding boxes.</em></small>
+<p style="line-height: 1.05"><small><em><strong>Table 4</strong>: Impact of AV-ASR model size and device on WER and RTF. Note that the RTF calculation includes the pre-processing step wherein the Ultra-Lightweight Face Detection Slim 320 model is used to generate face bounding boxes.</em></small></p>
 
 
 Learn more about the system from the published works below:
