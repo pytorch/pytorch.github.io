@@ -10,7 +10,7 @@ We have developed a compact real-time speech recognition system based on TorchAu
 
 This work is part of our approach to [AV-ASR research](https://arxiv.org/abs/2303.14307). A promising aspect of this approach is its ability to automatically annotate large-scale audio-visual datasets, which enables the training of more accurate and robust speech recognition systems. Furthermore, this technology has the potential to run on smart devices since it achieves the latency and memory efficiency that such devices require for inference.
 
-In the future, speech recognition systems are expected to power applications in numerous domains. One of the primary applications of AV-ASR is to enhance the performance of ASR in noisy environments. Since visual streams are not affected by acoustic noise, integrating them into an audio-visual speech recognition model can compensate for the performance drop of ASR models. Our AV-ASR system has the potential to serve multiple purposes beyond speech recognition, such as text summarization, translation and even text-to-speech conversion. There are also a number of applications that benefit from exclusive use of VSR. The use of VSR can be useful in scenarios where speaking is not allowed, for example, in a meeting, and can provide privacy in public conversations.
+In the future, speech recognition systems are expected to power applications in numerous domains. One of the primary applications of AV-ASR is to enhance the performance of ASR in noisy environments. Since visual streams are not affected by acoustic noise, integrating them into an audio-visual speech recognition model can compensate for the performance drop of ASR models. Our AV-ASR system has the potential to serve multiple purposes beyond speech recognition, such as text summarization, translation and even text-to-speech conversion. Moreover, the exclusive use of VSR can be useful in certain scenarios, e.g. where speaking is not allowed, in meetings, and where privacy in public conversations is desired.
 
 
 # AV-ASR
@@ -27,7 +27,7 @@ Our real-time AV-ASR system is presented in Fig. 1. It consists of three compone
 
 ## Data collection
 
-We use torchaudio.io.StreamReader to capture audio/video from streaming device input, e.g. microphone and camera on laptop. Once the raw video and audio streams are collected, the pre-processing module locates and crops faces. It should be noted that data is immediately deleted during the streaming process.
+We use `torchaudio.io.StreamReader` to capture audio/video from streaming device input, e.g. microphone and camera on laptop. Once the raw video and audio streams are collected, the pre-processing module locates and crops faces. It should be noted that data is immediately deleted during the streaming process.
 
 
 ## Pre-processing
