@@ -7,7 +7,7 @@ Quansight engineers have implemented support for tracing through NumPy code via
 `torch.compile` in PyTorch 2.1. This feature leverages PyTorch’s compiler to 
 generate efficient fused vectorized code without having to modify your original 
 NumPy code. Even more, it also allows for executing NumPy code on CUDA 
-just by running itdo through `torch.compile` under `torch.device("cuda")`!
+just by running it through `torch.compile` under `torch.device("cuda")`!
 
 In this post, we go over how to use this feature and give a few tips and tricks 
 to make the most out of it.
