@@ -1,10 +1,8 @@
 ---
 layout: blog_detail
 title: "PyTorch Edge: Enabling On-Device Inference Across Mobile and Edge Devices with ExecuTorch"
-author:  Ali Khosh, Martin Yuan, Bilgin Cagatay
+author:  the PyTorch Edge Team
 ---
-
-**Other contributors**: Dave Bort, Kimish Patel, Mergen Nachin, Orion Reblitz-Richardson, Andrew Caples
 
 We are excited to announce ExecuTorch, our all-new solution for enabling on-device inference capabilities across mobile and edge devices with the backing of industry leaders like Arm, Apple, and Qualcomm Innovation Center. 
 
@@ -35,3 +33,5 @@ PyTorch Edge builds on the same fundamental principle of improving research to p
 PyTorch Edge provides portability of core components that is required to reach a wide spectrum of devices which are characterized by differing hardware configurations, performance and efficiency. Such portability is achieved by allowing optimization that are custom developed for the target use-cases, and developer productivity via well defined entry-points, representations, and tools to tie all this together into a thriving ecosystem. 
 
 PyTorch Edge is the future of the on-device AI stack and ecosystem for PyTorch. We are excited to see what the community builds with ExecuTorch’s on-device inference capabilities across mobile and edge devices backed by our industry partner delegates. 
+
+[Learn more about PyTorch Edge and ExecuTorch](https://pytorch.org/executorch/stable/index.html).
