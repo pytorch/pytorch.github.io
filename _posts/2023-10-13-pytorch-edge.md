@@ -6,7 +6,7 @@ author:  Ali Khosh, Martin Yuan, Bilgin Cagatay
 
 **Other contributors**: Dave Bort, Kimish Patel, Mergen Nachin, Orion Reblitz-Richardson, Andrew Caples
 
-We are excited to announce ExecuTorch, our all-new solution for enabling on-device inference capabilities across mobile and edge devices with the backing of industry partners like Arm, Apple, and Qualcomm Innovation Center. 
+We are excited to announce ExecuTorch, our all-new solution for enabling on-device inference capabilities across mobile and edge devices with the backing of industry leaders like Arm, Apple, and Qualcomm Innovation Center. 
 
 As part of PyTorch Edge's vision for the future of the on-device AI stack and ecosystem, ExecuTorch addresses the fragmentation in the on-device AI ecosystem. It offers a design that provides extension points for seamless third-party integration to accelerate ML models on specialized hardware. Our partners have contributed custom delegate implementations to optimize model inference execution on their respective hardware platforms.
 
