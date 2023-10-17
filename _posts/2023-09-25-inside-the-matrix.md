@@ -1,17 +1,18 @@
 ---
 layout: blog_detail
 title: "Inside the Matrix: Visualizing Matrix Multiplication, Attention and Beyond"
+author: Basil Hosmer
 ---
 
 _Use 3D to visualize matrix multiplication expressions, attention heads with real weights, and more._
 
 Matrix multiplications (matmuls) are the building blocks of today’s ML models. This note presents [mm](https://bhosmer.github.io/mm/ref.html), a visualization tool for matmuls and compositions of matmuls.
 
-Because mm uses all three spatial dimensions, it helps build intuition and spark ideas with less cognitive overhead than the usual squares-on-paper idioms, especially (though not only) for visual/spatial thinkers. 
+Matrix multiplication is inherently a three-dimensional operation. Because mm uses all three spatial dimensions, it can convey meaning more clearly and intuitively than the usual squares-on-paper idioms, especially (though not only) for visual/spatial thinkers.
 
-And with three dimensions available for _composing_ matmuls, along with the ability to load trained weights, we can visualize big, compound expressions like attention heads and observe how they actually behave, using im.
+We also have room to _compose_ matmuls in geometrically consistent ways - so we can visualize big, compound structures like attention heads and MLP layers using the same rules as simple expressions. And more advanced features, like animating different matmul algorithms, partitioning for parallelism, and loading external data to explore the behavior of actual models, all build naturally on this foundation.
 
-mm is fully interactive, runs [in the browser](https://bhosmer.github.io/mm/) or [notebook iframes](https://colab.research.google.com/drive/1wZIoU20eRWKtRNCW7e5Iugm3MhfaE1f7) and keeps its complete state in the URL, so links are shareable sessions (the screenshots and videos in this note all have links that open the visualizations in the tool). This [reference guide](https://bhosmer.github.io/mm/ref.html) describes all of the available functionality.
+mm is fully interactive, runs [in the browser](https://bhosmer.github.io/mm/) and keeps its complete state in the URL, so links are shareable sessions (the screenshots and videos in this note all have links that open the corresponding visualization in the tool). This [reference guide](https://bhosmer.github.io/mm/ref.html) describes all of the available functionality.
 
 We'll first introduce the visualization approach, build intuition by visualizing some simple matmuls and expressions, then dive into some more extended examples:
 
