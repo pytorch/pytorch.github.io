@@ -76,7 +76,7 @@ We also micro-benchmark the scaled multi-head attention for various sequence len
 
 |                     |               |                        |                |
 | ------------------- | ------------- | ---------------------- | -------------- |
-| Setting \ Algorithm | PyTorch Eager | Flash-Attention v2.0.9 | Flash-Decoding |
+| Setting \ Algorithm | PyTorch Eager (us) | Flash-Attention v2.0.9 (us) | Flash-Decoding (us) |
 | B=256, seqlen=256   | 3058.6        | 390.5                  | 63.4           |
 | B=128, seqlen=512   | 3151.4        | 366.3                  | 67.7           |
 | B=64, seqlen=1024   | 3160.4        | 364.8                  | 77.7           |
@@ -105,4 +105,4 @@ A full example of decoding with LLaMa v2 / CodeLLaMa is available in the FlashAt
 
 ### Acknowledgements
 
-Thanks to Erich Elsen, Ashish Vaswani, and Michaël Benesty for suggesting this idea of splitting the KVcache loading. We want to thank Jeremy Reizenstein, Patrick Labatut and Andrew Tulloch for the valuable discussions. We also want to thank Geeta Chauhan and Gregory Chanan for helping with the writing and more broadly contributing to getting this published on the PyTorch blog.
+Thanks to Erich Elsen, Ashish Vaswani, and Michaël Benesty for suggesting this idea of splitting the KVcache loading. We want to thank Jeremy Reizenstein, Patrick Labatut and Andrew Tulloch for the valuable discussions, and Quentin Carbonneaux for contributing the efficient decoding example to xFormers. We also want to thank Geeta Chauhan and Gregory Chanan for helping with the writing and more broadly contributing to getting this published on the PyTorch blog.
