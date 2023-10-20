@@ -1,6 +1,7 @@
 ---
 layout: blog_detail
 title: "Compiling NumPy code into C++ or CUDA via torch.compile"
+author: Evgeni Burovski, Ralf Gommers and Mario Lezcano
 ---
 
 Quansight engineers have implemented support for tracing through NumPy code via 
