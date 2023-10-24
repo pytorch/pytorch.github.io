@@ -51,13 +51,13 @@ pip install torch==2.0.1 torchvision==0.15.2 torchaudio==2.0.2
 
 ```
 # ROCM 5.4.2 (Linux only)
-pip install torch==2.0.1+rocm5.4.2 torchvision==0.15.2+rocm5.4.2 torchaudio==2.0.2 --index-url https://download.pytorch.org/whl/rocm5.4.2
+pip install torch==2.0.1 torchvision==0.15.2 torchaudio==2.0.2 --index-url https://download.pytorch.org/whl/rocm5.4.2
 # CUDA 11.7
-pip install torch==2.0.1+cu117 torchvision==0.15.2+cu117 torchaudio==2.0.2 --index-url https://download.pytorch.org/whl/cu117
+pip install torch==2.0.1 torchvision==0.15.2 torchaudio==2.0.2
 # CUDA 11.8
-pip install torch==2.0.1+cu118 torchvision==0.15.2+cu118 torchaudio==2.0.2 --index-url https://download.pytorch.org/whl/cu118
+pip install torch==2.0.1 torchvision==0.15.2 torchaudio==2.0.2 --index-url https://download.pytorch.org/whl/cu118
 # CPU only
-pip install torch==2.0.1+cpu torchvision==0.15.2+cpu torchaudio==2.0.2 --index-url https://download.pytorch.org/whl/cpu
+pip install torch==2.0.1 torchvision==0.15.2 torchaudio==2.0.2 --index-url https://download.pytorch.org/whl/cpu
 ```
 
 ### v2.0.0
@@ -94,13 +94,13 @@ pip install torch==2.0.0 torchvision==0.15.1 torchaudio==2.0.1
 
 ```
 # ROCM 5.4.2 (Linux only)
-pip install torch==2.0.0+rocm5.4.2 torchvision==0.15.1+rocm5.4.2 torchaudio==2.0.1 --index-url https://download.pytorch.org/whl/rocm5.4.2
+pip install torch==2.0.0 torchvision==0.15.1 torchaudio==2.0.1 --index-url https://download.pytorch.org/whl/rocm5.4.2
 # CUDA 11.7
-pip install torch==2.0.0+cu117 torchvision==0.15.1+cu117 torchaudio==2.0.1 --index-url https://download.pytorch.org/whl/cu117
+pip install torch==2.0.0 torchvision==0.15.1 torchaudio==2.0.1
 # CUDA 11.8
-pip install torch==2.0.0+cu118 torchvision==0.15.1+cu118 torchaudio==2.0.1 --index-url https://download.pytorch.org/whl/cu118
+pip install torch==2.0.0 torchvision==0.15.1 torchaudio==2.0.1 --index-url https://download.pytorch.org/whl/cu118
 # CPU only
-pip install torch==2.0.0+cpu torchvision==0.15.1+cpu torchaudio==2.0.1 --index-url https://download.pytorch.org/whl/cpu
+pip install torch==2.0.0 torchvision==0.15.1 torchaudio==2.0.1 --index-url https://download.pytorch.org/whl/cpu
 ```
 
 ### v1.13.1
