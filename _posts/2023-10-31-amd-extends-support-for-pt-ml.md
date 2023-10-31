@@ -1,6 +1,6 @@
 ---
 layout: blog_detail
-title: "AMD Extends Support for Pytorch Machine Learning Development nn Select RDNA™ 3 GPUs with ROCm™ 5.7"
+title: "AMD Extends Support for PyTorch Machine Learning Development on Select RDNA™ 3 GPUs with ROCm™ 5.7"
 author: AMD
 ---
 
