@@ -212,7 +212,7 @@ involved. To figure out whether an error you are hitting is a `torch.compile
 `torch.compile` by replacing the NumPy import by `import torch._numpy as np`. 
 This is should just be used for **debugging purposes** and is in no way a 
 replacement for the PyTorch API, as it is **much slower** and, as a private API, 
-**may change without notice**. See also [this FAQ](https://hackmd.io/m3qRedShR3OZkLcaOOdISg) for other tricks.
+**may change without notice**. See also [this FAQ](https://pytorch.org/docs/stable/torch.compiler_faq.html#does-numpy-work-with-torch-compile) for other tricks.
 
 
 ## Differences between NumPy and `torch.compile` NumPy
