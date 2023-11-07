@@ -30,20 +30,21 @@ DEFAULT = "default"
 ENABLE = "enable"
 DISABLE = "disable"
 MACOS = "macos"
+MACOS_ARM64 = "macos-arm64"
 
 # Mapping json to release matrix default values
 acc_arch_ver_default = {
     "nightly": {
         "accnone": ("cpu", ""),
-        "cuda.x": ("cuda", "11.7"),
-        "cuda.y": ("cuda", "11.8"),
-        "rocm5.x": ("rocm", "5.4.2")
+        "cuda.x": ("cuda", "11.8"),
+        "cuda.y": ("cuda", "12.1"),
+        "rocm5.x": ("rocm", "5.7")
         },
     "release": {
         "accnone": ("cpu", ""),
-        "cuda.x": ("cuda", "11.7"),
-        "cuda.y": ("cuda", "11.8"),
-        "rocm5.x": ("rocm", "5.4.2")
+        "cuda.x": ("cuda", "11.8"),
+        "cuda.y": ("cuda", "12.1"),
+        "rocm5.x": ("rocm", "5.6")
         }
     }
 
@@ -57,7 +58,8 @@ LIBTORCH_DWNL_INSTR = {
         CXX11_ABI: "Download here (cxx11 ABI):",
         RELEASE: "Download here (Release version):",
         DEBUG: "Download here (Debug version):",
-        MACOS: "Download default libtorch here (ROCm and CUDA are not supported):",
+        MACOS: "Download x86 libtorch here (ROCm and CUDA are not supported):",
+        MACOS_ARM64: "Download arm64 libtorch here (ROCm and CUDA are not supported):",
     }
 
 def load_json_from_basedir(filename: str):
