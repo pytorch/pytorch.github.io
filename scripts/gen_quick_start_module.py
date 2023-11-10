@@ -59,8 +59,8 @@ LIBTORCH_DWNL_INSTR = {
         CXX11_ABI: "Download here (cxx11 ABI):",
         RELEASE: "Download here (Release version):",
         DEBUG: "Download here (Debug version):",
-        MACOS: "Download x86 libtorch here",
-        MACOS_ARM64: "Download arm64 libtorch here",
+        MACOS: "Download x86 libtorch here (ROCm and CUDA are not supported):",
+        MACOS_ARM64: "Download arm64 libtorch here (ROCm and CUDA are not supported):",
     }
 
 def load_json_from_basedir(filename: str):
@@ -124,8 +124,12 @@ def update_versions(versions, release_matrix, release_version):
                     if (x["package_type"], x["gpu_arch_type"], x["gpu_arch_version"]) ==
                     (package_type, gpu_arch_type, gpu_arch_version)
                     ]
+                # MACOS and MACOS_ARM64 release matrices are reduced to
+                # one single matrix in get started page. This is the only
+                # OS that this logic applies to. Hence this logic is needed.
+                pkg_arch_matrix_arm64 = []
                 if os_key == OperatingSystem.MACOS.value and package_type == "libtorch":
-                    pkg_arch_matrix += [
+                    pkg_arch_matrix_arm64 = [
                         x for x in release_matrix[OperatingSystem.MACOS_ARM64.value]
                         if (x["package_type"], x["gpu_arch_type"], x["gpu_arch_version"]) ==
                         (package_type, gpu_arch_type, gpu_arch_version)
@@ -151,9 +155,8 @@ def update_versions(versions, release_matrix, release_version):
                         elif os_key == OperatingSystem.MACOS.value:
                             if instr["versions"] is not None:
                                 instr["versions"][LIBTORCH_DWNL_INSTR[MACOS]] = pkg_arch_matrix[0]["installation"]
-                                # todo: remove this once we release libtorch for arm64 as stable
-                                if release_version == "nightly":
-                                    instr["versions"][LIBTORCH_DWNL_INSTR[MACOS_ARM64]] = pkg_arch_matrix[1]["installation"]
+                                if len(pkg_arch_matrix_arm64) > 0:
+                                    instr["versions"][LIBTORCH_DWNL_INSTR[MACOS_ARM64]] = pkg_arch_matrix_arm64[0]["installation"]
 
 # This method is used for generating new quick-start-module.js
 # from the versions json object
@@ -210,7 +213,7 @@ def main():
     options = parser.parse_args()
     versions = read_published_versions()
 
-    if options.autogenerate:
+    if options.autogenerate or True:
         release_matrix = {}
         for val in ("nightly", "release"):
             release_matrix[val] = {}
