@@ -21,6 +21,7 @@ class OperatingSystem(Enum):
     LINUX: str = "linux"
     WINDOWS: str = "windows"
     MACOS: str = "macos"
+    MACOS_ARM64: str = "macos_arm64"
 
 PRE_CXX11_ABI = "pre-cxx11"
 CXX11_ABI = "cxx11-abi"
@@ -123,6 +124,16 @@ def update_versions(versions, release_matrix, release_version):
                     if (x["package_type"], x["gpu_arch_type"], x["gpu_arch_version"]) ==
                     (package_type, gpu_arch_type, gpu_arch_version)
                     ]
+                # MACOS and MACOS_ARM64 release matrices are reduced to
+                # one single matrix in get started page. This is the only
+                # OS that this logic applies to. Hence this logic is needed.
+                pkg_arch_matrix_arm64 = []
+                if os_key == OperatingSystem.MACOS.value and package_type == "libtorch":
+                    pkg_arch_matrix_arm64 = [
+                        x for x in release_matrix[OperatingSystem.MACOS_ARM64.value]
+                        if (x["package_type"], x["gpu_arch_type"], x["gpu_arch_version"]) ==
+                        (package_type, gpu_arch_type, gpu_arch_version)
+                        ]
 
                 if pkg_arch_matrix:
                     if package_type != "libtorch":
@@ -142,12 +153,10 @@ def update_versions(versions, release_matrix, release_version):
                                 for ver in [RELEASE, DEBUG]:
                                      instr["versions"][LIBTORCH_DWNL_INSTR[ver]] = rel_entry_dict[ver]
                         elif os_key == OperatingSystem.MACOS.value:
-                            rel_entry_dict = {
-                                x["devtoolset"]: x["installation"] for x in pkg_arch_matrix
-                                if x["libtorch_variant"] == "shared-with-deps"
-                                }
                             if instr["versions"] is not None:
-                                instr["versions"][LIBTORCH_DWNL_INSTR[MACOS]] = list(rel_entry_dict.values())[0]
+                                instr["versions"][LIBTORCH_DWNL_INSTR[MACOS]] = pkg_arch_matrix[0]["installation"]
+                                if len(pkg_arch_matrix_arm64) > 0:
+                                    instr["versions"][LIBTORCH_DWNL_INSTR[MACOS_ARM64]] = pkg_arch_matrix_arm64[0]["installation"]
 
 # This method is used for generating new quick-start-module.js
 # from the versions json object
