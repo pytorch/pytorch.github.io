@@ -157,6 +157,8 @@ def update_versions(versions, release_matrix, release_version):
                                 instr["versions"][LIBTORCH_DWNL_INSTR[MACOS]] = pkg_arch_matrix[0]["installation"]
                                 if len(pkg_arch_matrix_arm64) > 0:
                                     instr["versions"][LIBTORCH_DWNL_INSTR[MACOS_ARM64]] = pkg_arch_matrix_arm64[0]["installation"]
+                                else:
+                                    instr["versions"].pop(LIBTORCH_DWNL_INSTR[MACOS_ARM64], None)
 
 # This method is used for generating new quick-start-module.js
 # from the versions json object
