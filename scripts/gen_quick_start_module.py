@@ -215,7 +215,7 @@ def main():
     options = parser.parse_args()
     versions = read_published_versions()
 
-    if options.autogenerate or True:
+    if options.autogenerate:
         release_matrix = {}
         for val in ("nightly", "release"):
             release_matrix[val] = {}
