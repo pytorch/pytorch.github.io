@@ -242,7 +242,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href='https://pytorch.org/docs/versions.html'>main (2.2.0a0+gitf5ce4d8 ) &#x25BC</a>
+      <a href='https://pytorch.org/docs/versions.html'>main (2.2.0a0+git1e260c8 ) &#x25BC</a>
     </div>
     
 
@@ -497,7 +497,11 @@
 
 <span class="n">RPC_AVAILABLE</span> <span class="o">=</span> <span class="kc">False</span>
 <span class="k">if</span> <span class="n">dist</span><span class="o">.</span><span class="n">is_available</span><span class="p">():</span>
-    <span class="kn">from</span> <span class="nn">torch.distributed.distributed_c10d</span> <span class="kn">import</span> <span class="n">_get_default_group</span><span class="p">,</span> <span class="n">ReduceOp</span>
+    <span class="kn">from</span> <span class="nn">torch.distributed.distributed_c10d</span> <span class="kn">import</span> <span class="p">(</span>
+        <span class="n">_get_default_group</span><span class="p">,</span>
+        <span class="n">_rank_not_in_group</span><span class="p">,</span>
+        <span class="n">ReduceOp</span><span class="p">,</span>
+    <span class="p">)</span>
     <span class="kn">from</span> <span class="nn">torch.distributed.utils</span> <span class="kn">import</span> <span class="p">(</span>
         <span class="n">_alloc_storage</span><span class="p">,</span>
         <span class="n">_cast_forward_inputs</span><span class="p">,</span>
@@ -1257,7 +1261,6 @@
         <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_delay_all_reduce_params</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_register_delay_all_reduce_hook</span><span class="p">(</span>
                 <span class="n">bucket_cap_mb</span><span class="o">=</span><span class="n">bucket_cap_mb</span><span class="p">,</span>
-                <span class="n">process_group</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">process_group</span><span class="p">,</span>
                 <span class="n">param_to_hook_all_reduce</span><span class="o">=</span><span class="n">param_to_hook_all_reduce</span><span class="p">,</span>
                 <span class="n">device_ids</span><span class="o">=</span><span class="n">device_ids</span><span class="p">,</span>
             <span class="p">)</span>
@@ -1336,10 +1339,18 @@
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_lazy_init_ran</span> <span class="o">=</span> <span class="kc">False</span>
 
+    <span class="k">def</span> <span class="nf">_delayed_all_reduce_hook</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">grad</span><span class="p">):</span>
+        <span class="n">world_size</span> <span class="o">=</span> <span class="n">dist</span><span class="o">.</span><span class="n">get_world_size</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">process_group</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_delay_grad_buffer</span><span class="o">.</span><span class="n">div_</span><span class="p">(</span><span class="n">world_size</span><span class="p">)</span>  <span class="c1"># type: ignore[union-attr]</span>
+        <span class="n">_</span> <span class="o">=</span> <span class="n">dist</span><span class="o">.</span><span class="n">all_reduce</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_delay_grad_buffer</span><span class="p">,</span> <span class="n">group</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">process_group</span><span class="p">,</span> <span class="n">async_op</span><span class="o">=</span><span class="kc">True</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">grad</span>
+
     <span class="k">def</span> <span class="nf">_register_delay_all_reduce_hook</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">bucket_cap_mb</span><span class="p">,</span>
-        <span class="n">process_group</span><span class="p">,</span>
         <span class="n">param_to_hook_all_reduce</span><span class="p">,</span>
         <span class="n">device_ids</span><span class="p">,</span>
     <span class="p">):</span>
@@ -1352,19 +1363,10 @@
 
         <span class="c1"># 2. Broadcast the parameters</span>
         <span class="n">detached_params</span> <span class="o">=</span> <span class="p">[</span><span class="n">p</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_delay_all_reduce_params</span><span class="p">]</span>
-        <span class="n">dist</span><span class="o">.</span><span class="n">_broadcast_coalesced</span><span class="p">(</span><span class="n">process_group</span><span class="p">,</span> <span class="n">detached_params</span><span class="p">,</span> <span class="n">bucket_cap_mb</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="n">dist</span><span class="o">.</span><span class="n">_broadcast_coalesced</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">process_group</span><span class="p">,</span> <span class="n">detached_params</span><span class="p">,</span> <span class="n">bucket_cap_mb</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
 
         <span class="c1"># 3. Hook all reduce to the specified parameter</span>
-        <span class="n">world_size</span> <span class="o">=</span> <span class="n">dist</span><span class="o">.</span><span class="n">get_world_size</span><span class="p">(</span><span class="n">process_group</span><span class="p">)</span>
-
-        <span class="k">def</span> <span class="nf">_delayed_all_reduce</span><span class="p">(</span><span class="n">grad</span><span class="p">):</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_delay_grad_buffer</span><span class="o">.</span><span class="n">div_</span><span class="p">(</span><span class="n">world_size</span><span class="p">)</span>  <span class="c1"># type: ignore[union-attr]</span>
-            <span class="n">_</span> <span class="o">=</span> <span class="n">dist</span><span class="o">.</span><span class="n">all_reduce</span><span class="p">(</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_delay_grad_buffer</span><span class="p">,</span> <span class="n">group</span><span class="o">=</span><span class="n">process_group</span><span class="p">,</span> <span class="n">async_op</span><span class="o">=</span><span class="kc">True</span>
-            <span class="p">)</span>
-            <span class="k">return</span> <span class="n">grad</span>
-
-        <span class="n">param_to_hook_all_reduce</span><span class="o">.</span><span class="n">register_hook</span><span class="p">(</span><span class="n">_delayed_all_reduce</span><span class="p">)</span>
+        <span class="n">param_to_hook_all_reduce</span><span class="o">.</span><span class="n">register_hook</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_delayed_all_reduce_hook</span><span class="p">)</span>
 
         <span class="c1"># 4. Build tensor views for gradients</span>
         <span class="n">offset</span> <span class="o">=</span> <span class="mi">0</span>
@@ -2712,7 +2714,26 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">reducer</span><span class="o">.</span><span class="n">_check_reducer_finalized</span><span class="p">()</span>
 
     <span class="k">def</span> <span class="nf">_set_sparse_metadata</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">global_unique_ids</span><span class="p">):</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">reducer</span><span class="o">.</span><span class="n">_set_sparse_metadata</span><span class="p">(</span><span class="n">global_unique_ids</span><span class="p">)</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">reducer</span><span class="o">.</span><span class="n">_set_sparse_metadata</span><span class="p">(</span><span class="n">global_unique_ids</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_update_process_group</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">new_process_group</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Dynamically updates the process group for DDP so that we can shrink/expand DDP</span>
+<span class="sd">        world size without having to reinitialize DDP.</span>
+
+<span class="sd">        NOTE: If you are using custom communications hooks via, register_comm_hook,</span>
+<span class="sd">        you need to update the process groups for those hooks separately.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Force a rebuild of buckets for a new process group. This ensures all ranks</span>
+        <span class="c1"># are synchronized in terms of when they will rebuild buckets and also</span>
+        <span class="c1"># re-evaluates previous assumptions of buckets given the world size might have</span>
+        <span class="c1"># changed.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_has_rebuilt_buckets</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">reducer</span><span class="o">.</span><span class="n">_force_bucket_rebuild</span><span class="p">()</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">_rank_not_in_group</span><span class="p">(</span><span class="n">new_process_group</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">process_group</span> <span class="o">=</span> <span class="n">new_process_group</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">reducer</span><span class="o">.</span><span class="n">_update_process_group</span><span class="p">(</span><span class="n">new_process_group</span><span class="p">)</span></div>
 </pre></div>
 
              </article>
