@@ -320,7 +320,7 @@ Wrapping up, we are excited to have[ announced](https://www.youtube.com/watch?v=
 * **GPU quantization** accelerate models with reduced precision operations [[api](https://github.com/pytorch-labs/ao/tree/main#torchao)]
 * **Scaled Dot Product Attention (SDPA)** a new, memory efficient implementation of Attention [[tutorial](https://pytorch.org/tutorials/intermediate/scaled_dot_product_attention_tutorial.html)]
 * **Semi-Structured (2:4) Sparsity** accelerate models with fewer bits to store weights and activations [[tutorial](https://pytorch.org/tutorials/prototype/semi_structured_sparse.html)]
-* **Nested Tensor** Highly optimized, ragged array handling for non-uniform batch and image sizes** **[[tutorial](https://pytorch.org/tutorials/prototype/nestedtensor.html)]
+* **Nested Tensor** Highly optimized, ragged array handling for non-uniform batch and image sizes [[tutorial](https://pytorch.org/tutorials/prototype/nestedtensor.html)]
 * **Triton kernels.** Custom GPU operations, easily built and optimized via Triton 
 
 For more details on how to reproduce the data presented in this blog post, check out [the experiments folder of segment-anything-fast](https://github.com/pytorch-labs/segment-anything-fast/tree/main/experiments). Please don't hesitate to contact us or [open an issue](https://github.com/pytorch-labs/segment-anything-fast/issues/new) if you run into any technical issues. 
