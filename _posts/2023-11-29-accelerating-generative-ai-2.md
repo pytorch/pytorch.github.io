@@ -42,7 +42,7 @@ Sadly, this does not perform very well. But why? Looking at a trace reveals the 
 Imagine the GPU as this super massive factory with a ridiculous amount of compute available. Then, imagine the CPU as some messenger shuttling instructions back and forth to the GPU. Remember, in large scale deep learning systems, the GPU is responsible for doing 100% of the work! In such systems, the only role of the CPU is to tell the GPU what work it should be doing.
 
 
-![factory](/assets/images/accelerating-generative-ai-2/image16.png){:style="width:100%;display: block;max-width:600px; margin-left:auto; margin-right:auto;"}
+![factory](/assets/images/accelerating-generative-ai-2/image16.png){:style="width:100%;display: block;max-width:500px; margin-left:auto; margin-right:auto;"}
 
 
 So, the CPU runs over and tells the GPU to do an “add”, but by the time the CPU can give the GPU another chunk of work, the GPU has long finished the previous chunk of work.
@@ -52,7 +52,7 @@ Despite the fact that the GPU needs to perform thousands of computations while t
 Regardless of the reason, we now find ourselves in the **overhead-bound regime**. So, what can we do? One, we could rewrite our implementation in C++, perhaps even eschew frameworks entirely and write raw CUDA. Or.... we could just send more work to the GPU at once.
 
 
-![factory](/assets/images/accelerating-generative-ai-2/image3.png){:style="width:100%;display: block;max-width:600px; margin-left:auto; margin-right:auto;"}
+![factory](/assets/images/accelerating-generative-ai-2/image3.png){:style="width:100%;display: block;max-width:500px; margin-left:auto; margin-right:auto;"}
 
 
 By just sending a massive chunk of work at once, we can keep our GPU busy! Although during training, this may just be accomplished by increasing your batch size, how do we do this during inference?
