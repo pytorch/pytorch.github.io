@@ -4,7 +4,7 @@
   <generator uri="https://jekyllrb.com/" version="3.9.0">Jekyll</generator>
   <link href="https://pytorch.org/feed.xml" rel="self" type="application/atom+xml" />
   <link href="https://pytorch.org/" rel="alternate" type="text/html" />
-  <updated>2023-11-29T17:05:51-08:00</updated>
+  <updated>2023-11-30T09:05:42-08:00</updated>
   <id>https://pytorch.org/feed.xml</id>
 
   
@@ -29,6 +29,282 @@
 
   
   
+  
+    <entry>
+      <title type="html">Accelerating Generative AI with PyTorch II: GPT, Fast</title>
+      <link href="https://pytorch.org/blog/accelerating-generative-ai-2/" rel="alternate" type="text/html" title="Accelerating Generative AI with PyTorch II: GPT, Fast" />
+      <published>2023-11-30T00:00:00-08:00</published>
+      <updated>2023-11-30T00:00:00-08:00</updated>
+      <id>https://pytorch.org/blog/accelerating-generative-ai-2</id>
+      <content type="html" xml:base="https://pytorch.org/blog/accelerating-generative-ai-2/">&lt;p&gt;This post is the second part of a multi-series blog focused on how to accelerate generative AI models with pure, native PyTorch. We are excited to share a breadth of newly released PyTorch performance features alongside practical examples to see how far we can push PyTorch native performance. In part one, we showed how to accelerate &lt;a href=&quot;https://pytorch.org/blog/accelerating-generative-ai/&quot;&gt;Segment Anything over 8x&lt;/a&gt; using only pure, native PyTorch. In this blog we’ll focus on LLM optimization.&lt;/p&gt;
+
+&lt;p&gt;Over the past year, generative AI use cases have exploded in popularity. Text generation has been one particularly popular area, with lots of innovation among open-source projects such as &lt;a href=&quot;https://github.com/ggerganov/llama.cpp&quot;&gt;llama.cpp&lt;/a&gt;, &lt;a href=&quot;https://github.com/vllm-project/vllm&quot;&gt;vLLM&lt;/a&gt;, and &lt;a href=&quot;https://github.com/mlc-ai/mlc-llm&quot;&gt;MLC-LLM&lt;/a&gt;.&lt;/p&gt;
+
+&lt;p&gt;While these projects are performant, they often come with tradeoffs in ease of use, such as requiring model conversion to specific formats or building and shipping new dependencies. This begs the question: &lt;strong&gt;how fast can we run transformer inference with only pure, native PyTorch?&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;As announced during our recent &lt;a href=&quot;https://www.youtube.com/watch?v=IWpM_9AsC-U&quot;&gt;PyTorch Developer Conference&lt;/a&gt;, the PyTorch team wrote a from-scratch LLM &lt;strong&gt;almost 10x faster than baseline,&lt;/strong&gt; with no loss of accuracy, all using native PyTorch optimizations. We leverage a breadth of optimizations including:&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;strong&gt;&lt;a href=&quot;https://pytorch.org/tutorials/intermediate/torch_compile_tutorial.html&quot;&gt;Torch.compile&lt;/a&gt;&lt;/strong&gt;: A compiler for PyTorch models&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;&lt;a href=&quot;https://github.com/pytorch-labs/ao/tree/main#torchao&quot;&gt;GPU quantization&lt;/a&gt;&lt;/strong&gt;: Accelerate models with reduced precision operations&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;&lt;a href=&quot;https://github.com/pytorch-labs/gpt-fast/blob/main/generate.py#L76&quot;&gt;Speculative Decoding&lt;/a&gt;&lt;/strong&gt;: Accelerate LLMs using a small “draft” model to predict large “target” model’s output&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;&lt;a href=&quot;https://github.com/pytorch-labs/gpt-fast/blob/main/tp.py&quot;&gt;Tensor Parallelism&lt;/a&gt;&lt;/strong&gt;: Accelerate models by running them across multiple devices.&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;And, even better, we can do it in &lt;strong&gt;less than 1000 lines of native PyTorch code&lt;/strong&gt;.&lt;/p&gt;
+
+&lt;p&gt;If this excites you enough to jump straight into the code, check it out at &lt;a href=&quot;https://github.com/pytorch-labs/gpt-fast&quot;&gt;https://github.com/pytorch-labs/gpt-fast&lt;/a&gt;!&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-generative-ai-2/screen-recording.gif&quot; alt=&quot;Screen recording&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;em&gt;Note: We will be focusing on latency (i.e. batch size=1) for all of these benchmarks. Unless otherwise specified, all benchmarks are run on an A100-80GB, power limited to 330W.&lt;/em&gt;&lt;/p&gt;
+
+&lt;h2 id=&quot;starting-point-255-toks&quot;&gt;Starting Point (25.5 tok/s)&lt;/h2&gt;
+
+&lt;p&gt;Let’s start off with an extremely basic and simple implementation.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-generative-ai-2/image23.png&quot; alt=&quot;simple implementation&quot; style=&quot;width:100%;display: block;max-width:600px; margin-left:auto; margin-right:auto;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Sadly, this does not perform very well. But why? Looking at a trace reveals the answer - it’s heavily &lt;strong&gt;CPU overhead bound&lt;/strong&gt;! What this means is that our CPU is not able to tell the GPU what to do fast enough for the GPU to be fully utilized.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-generative-ai-2/image14.png&quot; alt=&quot;trace&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Imagine the GPU as this super massive factory with a ridiculous amount of compute available. Then, imagine the CPU as some messenger shuttling instructions back and forth to the GPU. Remember, in large scale deep learning systems, the GPU is responsible for doing 100% of the work! In such systems, the only role of the CPU is to tell the GPU what work it should be doing.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-generative-ai-2/image16.png&quot; alt=&quot;factory&quot; style=&quot;width:100%;display: block;max-width:500px; margin-left:auto; margin-right:auto;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;So, the CPU runs over and tells the GPU to do an “add”, but by the time the CPU can give the GPU another chunk of work, the GPU has long finished the previous chunk of work.&lt;/p&gt;
+
+&lt;p&gt;Despite the fact that the GPU needs to perform thousands of computations while the CPU only needs to do orchestration work, this is surprisingly common! There’s a variety of reasons for this, ranging from the fact that the CPU is likely running some single-threaded Python to the fact that GPUs are just incredibly fast nowadays.&lt;/p&gt;
+
+&lt;p&gt;Regardless of the reason, we now find ourselves in the &lt;strong&gt;overhead-bound regime&lt;/strong&gt;. So, what can we do? One, we could rewrite our implementation in C++, perhaps even eschew frameworks entirely and write raw CUDA. Or…. we could just send more work to the GPU at once.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-generative-ai-2/image3.png&quot; alt=&quot;factory&quot; style=&quot;width:100%;display: block;max-width:500px; margin-left:auto; margin-right:auto;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;By just sending a massive chunk of work at once, we can keep our GPU busy! Although during training, this may just be accomplished by increasing your batch size, how do we do this during inference?&lt;/p&gt;
+
+&lt;p&gt;Enter torch.compile.&lt;/p&gt;
+
+&lt;h2 id=&quot;step-1-reducing-cpu-overhead-through-torchcompile-and-a-static-kv-cache-1070-toks&quot;&gt;Step 1: Reducing CPU overhead through torch.compile and a static kv-cache (107.0 tok/s)&lt;/h2&gt;
+
+&lt;p&gt;Torch.compile allows us to capture a larger region into a single compiled region, and particularly when run with mode=”reduce-overhead”, is very effective at reducing CPU overhead. Here, we also specify fullgraph=True, which validates that there are no “graph breaks” in your model (i.e. portions that torch.compile cannot compile). In other words, it ensures that torch.compile is running to its fullest potential.&lt;/p&gt;
+
+&lt;p&gt;To apply it, we &lt;a href=&quot;https://github.com/pytorch-labs/gpt-fast/blob/main/generate.py#L296&quot;&gt;simply wrap a function (or a module) with it&lt;/a&gt;.&lt;/p&gt;
+
+&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;torch.compile(decode_one_token, mode=&quot;reduce-overhead&quot;, fullgraph=True)
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;However, there are a couple of nuances here that make it somewhat nontrivial for folks to get significant performance boosts from applying torch.compile to text generation.&lt;/p&gt;
+
+&lt;p&gt;The first obstacle is the kv-cache. The kv-cache is an inference-time optimization that caches the activations computed for the previous tokens (see &lt;a href=&quot;https://www.dipkumar.dev/becoming-the-unbeatable/posts/gpt-kvcache/&quot;&gt;here&lt;/a&gt; for a more in-depth explanation). However, as we generate more tokens, the “logical length” of the kv-cache grows. This is problematic for two reasons. One is that reallocating (and copying!) the kv-cache every time the cache grows is simply expensive. The other one is that this dynamism makes it harder to reduce the overhead, as we are no longer able to leverage approaches like cudagraphs.&lt;/p&gt;
+
+&lt;p&gt;To resolve this, we use a&lt;a href=&quot;https://github.com/pytorch-labs/gpt-fast/blob/0afae1ace441ce4c5d02ef11a72da28cf7ca4795/generate.py#L154&quot;&gt; “static” kv-cache&lt;/a&gt;, which means that we statically allocate the maximum size of the kv-cache, and then mask out the unused values in the attention portion of the computation.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-generative-ai-2/image2.png&quot; alt=&quot;code&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;The second obstacle is the prefill phase. Transformer text generation is best thought of as a two phase process: 1. The prefill where the entire prompt is processed, and 2. Decoding where each token is generated autoregressively.&lt;/p&gt;
+
+&lt;p&gt;Although decoding can be made entirely static once the kv-cache is made static, the prefill stage still requires significantly more dynamism, due to having a variable prompt length. Thus, we actually need to compile the two stages with separate compilation strategies.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-generative-ai-2/image9.png&quot; alt=&quot;compile&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Although these details are a bit tricky, the actual implementation is not very difficult at all (see gpt-fast)! And the performance boost is dramatic.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-generative-ai-2/image28.png&quot; alt=&quot;chart&quot; style=&quot;width:100%;display: block;max-width:600px; margin-left:auto; margin-right:auto;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;All of a sudden, our performance improves by more than 4x! Such performance gains are often common when one’s workload is overhead bound.&lt;/p&gt;
+
+&lt;h2 id=&quot;sidenote-how-is-torchcompile-helping&quot;&gt;Sidenote: How is torch.compile helping?&lt;/h2&gt;
+
+&lt;p&gt;It is worth disentangling how exactly torch.compile is improving performance. There’s 2 main factors leading to torch.compile’s performance.&lt;/p&gt;
+
+&lt;p&gt;The first factor, like mentioned above, is overhead reduction. Torch.compile is able to reduce overhead through a variety of optimizations, but one of the most effective ones is called &lt;a href=&quot;https://pytorch.org/blog/accelerating-pytorch-with-cuda-graphs/&quot;&gt;CUDAGraphs&lt;/a&gt;. Although torch.compile applies this automatically for you when “reduce-overhead” is set, saving the extra work and code you need to write when doing this yourself manually  without torch.compile.&lt;/p&gt;
+
+&lt;p&gt;The second factor, however, is that torch.compile simply generates faster kernels. In the decoding benchmark above, torch.compile actually generates every single kernel from scratch, including both the matrix multiplications and the attention! And even cooler, these kernels are actually faster than the built in alternatives (CuBLAS and FlashAttention2)!&lt;/p&gt;
+
+&lt;p&gt;This may sound implausible to many of you, considering how hard it is to write efficient matrix multiplication/attention kernels, and how much manpower has been put into CuBLAS and FlashAttention. The key here, however, is that transformer decoding has very unusual computational properties. In particular, because of the KV-cache, for BS=1 &lt;em&gt;every single matrix multiplication in a transformer is actually a matrix vector multiplication&lt;/em&gt;.&lt;/p&gt;
+
+&lt;p&gt;This means that the computations are completely &lt;em&gt;memory-bandwidth bound&lt;/em&gt;, and as such, are well within the range of compilers to automatically generate. And in fact, when we benchmark torch.compile’s matrix-vector multiplications against CuBLAS, we find that torch.compile’s kernels are actually quite a bit faster!&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-generative-ai-2/image24.png&quot; alt=&quot;code&quot; style=&quot;width:100%;display: block;max-width:600px; margin-left:auto; margin-right:auto;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-generative-ai-2/image17.png&quot; alt=&quot;code&quot; style=&quot;width:100%;display: block;max-width:600px; margin-left:auto; margin-right:auto;&quot; /&gt;&lt;/p&gt;
+
+&lt;h2 id=&quot;step-2-alleviating-memory-bandwidth-bottleneck-through-int8-weight-only-quantization-1574-toks&quot;&gt;Step 2: Alleviating memory bandwidth bottleneck through int8 weight-only quantization (157.4 tok/s)&lt;/h2&gt;
+
+&lt;p&gt;So, given that we’ve already seen massive speedups from applying torch.compile, is it possible to do even better? One way to think about this problem is to compute how close we are to the theoretical peak. In this case, the largest bottleneck is the cost of loading the weights from GPU global memory to registers. In other words, each forward pass requires us to “touch” every single parameter on the GPU. So, how fast can we theoretically “touch” every single parameter in a model?&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-generative-ai-2/image11.png&quot; alt=&quot;weights&quot; style=&quot;width:100%;display: block;max-width:500px; margin-left:auto; margin-right:auto;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;To measure this, we can use &lt;strong&gt;Model Bandwidth Utilization (MBU).&lt;/strong&gt; This measures what percentage of our memory bandwidth we’re able to use during inference.&lt;/p&gt;
+
+&lt;p&gt;Computing it is pretty simple. We simply take the total size of our model (# params * bytes per param) and multiply it by the number of inferences we can do per second. Then, we divide this by the peak bandwidth of the GPU to get our MBU.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-generative-ai-2/image8.png&quot; alt=&quot;MBU&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;For example, for our above case, we have a 7B parameter model. Each parameter is stored in fp16 (2 bytes per parameter), and we achieved 107 tokens/s. Finally, our A100-80GB has a theoretical 2 TB/s of memory bandwidth.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-generative-ai-2/image25.png&quot; alt=&quot;MBU&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Putting this all together, we get **72% MBU! **This is quite good, considering that even just copying memory struggles to break 85%.&lt;/p&gt;
+
+&lt;p&gt;But… it does mean that we’re pretty close to the theoretical limit here, and that we’re clearly bottlenecked on just loading our weights from memory. It doesn’t matter what we do - without changing the problem statement in some manner, we might only be able to eek out another 10% in performance.&lt;/p&gt;
+
+&lt;p&gt;Let’s take another look at the above equation. We can’t really change the number of parameters in our model. We can’t really change the memory bandwidth of our GPU (well, without paying more money). But, we &lt;strong&gt;can&lt;/strong&gt; change how many bytes each parameter is stored in!&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-generative-ai-2/image18.png&quot; alt=&quot;MBU&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Thus, we arrive at our next technique - int8 quantization. The idea here is simple. If loading our weights from memory is our main bottleneck, why don’t we just make the weights smaller?&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-generative-ai-2/image7.png&quot; alt=&quot;MBU&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Note that this is quantizing &lt;em&gt;only&lt;/em&gt; the weights - the computation itself is still done in bf16. This makes this form of quantization easy to apply with very little to no accuracy degradation.&lt;/p&gt;
+
+&lt;p&gt;Moreover, torch.compile can also easily generate efficient code for int8 quantization. Let’s look again at the above benchmark, this time with int8 weight-only quantization included.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-generative-ai-2/image1.png&quot; alt=&quot;code&quot; style=&quot;width:100%;display: block;max-width:600px; margin-left:auto; margin-right:auto;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-generative-ai-2/image27.png&quot; alt=&quot;code&quot; style=&quot;width:100%;display: block;max-width:600px; margin-left:auto; margin-right:auto;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;As you can see from the dark blue line (torch.compile + int8), there is a significant performance improvement when using torch.compile + int8 weight-only quantization! Moreover, the light-blue line (no torch.compile + int8) is actually much worse than even the fp16 performance! This is because in order to take advantage of the perf benefits of int8 quantization, we need the kernels to be fused. This shows one of the benefits of torch.compile - these kernels can be automatically generated for the user!&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://github.com/pytorch-labs/gpt-fast/blob/main/quantize.py#L314&quot;&gt;Applying int8 quantization to our model&lt;/a&gt;, we see a nice 50% performance improvement, bringing us up to 157.4 tokens/s!&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-generative-ai-2/image19.png&quot; alt=&quot;chart&quot; style=&quot;width:100%;display: block;max-width:600px; margin-left:auto; margin-right:auto;&quot; /&gt;&lt;/p&gt;
+
+&lt;h2 id=&quot;step-3-reframing-the-problem-using-speculative-decoding&quot;&gt;Step 3: Reframing the problem using speculative decoding&lt;/h2&gt;
+
+&lt;p&gt;Even after using techniques like quantization, we’re still faced with another problem. In order to generate 100 tokens, we must load our weights 100 times.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-generative-ai-2/image5.png&quot; alt=&quot;diagram&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Even if the weights are quantized, we still must load our weights over and over, once for each token we generate! Is there any way around this?&lt;/p&gt;
+
+&lt;p&gt;At first glance, the answer might seem like no - there’s a strict serial dependency in our autoregressive generation. However, as it turns out, by utilizing &lt;a href=&quot;https://arxiv.org/abs/2211.17192&quot;&gt;speculative decoding&lt;/a&gt;, we’re able to break this strict serial dependency and obtain speedups!&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-generative-ai-2/image21.png&quot; alt=&quot;engineers&quot; style=&quot;width:100%;display: block;max-width:600px; margin-left:auto; margin-right:auto;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Imagine you had a senior engineer (called Verity), who makes the right technical decisions but is rather slow at writing code. However, you also have a junior engineer (called Drake), who doesn’t always make the right technical decisions but can write code much faster (and cheaper!) than Verity. How can we take advantage of Drake (the junior engineer) to write code faster while ensuring that we are still making the right technical decisions?&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-generative-ai-2/image6.png&quot; alt=&quot;engineers&quot; style=&quot;width:100%;display: block;max-width:600px; margin-left:auto; margin-right:auto;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;First, Drake goes through the labor-intensive process of writing the code, making technical decisions along the way. Next, we give the code to Verity to review.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-generative-ai-2/image15.png&quot; alt=&quot;engineers&quot; style=&quot;width:100%;display: block;max-width:600px; margin-left:auto; margin-right:auto;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Upon reviewing the code, Verity might decide that the first 3 technical decisions Drake made are correct, but the last 2 need to be redone. So, Drake goes back, throws away his last 2 decisions, and restarts coding from there.&lt;/p&gt;
+
+&lt;p&gt;Notably, although Verity (the senior engineer) has only looked at the code once, we are able to generate 3 pieces of validated code identical to what she would have written! Thus, assuming Verity is able to review the code faster than it would have taken her to write those 3 pieces herself, this approach comes out ahead.&lt;/p&gt;
+
+&lt;p&gt;In the context of transformer inference, Verity would be played by the role of the larger model whose outputs we want for our task, called the &lt;strong&gt;verifier model&lt;/strong&gt;. Similarly, Drake would be played by a smaller model that’s able to generate text much faster than the larger model, called the &lt;strong&gt;draft model&lt;/strong&gt;. So, we would generate 8 tokens using the draft model, and then process all eight tokens in parallel using the verifier model, throwing out the ones that don’t match.&lt;/p&gt;
+
+&lt;p&gt;Like mentioned above, one crucial property of speculative decoding is that &lt;strong&gt;it does not change the quality of the output&lt;/strong&gt;. As long as the time it takes for generating the tokens using the draft model + verifying the tokens is less than it would have taken to generate those tokens, we come out ahead.&lt;/p&gt;
+
+&lt;p&gt;One of the great things about doing this all in native PyTorch is that this technique is actually really easy to implement! Here’s the &lt;a href=&quot;https://github.com/pytorch-labs/gpt-fast/blob/main/generate.py#L76&quot;&gt;entirety of the implementation&lt;/a&gt;, in about 50 lines of native PyTorch.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-generative-ai-2/image10.png&quot; alt=&quot;code&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Although speculative decoding guarantees that we have mathematically identical results compared to regular generation, it does have the property that the runtime performance varies depending on the generated text, as well as how aligned the draft and verifier model are. For example, when running CodeLlama-34B + CodeLlama-7B, we’re able to obtain a 2x boost in tokens/s for generating code. On the other hand, when using Llama-7B + TinyLlama-1B, we’re only able to obtain about a 1.3x boost in tokens/s.&lt;/p&gt;
+
+&lt;h2 id=&quot;sidenote-running-this-on-amd&quot;&gt;Sidenote: Running this on AMD&lt;/h2&gt;
+
+&lt;p&gt;Like mentioned above, every single kernel in decoding is generated from scratch by torch.compile, and is converted into OpenAI Triton. As AMD has a &lt;a href=&quot;https://pytorch.org/blog/experience-power-pytorch-2.0/&quot;&gt;torch.compile backend&lt;/a&gt; (and also a Triton backend), we can simply go through all of the optimizations above… but on an AMD GPU! With int8 quantization, we’re able to achieve 102.5 tokens/s with one GCD (i.e. one half) of a MI250x!&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-generative-ai-2/image4.png&quot; alt=&quot;chart&quot; style=&quot;width:100%;display: block;max-width:600px; margin-left:auto; margin-right:auto;&quot; /&gt;&lt;/p&gt;
+
+&lt;h2 id=&quot;step-4-reducing-the-size-of-the-weights-even-more-with-int4-quantization-and-gptq-2021-toks&quot;&gt;Step 4: Reducing the size of the weights even more with int4 quantization and GPTQ (202.1 tok/s)&lt;/h2&gt;
+
+&lt;p&gt;Of course, if reducing the weights down from 16 bits to 8 bits allows for speedups by reducing the number of bytes we need to load, reducing the weights down to 4 bits would result in even larger speedups!&lt;/p&gt;
+
+&lt;p&gt;Unfortunately, when reducing weights down to 4-bits, the accuracy of the model starts to become a much larger concern. From our preliminary evals, we see that although using int8 weight-only quantization has no perceptible accuracy degradation, using int4 weight-only quantization does.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-generative-ai-2/image13.png&quot; alt=&quot;table&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;There are 2 main tricks we can use to limit the accuracy degradation of int4 quantization.&lt;/p&gt;
+
+&lt;p&gt;The first one is to have a more granular scaling factor. One way to think about the scaling factor is that when we have a quantized tensor representation, it is on a sliding scale between a floating point tensor (each value has a scaling factor) and an integer tensor (no values have a scaling factor). For example, with int8 quantization, we had one scaling factor per row. If we want higher accuracy, however, we can change that to “one scaling factor per 32 elements”. We choose a group size of 32 to minimize accuracy degradation, and this is also a common choice among the community.&lt;/p&gt;
+
+&lt;p&gt;The other one is to use a more advanced quantization strategy than simply rounding the weights. For example, approaches like &lt;a href=&quot;https://arxiv.org/abs/2210.17323&quot;&gt;GPTQ&lt;/a&gt; leverage example data in order to calibrate the weights more accurately. In this case, we prototype an implementation of GPTQ in the repository based off of PyTorch’s recently released &lt;a href=&quot;https://pytorch.org/tutorials/intermediate/torch_export_tutorial.html&quot;&gt;torch.export&lt;/a&gt;.&lt;/p&gt;
+
+&lt;p&gt;In addition, we need kernels that fuse int4 dequantize with the matrix vector multiplication. In this case, torch.compile is unfortunately not able to generate these kernels from scratch, so we leverage some handwritten CUDA kernels in PyTorch.&lt;/p&gt;
+
+&lt;p&gt;These techniques require some additional work, but putting them all together results in even better performance!&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-generative-ai-2/image12.png&quot; alt=&quot;chart&quot; style=&quot;width:100%;display: block;max-width:600px; margin-left:auto; margin-right:auto;&quot; /&gt;&lt;/p&gt;
+
+&lt;h2 id=&quot;step-5-combining-everything-together-2447-toks&quot;&gt;Step 5: Combining everything together (244.7 tok/s)&lt;/h2&gt;
+
+&lt;p&gt;Finally, we can compose all of the techniques together to achieve even better performance!&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-generative-ai-2/image22.png&quot; alt=&quot;chart&quot; style=&quot;width:100%;display: block;max-width:600px; margin-left:auto; margin-right:auto;&quot; /&gt;&lt;/p&gt;
+
+&lt;h2 id=&quot;step-6-using-tensor-parallelism&quot;&gt;Step 6: Using Tensor Parallelism&lt;/h2&gt;
+
+&lt;p&gt;So far, we’ve been restricting ourselves to minimizing latency while on a single GPU. In many settings, however, we have access to multiple GPUs. This allows us to improve our latency further!&lt;/p&gt;
+
+&lt;p&gt;To get an intuitive sense of why this would allow us to improve our latency, let’s take a look at the prior equation for MBU, particularly the denominator. Running on multiple GPUs gives us access to more memory bandwidth, and thus, higher potential performance.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-generative-ai-2/image8.png&quot; alt=&quot;MBU&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;As for which parallelism strategy to pick, note that in order to reduce our latency for one example, we need to be able to leverage our memory bandwidth across more devices simultaneously. This means that we need to split the processing of one token across multiple devices. In other words, we need to use tensor parallelism.&lt;/p&gt;
+
+&lt;p&gt;Luckily, PyTorch also provides low-level tools for tensor-parallelism that compose with torch.compile. We are also working on higher-level APIs for expressing tensor parallelism, stay tuned for those!&lt;/p&gt;
+
+&lt;p&gt;However, even without a higher-level API, it’s actually still quite easy to add tensor parallelism. Our implementation comes in at &lt;a href=&quot;https://github.com/pytorch-labs/gpt-fast/blob/main/tp.py&quot;&gt;150 lines of code&lt;/a&gt;, and doesn’t require any model changes.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-generative-ai-2/image20.png&quot; alt=&quot;code&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;We are still able to take advantage of all the optimizations mentioned previously, which all can continue to compose with tensor parallelism. Combining these together, we’re able to serve Llama-70B at 55 tokens/s with int8 quantization!&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-generative-ai-2/image26.png&quot; alt=&quot;chart&quot; style=&quot;width:100%;display: block;max-width:600px; margin-left:auto; margin-right:auto;&quot; /&gt;&lt;/p&gt;
+
+&lt;h2 id=&quot;conclusion&quot;&gt;Conclusion&lt;/h2&gt;
+
+&lt;p&gt;Let’s take a look at what we’re able to accomplish.&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;Simplicity: Ignoring quantization, &lt;a href=&quot;https://github.com/pytorch-labs/gpt-fast/blob/main/model.py&quot;&gt;model.py&lt;/a&gt; (244 LOC) + &lt;a href=&quot;https://github.com/pytorch-labs/gpt-fast/blob/main/generate.py&quot;&gt;generate.py&lt;/a&gt; (371 LOC) + &lt;a href=&quot;https://github.com/pytorch-labs/gpt-fast/blob/main/tp.py&quot;&gt;tp.py&lt;/a&gt; (151 LOC) comes out to 766 LOC to implement fast inference + speculative decoding + tensor-parallelism.&lt;/li&gt;
+  &lt;li&gt;Performance: With Llama-7B, we’re able to use compile + int4 quant + speculative decoding to reach 241 tok/s. With llama-70B, we’re able to also throw in tensor-parallelism to reach 80 tok/s. These are both close to or surpassing SOTA performance numbers!&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;PyTorch has always allowed for simplicity, ease of use, and flexibility. However, with torch.compile, we can throw in performance as well.&lt;/p&gt;
+
+&lt;p&gt;The code can be found here: &lt;a href=&quot;https://github.com/pytorch-labs/gpt-fast&quot;&gt;https://github.com/pytorch-labs/gpt-fast&lt;/a&gt;. We hope that the community finds it useful. Our goal with this repo is not to provide another library or framework for people to import. Instead, we encourage users to copy-paste, fork, and modify the code in the repo.&lt;/p&gt;
+
+&lt;h2 id=&quot;acknowledgements&quot;&gt;Acknowledgements&lt;/h2&gt;
+
+&lt;p&gt;We would like to thank the vibrant open source community for their continual support of scaling LLMs, including:&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;Lightning AI for supporting pytorch and work in flash attention, int8 quantization, and LoRA fine-tuning.&lt;/li&gt;
+  &lt;li&gt;GGML for driving forward fast, on device inference of LLMs&lt;/li&gt;
+  &lt;li&gt;Andrej Karpathy for spearheading simple, interpretable and fast LLM implementations&lt;/li&gt;
+  &lt;li&gt;MLC-LLM for pushing 4-bit quantization performance on heterogenous hardware&lt;/li&gt;
+&lt;/ul&gt;</content>
+
+      
+      
+      
+      
+      
+
+      <author>
+          <name>Facebook</name>
+        
+        
+      </author>
+
+      
+
+      
+
+      
+        <summary type="html">This post is the second part of a multi-series blog focused on how to accelerate generative AI models with pure, native PyTorch. We are excited to share a breadth of newly released PyTorch performance features alongside practical examples to see how far we can push PyTorch native performance. In part one, we showed how to accelerate Segment Anything over 8x using only pure, native PyTorch. In this blog we’ll focus on LLM optimization.</summary>
+      
+
+      
+      
+    </entry>
   
     <entry>
       <title type="html">PyTorch 2.1 Contains New Performance Features for AI Developers</title>
@@ -2215,64 +2491,6 @@ data ecosystem.&lt;/p&gt;</content>
 
       
         <summary type="html">Today, the PyTorch Foundation, a neutral home for the deep learning community to collaborate on the open source PyTorch framework and ecosystem, announced that Huawei has joined as a premier member.</summary>
-      
-
-      
-      
-    </entry>
-  
-    <entry>
-      <title type="html">Lightning AI Joins the PyTorch Foundation as a Premier Member</title>
-      <link href="https://pytorch.org/blog/lightning-ai-joins-pytorch/" rel="alternate" type="text/html" title="Lightning AI Joins the PyTorch Foundation as a Premier Member" />
-      <published>2023-10-17T00:00:00-07:00</published>
-      <updated>2023-10-17T00:00:00-07:00</updated>
-      <id>https://pytorch.org/blog/lightning-ai-joins-pytorch</id>
-      <content type="html" xml:base="https://pytorch.org/blog/lightning-ai-joins-pytorch/">&lt;p&gt;The PyTorch Foundation, a neutral home for the deep learning community to collaborate on the open source PyTorch framework and ecosystem, is announcing today that Lightning AI has joined as a premier member.&lt;/p&gt;
-
-&lt;p&gt;Lightning AI is the company behind PyTorch Lightning, the platform and open-source framework for companies to build and deploy AI products leveraging the latest generative AI models.&lt;/p&gt;
-
-&lt;p&gt;“This is a very important milestone for Lightning AI and the PyTorch Lightning community,” remarks Luca Antiga, Chief Technology Officer of Lightning AI. “By joining the PyTorch Foundation, we are strengthening our commitment to boost the adoption of PyTorch across industries. We look forward to partnering with the Foundation to push the vision of PyTorch forward.”&lt;/p&gt;
-
-&lt;p&gt;PyTorch Lightning is one of the leading projects in the PyTorch ecosystem, allowing developers to build, train, fine-tune and deploy AI models at scale. PyTorch Lightning is helping drive the rapid adoption of PyTorch by both the research community and the enterprise.&lt;/p&gt;
-
-&lt;p&gt;“Lightning AI has been a great steward of the AI community, and notably a key contributor to PyTorch over the years,” said PyTorch Foundation Executive Director Ibrahim Haddad. “Their goal of making AI research scalable directly aligns with our mission at the foundation.”&lt;/p&gt;
-
-&lt;p&gt;As a premier member, Lightning AI is granted one seat to the PyTorch Foundation Governing Board. The Board sets policy through our bylaws, mission and vision statements, describing the overarching scope of foundation initiatives, technical vision, and direction.&lt;/p&gt;
-
-&lt;p&gt;We’re happy to welcome Luca Antiga, Chief Technology Officer at Lightning AI, to our board. Luca joined the Lightning AI team in April 2021 when the Tensorwerk team joined Grid AI. Prior to joining Lightning AI, Luca co-founded Orobix, an applied AI company, and Tensorwerk. He was an early core contributor to PyTorch and co-authored Deep Learning with PyTorch (Manning).&lt;/p&gt;
-
-&lt;p&gt;To learn more about how you can be a part of the PyTorch Foundation, visit our &lt;a href=&quot;https://pytorch.org/foundation&quot;&gt;website&lt;/a&gt;.&lt;/p&gt;
-
-&lt;h2 id=&quot;about-lightning-ai&quot;&gt;About Lightning AI&lt;/h2&gt;
-
-&lt;p&gt;Lightning AI is the creator of PyTorch Lightning, the deep learning platform and open-source framework of choice for developers and companies seeking to build and deploy AI products.&lt;/p&gt;
-
-&lt;h2 id=&quot;about-pytorch-foundation&quot;&gt;About PyTorch Foundation&lt;/h2&gt;
-
-&lt;p&gt;The PyTorch Foundation is a neutral home for the deep learning community to collaborate on the open source PyTorch framework and ecosystem. The PyTorch Foundation is supported by its members and leading contributors to the PyTorch open source project. The Foundation leverages resources provided by members and contributors to enable community discussions and collaboration.&lt;/p&gt;
-
-&lt;h2 id=&quot;about-the-linux-foundation&quot;&gt;About The Linux Foundation&lt;/h2&gt;
-
-&lt;p&gt;The Linux Foundation is the world’s leading home for collaboration on open source software, hardware, standards, and data. Linux Foundation projects are critical to the world’s infrastructure including Linux, Kubernetes, Node.js, ONAP, PyTorch, RISC-V, SPDX, OpenChain, and more. The Linux Foundation focuses on leveraging best practices and addressing the needs of contributors, users, and solution providers to create sustainable models for open collaboration. For more information, please visit us at linuxfoundation.org. The Linux Foundation has registered trademarks and uses trademarks. For a list of trademarks of The Linux Foundation, please see its &lt;a href=&quot;https://www.linuxfoundation.org/legal/trademark-usage&quot;&gt;trademark usage page&lt;/a&gt;. Linux is a registered trademark of Linus Torvalds.&lt;/p&gt;</content>
-
-      
-      
-      
-      
-      
-
-      <author>
-          <name>Facebook</name>
-        
-        
-      </author>
-
-      
-
-      
-
-      
-        <summary type="html">The PyTorch Foundation, a neutral home for the deep learning community to collaborate on the open source PyTorch framework and ecosystem, is announcing today that Lightning AI has joined as a premier member.</summary>
       
 
       
