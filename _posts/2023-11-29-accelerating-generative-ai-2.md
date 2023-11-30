@@ -1,6 +1,7 @@
 ---
 layout: blog_detail
 title: "Accelerating Generative AI with PyTorch II: GPT, Fast"
+featured-img: 'assets/images/accelerating-generative-ai-2/social-share.jpg'
 ---
 
 This post is the second part of a multi-series blog focused on how to accelerate generative AI models with pure, native PyTorch. We are excited to share a breadth of newly released PyTorch performance features alongside practical examples to see how far we can push PyTorch native performance. In part one, we showed how to accelerate [Segment Anything over 8x](https://pytorch.org/blog/accelerating-generative-ai/) using only pure, native PyTorch. In this blog we’ll focus on LLM optimization.
