@@ -242,7 +242,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href='https://pytorch.org/docs/versions.html'>main (2.2.0a0+gitb8ce054 ) &#x25BC</a>
+      <a href='https://pytorch.org/docs/versions.html'>main (2.2.0a0+gitae53658 ) &#x25BC</a>
     </div>
     
 
@@ -355,6 +355,8 @@
 <li class="toctree-l1"><a class="reference internal" href="../../package.html">torch.package</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../profiler.html">torch.profiler</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../nn.init.html">torch.nn.init</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../nn.attention.bias.html">torch.nn.attention.bias</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../nn.attention.bias.html#causalbias">CausalBias</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../onnx.html">torch.onnx</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../optim.html">torch.optim</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../complex_numbers.html">Complex Numbers</a></li>
@@ -479,10 +481,10 @@
 <span class="kn">import</span> <span class="nn">dataclasses</span>
 <span class="kn">import</span> <span class="nn">inspect</span>
 <span class="kn">import</span> <span class="nn">io</span>
-<span class="kn">import</span> <span class="nn">math</span>
 <span class="kn">import</span> <span class="nn">pathlib</span>
 <span class="kn">import</span> <span class="nn">sys</span>
 <span class="kn">import</span> <span class="nn">typing</span>
+<span class="kn">import</span> <span class="nn">warnings</span>
 <span class="kn">from</span> <span class="nn">enum</span> <span class="kn">import</span> <span class="n">auto</span><span class="p">,</span> <span class="n">Enum</span>
 <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">Any</span><span class="p">,</span>
@@ -535,288 +537,12 @@
 <span class="p">]</span>
 
 
+<span class="kn">from</span> <span class="nn">.dynamic_shapes</span> <span class="kn">import</span> <span class="n">Constraint</span><span class="p">,</span> <span class="n">Dim</span><span class="p">,</span> <span class="n">dims</span><span class="p">,</span> <span class="n">dynamic_dim</span>
 <span class="kn">from</span> <span class="nn">.exported_program</span> <span class="kn">import</span> <span class="n">ExportedProgram</span><span class="p">,</span> <span class="n">ModuleCallEntry</span><span class="p">,</span> <span class="n">ModuleCallSignature</span>
 <span class="kn">from</span> <span class="nn">.graph_signature</span> <span class="kn">import</span> <span class="n">ExportBackwardSignature</span><span class="p">,</span> <span class="n">ExportGraphSignature</span>
 
 
 <span class="n">PassType</span> <span class="o">=</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">torch</span><span class="o">.</span><span class="n">fx</span><span class="o">.</span><span class="n">GraphModule</span><span class="p">],</span> <span class="n">Optional</span><span class="p">[</span><span class="n">PassResult</span><span class="p">]]</span>
-
-
-<span class="nd">@dataclasses</span><span class="o">.</span><span class="n">dataclass</span>
-<span class="k">class</span> <span class="nc">_ConstraintTarget</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    This represents input tensor dimensions.  Don&#39;t create this</span>
-<span class="sd">    class directly; instead, use :func:`dynamic_dim`.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-
-    <span class="n">w_tensor</span><span class="p">:</span> <span class="n">Any</span>  <span class="c1"># weakref to torch.Tensor</span>
-    <span class="c1"># TODO: We don&#39;t need t_id; we can get it off of w_tensor</span>
-    <span class="n">t_id</span><span class="p">:</span> <span class="nb">int</span>
-    <span class="n">dim</span><span class="p">:</span> <span class="nb">int</span>
-
-
-<span class="k">class</span> <span class="nc">_ConstraintFactory</span><span class="p">(</span><span class="nb">type</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Metaclass that ensures a private constructor for :class:`Constraint`</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-
-    <span class="k">def</span> <span class="fm">__call__</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
-        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
-            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">cls</span><span class="o">.</span><span class="vm">__module__</span><span class="si">}</span><span class="s2">.</span><span class="si">{</span><span class="bp">cls</span><span class="o">.</span><span class="vm">__qualname__</span><span class="si">}</span><span class="s2"> has no public constructor. &quot;</span>
-            <span class="sa">f</span><span class="s2">&quot;Please use torch.export.dynamic_dim() to create one&quot;</span>
-        <span class="p">)</span>
-
-    <span class="k">def</span> <span class="nf">_create</span><span class="p">(</span>
-        <span class="bp">cls</span><span class="p">,</span> <span class="n">w_tensor</span><span class="p">,</span> <span class="n">t_id</span><span class="p">,</span> <span class="n">dim</span><span class="p">,</span> <span class="n">constraint_range</span><span class="p">,</span> <span class="n">shared</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">debug_name</span><span class="o">=</span><span class="kc">None</span>
-    <span class="p">):</span>
-        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__call__</span><span class="p">(</span>
-            <span class="n">w_tensor</span><span class="p">,</span> <span class="n">t_id</span><span class="p">,</span> <span class="n">dim</span><span class="p">,</span> <span class="n">constraint_range</span><span class="p">,</span> <span class="n">shared</span><span class="p">,</span> <span class="n">debug_name</span>
-        <span class="p">)</span>
-
-
-<span class="k">def</span> <span class="nf">_create_constraint</span><span class="p">(</span>
-    <span class="n">w_tensor</span><span class="p">,</span> <span class="n">t_id</span><span class="p">,</span> <span class="n">dim</span><span class="p">,</span> <span class="n">constraint_range</span><span class="p">,</span> <span class="n">shared</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">debug_name</span><span class="o">=</span><span class="kc">None</span>
-<span class="p">):</span>
-    <span class="k">return</span> <span class="n">Constraint</span><span class="o">.</span><span class="n">_create</span><span class="p">(</span><span class="n">w_tensor</span><span class="p">,</span> <span class="n">t_id</span><span class="p">,</span> <span class="n">dim</span><span class="p">,</span> <span class="n">constraint_range</span><span class="p">,</span> <span class="n">shared</span><span class="p">,</span> <span class="n">debug_name</span><span class="p">)</span>
-
-
-<div class="viewcode-block" id="Constraint"><a class="viewcode-back" href="../../export.html#torch.export.Constraint">[docs]</a><span class="nd">@dataclasses</span><span class="o">.</span><span class="n">dataclass</span>
-<span class="k">class</span> <span class="nc">Constraint</span><span class="p">(</span><span class="n">_ConstraintTarget</span><span class="p">,</span> <span class="n">metaclass</span><span class="o">=</span><span class="n">_ConstraintFactory</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-
-<span class="sd">    .. warning::</span>
-<span class="sd">        Do not construct :class:`Constraint` directly, use :func:`dynamic_dim` instead.</span>
-
-<span class="sd">    This represents constraints on input tensor dimensions, e.g., requiring</span>
-<span class="sd">    them to be fully polymorphic or within some range.</span>
-
-<span class="sd">    &quot;&quot;&quot;</span>
-
-    <span class="c1"># NOTE(avik): In the future, this could be Union[StrictMinMaxConstraint, &lt;other kinds&gt;]</span>
-    <span class="n">constraint_range</span><span class="p">:</span> <span class="s2">&quot;StrictMinMaxConstraint&quot;</span>
-    <span class="c1"># Represent that `constraint_range` is shared with another _ConstraintTarget, which</span>
-    <span class="c1"># typically arises because of a specified equality with another dynamic dimension.</span>
-    <span class="n">shared</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">_ConstraintTarget</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="n">debug_name</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
-
-    <span class="k">def</span> <span class="nf">_clone_with_range</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">lower</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">upper</span><span class="o">=</span><span class="n">math</span><span class="o">.</span><span class="n">inf</span><span class="p">):</span>
-        <span class="c1"># Import sympy locally</span>
-        <span class="kn">from</span> <span class="nn">torch.fx.experimental.symbolic_shapes</span> <span class="kn">import</span> <span class="n">StrictMinMaxConstraint</span>
-        <span class="kn">from</span> <span class="nn">torch.utils._sympy.value_ranges</span> <span class="kn">import</span> <span class="n">ValueRanges</span>
-
-        <span class="n">constraint_range</span> <span class="o">=</span> <span class="n">StrictMinMaxConstraint</span><span class="p">(</span>
-            <span class="n">vr</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">constraint_range</span><span class="o">.</span><span class="n">vr</span> <span class="o">&amp;</span> <span class="n">ValueRanges</span><span class="p">(</span><span class="n">lower</span><span class="o">=</span><span class="n">lower</span><span class="p">,</span> <span class="n">upper</span><span class="o">=</span><span class="n">upper</span><span class="p">),</span>
-            <span class="n">warn_only</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-        <span class="p">)</span>
-        <span class="k">return</span> <span class="n">_create_constraint</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">w_tensor</span><span class="p">,</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">t_id</span><span class="p">,</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">dim</span><span class="p">,</span>
-            <span class="n">constraint_range</span><span class="p">,</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">shared</span><span class="p">,</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">debug_name</span><span class="p">,</span>
-        <span class="p">)</span>
-
-    <span class="k">def</span> <span class="fm">__ge__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">lower</span><span class="p">):</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_clone_with_range</span><span class="p">(</span><span class="n">lower</span><span class="o">=</span><span class="n">lower</span><span class="p">)</span>
-
-    <span class="k">def</span> <span class="fm">__gt__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">lower</span><span class="p">):</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_clone_with_range</span><span class="p">(</span><span class="n">lower</span><span class="o">=</span><span class="n">lower</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
-
-    <span class="k">def</span> <span class="fm">__le__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">upper</span><span class="p">):</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_clone_with_range</span><span class="p">(</span><span class="n">upper</span><span class="o">=</span><span class="n">upper</span><span class="p">)</span>
-
-    <span class="k">def</span> <span class="fm">__lt__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">upper</span><span class="p">):</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_clone_with_range</span><span class="p">(</span><span class="n">upper</span><span class="o">=</span><span class="n">upper</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
-
-    <span class="k">def</span> <span class="fm">__bool__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="c1"># NOTE(avik): We do not support compound expressions like a &lt;= x &lt;= b.</span>
-        <span class="c1"># This is because Python implicitly desugars them into bool(a &lt;= x) and bool(x &lt;= b),</span>
-        <span class="c1"># and moreover, enforces that any overload of __bool__ must return True or False.</span>
-        <span class="c1"># FWIW, sympy also raises TypeError in this case.</span>
-        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
-            <span class="s2">&quot;Cannot determine truth value of Constraint. &quot;</span>
-            <span class="s2">&quot;If you are trying to combine Constraint&#39;s with logical connectives, &quot;</span>
-            <span class="s2">&quot;you can specify them separately instead.&quot;</span>
-        <span class="p">)</span>
-
-    <span class="nd">@property</span>
-    <span class="k">def</span> <span class="nf">serializable_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="c1"># We need a serialization compatible format of the constraint so that it</span>
-        <span class="c1"># can be savedin the graph module w/o breaking the module serialization.</span>
-        <span class="c1"># The saved constraints will be used directly for the post-exporting pass</span>
-        <span class="c1"># that converts constraints to runtime assertion. The saved constraints</span>
-        <span class="c1"># will not be saved in the serialized module.</span>
-        <span class="c1"># TODO: A better way is needed. Currently we use &#39;t_id&#39; to map the constraint,</span>
-        <span class="c1"># which is not reliable</span>
-        <span class="k">return</span> <span class="p">{</span>
-            <span class="s2">&quot;t_id&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">t_id</span><span class="p">,</span>
-            <span class="s2">&quot;dim&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">dim</span><span class="p">,</span>
-            <span class="s2">&quot;min&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">constraint_range</span><span class="o">.</span><span class="n">vr</span><span class="o">.</span><span class="n">lower</span><span class="p">,</span>
-            <span class="s2">&quot;max&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">constraint_range</span><span class="o">.</span><span class="n">vr</span><span class="o">.</span><span class="n">upper</span><span class="p">,</span>
-            <span class="s2">&quot;shared&quot;</span><span class="p">:</span> <span class="p">(</span>
-                <span class="kc">None</span>
-                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">shared</span> <span class="ow">is</span> <span class="kc">None</span>
-                <span class="k">else</span> <span class="p">{</span>
-                    <span class="s2">&quot;t_id&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">shared</span><span class="o">.</span><span class="n">t_id</span><span class="p">,</span>
-                    <span class="s2">&quot;dim&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">shared</span><span class="o">.</span><span class="n">dim</span><span class="p">,</span>
-                <span class="p">}</span>
-            <span class="p">),</span>
-        <span class="p">}</span>
-
-    <span class="k">def</span> <span class="fm">__eq__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">):</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">other</span><span class="p">,</span> <span class="n">Constraint</span><span class="p">):</span>
-            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
-                <span class="s2">&quot;A dynamic dim can be specified equal only to another dynamic dim. &quot;</span>
-                <span class="sa">f</span><span class="s2">&quot;Equality with </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">other</span><span class="p">)</span><span class="si">}</span><span class="s2"> is not supported.&quot;</span>
-            <span class="p">)</span>
-
-        <span class="c1"># import sympy locally</span>
-        <span class="kn">from</span> <span class="nn">torch.fx.experimental.symbolic_shapes</span> <span class="kn">import</span> <span class="n">StrictMinMaxConstraint</span>
-
-        <span class="n">constraint_range</span> <span class="o">=</span> <span class="n">StrictMinMaxConstraint</span><span class="p">(</span>
-            <span class="n">vr</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">constraint_range</span><span class="o">.</span><span class="n">vr</span> <span class="o">&amp;</span> <span class="n">other</span><span class="o">.</span><span class="n">constraint_range</span><span class="o">.</span><span class="n">vr</span><span class="p">,</span>
-            <span class="n">warn_only</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-        <span class="p">)</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">debug_name</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">debug_name</span> <span class="o">=</span> <span class="n">other</span><span class="o">.</span><span class="n">debug_name</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="k">assert</span> <span class="n">other</span><span class="o">.</span><span class="n">debug_name</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">debug_name</span> <span class="o">==</span> <span class="n">other</span><span class="o">.</span><span class="n">debug_name</span>
-            <span class="n">debug_name</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">debug_name</span>
-        <span class="k">return</span> <span class="n">_create_constraint</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">w_tensor</span><span class="p">,</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">t_id</span><span class="p">,</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">dim</span><span class="p">,</span>
-            <span class="n">constraint_range</span><span class="p">,</span>
-            <span class="n">shared</span><span class="o">=</span><span class="n">_ConstraintTarget</span><span class="p">(</span><span class="n">other</span><span class="o">.</span><span class="n">w_tensor</span><span class="p">,</span> <span class="n">other</span><span class="o">.</span><span class="n">t_id</span><span class="p">,</span> <span class="n">other</span><span class="o">.</span><span class="n">dim</span><span class="p">),</span>
-            <span class="n">debug_name</span><span class="o">=</span><span class="n">debug_name</span><span class="p">,</span>
-        <span class="p">)</span></div>
-
-
-<div class="viewcode-block" id="dynamic_dim"><a class="viewcode-back" href="../../export.html#torch.export.dynamic_dim">[docs]</a><span class="k">def</span> <span class="nf">dynamic_dim</span><span class="p">(</span><span class="n">t</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">index</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    .. warning::</span>
-<span class="sd">        (This feature is DEPRECATED. See :func:`Dim` instead.)</span>
-
-<span class="sd">    :func:`dynamic_dim` constructs a :class:`Constraint` object that describes the dynamism of</span>
-<span class="sd">    a dimension ``index`` of tensor ``t``. :class:`Constraint` objects should be passed to</span>
-<span class="sd">    ``constraints`` argument of :func:`export`.</span>
-
-<span class="sd">    Args:</span>
-<span class="sd">        t (torch.Tensor): Example input tensor that have dynamic dimension size(s)</span>
-<span class="sd">        index (int): Index of dynamic dimension</span>
-
-<span class="sd">    Returns:</span>
-<span class="sd">        A :class:`Constraint` object that describes shape dynamism. It can be passed to :func:`export` so</span>
-<span class="sd">        that :func:`export` does not assume static size of specified tensor, i.e. keeping it dynamic</span>
-<span class="sd">        as a symbolic size rather than specializing according to size of example tracing input.</span>
-
-<span class="sd">    Specifically :func:`dynamic_dim` can be used to express following types of dynamism.</span>
-
-<span class="sd">    - Size of a dimension is dynamic and unbounded::</span>
-
-<span class="sd">        t0 = torch.rand(2, 3)</span>
-<span class="sd">        t1 = torch.rand(3, 4)</span>
-
-<span class="sd">        # First dimension of t0 can be dynamic size rather than always being static size 2</span>
-<span class="sd">        constraints = [dynamic_dim(t0, 0)]</span>
-<span class="sd">        ep = export(fn, (t0, t1), constraints=constraints)</span>
-
-<span class="sd">    - Size of a dimension is dynamic with a lower bound::</span>
-
-<span class="sd">        t0 = torch.rand(10, 3)</span>
-<span class="sd">        t1 = torch.rand(3, 4)</span>
-
-<span class="sd">        # First dimension of t0 can be dynamic size with a lower bound of 5 (inclusive)</span>
-<span class="sd">        # Second dimension of t1 can be dynamic size with a lower bound of 2 (exclusive)</span>
-<span class="sd">        constraints = [</span>
-<span class="sd">            dynamic_dim(t0, 0) &gt;= 5,</span>
-<span class="sd">            dynamic_dim(t1, 1) &gt; 2,</span>
-<span class="sd">        ]</span>
-<span class="sd">        ep = export(fn, (t0, t1), constraints=constraints)</span>
-
-<span class="sd">    - Size of a dimension is dynamic with an upper bound::</span>
-
-<span class="sd">        t0 = torch.rand(10, 3)</span>
-<span class="sd">        t1 = torch.rand(3, 4)</span>
-
-<span class="sd">        # First dimension of t0 can be dynamic size with a upper bound of 16 (inclusive)</span>
-<span class="sd">        # Second dimension of t1 can be dynamic size with a upper bound of 8 (exclusive)</span>
-<span class="sd">        constraints = [</span>
-<span class="sd">            dynamic_dim(t0, 0) &lt;= 16,</span>
-<span class="sd">            dynamic_dim(t1, 1) &lt; 8,</span>
-<span class="sd">        ]</span>
-<span class="sd">        ep = export(fn, (t0, t1), constraints=constraints)</span>
-
-<span class="sd">    - Size of a dimension is dynamic and it is always equal to size of another dynamic dimension::</span>
-
-<span class="sd">        t0 = torch.rand(10, 3)</span>
-<span class="sd">        t1 = torch.rand(3, 4)</span>
-
-<span class="sd">        # Sizes of second dimension of t0 and first dimension are always equal</span>
-<span class="sd">        constraints = [</span>
-<span class="sd">            dynamic_dim(t0, 1) == dynamic_dim(t1, 0),</span>
-<span class="sd">        ]</span>
-<span class="sd">        ep = export(fn, (t0, t1), constraints=constraints)</span>
-
-<span class="sd">    - Mix and match all types above as long as they do not express conflicting requirements</span>
-
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="kn">from</span> <span class="nn">torch._export</span> <span class="kn">import</span> <span class="n">dynamic_dim</span>
-
-    <span class="k">return</span> <span class="n">dynamic_dim</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="n">index</span><span class="p">)</span></div>
-
-
-<span class="k">class</span> <span class="nc">_Dim</span><span class="p">(</span><span class="nb">type</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Metaclass for :func:`Dim` types.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-
-    <span class="nd">@staticmethod</span>
-    <span class="k">def</span> <span class="nf">readable</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">min_</span><span class="p">,</span> <span class="n">max_</span><span class="p">):</span>
-        <span class="k">if</span> <span class="n">min_</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
-            <span class="n">min_</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="k">if</span> <span class="n">max_</span> <span class="o">==</span> <span class="n">sys</span><span class="o">.</span><span class="n">maxsize</span> <span class="o">-</span> <span class="mi">1</span><span class="p">:</span>
-            <span class="n">max_</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="k">if</span> <span class="n">min_</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">max_</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;Dim(&#39;</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">&#39;)&quot;</span>
-        <span class="k">if</span> <span class="n">min_</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;Dim(&#39;</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">&#39;, max=</span><span class="si">{</span><span class="n">max_</span><span class="si">}</span><span class="s2">)&quot;</span>
-        <span class="k">if</span> <span class="n">max_</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;Dim(&#39;</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">&#39;, min=</span><span class="si">{</span><span class="n">min_</span><span class="si">}</span><span class="s2">)&quot;</span>
-        <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;Dim(&#39;</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">&#39;, min=</span><span class="si">{</span><span class="n">min_</span><span class="si">}</span><span class="s2">, max=</span><span class="si">{</span><span class="n">max_</span><span class="si">}</span><span class="s2">)&quot;</span>
-
-
-<div class="viewcode-block" id="Dim"><a class="viewcode-back" href="../../export.html#torch.export.Dim">[docs]</a><span class="k">def</span> <span class="nf">Dim</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="nb">min</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="nb">max</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    :func:`Dim` constructs a type analogous to a named symbolic integer with a range.</span>
-<span class="sd">    It can be used to describe multiple possible values of a dynamic tensor dimension.</span>
-<span class="sd">    Note that different dynamic dimensions of the same tensor, or of different tensors,</span>
-<span class="sd">    can be described by the same type.</span>
-
-<span class="sd">    Args:</span>
-<span class="sd">        name (str): Human-readable name for debugging.</span>
-<span class="sd">        min (Optional[int]): Minimum possible value of given symbol (inclusive)</span>
-<span class="sd">        max (Optional[int]): Maximum possible value of given symbol (inclusive)</span>
-
-<span class="sd">    Returns:</span>
-<span class="sd">        A type that can be used in dynamic shape specifications for tensors.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">_min</span> <span class="o">=</span> <span class="mi">2</span> <span class="k">if</span> <span class="nb">min</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">builtins</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="nb">min</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
-    <span class="n">_max</span> <span class="o">=</span> <span class="n">sys</span><span class="o">.</span><span class="n">maxsize</span> <span class="o">-</span> <span class="mi">1</span> <span class="k">if</span> <span class="nb">max</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">builtins</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="nb">max</span><span class="p">,</span> <span class="n">sys</span><span class="o">.</span><span class="n">maxsize</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
-    <span class="k">assert</span> <span class="n">_max</span> <span class="o">&gt;</span> <span class="n">_min</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;Cannot create Dim with inconsistent min=</span><span class="si">{</span><span class="nb">min</span><span class="si">}</span><span class="s2">, max=</span><span class="si">{</span><span class="nb">max</span><span class="si">}</span><span class="s2">&quot;</span>
-    <span class="n">dim</span> <span class="o">=</span> <span class="n">_Dim</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="p">(</span><span class="nb">int</span><span class="p">,),</span> <span class="p">{</span><span class="s2">&quot;min&quot;</span><span class="p">:</span> <span class="n">_min</span><span class="p">,</span> <span class="s2">&quot;max&quot;</span><span class="p">:</span> <span class="n">_max</span><span class="p">})</span>
-    <span class="n">dim</span><span class="o">.</span><span class="vm">__module__</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span>
-        <span class="n">inspect</span><span class="o">.</span><span class="n">getmodule</span><span class="p">(</span><span class="n">inspect</span><span class="o">.</span><span class="n">stack</span><span class="p">()[</span><span class="mi">1</span><span class="p">][</span><span class="mi">0</span><span class="p">]),</span> <span class="s2">&quot;__name__&quot;</span><span class="p">,</span> <span class="s2">&quot;__main__&quot;</span>
-    <span class="p">)</span>
-    <span class="k">return</span> <span class="n">dim</span></div>
-
-
-<div class="viewcode-block" id="dims"><a class="viewcode-back" href="../../export.html#torch.export.dims">[docs]</a><span class="k">def</span> <span class="nf">dims</span><span class="p">(</span><span class="o">*</span><span class="n">names</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="nb">min</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="nb">max</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Util to create multiple :func:`Dim` types.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">Dim</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="nb">min</span><span class="o">=</span><span class="nb">min</span><span class="p">,</span> <span class="nb">max</span><span class="o">=</span><span class="nb">max</span><span class="p">)</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">names</span><span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="export"><a class="viewcode-back" href="../../export.html#torch.export.export">[docs]</a><span class="k">def</span> <span class="nf">export</span><span class="p">(</span>
@@ -922,27 +648,28 @@
 <span class="sd">      ``OrderedDict`` containing all above types.</span>
 
 <span class="sd">    &quot;&quot;&quot;</span>
-
-    <span class="kn">from</span> <span class="nn">torch._export</span> <span class="kn">import</span> <span class="n">export</span><span class="p">,</span> <span class="n">export__RC__</span>
+    <span class="kn">from</span> <span class="nn">._trace</span> <span class="kn">import</span> <span class="n">_export</span>
+    <span class="kn">from</span> <span class="nn">.dynamic_shapes</span> <span class="kn">import</span> <span class="n">_process_dynamic_shapes</span>
 
     <span class="k">if</span> <span class="n">constraints</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">export</span><span class="p">(</span>
-            <span class="n">f</span><span class="p">,</span>
-            <span class="n">args</span><span class="p">,</span>
-            <span class="n">kwargs</span><span class="p">,</span>
-            <span class="n">constraints</span><span class="p">,</span>
-            <span class="n">strict</span><span class="o">=</span><span class="n">strict</span><span class="p">,</span>
-            <span class="n">preserve_module_call_signature</span><span class="o">=</span><span class="n">preserve_module_call_signature</span><span class="p">,</span>
+        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+            <span class="s2">&quot;Using `constraints` to specify dynamic shapes for export is DEPRECATED &quot;</span>
+            <span class="s2">&quot;and will not be supported in the future. &quot;</span>
+            <span class="s2">&quot;Please use `dynamic_shapes` instead (see docs on `torch.export.export`).&quot;</span><span class="p">,</span>
+            <span class="ne">DeprecationWarning</span><span class="p">,</span>
+            <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
         <span class="p">)</span>
     <span class="k">else</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">export__RC__</span><span class="p">(</span>
-            <span class="n">f</span><span class="p">,</span>
-            <span class="n">args</span><span class="p">,</span>
-            <span class="n">kwargs</span><span class="p">,</span>
-            <span class="n">dynamic_shapes</span><span class="o">=</span><span class="n">dynamic_shapes</span><span class="p">,</span>
-            <span class="n">strict</span><span class="o">=</span><span class="n">strict</span><span class="p">,</span>
-            <span class="n">preserve_module_call_signature</span><span class="o">=</span><span class="n">preserve_module_call_signature</span><span class="p">,</span>
-        <span class="p">)</span></div>
+        <span class="n">constraints</span> <span class="o">=</span> <span class="n">_process_dynamic_shapes</span><span class="p">(</span><span class="n">f</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">,</span> <span class="n">dynamic_shapes</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">_export</span><span class="p">(</span>
+        <span class="n">f</span><span class="p">,</span>
+        <span class="n">args</span><span class="p">,</span>
+        <span class="n">kwargs</span><span class="p">,</span>
+        <span class="n">constraints</span><span class="p">,</span>
+        <span class="n">strict</span><span class="o">=</span><span class="n">strict</span><span class="p">,</span>
+        <span class="n">preserve_module_call_signature</span><span class="o">=</span><span class="n">preserve_module_call_signature</span><span class="p">,</span>
+    <span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="save"><a class="viewcode-back" href="../../export.html#torch.export.save">[docs]</a><span class="k">def</span> <span class="nf">save</span><span class="p">(</span>
