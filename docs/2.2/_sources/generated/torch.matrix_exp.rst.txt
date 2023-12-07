@@ -1,0 +1,6 @@
+﻿torch.matrix\_exp
+=================
+
+.. currentmodule:: torch
+
+.. autofunction:: matrix_exp

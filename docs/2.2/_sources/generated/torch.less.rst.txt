@@ -1,0 +1,6 @@
+﻿torch.less
+==========
+
+.. currentmodule:: torch
+
+.. autofunction:: less
