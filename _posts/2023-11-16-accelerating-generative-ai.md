@@ -263,7 +263,7 @@ Methods for pruning are varied, from completely unstructured, wherein weights ar
 ![dense tensor output that can leverage highly performant, 2:4 GPU kernels](/assets/images/accelerating-generative-ai/sparse_image.png){:style="width:100%;display: block;max-width:600px; margin-left:auto; margin-right:auto;"}
 
 
-From [developer.nvidia.com/blog/exploiting-ampere-structured-sparsity-with-cusparselt](developer.nvidia.com/blog/exploiting-ampere-structured-sparsity-with-cusparselt)
+From [developer.nvidia.com/blog/exploiting-ampere-structured-sparsity-with-cusparselt](https://developer.nvidia.com/blog/exploiting-ampere-structured-sparsity-with-cusparselt)
 
 In order to use this sparse storage format and the associated fast kernels we need to prune our weights such that they adhere to the constraints for the format. We pick the two smallest weights to prune in a 1 by 4 region, measuring the performance vs accuracy tradeoff. It is easy to change a weight from its default PyTorch (“strided”) layout to this new, semi-structured sparse layout. To implement `apply_sparse(model)` we only require 32 lines of Python code:
 
