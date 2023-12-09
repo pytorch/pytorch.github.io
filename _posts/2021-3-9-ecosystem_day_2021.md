@@ -37,8 +37,8 @@ Poster Exhibition & Breakout Sessions - 3:00 pm-6:00 pm PT
  
 2. **Breakout Sessions** are 40-min sessions freely designed by the community. The breakouts can be talks, demos, tutorials or discussions. Note: you must have an accepted poster to apply for the breakout sessions.
 
-Call for posters now open! [Submit your proposal](https://pytorchecosystemday.fbreg.com/posters) today! Please send us the **title** and **summary** of your projects, tools, and libraries that could benefit PyTorch researchers in academia and industry, application developers, and ML engineers for consideration. The focus must be on academic papers, machine learning research, or open-source projects. Please no sales pitches. **Deadline for submission is March 18, 2021.** 
+Call for posters now open! Submit your proposal today! Please send us the **title** and **summary** of your projects, tools, and libraries that could benefit PyTorch researchers in academia and industry, application developers, and ML engineers for consideration. The focus must be on academic papers, machine learning research, or open-source projects. Please no sales pitches. **Deadline for submission is March 18, 2021.** 
 
-Visit [pytorchecosystemday.fbreg.com](http://pytorchecosystemday.fbreg.com) for more information and we look forward to welcoming you to PyTorch Ecosystem Day on April 21st!
+Visit pytorchecosystemday.fbreg.com for more information and we look forward to welcoming you to PyTorch Ecosystem Day on April 21st!
 
 

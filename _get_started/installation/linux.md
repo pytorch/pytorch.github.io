@@ -16,7 +16,7 @@ PyTorch is supported on Linux distributions that use [glibc](https://www.gnu.org
 * [Fedora](https://getfedora.org/), minimum version 24
 * [Mint](https://linuxmint.com/download.php), minimum version 14
 * [OpenSUSE](https://software.opensuse.org/), minimum version 42.1
-* [PCLinuxOS](https://www.pclinuxos.com/get-pclinuxos/), minimum version 2014.7
+* [PCLinuxOS](https://www.pclinuxos.com/), minimum version 2014.7
 * [Slackware](http://www.slackware.com/getslack/), minimum version 14.2
 * [Ubuntu](https://www.ubuntu.com/download/desktop), minimum version 13.04
 

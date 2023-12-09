@@ -74,7 +74,7 @@ Generally, you will be using Amazon Elastic Compute Cloud (or [EC2](https://aws.
 
 In order to use AWS, you need to set up an [AWS account](https://aws.amazon.com/getting-started/){:target="_blank"}, if you do not have one already. You will create a username (your email address), password and an AWS account name (since you can create multiple AWS accounts for different purposes). You will also provide contact and billing information. The billing information is important because while AWS does provide what they call “free-tier” instances, to use PyTorch you will want more powerful, paid instances.
 
-Once you are logged in, you will be brought to your [AWS console](https://aws.amazon.com/console/){:target="_blank"}. You can even learn more about AWS through a set of [simple tutorials](https://aws.amazon.com/getting-started/tutorials/){:target="_blank"}.
+Once you are logged in, you will be brought to your [AWS console](https://aws.amazon.com/console/){:target="_blank"}. You can even learn more about AWS through a set of [simple tutorials](https://aws.amazon.com/getting-started/hands-on/){:target="_blank"}.
 
 ### AWS Inferentia-based instances
 
@@ -90,7 +90,7 @@ Once you are logged in, you will be brought to your [AWS console](https://aws.am
 
 Once you decided upon your instance type, you will need to create, optionally configure and launch your instance. You can connect to your instance from the web browser or a command-line interface. Here are guides for instance launch for various platforms:
 
-* [Linux](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/EC2_GetStarted.html/){:target="_blank"}
+* [Linux](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/EC2_GetStarted.html){:target="_blank"}
 * [Windows](https://docs.aws.amazon.com/AWSEC2/latest/WindowsGuide/EC2_GetStarted.html){:target="_blank"}
 * [Command-line](https://docs.aws.amazon.com/cli/latest/userguide/cli-using-ec2.html){:target="_blank"}
 
