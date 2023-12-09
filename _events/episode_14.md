@@ -5,7 +5,7 @@ guest: Edgar Riba
 company: Kornia
 date: August 17, 2021
 time: 9AM PST
-poster: https://assets.pytorch.org/pted2021/posters/C7.png
+poster: https://s3.amazonaws.com/assets.pytorch.org/pted2021/posters/C7.png
 link: https://www.youtube.com/pytorch
 video: https://www.youtube.com/watch?v=Ge5T6eZ2WY4
 ---
