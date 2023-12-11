@@ -40,8 +40,6 @@ With the scale of models, such as RoBERTa, continuing to increase into the billi
 To learn more about the APIs and the design of this feature, see the links below:
 
 * [API documentation](https://pytorch.org/docs/stable/rpc.html)
-* [Distributed Autograd design doc](https://pytorch.org/docs/stable/notes/distributed_autograd.html)
-* [Remote Reference design doc](https://pytorch.org/docs/stable/notes/rref.html)
 
 For the full tutorials, see the links below:  
 

@@ -202,7 +202,7 @@ Jump to source is ONLY available when Tensorboard is launched within VS Code. St
   <p>Gify: Jump to Source using Visual Studio Code Plug In UI </p>
 </div>
 
-For how to optimize batch size performance, check out the step-by-step tutorial [here](https://opendatascience.com/optimizing-pytorch-performance-batch-size-with-pytorch-profiler/). PyTorch Profiler is also integrated with [PyTorch Lightning](https://pytorch-lightning.readthedocs.io/en/stable/advanced/profiler.html#pytorch-profiling) and you can simply launch your lightning training jobs with --```trainer.profiler=pytorch``` flag to generate the traces. Check out an example [here](https://github.com/PyTorchLightning/pytorch-lightning/blob/master/pl_examples/basic_examples/profiler_example.py).  
+For how to optimize batch size performance, check out the step-by-step tutorial [here](https://opendatascience.com/optimizing-pytorch-performance-batch-size-with-pytorch-profiler/). PyTorch Profiler is also integrated with PyTorch Lightning and you can simply launch your lightning training jobs with --```trainer.profiler=pytorch``` flag to generate the traces. 
 
 ## What’s Next for the PyTorch Profiler?
 You just saw how PyTorch Profiler can help optimize a model. You can now try the Profiler by ```pip install torch-tb-profiler``` to optimize your PyTorch model. 

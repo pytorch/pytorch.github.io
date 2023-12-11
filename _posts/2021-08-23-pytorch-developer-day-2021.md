@@ -22,12 +22,9 @@ Stay up to date by following us on our social channels: [Twitter](https://twitte
 
 On the second day, we’ll be hosting an online poster exhibition on Gather.Town. There will be opportunities to meet the authors and learn more about their PyTorch projects as well as network with the community. This poster and networking event is limited to people composed of PyTorch maintainers and contributors, long-time stakeholders and experts in areas relevant to PyTorch’s future. Conversations from the networking event will strongly shape the future of PyTorch. As such, invitations are required to attend the networking event. 
 
-Apply for an invitation to the networking event by clicking [here](https://pytorchdeveloperday.fbreg.com/).
 
 ## Call for Content Now Open
 
 Submit your poster abstracts today! Please send us the title and brief summary of your project, tools and libraries that could benefit PyTorch researchers in academia and industry, application developers, and ML engineers for consideration. The focus must be on academic papers, machine learning research, or open-source projects related to PyTorch development, Responsible AI or Mobile. Please no sales pitches. **Deadline for submission is September 24, 2021**. 
 
-You can submit your poster abstract during your application & registration process [here](https://pytorchdeveloperday.fbreg.com/apply).
-
-Visit the [event website](https://pytorchdeveloperday.fbreg.com/) for more information and we look forward to having you at PyTorch Developer Day. For any questions about the event, contact [pytorch@fbreg.com](mailto:pytorch@fbreg.com). 
+Visit the event website for more information and we look forward to having you at PyTorch Developer Day.

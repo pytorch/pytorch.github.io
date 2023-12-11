@@ -106,7 +106,7 @@ Users can list all available entrypoints in a repo using the ```torch.hub.list()
  'vgg19_bn']
  ```
 
-Note that PyTorch Hub also allows auxillary entrypoints (other than pretrained models), e.g. ```bertTokenizer``` for preprocessing in the [BERT](https://pytorch.org/hub/huggingface_pytorch-pretrained-bert_bert/) models, to make the user workflow smoother.
+Note that PyTorch Hub also allows auxillary entrypoints (other than pretrained models), e.g. ```bertTokenizer``` for preprocessing in the BERT models, to make the user workflow smoother.
 
 
 ### Load a model
@@ -164,7 +164,7 @@ forward(input_ids, token_type_ids=None, attention_mask=None, masked_lm_labels=No
 ...
 ```
 
-Have a closer look at the [BERT](https://pytorch.org/hub/huggingface_pytorch-pretrained-bert_bert/) and [DeepLabV3](https://pytorch.org/hub/pytorch_vision_deeplabv3_resnet101/) pages, where you can see how these models can be used once loaded.
+Have a closer look at the BERT and [DeepLabV3](https://pytorch.org/hub/pytorch_vision_deeplabv3_resnet101/) pages, where you can see how these models can be used once loaded.
 
 ### Other ways to explore
 
