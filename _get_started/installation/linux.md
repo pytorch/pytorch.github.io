@@ -40,8 +40,6 @@ If you decide to use APT, you can run the following command to install it:
 sudo apt install python
 ```
 
-> It is recommended that you use Python 3.6, 3.7 or 3.8, which can be installed via any of the mechanisms above .
-
 > If you use [Anaconda](#anaconda) to install PyTorch, it will install a sandboxed version of Python that will be used for running PyTorch applications.
 
 ### Package Manager
