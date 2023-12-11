@@ -34,7 +34,7 @@ conda install -c pytorch -c tensorcomp tensor_comprehensions
 
 At this time we only provide Linux-64 binaries which have been tested on Ubuntu 16.04 and CentOS7.
 
-TC depends on heavyweight C++ projects such as [Halide](http://halide-lang.org/), [Tapir-LLVM](https://github.com/wsmoses/Tapir-LLVM) and [ISL](http://isl.gforge.inria.fr/). Hence, we rely on Anaconda to distribute these dependencies reliably. For the same reason, TC is not available via PyPI.
+TC depends on heavyweight C++ projects such as [Halide](http://halide-lang.org/), [Tapir-LLVM](https://github.com/wsmoses/Tapir-LLVM) and ISL. Hence, we rely on Anaconda to distribute these dependencies reliably. For the same reason, TC is not available via PyPI.
 
 #### 2. Import the python package
 
@@ -73,8 +73,6 @@ fcrelu.autotune(I, W1, B1, cache="fcrelu_100_128_100.tc")
 The autotuner is your biggest friend. You generally do not want to use a `tc` function without autotuning it first.
 
 When the autotuning is running, the current best performance is displayed. If you are satisfied with the current result or you are out of time, stop the tuning procedure by pressing `Ctrl+C`.
-
-![tc-autotuner](https://pytorch.org/static/img/tc_autotuner.gif)
 
 `cache` saves the results of the autotuned kernel search and saves it to the file `fcrelu_100_128_100.tc`. The next time you call the same line of code, it loads the results of the autotuning without recomputing it.
 
@@ -146,7 +144,7 @@ Note: the syntax for passing in scalars is subject to change in the next release
 
 ## torch.nn layers
 
-We added some sugar-coating around the basic PyTorch integration of TC to make it easy to integrate TC into larger `torch.nn` models by defining the forward and backward TC expressions and taking `Variable` inputs / outputs. Here is an [example](https://github.com/facebookresearch/TensorComprehensions/blob/master/test_python/layers/test_convolution_train.py) of defining a convolution layer with TC.
+We added some sugar-coating around the basic PyTorch integration of TC to make it easy to integrate TC into larger `torch.nn` models by defining the forward and backward TC expressions and taking `Variable` inputs / outputs. 
 
 ## Some essentials that you will miss (we're working on them)
 
@@ -183,12 +181,12 @@ You cannot write this operation in TC: `torch.matmul(...).view(...).mean(...)`. 
 ## Getting Started
 
 - [Walk through Tutorial](https://facebookresearch.github.io/TensorComprehensions/framework/pytorch_integration/writing_layers.html) to quickly get started with understanding and using Tensor Comprehensions PyTorch package.
-- [Over 20 examples](https://github.com/facebookresearch/TensorComprehensions/tree/master/test_python/layers) of various ML layers with TC, including `avgpool`, `maxpool`, `matmul`, matmul - give output buffers and `batch-matmul`, `convolution`, `strided-convolution`, `batchnorm`, `copy`, `cosine similarity`, `Linear`, `Linear + ReLU`, `group-convolutions`, strided `group-convolutions`, `indexing`, `Embedding` (lookup table), small-mobilenet, `softmax`, `tensordot`, `transpose`
+- Over 20 examples of various ML layers with TC, including `avgpool`, `maxpool`, `matmul`, matmul - give output buffers and `batch-matmul`, `convolution`, `strided-convolution`, `batchnorm`, `copy`, `cosine similarity`, `Linear`, `Linear + ReLU`, `group-convolutions`, strided `group-convolutions`, `indexing`, `Embedding` (lookup table), small-mobilenet, `softmax`, `tensordot`, `transpose`
 - [Detailed docs](https://facebookresearch.github.io/TensorComprehensions/framework/pytorch_integration/getting_started.html) on Tensor Comprehensions and integration with PyTorch.
 
 ## Communication
 
-- [Slack](https://tensorcomprehensions.herokuapp.com/): For discussion around framework integration, build support, collaboration, etc. join our slack channel.
+- Slack: For discussion around framework integration, build support, collaboration, etc. join our slack channel.
 - Email: tensorcomp@fb.com
 - [GitHub](https://github.com/facebookresearch/TensorComprehensions): bug reports, feature requests, install issues, RFCs, thoughts, etc.
 

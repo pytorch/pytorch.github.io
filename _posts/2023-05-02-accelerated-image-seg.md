@@ -115,7 +115,7 @@ I used the Moscow satellite image dataset, which consists of 1,352 images of 1,3
 
 <small style="line-height: 1.1"><em>**Figure 3**. Satellite image 3-channel RGB chips from Moscow (top row) and corresponding pixel segmentation masks with varying speed limits (bottom row) (image by author)</em></small>
 
-There is a JSON configuration file that must be updated for all remaining components: training and validation split, training, and inference. [An example configuration can be found here](http://github.com/avanetten/cresi/blob/main/cresi/configs/sn5_baseline_aws.json.). I perform an 80:20 training/validation split, making sure to point to the correct folder of satellite images and corresponding masks for training. The configuration parameters are explained in more in the [notebook under examples in GitHub for Intel Extension for PyTorch here](http://github.com/intel/intel-extension-for-pytorch/tree/master/examples/cpu/usecase_spacenet5).
+There is a JSON configuration file that must be updated for all remaining components: training and validation split, training, and inference. [An example configuration can be found here](http://github.com/avanetten/cresi/blob/main/cresi/configs/sn5_baseline_aws.json). I perform an 80:20 training/validation split, making sure to point to the correct folder of satellite images and corresponding masks for training. The configuration parameters are explained in more in the [notebook under examples in GitHub for Intel Extension for PyTorch here](http://github.com/intel/intel-extension-for-pytorch/tree/master/examples/cpu/usecase_spacenet5).
 
 
 ### Training a ResNet34 + UNet Model

@@ -45,9 +45,9 @@ where [<img src="https://latex.codecogs.com/gif.latex?\alpha, \beta">] is the cl
 
 
 ### Calibration
-The process of choosing the input clipping range is known as **calibration**. The simplest technique (also the default in PyTorch) is to record the running mininmum and maximum values and assign them to <img src="https://latex.codecogs.com/gif.latex?\alpha"> and <img src="https://latex.codecogs.com/gif.latex?\beta">. [TensorRT](https://docs.nvidia.com/deeplearning/tensorrt/pytorch-quantization-toolkit/docs/calib.html) also uses entropy minimization (KL divergence), mean-square-error minimization, or percentiles of the input range. 
+The process of choosing the input clipping range is known as **calibration**. The simplest technique (also the default in PyTorch) is to record the running mininmum and maximum values and assign them to <img src="https://latex.codecogs.com/gif.latex?\alpha"> and <img src="https://latex.codecogs.com/gif.latex?\beta">. TensorRT also uses entropy minimization (KL divergence), mean-square-error minimization, or percentiles of the input range. 
 
-In PyTorch, `Observer` modules ([docs](https://PyTorch.org/docs/stable/torch.quantization.html?highlight=observer#observers), [code](https://github.com/PyTorch/PyTorch/blob/748d9d24940cd17938df963456c90fa1a13f3932/torch/ao/quantization/observer.py#L88)) collect statistics on the input values and calculate the qparams <img src="https://latex.codecogs.com/gif.latex?S, Z">. Different calibration schemes result in different quantized outputs, and it's best to empirically verify which scheme works best for your application and architecture (more on that later).
+In PyTorch, `Observer` modules ([code](https://github.com/PyTorch/PyTorch/blob/748d9d24940cd17938df963456c90fa1a13f3932/torch/ao/quantization/observer.py#L88)) collect statistics on the input values and calculate the qparams <img src="https://latex.codecogs.com/gif.latex?S, Z">. Different calibration schemes result in different quantized outputs, and it's best to empirically verify which scheme works best for your application and architecture (more on that later).
 
 ```python
 from torch.quantization.observer import MinMaxObserver, MovingAverageMinMaxObserver, HistogramObserver
@@ -166,7 +166,7 @@ torch.backends.quantized.engine = backend
 
 ### QConfig
 
-The `QConfig` ([code](https://github.com/PyTorch/PyTorch/blob/d6b15bfcbdaff8eb73fa750ee47cef4ccee1cd92/torch/ao/quantization/qconfig.py#L165), [docs](https://pytorch.org/docs/stable/torch.quantization.html?highlight=qconfig#torch.quantization.QConfig)) NamedTuple stores the Observers and the quantization schemes used to quantize activations and weights.
+The `QConfig` ([code](https://github.com/PyTorch/PyTorch/blob/d6b15bfcbdaff8eb73fa750ee47cef4ccee1cd92/torch/ao/quantization/qconfig.py#L165)) NamedTuple stores the Observers and the quantization schemes used to quantize activations and weights.
 
 Be sure to pass the Observer class (not the instance), or a callable that can return Observer instances. Use `with_args()` to override the default arguments.
 

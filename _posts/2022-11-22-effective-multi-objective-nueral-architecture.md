@@ -108,7 +108,7 @@ Ax has a number of other advanced capabilities that we did not discuss in our tu
 
 ### Early Stopping
 
-When evaluating a new candidate configuration, partial learning curves are typically available while the NN training job is running. We can use the information contained in the partial curves to identify under-performing trials to stop early in order to free up computational resources for more promising candidates. While not demonstrated in the above tutorial, Ax supports early stopping out-of-the-box - see our [early stopping tutorial](https://ax.dev/versions/latest/tutorials/early_stopping/early_stopping.html) for more details.
+When evaluating a new candidate configuration, partial learning curves are typically available while the NN training job is running. We can use the information contained in the partial curves to identify under-performing trials to stop early in order to free up computational resources for more promising candidates. While not demonstrated in the above tutorial, Ax supports early stopping out-of-the-box.
 
 ### High-dimensional search spaces
 

@@ -16,9 +16,8 @@ For Developer Day, we have an online networking event limited to people composed
 
 All talks will be livestreamed and available to the public.
 * [Livestream event page](https://www.facebook.com/events/802177440559164/)
-* [Apply for an invitation to the networking event](https://pytorchdeveloperday.fbreg.com/apply)
 
-Visit the [event website](https://pytorchdeveloperday.fbreg.com/) to learn more. We look forward to welcoming you to PyTorch Developer Day on November 12th! 
+Visit the event website to learn more. We look forward to welcoming you to PyTorch Developer Day on November 12th! 
 
 Thank you,
 

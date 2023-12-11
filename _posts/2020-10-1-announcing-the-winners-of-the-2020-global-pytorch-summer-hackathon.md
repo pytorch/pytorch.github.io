@@ -63,7 +63,7 @@ A PyTorch-based automated machine learning (AutoML) solution, carefree-learn pro
 
 **3rd Place** - [TorchExpo](https://devpost.com/software/torchexpo)
 
-TorchExpo is a collection of models and extensions that simplifies taking PyTorch from research to production in mobile devices. This library is more than a web and mobile application, and also comes with a Python library. The Python library is available via pip install and it helps researchers convert a state-of-the-art model in TorchScript and ONNX format in just one line. Detailed docs are available [here](https://torchexpo.readthedocs.io/en/latest/).
+TorchExpo is a collection of models and extensions that simplifies taking PyTorch from research to production in mobile devices. This library is more than a web and mobile application, and also comes with a Python library. The Python library is available via pip install and it helps researchers convert a state-of-the-art model in TorchScript and ONNX format in just one line. 
 
 ## Web/Mobile Applications Powered by PyTorch
 
@@ -91,10 +91,7 @@ FairTorch is a fairness library for PyTorch. It lets developers add constraints 
 
 <div align="center">
       <a href="https://www.youtube.com/watch?v=b2Cj4VflFKQ">
-     <img 
-      src="https://yt-embed.herokuapp.com/embed?v=b2Cj4VflFKQ" 
-      alt="FairTorch" 
-      style="width:50%;">
+      FairTorch
       </a>
     </div>
 

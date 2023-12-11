@@ -45,7 +45,7 @@ If you would like to have your project included in the PyTorch ecosystem and fea
 
 ## PyTorch Hub for reproducible research | New models
 
-Since [launching](https://pytorch.org/blog/towards-reproducible-research-with-pytorch-hub/) the PyTorch Hub in beta, we’ve received a lot of interest from the community including the contribution of many new models. Some of the latest include [U-Net for Brain MRI](https://pytorch.org/hub/mateuszbuda_brain-segmentation-pytorch_unet/) contributed by researchers at Duke University, [Single Shot Detection](https://pytorch.org/hub/nvidia_deeplearningexamples_ssd/) from NVIDIA and [Transformer-XL](https://pytorch.org/hub/huggingface_pytorch-pretrained-bert_transformerXL/) from HuggingFace.
+Since [launching](https://pytorch.org/blog/towards-reproducible-research-with-pytorch-hub/) the PyTorch Hub in beta, we’ve received a lot of interest from the community including the contribution of many new models. Some of the latest include [U-Net for Brain MRI](https://pytorch.org/hub/mateuszbuda_brain-segmentation-pytorch_unet/) contributed by researchers at Duke University, [Single Shot Detection](https://pytorch.org/hub/nvidia_deeplearningexamples_ssd/) from NVIDIA and Transformer-XL from HuggingFace.
 
 We’ve seen organic integration of the PyTorch Hub by folks like [paperswithcode](https://paperswithcode.com/), making it even easier for you to try out the state of the art in AI research. In addition, companies like [Seldon](https://github.com/axsaucedo/seldon-core/tree/pytorch_hub/examples/models/pytorchhub) provide production-level support for PyTorch Hub models on top of Kubernetes.
 

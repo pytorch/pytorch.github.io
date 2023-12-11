@@ -2,7 +2,6 @@
 layout: blog_detail
 title: 'Everything You Need To Know About Torchvision’s SSD Implementation'
 author: Vasilis Vryniotis
-featured-img: 'assets/images/prediction-examples.png'
 ---
 
 In TorchVision v0.10, we’ve released two new Object Detection models based on the SSD architecture. Our plan is to cover the key implementation details of the algorithms along with information on how they were trained in a two-part article.
