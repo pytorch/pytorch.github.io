@@ -42,7 +42,7 @@ Additionally, the following features will be reclassified under this new rubric:
 5. [Channels Last Memory Layout](https://pytorch.org/docs/stable/tensor_attributes.html#torch-memory-format): Beta (was Experimental)
 6. [Custom C++ Classes](https://pytorch.org/docs/stable/jit.html?highlight=experimental): Beta (was Experimental)
 7. [PyTorch Mobile](https://pytorch.org/mobile/home/): Beta (was Experimental)
-8. [Java Bindings](https://pytorch.org/docs/stable/packages.html#): Beta (was Experimental)
+8. [Java Bindings](https://pytorch.org/docs/stable/index.html): Beta (was Experimental)
 9. [Torch.Sparse](https://pytorch.org/docs/stable/sparse.html?highlight=experimental#): Beta (was Experimental)
 
 
