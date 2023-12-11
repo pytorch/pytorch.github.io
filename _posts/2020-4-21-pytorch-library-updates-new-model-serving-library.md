@@ -61,7 +61,7 @@ The torchvision 0.6 release includes updates to datasets, models and a significa
 * Added `aligned` flag to `RoIAlign` to match Detectron2. 
 * Refactored abstractions for C++ video decoder
 
-See the release full notes [here](https://github.com/pytorch/vision/releases) and full docs can be found [here](https://pytorch.org/docs/stable/torchvision/index.html).
+See the release full notes [here](https://github.com/pytorch/vision/releases) and full docs can be found [here](https://pytorch.org/vision/stable/index.html).
 
 ### torchtext 0.6
 The torchtext 0.6 release includes a number of bug fixes and improvements to documentation. Based on user's feedback, dataset abstractions are currently being redesigned also. Highlights for the release include:

@@ -36,7 +36,7 @@ Wrapping an `nn.Module` instance with `XlaFullyShardedDataParallel` enables the 
 
 **Model checkpoint saving and loading** for models and optimizers can be done like before by saving and loading their `.state_dict()`. Meanwhile, each training process should save its own checkpoint file of the sharded model parameters and optimizer states, and load the checkpoint file for the corresponding rank when resuming (regardless of ZeRO-2 or ZeRO-3, i.e. nested wrapping or not). A command line tool and a Python interface are provided to consolidate the sharded model checkpoint files together into a full/unshareded model checkpoint file.
 
-[**Gradient checkpointing**](https://spell.ml/blog/gradient-checkpointing-pytorch-YGypLBAAACEAefHs) (also referred to as "activation checkpointing" or "rematerialization") is another common technique for model scaling and can be used in conjunction with FSDP. We provide `checkpoint_module`, a wrapper function over a given `nn.Module` instance for gradient checkpointing (based on `torch_xla.utils.checkpoint.checkpoint`).
+**Gradient checkpointing** (also referred to as "activation checkpointing" or "rematerialization") is another common technique for model scaling and can be used in conjunction with FSDP. We provide `checkpoint_module`, a wrapper function over a given `nn.Module` instance for gradient checkpointing (based on `torch_xla.utils.checkpoint.checkpoint`).
 
 The MNIST and ImageNet examples below provide illustrative usages of (plain or nested) FSDP, saving and consolidation of model checkpoints, as well as gradient checkpointing.
 

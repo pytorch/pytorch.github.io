@@ -158,17 +158,17 @@ TensorDict is a new data carrier for PyTorch.
 
 ### [Beta] TensorDict: specialized dictionary for PyTorch
 
-TensorDict allows you to execute many common operations across batches of tensors carried by a single container. TensorDict supports many shape and device or storage operations, and  can readily be used in distributed settings. Check the [documentation](https://pytorch-labs.github.io/tensordict/) to know more.
+TensorDict allows you to execute many common operations across batches of tensors carried by a single container. TensorDict supports many shape and device or storage operations, and  can readily be used in distributed settings. Check the [documentation](https://pytorch.org/tensordict/) to know more.
 
 
 ### [Beta] @tensorclass: a dataclass for PyTorch
 
-Like TensorDict, [tensorclass](https://pytorch-labs.github.io/tensordict/reference/prototype.html) provides the opportunity to write dataclasses with built-in torch features such as shape or device operations. 
+Like TensorDict, [tensorclass](https://pytorch.org/tensordict/reference/prototype.html) provides the opportunity to write dataclasses with built-in torch features such as shape or device operations. 
 
 
 ### [Beta] tensordict.nn: specialized modules for TensorDict
 
-The [tensordict.nn module](https://pytorch-labs.github.io/tensordict/reference/nn.html) provides specialized nn.Module subclasses that make it easy to build arbitrarily complex graphs that can be executed with TensorDict inputs. It is compatible with the latest PyTorch features such as functorch, torch.fx and torch.compile.
+The [tensordict.nn module](https://pytorch.org/tensordict/reference/nn.html) provides specialized nn.Module subclasses that make it easy to build arbitrarily complex graphs that can be executed with TensorDict inputs. It is compatible with the latest PyTorch features such as functorch, torch.fx and torch.compile.
 
 
 ## TorchRec

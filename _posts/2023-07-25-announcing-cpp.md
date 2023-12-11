@@ -34,10 +34,10 @@ Amazon S3 supports global buckets. However, a bucket is created within a Region.
  
 To read objects in a bucket that aren’t publicly accessible, you must provide AWS credentials through one of the following methods:
 
-* [Install and configure](https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-install.html) the [AWS Command Line Interface](aws.amazon.com/cli) (AWS CLI) with `AWS configure`
+* [Install and configure](https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-install.html) the [AWS Command Line Interface](https://aws.amazon.com/cli/) (AWS CLI) with `AWS configure`
 * Set credentials in the AWS credentials profile file on the local system, located at `~/.aws/credentials` on Linux, macOS, or Unix
 * Set the `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` environment variables
-* If you’re using this library on an [Amazon Elastic Compute Cloud](aws.amazon.com/ec2) (Amazon EC2) instance, specify an [AWS Identity and Access Management](aws.amazon.com/iam) (IAM) role and then give the EC2 instance access to that role
+* If you’re using this library on an [Amazon Elastic Compute Cloud](https://aws.amazon.com/ec2) (Amazon EC2) instance, specify an [AWS Identity and Access Management](https://aws.amazon.com/iam) (IAM) role and then give the EC2 instance access to that role
 
 
 ### Example code

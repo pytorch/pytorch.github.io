@@ -110,7 +110,7 @@ In this release, we further consolidated the API for `DataLoader2` and a [detail
 
 We extended our support to load data from additional cloud storage providers via DataPipes, now covering AWS, Google Cloud Storage, and Azure. A [tutorial is also available](https://pytorch.org/data/0.5/tutorial.html#working-with-cloud-storage-providers). We are open to feedback and feature requests.
 
-We also performed a simple benchmark, comparing the performance of data loading from AWS S3 and attached volume on an AWS EC2 instance. The results are [visible here](https://github.com/pytorch/data/blob/gh/NivekT/100/head/benchmarks/cloud/aws_s3_results.md).
+We also performed a simple benchmark, comparing the performance of data loading from AWS S3 and attached volume on an AWS EC2 instance.
 
 ### torch::deploy (Beta)
 
@@ -154,7 +154,7 @@ torch::deploy now has basic support for aarch64 Linux systems.
 
 TorchEval is a library built for users who want highly performant implementations of common metrics to evaluate machine learning models. It also provides an easy to use interface for building custom metrics with the same toolkit. Building your metrics with TorchEval makes running distributed training loops with [torch.distributed](https://pytorch.org/docs/stable/distributed.html) a breeze.
 
-Learn more with our [docs](https://pytorch.org/torcheval), see our [examples](https://pytorch.org/torcheval/metric_example.html), or check out our [GitHub repo](http://github.com/pytorch/torcheval).
+Learn more with our [docs](https://pytorch.org/torcheval), see our [examples](https://pytorch.org/torcheval/stable/metric_example.html), or check out our [GitHub repo](http://github.com/pytorch/torcheval).
 
 ### TorchMultimodal Release (Beta)
 
