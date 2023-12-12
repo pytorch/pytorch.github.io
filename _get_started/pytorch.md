@@ -363,10 +363,10 @@ We have built utilities for partitioning an FX graph into subgraphs that contain
 
 We are super excited about the direction that we’ve taken for PyTorch 2.0 and beyond. The road to the final 2.0 release is going to be rough, but come join us on this journey early-on. If you are interested in deep-diving further or contributing to the compiler, please continue reading below which includes more information on how to get started (e.g., tutorials, benchmarks, models, FAQs) and **Ask the Engineers: 2.0 Live Q&A Series** starting this month. Additional resources include:
 
-- Getting Started @ [https://pytorch.org/docs/stable/dynamo/get-started.html](https://pytorch.org/docs/stable/dynamo/get-started.html)
-- Tutorials @ [https://pytorch.org/tutorials/](https://pytorch.org/tutorials/)
-- Documentation @ [https://pytorch.org/docs/stable](https://pytorch.org/docs/stable) and [http://pytorch.org/docs/stable/dynamo](http://pytorch.org/docs/stable/dynamo)
-- Developer Discussions @ [https://dev-discuss.pytorch.org](https://dev-discuss.pytorch.org)
+- [Getting Started](https://pytorch.org/docs/stable/torch.compiler_get_started.html)
+- [Tutorials](https://pytorch.org/tutorials/)
+- [Documentation](https://pytorch.org/docs/stable)
+- [Developer Discussions](https://dev-discuss.pytorch.org)
 
 <script page-id="pytorch" src="{{ site.baseurl }}/assets/menu-tab-selection.js"></script>
 <script src="{{ site.baseurl }}/assets/quick-start-module.js"></script>
