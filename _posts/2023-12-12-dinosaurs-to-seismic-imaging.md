@@ -92,6 +92,8 @@ Watch the [full video recording here](https://www.youtube.com/watch?v=TPp_Zyco6X
 
 ### About the Speaker 
 
+![Ben Consolvo](/assets/images/ben-consolvo.jpg){:style="max-width:220px;float:right;margin-left: 20px;"}
+
 Ben Consolvo is an AI Solutions Engineering Manager at Intel. He has been building a team and a program around Intel’s AI technology paired with Intel’s hardware offerings. He brings a background and passion in data science, particularly in deep learning (DL) and computer vision. He has applied his skills in DL in the cybersecurity industry to automatically identify phishing websites, as well as to the oil and gas industry to identify subsurface features for geophysical imaging.
 
 ## Lightning Talk 2: Dinosaur Bone Hunt
@@ -115,5 +117,7 @@ Finally, Bob shows the results that dinosaur bones were discovered in Utah using
 Watch the [full video recording here](https://www.youtube.com/watch?v=Q_soyAhduKk&list=PL_lsbAsL_o2BivkGLiDfHY9VqWlaNoZ2O&index=67) and download the [presentation](https://static.sched.com/hosted_files/pytorch2023/86/PyTorch_Conf_Chesebrough_2023_PPT.pdf). More details can be found in this [blog](https://www.intel.com/content/www/us/en/developer/articles/technical/intel-ai-step-by-step-guide-for-hunting-dinosaurs.html).
 
 ### About the Speaker
+
+![Bob Chesebrough](/assets/images/bob-chesebrough.jpg){:style="max-width:220px;float:right;margin-left: 20px;"}
 
 Bob Chesebrough's industry experience is software development/AI solution engineering for fortune 100 companies and national laboratories for over three decades. He is also a hobbyist who has logged over 800 miles and 1000 hours in the field finding dinosaur bones. He and his sons discovered an important fossil of the only known crocodilian from the Jurassic in New Mexico, they have also discovered and logged into the museum 2000+ bones localities and described a new mass bone bed in New Mexico.
