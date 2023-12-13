@@ -17,7 +17,7 @@ pip install hidet
 ```
 
 
-Hidet is integrated with PyTorch as a `torch.compile(...)` backend following the [Custom Backends tutorial](https://pytorch.org/docs/stable/dynamo/custom-backends.html). You can specify `hidet` as the `backend` when you compile a model. (Note: requires PyTorch version 2.0+):
+Hidet is integrated with PyTorch as a `torch.compile(...)` backend following the [Custom Backends tutorial](https://pytorch.org/docs/stable/torch.compiler_custom_backends.html). You can specify `hidet` as the `backend` when you compile a model. (Note: requires PyTorch version 2.0+):
 
 
 ```
