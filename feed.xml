@@ -4,7 +4,7 @@
   <generator uri="https://jekyllrb.com/" version="3.9.0">Jekyll</generator>
   <link href="https://pytorch.org/feed.xml" rel="self" type="application/atom+xml" />
   <link href="https://pytorch.org/" rel="alternate" type="text/html" />
-  <updated>2023-12-13T17:02:53-08:00</updated>
+  <updated>2023-12-14T14:11:16-08:00</updated>
   <id>https://pytorch.org/feed.xml</id>
 
   
@@ -29,6 +29,380 @@
 
   
   
+  
+    <entry>
+      <title type="html">Understanding GPU Memory 1: Visualizing All Allocations over Time</title>
+      <link href="https://pytorch.org/blog/understanding-gpu-memory-1/" rel="alternate" type="text/html" title="Understanding GPU Memory 1: Visualizing All Allocations over Time" />
+      <published>2023-12-14T00:00:00-08:00</published>
+      <updated>2023-12-14T00:00:00-08:00</updated>
+      <id>https://pytorch.org/blog/understanding-gpu-memory-1</id>
+      <content type="html" xml:base="https://pytorch.org/blog/understanding-gpu-memory-1/">&lt;p&gt;During your time with PyTorch on GPUs, you may be familiar with this common error message:&lt;/p&gt;
+
+&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;torch.cuda.OutOfMemoryError: CUDA out of memory. Tried to allocate 512.00 MiB. GPU 0 has a total capacity of 79.32 GiB of which 401.56 MiB is free.
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;In this series, we show how to use memory tooling, including the Memory Snapshot, the Memory Profiler, and the Reference Cycle Detector to debug out of memory errors and improve memory usage.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/understanding-gpu-memory-1/fig1.jpg&quot; alt=&quot;Memory Timeline&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;The &lt;strong&gt;Memory Snapshot&lt;/strong&gt; tool provides a fine-grained GPU memory visualization for debugging GPU OOMs. Captured memory snapshots will show memory events including allocations, frees and OOMs, along with their stack traces.&lt;/p&gt;
+
+&lt;p&gt;In a snapshot, each tensor’s memory allocation is color coded separately. The x axis is over time, and the y axis is the amount of GPU memory in MB. The snapshot is interactive, so we can observe the stack trace for any allocation by mousing over.&lt;/p&gt;
+
+&lt;p&gt;In this snapshot, there are 3 peaks showing the memory allocations over 3 training iterations. When looking at the peaks, it is &lt;strong&gt;easy to see the rise of memory in the forward&lt;/strong&gt; &lt;strong&gt;pass&lt;/strong&gt; and the &lt;strong&gt;fall during the backward pass&lt;/strong&gt; as the gradients are computed. It is also possible to see that the program has the &lt;strong&gt;same pattern of memory use iteration to iteration&lt;/strong&gt;. One thing that stands out is the many &lt;strong&gt;tiny spikes in memory&lt;/strong&gt;, by mousing over them, we see that they are buffers used temporarily by convolution operators.&lt;/p&gt;
+
+&lt;h3 id=&quot;capturing-memory-snapshots&quot;&gt;Capturing Memory Snapshots&lt;/h3&gt;
+
+&lt;p&gt;The API to capture memory snapshots is fairly simple and available in torch.cuda.memory:&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;strong&gt;Start:&lt;/strong&gt; &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;torch.cuda.memory._record_memory_history(max_entries=100000)&lt;/code&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;Save:&lt;/strong&gt; &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;torch.cuda.memory._dump_snapshot(file_name)&lt;/code&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;Stop:&lt;/strong&gt; &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;torch.cuda.memory._record_memory_history(enabled=None)&lt;/code&gt;&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;&lt;strong&gt;Code Snippet&lt;/strong&gt; (for full code sample, see &lt;strong&gt;Appendix A&lt;/strong&gt;):&lt;/p&gt;
+
+&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;   # Start recording memory snapshot history, initialized with a buffer
+   # capacity of 100,000 memory events, via the `max_entries` field.
+   torch.cuda.memory._record_memory_history(
+       max_entries=MAX_NUM_OF_MEM_EVENTS_PER_SNAPSHOT
+   )
+
+   # Run your PyTorch Model.
+   # At any point in time, save a snapshot to file for later.
+   for _ in range(5):
+       pred = model(inputs)
+       loss_fn(pred, labels).backward()
+       optimizer.step()
+       optimizer.zero_grad(set_to_none=True)
+
+   # In this sample, we save the snapshot after running 5 iterations.
+   #   - Save as many snapshots as you'd like.
+   #   - Snapshots will save last `max_entries` number of memory events
+   #     (100,000 in this example).
+   try:
+       torch.cuda.memory._dump_snapshot(f&quot;{file_prefix}.pickle&quot;)
+   except Exception as e:
+       logger.error(f&quot;Failed to capture memory snapshot {e}&quot;)
+
+   # Stop recording memory snapshot history.
+   torch.cuda.memory._record_memory_history(enabled=None)
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;To visualize the snapshot file, we have a tool hosted at &lt;a href=&quot;https://pytorch.org/memory_viz&quot;&gt;https://pytorch.org/memory_viz&lt;/a&gt;. There, you can drag and drop your saved snapshot file and it will plot each allocation over time.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/understanding-gpu-memory-1/fig2.jpg&quot; alt=&quot;Memory Timeline&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Alternatively, you can generate an HTML from a .pickle by using the script at pytorch/torch/cuda/_memory_viz.py, here is an example:&lt;/p&gt;
+
+&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;python torch/cuda/_memory_viz.py trace_plot snapshot.pickle -o snapshot.html
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;h2 id=&quot;debugging-cuda-ooms&quot;&gt;Debugging CUDA OOMs&lt;/h2&gt;
+
+&lt;p&gt;Let’s look at how we can use the memory snapshot tool to answer:&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;Why did a &lt;strong&gt;CUDA OOM&lt;/strong&gt; happen?&lt;/li&gt;
+  &lt;li&gt;Where is the &lt;strong&gt;GPU Memory being used&lt;/strong&gt;?&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;h3 id=&quot;resnet50-with-a-bug&quot;&gt;ResNet50 with a bug&lt;/h3&gt;
+
+&lt;p&gt;We’ve taken a look at a properly working model in the first snapshot. Now, let’s take a look at a training example with a bug, see snapshot:&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/understanding-gpu-memory-1/fig3.jpg&quot; alt=&quot;Memory Timeline&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Notice how the &lt;strong&gt;second iteration uses far more memory&lt;/strong&gt; than the first iteration. If this model were much larger, it could have &lt;strong&gt;CUDA OOM’d in the second iteration&lt;/strong&gt; without much more insight into why.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/understanding-gpu-memory-1/fig4.jpg&quot; alt=&quot;Memory Timeline&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;When examining this snapshot further, we can clearly see that several tensors are staying alive from the first iteration to the second and later iterations. If we mouse over one of these tensors, it would show a &lt;strong&gt;stack trace suggesting that these were gradient tensors&lt;/strong&gt;.&lt;/p&gt;
+
+&lt;p&gt;And indeed if we go to the code, we can see that &lt;strong&gt;it doesn’t clear the gradient tensors&lt;/strong&gt;, when it could have &lt;strong&gt;cleared them before the forward&lt;/strong&gt;.&lt;/p&gt;
+
+&lt;p&gt;Before:&lt;/p&gt;
+&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;        for _ in range(num_iters):
+          pred = model(inputs)
+          loss_fn(pred, labels).backward()
+          optimizer.step()
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;After:&lt;/p&gt;
+&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;        for _ in range(num_iters):
+          pred = model(inputs)
+          loss_fn(pred, labels).backward()
+          optimizer.step()
+          # Add this line to clear grad tensors
+          optimizer.zero_grad(set_to_none=True)
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;We can simply add an &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;optimizer.zero_grad(set_to_none=True)&lt;/code&gt; instruction to clear the gradient tensors from iteration to iteration (more details about why we need to zero the gradients here: &lt;a href=&quot;https://pytorch.org/tutorials/recipes/recipes/zeroing_out_gradients.html&quot;&gt;https://pytorch.org/tutorials/recipes/recipes/zeroing_out_gradients.html&lt;/a&gt;).&lt;/p&gt;
+
+&lt;p&gt;This is a simplification of a bug we’ve found in more complicated programs using this tool. We encourage you to try out the Memory Snapshot on your GPU memory problems and let us know how it goes.&lt;/p&gt;
+
+&lt;h3 id=&quot;resnet50-after-bug-fix&quot;&gt;ResNet50 after bug fix&lt;/h3&gt;
+
+&lt;p&gt;After applying the fix, the snapshot seems to be clearing the gradients now.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/understanding-gpu-memory-1/fig5.jpg&quot; alt=&quot;Memory Timeline&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;We now have the snapshot of a properly working ResNet50 model. Try out the code yourself (see code sample in &lt;strong&gt;Appendix A&lt;/strong&gt;).&lt;/p&gt;
+
+&lt;p&gt;But you may be wondering, &lt;strong&gt;why is there still an increase in memory after the first iteration?&lt;/strong&gt; To answer this, let’s visit the &lt;strong&gt;Memory Profiler&lt;/strong&gt; in the next section.&lt;/p&gt;
+
+&lt;h2 id=&quot;categorized-memory-usage&quot;&gt;Categorized Memory Usage&lt;/h2&gt;
+
+&lt;p&gt;The &lt;strong&gt;Memory Profiler&lt;/strong&gt; is an added feature of the PyTorch Profiler that &lt;strong&gt;categorizes&lt;/strong&gt; memory usage over time. We still rely on the Memory Snapshot for stack traces for deep dives into memory allocations.&lt;/p&gt;
+
+&lt;p&gt;To generate a memory timeline, here is a code snippet (full code sample in &lt;strong&gt;Appendix B&lt;/strong&gt;):&lt;/p&gt;
+
+&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;   # Initialize the profiler context with record_shapes, profile_memory,
+   # and with_stack set to True.
+   with torch.profiler.profile(
+       activities=[
+           torch.profiler.ProfilerActivity.CPU,
+           torch.profiler.ProfilerActivity.CUDA,
+       ],
+       schedule=torch.profiler.schedule(wait=0, warmup=0, active=6, repeat=1),
+       record_shapes=True,
+       profile_memory=True,
+       with_stack=True,
+       on_trace_ready=trace_handler,
+   ) as prof:
+       # Run the PyTorch Model inside the profile context.
+       for _ in range(5):
+           prof.step()
+           with record_function(&quot;## forward ##&quot;):
+               pred = model(inputs)
+
+           with record_function(&quot;## backward ##&quot;):
+               loss_fn(pred, labels).backward()
+
+           with record_function(&quot;## optimizer ##&quot;):
+               optimizer.step()
+               optimizer.zero_grad(set_to_none=True)
+
+   # Construct the memory timeline HTML plot.
+   prof.export_memory_timeline(f&quot;{file_prefix}.html&quot;, device=&quot;cuda:0&quot;)
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;For further reference, see &lt;a href=&quot;https://pytorch.org/docs/main/profiler.html&quot;&gt;https://pytorch.org/docs/main/profiler.html&lt;/a&gt;.&lt;/p&gt;
+
+&lt;p&gt;The Memory Profiler automatically generates categories based on the graph of tensor operations recorded during profiling.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/understanding-gpu-memory-1/fig6.jpg&quot; alt=&quot;Memory Timeline&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;In this Memory Timeline collected using the Memory Profiler, we have the same training example as before. We can observe the &lt;strong&gt;gradients in blue are now being cleared&lt;/strong&gt; from iteration to iteration. We can also notice that the &lt;strong&gt;optimizer state in yellow is allocated after the first iteration&lt;/strong&gt;, and is kept constant for the rest of the job.&lt;/p&gt;
+
+&lt;p&gt;This optimizer state is the reason behind the increase of GPU memory from the first iteration to the second. Try out the code yourself (see code sample in &lt;strong&gt;Appendix B&lt;/strong&gt;). The Memory Profiler helps to improve training &lt;strong&gt;memory understanding&lt;/strong&gt; so that model authors can figure out which categories are using the most GPU memory.&lt;/p&gt;
+
+&lt;h2 id=&quot;where-can-i-find-these-tools&quot;&gt;Where can I find these tools?&lt;/h2&gt;
+
+&lt;p&gt;We hope that these tools will greatly improve your ability to debug CUDA OOMs and to understand your memory usage by category.&lt;/p&gt;
+
+&lt;p&gt;The Memory Snapshot and the Memory Profiler are available in the v2.1 release of PyTorch as experimental features.&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;More information about the Memory Snapshot can be found in the &lt;a href=&quot;https://pytorch.org/docs/main/torch_cuda_memory.html&quot;&gt;PyTorch Memory docs here&lt;/a&gt;.&lt;/li&gt;
+  &lt;li&gt;More details about the Memory Profiler can be found in the &lt;a href=&quot;https://pytorch.org/docs/main/profiler.html&quot;&gt;PyTorch Profiler docs here&lt;/a&gt;.&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h2 id=&quot;feedback&quot;&gt;Feedback&lt;/h2&gt;
+
+&lt;p&gt;We look forward to hearing from you about any enhancements, bugs or memory stories that our tools helped to solve! As always, please feel free to open new issues on PyTorch’s Github page.&lt;/p&gt;
+
+&lt;p&gt;We are also open to contributions from the OSS community, feel free to tag &lt;a href=&quot;https://github.com/aaronenyeshi&quot;&gt;Aaron Shi&lt;/a&gt; and &lt;a href=&quot;https://github.com/zdevito&quot;&gt;Zachary DeVito&lt;/a&gt; in any Github PRs for reviews.&lt;/p&gt;
+
+&lt;h2 id=&quot;acknowledgements&quot;&gt;Acknowledgements&lt;/h2&gt;
+
+&lt;p&gt;Really appreciate the content reviewers, &lt;a href=&quot;mailto:marksaroufim@meta.com&quot;&gt;Mark Saroufim&lt;/a&gt;, &lt;a href=&quot;mailto:gchanan@meta.com&quot;&gt;Gregory Chanan&lt;/a&gt;, and &lt;a href=&quot;mailto:adnanaziz@meta.com&quot;&gt;Adnan Aziz&lt;/a&gt; for reviewing this post and improving its readability.&lt;/p&gt;
+
+&lt;h2 id=&quot;appendix&quot;&gt;Appendix&lt;/h2&gt;
+
+&lt;h3 id=&quot;appendix-a---resnet50-memory-snapshot-code-example&quot;&gt;Appendix A - ResNet50 Memory Snapshot Code Example&lt;/h3&gt;
+
+&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;# (c) Meta Platforms, Inc. and affiliates. 
+import logging
+import socket
+from datetime import datetime, timedelta
+
+import torch
+
+from torchvision import models
+
+logging.basicConfig(
+   format=&quot;%(levelname)s:%(asctime)s %(message)s&quot;,
+   level=logging.INFO,
+   datefmt=&quot;%Y-%m-%d %H:%M:%S&quot;,
+)
+logger: logging.Logger = logging.getLogger(__name__)
+logger.setLevel(level=logging.INFO)
+
+TIME_FORMAT_STR: str = &quot;%b_%d_%H_%M_%S&quot;
+
+# Keep a max of 100,000 alloc/free events in the recorded history
+# leading up to the snapshot.
+MAX_NUM_OF_MEM_EVENTS_PER_SNAPSHOT: int = 100000
+
+def start_record_memory_history() -&amp;gt; None:
+   if not torch.cuda.is_available():
+       logger.info(&quot;CUDA unavailable. Not recording memory history&quot;)
+       return
+
+   logger.info(&quot;Starting snapshot record_memory_history&quot;)
+   torch.cuda.memory._record_memory_history(
+       max_entries=MAX_NUM_OF_MEM_EVENTS_PER_SNAPSHOT
+   )
+
+def stop_record_memory_history() -&amp;gt; None:
+   if not torch.cuda.is_available():
+       logger.info(&quot;CUDA unavailable. Not recording memory history&quot;)
+       return
+
+   logger.info(&quot;Stopping snapshot record_memory_history&quot;)
+   torch.cuda.memory._record_memory_history(enabled=None)
+
+def export_memory_snapshot() -&amp;gt; None:
+   if not torch.cuda.is_available():
+       logger.info(&quot;CUDA unavailable. Not exporting memory snapshot&quot;)
+       return
+
+   # Prefix for file names.
+   host_name = socket.gethostname()
+   timestamp = datetime.now().strftime(TIME_FORMAT_STR)
+   file_prefix = f&quot;{host_name}_{timestamp}&quot;
+
+   try:
+       logger.info(f&quot;Saving snapshot to local file: {file_prefix}.pickle&quot;)
+       torch.cuda.memory._dump_snapshot(f&quot;{file_prefix}.pickle&quot;)
+   except Exception as e:
+       logger.error(f&quot;Failed to capture memory snapshot {e}&quot;)
+       return
+
+# Simple Resnet50 example to demonstrate how to capture memory visuals.
+def run_resnet50(num_iters=5, device=&quot;cuda:0&quot;):
+   model = models.resnet50().to(device=device)
+   inputs = torch.randn(1, 3, 224, 224, device=device)
+   labels = torch.rand_like(model(inputs))
+   optimizer = torch.optim.SGD(model.parameters(), lr=1e-2, momentum=0.9)
+   loss_fn = torch.nn.CrossEntropyLoss()
+
+   # Start recording memory snapshot history
+   start_record_memory_history()
+
+   for _ in range(num_iters):
+       pred = model(inputs)
+       loss_fn(pred, labels).backward()
+       optimizer.step()
+       optimizer.zero_grad(set_to_none=True)
+
+   # Create the memory snapshot file
+   export_memory_snapshot()
+
+   # Stop recording memory snapshot history
+   stop_record_memory_history()
+
+if __name__ == &quot;__main__&quot;:
+    # Run the resnet50 model
+    run_resnet50()
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;h3 id=&quot;appendix-b---resnet50-memory-profiler-code-example&quot;&gt;Appendix B - ResNet50 Memory Profiler Code Example&lt;/h3&gt;
+
+&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;# (c) Meta Platforms, Inc. and affiliates. 
+import logging
+import socket
+from datetime import datetime, timedelta
+
+import torch
+
+from torch.autograd.profiler import record_function
+from torchvision import models
+
+logging.basicConfig(
+   format=&quot;%(levelname)s:%(asctime)s %(message)s&quot;,
+   level=logging.INFO,
+   datefmt=&quot;%Y-%m-%d %H:%M:%S&quot;,
+)
+logger: logging.Logger = logging.getLogger(__name__)
+logger.setLevel(level=logging.INFO)
+
+TIME_FORMAT_STR: str = &quot;%b_%d_%H_%M_%S&quot;
+
+def trace_handler(prof: torch.profiler.profile):
+   # Prefix for file names.
+   host_name = socket.gethostname()
+   timestamp = datetime.now().strftime(TIME_FORMAT_STR)
+   file_prefix = f&quot;{host_name}_{timestamp}&quot;
+
+   # Construct the trace file.
+   prof.export_chrome_trace(f&quot;{file_prefix}.json.gz&quot;)
+
+   # Construct the memory timeline file.
+   prof.export_memory_timeline(f&quot;{file_prefix}.html&quot;, device=&quot;cuda:0&quot;)
+
+def run_resnet50(num_iters=5, device=&quot;cuda:0&quot;):
+   model = models.resnet50().to(device=device)
+   inputs = torch.randn(1, 3, 224, 224, device=device)
+   labels = torch.rand_like(model(inputs))
+   optimizer = torch.optim.SGD(model.parameters(), lr=1e-2, momentum=0.9)
+   loss_fn = torch.nn.CrossEntropyLoss()
+
+   with torch.profiler.profile(
+       activities=[
+           torch.profiler.ProfilerActivity.CPU,
+           torch.profiler.ProfilerActivity.CUDA,
+       ],
+       schedule=torch.profiler.schedule(wait=0, warmup=0, active=6, repeat=1),
+       record_shapes=True,
+       profile_memory=True,
+       with_stack=True,
+       on_trace_ready=trace_handler,
+   ) as prof:
+       for _ in range(num_iters):
+           prof.step()
+           with record_function(&quot;## forward ##&quot;):
+               pred = model(inputs)
+
+           with record_function(&quot;## backward ##&quot;):
+               loss_fn(pred, labels).backward()
+
+           with record_function(&quot;## optimizer ##&quot;):
+               optimizer.step()
+               optimizer.zero_grad(set_to_none=True)
+
+if __name__ == &quot;__main__&quot;:
+    # Warm up
+    run_resnet50()
+    # Run the resnet50 model
+    run_resnet50()
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;</content>
+
+      
+      
+      
+      
+      
+
+      <author>
+          <name>Aaron Shi, Zachary DeVito</name>
+        
+        
+      </author>
+
+      
+
+      
+
+      
+        <summary type="html">During your time with PyTorch on GPUs, you may be familiar with this common error message:</summary>
+      
+
+      
+      
+    </entry>
   
     <entry>
       <title type="html">From PyTorch Conference 2023: From Dinosaurs to Seismic Imaging with Intel</title>
@@ -2232,90 +2606,6 @@ The PyTorch/XLA Team at Google&lt;/p&gt;</content>
 
       
         <summary type="html">Supported in PyTorch 2.0 as a beta feature, oneDNN Graph leverages aggressive fusion patterns to accelerate inference on x86-64 machines, especially Intel® Xeon® Scalable processors.</summary>
-      
-
-      
-      
-    </entry>
-  
-    <entry>
-      <title type="html">AMD Extends Support for PyTorch Machine Learning Development on Select RDNA™ 3 GPUs with ROCm™ 5.7</title>
-      <link href="https://pytorch.org/blog/amd-extends-support-for-pt-ml/" rel="alternate" type="text/html" title="AMD Extends Support for PyTorch Machine Learning Development on Select RDNA™ 3 GPUs with ROCm™ 5.7" />
-      <published>2023-10-31T00:00:00-07:00</published>
-      <updated>2023-10-31T00:00:00-07:00</updated>
-      <id>https://pytorch.org/blog/amd-extends-support-for-pt-ml</id>
-      <content type="html" xml:base="https://pytorch.org/blog/amd-extends-support-for-pt-ml/">&lt;p&gt;Researchers and developers working with Machine Learning (ML) models and algorithms using PyTorch can now use AMD ROCm 5.7 on Ubuntu® Linux® to tap into the parallel computing power of the Radeon™ RX 7900 XTX and the Radeon™ PRO W7900 graphics cards which are based on the AMD RDNA™ 3 GPU architecture.&lt;/p&gt;
-
-&lt;p&gt;A client solution built on these two high-end GPUs enables a local, private, and cost-effective workflow for ML training and inference for those who previously relied on cloud-based solutions alone.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/2281965-ROCm-development-radeon.jpg&quot; alt=&quot;ML Development on Desktop&quot; style=&quot;width:100%; display: block; margin-left: auto; margin-right: auto&quot; /&gt;&lt;/p&gt;
-
-&lt;h2 id=&quot;accelerate-machine-learning-with-pytorch-on-your-desktop&quot;&gt;Accelerate Machine Learning With Pytorch On Your Desktop&lt;/h2&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;A local PC or workstation system running PyTorch with a Radeon 7900 series GPU presents a capable, yet affordable solution to address these growing workflow challenges thanks to large GPU memory sizes of 24GB and even 48GB.&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;h2 id=&quot;unified-software-stack-for-the-desktop-and-the-datacenter&quot;&gt;Unified Software Stack For The Desktop And The Datacenter&lt;/h2&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;The latest AMD ROCm 5.7 software stack for GPU programming unlocks the massively parallel compute power of these RDNA™ 3 architecture-based GPUs for use with PyTorch, one of the leading ML frameworks. The same unified software stack also supports the CDNA™ GPU architecture of the AMD Instinct™ MI series accelerators.&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;h2 id=&quot;freedom-to-customize&quot;&gt;Freedom To Customize&lt;/h2&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;The AMD ROCm platform is primarily Open-Source Software (OSS).  It allows developers the freedom to customize and tailor their GPU software for their own needs while collaborating with a community of other developers, and helping each other find solutions in an agile, flexible, and rapid manner. The AMD ROCm platform’s goal is to allow users to maximize their GPU hardware investment. The AMD ROCm platform is designed to help develop, test, and deploy GPU accelerated HPC, AI, scientific computing, CAD, and other applications in a free, open source, integrated and secure software ecosystem.&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;As the industry moves towards an ecosystem that supports a broad set of systems, frameworks and accelerators, AMD is determined to continue to make AI more accessible to PyTorch developers and researchers that benefit from a local client-based setup for ML development using RDNA™ 3 architecture-based desktop GPUs.&lt;/p&gt;
-
-&lt;h2 id=&quot;learn-more&quot;&gt;Learn More&lt;/h2&gt;
-
-&lt;p&gt;&lt;a href=&quot;https://www.amd.com/en/developer/resources/ml-radeon.html&quot;&gt;https://www.amd.com/en/developer/resources/ml-radeon.html&lt;/a&gt;&lt;/p&gt;
-
-&lt;h2 id=&quot;download-software&quot;&gt;Download Software&lt;/h2&gt;
-
-&lt;p&gt;&lt;a href=&quot;https://www.amd.com/en/support/linux-drivers&quot;&gt;https://www.amd.com/en/support/linux-drivers&lt;/a&gt;&lt;/p&gt;
-
-&lt;h2 id=&quot;visit-thedocumentation-portalto-get-started-training-ml-models-on-your-local-desktop&quot;&gt;Visit the Documentation Portal to get started training ML models on your local desktop&lt;/h2&gt;
-
-&lt;p&gt;&lt;a href=&quot;https://rocm.docs.amd.com/projects/radeon/en/latest/&quot;&gt;https://rocm.docs.amd.com/projects/radeon/en/latest/&lt;/a&gt;&lt;/p&gt;
-
-&lt;h2 id=&quot;prerequisites&quot;&gt;Prerequisites&lt;/h2&gt;
-
-&lt;p&gt;&lt;a href=&quot;https://rocm.docs.amd.com/projects/radeon/en/latest/docs/prerequisites.html&quot;&gt;https://rocm.docs.amd.com/projects/radeon/en/latest/docs/prerequisites.html&lt;/a&gt;&lt;/p&gt;
-
-&lt;h2 id=&quot;how-to-guide&quot;&gt;How to Guide&lt;/h2&gt;
-
-&lt;p&gt;&lt;a href=&quot;https://rocm.docs.amd.com/projects/radeon/en/latest/docs/install/howto.html&quot;&gt;https://rocm.docs.amd.com/projects/radeon/en/latest/docs/install/howto.html&lt;/a&gt;&lt;/p&gt;
-
-&lt;p&gt;© 2023 Advanced Micro Devices, Inc. All rights reserved. AMD, the AMD Arrow logo, CDNA, Radeon, ROCm, and combinations thereof are trademarks of Advanced Micro Devices, Inc. Linux® is the registered trademark of Linus Torvalds in the U.S. and other countries. Microsoft and Windows are registered trademarks of Microsoft Corporation in the US and/or other countries. PyTorch, the PyTorch logo and any related marks are trademarks of The Linux Foundation. TensorFlow, the TensorFlow logo and any related marks are trademarks of Google Inc. Ubuntu and the Ubuntu logo are registered trademarks of Canonical Ltd. Other product names used in this publication are for identification purposes only and may be trademarks of their respective owners.&lt;/p&gt;
-
-&lt;p&gt;Radeon™ AI technology is compatible with all AMD Radeon 7000 Series graphics cards and newer. Please check with your system manufacturer for feature availability prior to purchase. GD-232.&lt;/p&gt;
-
-&lt;ol&gt;
-  &lt;li&gt;Based on AMD internal measurements, November 2022, comparing the Radeon RX 7900 XTX at 2.5GHz boost clock with 96 CUs issuing 2X the Bfloat16 math operations per clocks vs. the RX 6900 XT GPU at 2.25 GHz boost clock and 80 CUs issue 1X the Bfloat16 math operations per clock. RX-821&lt;/li&gt;
-&lt;/ol&gt;</content>
-
-      
-      
-      
-      
-      
-
-      <author>
-          <name>AMD</name>
-        
-        
-      </author>
-
-      
-
-      
-
-      
-        <summary type="html">Researchers and developers working with Machine Learning (ML) models and algorithms using PyTorch can now use AMD ROCm 5.7 on Ubuntu® Linux® to tap into the parallel computing power of the Radeon™ RX 7900 XTX and the Radeon™ PRO W7900 graphics cards which are based on the AMD RDNA™ 3 GPU architecture.</summary>
       
 
       
