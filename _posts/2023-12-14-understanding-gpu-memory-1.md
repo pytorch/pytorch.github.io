@@ -18,7 +18,7 @@ In this series, we show how to use memory tooling, including the Memory Snapshot
 
 The **Memory Snapshot** tool provides a fine-grained GPU memory visualization for debugging GPU OOMs. Captured memory snapshots will show memory events including allocations, frees and OOMs, along with their stack traces.
 
-In a snapshot, each tensor’s memory allocation is color coded separately. The x axis is over time, and the y axis is the amount of GPU memory in MB. The snapshot is interactive, so we can observe the stack trace for any allocation by mousing over. Try it yourself on [the interactive HTML version](https://www.internalfb.com/manifold/explorer/ai_efficiency/tree/users/aaronshi/devvm2184.cco0.facebook.com_Dec_11_10_38_05.html).
+In a snapshot, each tensor’s memory allocation is color coded separately. The x axis is over time, and the y axis is the amount of GPU memory in MB. The snapshot is interactive, so we can observe the stack trace for any allocation by mousing over.
 
 
 In this snapshot, there are 3 peaks showing the memory allocations over 3 training iterations. When looking at the peaks, it is **easy to see the rise of memory in the forward** **pass** and the **fall during the backward pass** as the gradients are computed. It is also possible to see that the program has the **same pattern of memory use iteration to iteration**. One thing that stands out is the many **tiny spikes in memory**, by mousing over them, we see that they are buffers used temporarily by convolution operators.
