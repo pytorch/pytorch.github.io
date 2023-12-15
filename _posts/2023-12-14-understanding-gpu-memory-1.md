@@ -14,14 +14,14 @@ torch.cuda.OutOfMemoryError: CUDA out of memory. Tried to allocate 512.00 MiB. G
 
 In this series, we show how to use memory tooling, including the Memory Snapshot, the Memory Profiler, and the Reference Cycle Detector to debug out of memory errors and improve memory usage. 
 
-![Memory Timeline](/assets/images/understanding-gpu-memory-1/fig1.jpg){:style="width:100%;"}
+![Memory Timeline](/assets/images/understanding-gpu-memory-1/fig1.png){:style="width:100%;"}
 
 The **Memory Snapshot** tool provides a fine-grained GPU memory visualization for debugging GPU OOMs. Captured memory snapshots will show memory events including allocations, frees and OOMs, along with their stack traces.
 
-In a snapshot, each tensor’s memory allocation is color coded separately. The x axis is over time, and the y axis is the amount of GPU memory in MB. The snapshot is interactive, so we can observe the stack trace for any allocation by mousing over.
+In a snapshot, each tensor’s memory allocation is color coded separately. The x axis is over time, and the y axis is the amount of GPU memory in MB. The snapshot is interactive, so we can observe the stack trace for any allocation by mousing over. Try it yourself at [https://github.com/pytorch/pytorch.github.io/blob/site/assets/images/understanding-gpu-memory-1/snapshot.html](https://github.com/pytorch/pytorch.github.io/blob/site/assets/images/understanding-gpu-memory-1/snapshot.html).
 
 
-In this snapshot, there are 3 peaks showing the memory allocations over 3 training iterations. When looking at the peaks, it is **easy to see the rise of memory in the forward** **pass** and the **fall during the backward pass** as the gradients are computed. It is also possible to see that the program has the **same pattern of memory use iteration to iteration**. One thing that stands out is the many **tiny spikes in memory**, by mousing over them, we see that they are buffers used temporarily by convolution operators.
+In this snapshot, there are 3 peaks showing the memory allocations over 3 training iterations (this is configerable). When looking at the peaks, it is **easy to see the rise of memory in the forward** **pass** and the **fall during the backward pass** as the gradients are computed. It is also possible to see that the program has the **same pattern of memory use iteration to iteration**. One thing that stands out is the many **tiny spikes in memory**, by mousing over them, we see that they are buffers used temporarily by convolution operators.
 
 
 ### Capturing Memory Snapshots
@@ -66,10 +66,10 @@ The API to capture memory snapshots is fairly simple and available in torch.cuda
 ```
 
 
-To visualize the snapshot file, we have a tool hosted at [https://pytorch.org/memory_viz](https://pytorch.org/memory_viz). There, you can drag and drop your saved snapshot file and it will plot each allocation over time.
+To visualize the snapshot file, we have a tool hosted at [https://pytorch.org/memory_viz](https://pytorch.org/memory_viz). There, you can drag and drop your saved snapshot file and it will plot each allocation over time. **Privacy Note:** The tool will not save your snapshot.
 
 
-![Memory Timeline](/assets/images/understanding-gpu-memory-1/fig2.jpg){:style="width:100%;"}
+![Memory Timeline](/assets/images/understanding-gpu-memory-1/fig2.png){:style="width:100%;"}
 
 
 Alternatively, you can generate an HTML from a .pickle by using the script at pytorch/torch/cuda/_memory_viz.py, here is an example:
@@ -95,13 +95,13 @@ Let’s look at how we can use the memory snapshot tool to answer:
 We’ve taken a look at a properly working model in the first snapshot. Now, let’s take a look at a training example with a bug, see snapshot:
 
 
-![Memory Timeline](/assets/images/understanding-gpu-memory-1/fig3.jpg){:style="width:100%;"}
+![Memory Timeline](/assets/images/understanding-gpu-memory-1/fig3.png){:style="width:100%;"}
 
 
 Notice how the **second iteration uses far more memory** than the first iteration. If this model were much larger, it could have **CUDA OOM'd in the second iteration** without much more insight into why.
 
 
-![Memory Timeline](/assets/images/understanding-gpu-memory-1/fig4.jpg){:style="width:100%;"}
+![Memory Timeline](/assets/images/understanding-gpu-memory-1/fig4.png){:style="width:100%;"}
 
 
 When examining this snapshot further, we can clearly see that several tensors are staying alive from the first iteration to the second and later iterations. If we mouse over one of these tensors, it would show a **stack trace suggesting that these were gradient tensors**.
@@ -137,7 +137,7 @@ This is a simplification of a bug we've found in more complicated programs using
 
 After applying the fix, the snapshot seems to be clearing the gradients now. 
 
-![Memory Timeline](/assets/images/understanding-gpu-memory-1/fig5.jpg){:style="width:100%;"}
+![Memory Timeline](/assets/images/understanding-gpu-memory-1/fig5.png){:style="width:100%;"}
 
 
 We now have the snapshot of a properly working ResNet50 model. Try out the code yourself (see code sample in **Appendix A**).
@@ -189,7 +189,7 @@ For further reference, see [https://pytorch.org/docs/main/profiler.html](https:/
 The Memory Profiler automatically generates categories based on the graph of tensor operations recorded during profiling. 
 
 
-![Memory Timeline](/assets/images/understanding-gpu-memory-1/fig6.jpg){:style="width:100%;"}
+![Memory Timeline](/assets/images/understanding-gpu-memory-1/fig6.png){:style="width:100%;"}
 
 
 In this Memory Timeline collected using the Memory Profiler, we have the same training example as before. We can observe the **gradients in blue are now being cleared** from iteration to iteration. We can also notice that the **optimizer state in yellow is allocated after the first iteration**, and is kept constant for the rest of the job.
@@ -218,8 +218,9 @@ We are also open to contributions from the OSS community, feel free to tag [Aaro
 
 ## Acknowledgements
 
-Really appreciate the content reviewers, [Mark Saroufim](mailto:marksaroufim@meta.com), [Gregory Chanan](mailto:gchanan@meta.com), and [Adnan Aziz](mailto:adnanaziz@meta.com) for reviewing this post and improving its readability.
+Really appreciate the content reviewers, [Mark Saroufim](mailto:marksaroufim@meta.com) and [Gregory Chanan](mailto:gchanan@meta.com) for reviewing this post and improving its readability.
 
+Really appreciate the code reviews and feedback from [Adnan Aziz](mailto:adnanaziz@meta.com) and [Lei Tian](mailto:ltian@meta.com).
 
 ## Appendix
 
