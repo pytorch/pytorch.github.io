@@ -218,7 +218,7 @@ We are also open to contributions from the OSS community, feel free to tag [Aaro
 
 ## Acknowledgements
 
-Really appreciate the content reviewers, [Mark Saroufim](mailto:marksaroufim@meta.com) and [Gregory Chanan](mailto:gchanan@meta.com) for reviewing this post and improving its readability.
+Really appreciate the content reviewers, [Mark Saroufim](mailto:marksaroufim@meta.com) and [Gregory Chanan](mailto:gchanan@meta.com), for reviewing this post and improving its readability.
 
 Really appreciate the code reviews and feedback from [Adnan Aziz](mailto:adnanaziz@meta.com) and [Lei Tian](mailto:ltian@meta.com).
 
