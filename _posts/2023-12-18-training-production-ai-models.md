@@ -8,7 +8,7 @@ author: CK Luk, Daohang Shi, Yuzhen Huang, Jackie (Jiaqi) Xu, Jade Nie, Zhou Wan
 
 ## 1. Introduction
 
-[PyTorch 2.0](https://pytorch.org/get-started/pytorch-2.0/) (abbreviated as PT2) can significantly improve the training and inference performance of an AI model using a compiler called_ torch.compile_ while being 100% backward compatible with PyTorch 1.x. There have been reports on how PT2 improves the performance of common _benchmarks_ (e.g., [huggingface’s diffusers](https://huggingface.co/docs/diffusers/optimization/torch2.0)). In this blog, we discuss our experiences in applying PT2 to _production _AI models_ _at Meta.
+[PyTorch 2.0](https://pytorch.org/get-started/pytorch-2.0/) (abbreviated as PT2) can significantly improve the training and inference performance of an AI model using a compiler called _torch.compile_ while being 100% backward compatible with PyTorch 1.x. There have been reports on how PT2 improves the performance of common _benchmarks_ (e.g., [huggingface’s diffusers](https://huggingface.co/docs/diffusers/optimization/torch2.0)). In this blog, we discuss our experiences in applying PT2 to _production AI models_ at Meta.
 
 
 ## 2. Background
@@ -16,12 +16,12 @@ author: CK Luk, Daohang Shi, Yuzhen Huang, Jackie (Jiaqi) Xu, Jade Nie, Zhou Wan
 
 ### 2.1 Why is automatic performance optimization important for production?
 
-Performance is particularly important for production—e.g, even a 5% reduction in the training time of a heavily used model can translate to substantial savings in GPU cost and data-center _power_. Another important metric is _development efficiency_, which measures how many engineer-months are required to bring a model to production. Typically, a significant part of this bring-up effort is spent on _manual _performance tuning such as rewriting GPU kernels to improve the training speed. By providing _automatic _performance optimization, PT2 can improve _both_ cost and development efficiency.
+Performance is particularly important for production—e.g, even a 5% reduction in the training time of a heavily used model can translate to substantial savings in GPU cost and data-center _power_. Another important metric is _development efficiency_, which measures how many engineer-months are required to bring a model to production. Typically, a significant part of this bring-up effort is spent on _manual_ performance tuning such as rewriting GPU kernels to improve the training speed. By providing _automatic_ performance optimization, PT2 can improve _both_ cost and development efficiency.
 
 
 ### 2.2 How PT2 improves performance
 
-As a compiler, PT2 can view_ multiple_ operations in the training graph captured from a model (unlike in PT1.x, where only one operation is executed at a time). Consequently, PT2 can exploit a number of performance optimization opportunities, including:
+As a compiler, PT2 can view _multiple_ operations in the training graph captured from a model (unlike in PT1.x, where only one operation is executed at a time). Consequently, PT2 can exploit a number of performance optimization opportunities, including:
 
 
 
@@ -124,9 +124,9 @@ In this section, we use three production models to evaluate PT2. First we show t
 Figure 7 reports the training-time speedup with PT2. For each model, we show four cases: (i) no-compile with bf16, (ii) compile with fp32, (iii) compile with bf16, (iv) compile with bf16 and autotuning. The y-axis is the speedup over the baseline, which is no-compile with fp32.  Note that no-compile with bf16 is actually slower than no-compile with fp32, due to the type conversion overhead. In contrast, compiling with bf16 achieves much larger speedups by reducing much of this overhead. Overall, given that these models are already heavily optimized by hand, we are excited to see that torch.compile can still provide 1.14-1.24x speedup.
 
 
-![Fig.7 Training-time speedup with torch.compile (note: the baseline, no-compile/fp32, is_ omitted _in this figure).](/assets/images/training-production-ai-models/blog-fig7.jpg){:style="width:100%;"}
+![Fig.7 Training-time speedup with torch.compile (note: the baseline, no-compile/fp32, is _omitted_ in this figure).](/assets/images/training-production-ai-models/blog-fig7.jpg){:style="width:100%;"}
 
-<p style="line-height: 1.05"><small><em><strong>Fig. 7</strong>: Training-time speedup with torch.compile (note: the baseline, no-compile/fp32, is_ omitted _in this figure).</em></small></p>
+<p style="line-height: 1.05"><small><em><strong>Fig. 7</strong>: Training-time speedup with torch.compile (note: the baseline, no-compile/fp32, is omitted in this figure).</em></small></p>
 
 
 
