@@ -95,6 +95,7 @@ By default, the autotuning in torch.inductor is done _online_ while the model is
 
 <p style="line-height: 1.05"><small><em><strong>Fig. 4</strong>: The offline autotuning used in production.</em></small></p>
 
+### 3.3 Profiling support for torch.compile
 
 As we previously discussed in this [blog](https://pytorch.org/blog/performance-deb), a profiler is essential for debugging the performance of production models. We have enhanced the profiler to display torch.compile related events on the timeline. The most useful ones are marking which parts of the model are running compiled code so that we can quickly validate if the parts of the model that are supposed to be compiled are actually compiled by torch.compile. For example, the trace in Figure 5 has two compiled regions (with the label “CompiledFunction”). Other useful events are time spent on the compilation and that spent on accessing the compiler’s code-cache.
 
