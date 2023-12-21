@@ -242,7 +242,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href='https://pytorch.org/docs/versions.html'>main (2.3.0a0+git110339a ) &#x25BC</a>
+      <a href='https://pytorch.org/docs/versions.html'>main (2.3.0a0+gitbbded92 ) &#x25BC</a>
     </div>
     
 
@@ -479,14 +479,20 @@
               
   <h1>Source code for torch.autograd.graph</h1><div class="highlight"><pre>
 <span></span><span class="kn">import</span> <span class="nn">abc</span>
+<span class="kn">import</span> <span class="nn">collections</span>
 <span class="kn">import</span> <span class="nn">contextlib</span>
+<span class="kn">import</span> <span class="nn">logging</span>
 <span class="kn">import</span> <span class="nn">weakref</span>
 <span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">defaultdict</span><span class="p">,</span> <span class="n">namedtuple</span>
-<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">,</span> <span class="n">Set</span><span class="p">,</span> <span class="n">Tuple</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Deque</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">,</span> <span class="n">Set</span><span class="p">,</span> <span class="n">Tuple</span>
 
 <span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">from</span> <span class="nn">torch.autograd.variable</span> <span class="kn">import</span> <span class="n">Variable</span>
 <span class="kn">from</span> <span class="nn">torch.utils._python_dispatch</span> <span class="kn">import</span> <span class="n">TorchDispatchMode</span>
 <span class="kn">from</span> <span class="nn">torch.utils.hooks</span> <span class="kn">import</span> <span class="n">RemovableHandle</span>
+
+<span class="n">log</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+
 
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
     <span class="s2">&quot;saved_tensors_hooks&quot;</span><span class="p">,</span>
@@ -615,6 +621,13 @@
         <span class="k">return</span> <span class="bp">NotImplemented</span>
 
 
+<span class="k">def</span> <span class="nf">_get_grad_fn_or_grad_acc</span><span class="p">(</span><span class="n">t</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">t</span><span class="o">.</span><span class="n">requires_grad</span> <span class="ow">and</span> <span class="n">t</span><span class="o">.</span><span class="n">grad_fn</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">t</span><span class="o">.</span><span class="n">view_as</span><span class="p">(</span><span class="n">t</span><span class="p">)</span><span class="o">.</span><span class="n">grad_fn</span><span class="o">.</span><span class="n">next_functions</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">t</span><span class="o">.</span><span class="n">grad_fn</span>
+
+
 <span class="n">GradientEdge</span> <span class="o">=</span> <span class="n">namedtuple</span><span class="p">(</span><span class="s2">&quot;GradientEdge&quot;</span><span class="p">,</span> <span class="p">(</span><span class="s2">&quot;node output_nr&quot;</span><span class="p">))</span>
 <span class="n">GradientEdge</span><span class="o">.</span><span class="vm">__doc__</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;</span><span class="se">\</span>
 <span class="s2">Object representing a given gradient edge within the autograd graph.</span>
@@ -633,10 +646,7 @@
         <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
             <span class="s2">&quot;It is not possible to get the gradient edge for a Tensor that does not require gradients&quot;</span>
         <span class="p">)</span>
-    <span class="n">grad_fn</span> <span class="o">=</span> <span class="n">tensor</span><span class="o">.</span><span class="n">grad_fn</span>
-    <span class="k">if</span> <span class="n">grad_fn</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="c1"># Do an op to force AccumulateGrad lazy creation and get it</span>
-        <span class="n">grad_fn</span> <span class="o">=</span> <span class="n">tensor</span><span class="o">.</span><span class="n">view_as</span><span class="p">(</span><span class="n">tensor</span><span class="p">)</span><span class="o">.</span><span class="n">grad_fn</span><span class="o">.</span><span class="n">next_functions</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+    <span class="n">grad_fn</span> <span class="o">=</span> <span class="n">_get_grad_fn_or_grad_acc</span><span class="p">(</span><span class="n">tensor</span><span class="p">)</span>
 
     <span class="c1"># Note that output_nr default to 0 which is the right value</span>
     <span class="c1"># for the AccumulateGrad node.</span>
@@ -887,14 +897,7 @@
     <span class="n">nb_calls</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">buffer</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="n">Optional</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]]]</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
 
-    <span class="k">def</span> <span class="nf">get_grad_fn</span><span class="p">(</span><span class="n">t</span><span class="p">):</span>
-        <span class="c1"># or grad accumulator</span>
-        <span class="k">if</span> <span class="n">t</span><span class="o">.</span><span class="n">requires_grad</span> <span class="ow">and</span> <span class="n">t</span><span class="o">.</span><span class="n">grad_fn</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">t</span><span class="o">.</span><span class="n">expand_as</span><span class="p">(</span><span class="n">t</span><span class="p">)</span><span class="o">.</span><span class="n">grad_fn</span><span class="o">.</span><span class="n">next_functions</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">t</span><span class="o">.</span><span class="n">grad_fn</span>
-
-    <span class="n">grad_fns</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">map</span><span class="p">(</span><span class="n">get_grad_fn</span><span class="p">,</span> <span class="n">tensors</span><span class="p">))</span>
+    <span class="n">grad_fns</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">map</span><span class="p">(</span><span class="n">_get_grad_fn_or_grad_acc</span><span class="p">,</span> <span class="n">tensors</span><span class="p">))</span>
     <span class="n">len_tensors</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">tensors</span><span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">get_inner_hook</span><span class="p">(</span><span class="n">idx</span><span class="p">):</span>
@@ -1109,6 +1112,58 @@
         <span class="k">finally</span><span class="p">:</span>
             <span class="n">ctx</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
             <span class="n">_allow_mutation_on_saved_tensors_enabled</span> <span class="o">=</span> <span class="kc">False</span></div>
+
+
+<span class="k">def</span> <span class="nf">_register_logging_hooks_on_whole_graph</span><span class="p">(</span><span class="n">t_outputs</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]):</span>
+    <span class="n">grad_fns</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">map</span><span class="p">(</span><span class="n">_get_grad_fn_or_grad_acc</span><span class="p">,</span> <span class="n">t_outputs</span><span class="p">))</span>
+
+    <span class="k">def</span> <span class="nf">iter_graph</span><span class="p">(</span><span class="n">roots</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">roots</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="n">seen</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+        <span class="n">q</span><span class="p">:</span> <span class="n">Deque</span> <span class="o">=</span> <span class="n">collections</span><span class="o">.</span><span class="n">deque</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">node</span> <span class="ow">in</span> <span class="n">roots</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">node</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">seen</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">node</span><span class="p">)</span>
+                <span class="n">q</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">node</span><span class="p">)</span>
+
+        <span class="k">while</span> <span class="n">q</span><span class="p">:</span>
+            <span class="n">node</span> <span class="o">=</span> <span class="n">q</span><span class="o">.</span><span class="n">popleft</span><span class="p">()</span>
+            <span class="k">for</span> <span class="n">fn</span><span class="p">,</span> <span class="n">_idx</span> <span class="ow">in</span> <span class="n">node</span><span class="o">.</span><span class="n">next_functions</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">fn</span> <span class="ow">in</span> <span class="n">seen</span> <span class="ow">or</span> <span class="n">fn</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="k">continue</span>
+                <span class="n">seen</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">fn</span><span class="p">)</span>
+                <span class="n">q</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">fn</span><span class="p">)</span>
+
+            <span class="k">yield</span> <span class="n">node</span>
+
+    <span class="k">def</span> <span class="nf">prehook</span><span class="p">(</span><span class="n">grad_output</span><span class="p">):</span>
+        <span class="n">node</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">_current_autograd_node</span><span class="p">()</span>
+        <span class="n">log_str</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;Executing: </span><span class="si">{</span><span class="n">node</span><span class="si">}</span><span class="s2"> with grad_output: </span><span class="si">{</span><span class="n">grad_output</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="n">log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="n">log_str</span><span class="p">)</span>
+
+    <span class="n">handles</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">node</span> <span class="ow">in</span> <span class="n">iter_graph</span><span class="p">(</span><span class="n">grad_fns</span><span class="p">):</span>
+        <span class="n">handles</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">node</span><span class="o">.</span><span class="n">register_prehook</span><span class="p">(</span><span class="n">prehook</span><span class="p">))</span>
+
+    <span class="k">def</span> <span class="nf">unregister_hooks</span><span class="p">():</span>
+        <span class="k">for</span> <span class="n">handle</span> <span class="ow">in</span> <span class="n">handles</span><span class="p">:</span>
+            <span class="n">handle</span><span class="o">.</span><span class="n">remove</span><span class="p">()</span>
+
+    <span class="k">return</span> <span class="n">unregister_hooks</span>
+
+
+<span class="k">def</span> <span class="nf">_engine_run_backward</span><span class="p">(</span><span class="n">t_outputs</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="n">attach_logging_hooks</span> <span class="o">=</span> <span class="n">log</span><span class="o">.</span><span class="n">getEffectiveLevel</span><span class="p">()</span> <span class="o">&lt;=</span> <span class="n">logging</span><span class="o">.</span><span class="n">INFO</span>
+    <span class="k">if</span> <span class="n">attach_logging_hooks</span><span class="p">:</span>
+        <span class="n">unregister_hooks</span> <span class="o">=</span> <span class="n">_register_logging_hooks_on_whole_graph</span><span class="p">(</span><span class="n">t_outputs</span><span class="p">)</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">Variable</span><span class="o">.</span><span class="n">_execution_engine</span><span class="o">.</span><span class="n">run_backward</span><span class="p">(</span>  <span class="c1"># Calls into the C++ engine to run the backward pass</span>
+            <span class="n">t_outputs</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
+        <span class="p">)</span>  <span class="c1"># Calls into the C++ engine to run the backward pass</span>
+    <span class="k">finally</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">attach_logging_hooks</span><span class="p">:</span>
+            <span class="n">unregister_hooks</span><span class="p">()</span>
 </pre></div>
 
              </article>
