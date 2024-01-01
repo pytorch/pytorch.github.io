@@ -34,7 +34,7 @@ We will walk through some simple examples to demonstrate how we use a chain of a
 
 ### Case 1: Horizontal fusion of computation chains started with accesses to embedding tables
 
-Horizontal fusion means fusing parallel operators into one so as to reduce the number of kernels to be launched and improve performance. In our previous blog ([Section 3.2](https://fburl.com/dp0c31pl)), we described model transformations that fused layernorm and activation functions after embedding bags, as shown in the figure provided. However, this method, had limitations:
+Horizontal fusion means fusing parallel operators into one so as to reduce the number of kernels to be launched and improve performance. In our previous blog ([Section 3.2](https://pytorch.org/blog/optimizing-production-pytorch-performance-with-graph-transformations/#32-horizontal-fusion-of-computation-chains-started-with-accesses-to-embedding-tables)), we described model transformations that fused layernorm and activation functions after embedding bags, as shown in the figure provided. However, this method, had limitations:
 
 
 
