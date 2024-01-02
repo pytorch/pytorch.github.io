@@ -89,7 +89,7 @@ We design a two-step greedy algorithm as illustrated in Fig. 5. The first step i
 <p style="line-height: 1.05"><small><em><strong>Fig. 5</strong>: Process of model transformation with graph IR.</em></small></p>
 
 
-With our approach, the search time is roughly 60 seconds for one of our largest internal models. It is manageable for on-the-fly tasks and 
+With our approach, the search time is roughly 60 seconds for one of our largest internal models, which is manageable for on-the-fly tasks.
 
 
 ## In the End
