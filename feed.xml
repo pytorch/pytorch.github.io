@@ -4,7 +4,7 @@
   <generator uri="https://jekyllrb.com/" version="3.9.0">Jekyll</generator>
   <link href="https://pytorch.org/feed.xml" rel="self" type="application/atom+xml" />
   <link href="https://pytorch.org/" rel="alternate" type="text/html" />
-  <updated>2024-01-02T22:02:03-08:00</updated>
+  <updated>2024-01-03T10:26:43-08:00</updated>
   <id>https://pytorch.org/feed.xml</id>
 
   
@@ -29,6 +29,313 @@
 
   
   
+  
+    <entry>
+      <title type="html">Accelerating Generative AI Part III: Diffusion, Fast</title>
+      <link href="https://pytorch.org/blog/accelerating-generative-ai-3/" rel="alternate" type="text/html" title="Accelerating Generative AI Part III: Diffusion, Fast" />
+      <published>2024-01-03T00:00:00-08:00</published>
+      <updated>2024-01-03T00:00:00-08:00</updated>
+      <id>https://pytorch.org/blog/accelerating-generative-ai-3</id>
+      <content type="html" xml:base="https://pytorch.org/blog/accelerating-generative-ai-3/">&lt;p&gt;This post is the third part of a multi-series blog focused on how to accelerate generative AI models with pure, native PyTorch. We are excited to share a breadth of newly released PyTorch performance features alongside practical examples to see how far we can push PyTorch native performance. In part one, we showed how to accelerate &lt;a href=&quot;https://pytorch.org/blog/accelerating-generative-ai/&quot;&gt;Segment Anything over 8x&lt;/a&gt; using only pure, native PyTorch. In part two, we showed how to accelerate &lt;a href=&quot;https://pytorch.org/blog/accelerating-generative-ai-2/&quot;&gt;Llama-7B by almost 10x&lt;/a&gt; using only native PyTorch optimizations. In this blog, we’ll focus on speeding up text-to-image diffusion models by upto 3x.&lt;/p&gt;
+
+&lt;p&gt;We will leverage an array of optimizations including:&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;Running with the bfloat16 precision&lt;/li&gt;
+  &lt;li&gt;scaled_dot_product_attention (SPDA)&lt;/li&gt;
+  &lt;li&gt;torch.compile&lt;/li&gt;
+  &lt;li&gt;Combining q,k,v projections for attention computation&lt;/li&gt;
+  &lt;li&gt;Dynamic int8 quantization&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;We will primarily focus on Stable Diffusion XL (SDXL), demonstrating a latency improvement of 3x. These techniques are PyTorch-native, which means you don’t have to rely on any third-party libraries or any C++ code to take advantage of them.&lt;/p&gt;
+
+&lt;p&gt;Enabling these optimizations with the 🤗Diffusers library takes just a few lines of code. If you’re already feeling excited and cannot wait to jump to the code, check out the accompanying repository here: &lt;a href=&quot;https://github.com/huggingface/diffusion-fast&quot;&gt;https://github.com/huggingface/diffusion-fast&lt;/a&gt;.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-generative-ai-3/fg1.png&quot; alt=&quot;SDXL Chart&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;em&gt;(The discussed techniques are not SDXL-specific and can be used to speed up other text-to-image diffusion systems, as shown later.)&lt;/em&gt;&lt;/p&gt;
+
+&lt;p&gt;Below, you can find some blog posts on similar topics:&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;a href=&quot;https://pytorch.org/blog/accelerated-diffusers-pt-20/&quot;&gt;Accelerated Diffusers with PyTorch 2.0&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://huggingface.co/blog/simple_sdxl_optimizations&quot;&gt;Exploring simple optimizations for SDXL&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://pytorch.org/blog/accelerated-generative-diffusion-models/&quot;&gt;Accelerated Generative Diffusion Models with PyTorch 2&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h2 id=&quot;setup&quot;&gt;Setup&lt;/h2&gt;
+
+&lt;p&gt;We will demonstrate the optimizations and their respective speed-up gains using the 🤗&lt;a href=&quot;https://github.com/huggingface/diffusers&quot;&gt;Diffusers library&lt;/a&gt;. Apart from that, we will make use of the following PyTorch-native libraries and environments:&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;Torch nightly (to benefit from the fastest kernels for efficient attention; 2.3.0.dev20231218+cu121)&lt;/li&gt;
+  &lt;li&gt;🤗 PEFT (version: 0.7.1)&lt;/li&gt;
+  &lt;li&gt;torchao (commit SHA: 54bcd5a10d0abbe7b0c045052029257099f83fd9)&lt;/li&gt;
+  &lt;li&gt;CUDA 12.1&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;For an easier reproduction environment, you can also refer to this &lt;a href=&quot;https://github.com/huggingface/sdxl-fast/blob/main/Dockerfile&quot;&gt;Dockerfile&lt;/a&gt;. The benchmarking numbers presented in this post come from a 400W 80GB A100 GPU (with its clock rate set to its maximum capacity).&lt;/p&gt;
+
+&lt;p&gt;Since we use an A100 GPU (Ampere architecture) here, we can specify &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;torch.set_float32_matmul_precision(&quot;high&quot;)&lt;/code&gt; to benefit from the &lt;a href=&quot;https://blogs.nvidia.com/blog/tensorfloat-32-precision-format/&quot;&gt;TF32 precision format&lt;/a&gt;.&lt;/p&gt;
+
+&lt;h2 id=&quot;run-inference-using-a-reduced-precision&quot;&gt;Run inference using a reduced precision&lt;/h2&gt;
+
+&lt;p&gt;Running SDXL in Diffusers just takes a few lines of code:&lt;/p&gt;
+
+&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;from diffusers import StableDiffusionXLPipeline
+
+## Load the pipeline in full-precision and place its model components on CUDA.
+pipe = StableDiffusionXLPipeline.from_pretrained(&quot;stabilityai/stable-diffusion-xl-base-1.0&quot;).to(&quot;cuda&quot;)
+
+## Run the attention ops without efficiency.
+pipe.unet.set_default_attn_processor()
+pipe.vae.set_default_attn_processor()
+
+prompt = &quot;Astronaut in a jungle, cold color palette, muted colors, detailed, 8k&quot;
+image = pipe(prompt, num_inference_steps=30).images[0]
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;But this isn’t very practical as it takes &lt;strong&gt;7.36 seconds&lt;/strong&gt; to generate a single image with 30 steps. This is our baseline which we will try to optimize one step at a time.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-generative-ai-3/fg2.png&quot; alt=&quot;SDXL Chart&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Here, we’re running the pipeline with the full precision. We can immediately cut down the inference time by using a reduced precision such as &lt;a href=&quot;https://cloud.google.com/tpu/docs/bfloat16&quot;&gt;bfloat16&lt;/a&gt;. Besides, modern GPUs come with dedicated cores for running accelerated computation benefiting from reduced precision. To run the computations of the pipeline in the bfloat16 precision, we just need to specify the data type while initializing the pipeline:&lt;/p&gt;
+
+&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;from diffusers import StableDiffusionXLPipeline
+
+pipe = StableDiffusionXLPipeline.from_pretrained(
+	&quot;stabilityai/stable-diffusion-xl-base-1.0&quot;, torch_dtype=torch.bfloat16
+).to(&quot;cuda&quot;)
+
+## Run the attention ops without efficiency.
+pipe.unet.set_default_attn_processor()
+pipe.vae.set_default_attn_processor()
+prompt = &quot;Astronaut in a jungle, cold color palette, muted colors, detailed, 8k&quot;
+image = pipe(prompt, num_inference_steps=30).images[0]
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-generative-ai-3/fg3.png&quot; alt=&quot;SDXL Chart&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;By using a reduced precision, we’re able to cut down the inference latency from &lt;strong&gt;7.36 seconds to 4.63 seconds&lt;/strong&gt;.&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Some notes on the use of bfloat16&lt;/strong&gt;&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;Using a reduced numerical precision (such as float16, bfloat16) to run inference doesn’t affect the generation quality but significantly improves latency.&lt;/li&gt;
+  &lt;li&gt;The benefits of using the &lt;a href=&quot;https://cloud.google.com/tpu/docs/bfloat16&quot;&gt;bfloat16&lt;/a&gt; numerical precision as compared to float16 are hardware-dependent. Modern generations of GPUs tend to favor bfloat16.&lt;/li&gt;
+  &lt;li&gt;Furthermore, in our experiments, we bfloat16 to be much more resilient when used with quantization in comparison to float16.&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;&lt;em&gt;(We later ran the experiments in float16 and found out that the recent versions of torchao do not incur numerical problems from float16.)&lt;/em&gt;&lt;/p&gt;
+
+&lt;h2 id=&quot;use-sdpa-for-performing-attention-computations&quot;&gt;Use SDPA for performing attention computations&lt;/h2&gt;
+
+&lt;p&gt;By default, Diffusers uses &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;scaled_dot_product_attention&lt;/code&gt; (SDPA) for performing attention-related computations when using PyTorch 2. SDPA provides faster and more efficient kernels to run intensive attention-related operations. To run the pipeline SDPA, we simply don’t set any attention processor like so:&lt;/p&gt;
+
+&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;from diffusers import StableDiffusionXLPipeline
+
+pipe = StableDiffusionXLPipeline.from_pretrained(
+	&quot;stabilityai/stable-diffusion-xl-base-1.0&quot;, torch_dtype=torch.bfloat16
+).to(&quot;cuda&quot;)
+
+prompt = &quot;Astronaut in a jungle, cold color palette, muted colors, detailed, 8k&quot;
+image = pipe(prompt, num_inference_steps=30).images[0]
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;SDPA gives a nice boost from &lt;strong&gt;4.63 seconds to 3.31 seconds&lt;/strong&gt;.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-generative-ai-3/fg4.png&quot; alt=&quot;SDXL Chart&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
+
+&lt;h2 id=&quot;compiling-the-unet-and-vae&quot;&gt;Compiling the UNet and VAE&lt;/h2&gt;
+
+&lt;p&gt;We can ask PyTorch to perform some low-level optimizations (such as operator fusion and launching faster kernels with CUDA graphs) by using &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;torch.compile&lt;/code&gt;. For the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;StableDiffusionXLPipeline&lt;/code&gt;, we compile the denoiser (UNet) and the VAE:&lt;/p&gt;
+
+&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;from diffusers import StableDiffusionXLPipeline
+import torch
+
+pipe = StableDiffusionXLPipeline.from_pretrained(
+    &quot;stabilityai/stable-diffusion-xl-base-1.0&quot;, torch_dtype=torch.bfloat16
+).to(&quot;cuda&quot;)
+
+## Compile the UNet and VAE.
+pipe.unet = torch.compile(pipe.unet, mode=&quot;max-autotune&quot;, fullgraph=True)
+pipe.vae.decode = torch.compile(pipe.vae.decode, mode=&quot;max-autotune&quot;, fullgraph=True)
+
+prompt = &quot;Astronaut in a jungle, cold color palette, muted colors, detailed, 8k&quot;
+
+## First call to `pipe` will be slow, subsequent ones will be faster.
+image = pipe(prompt, num_inference_steps=30).images[0]
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Using SDPA attention and compiling both the UNet and VAE reduces the latency from &lt;strong&gt;3.31 seconds to 2.54 seconds&lt;/strong&gt;.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-generative-ai-3/fg5.png&quot; alt=&quot;SDXL Chart&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Notes on &lt;code&gt;torch.compile&lt;/code&gt;&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;torch.compile&lt;/code&gt; offers different backends and modes. As we’re aiming for maximum inference speed, we opt for the inductor backend using the “max-autotune”. “max-autotune” uses CUDA graphs and optimizes the compilation graph specifically for latency. Using CUDA graphs greatly reduces the overhead of launching GPU operations. It saves time by using a mechanism to launch multiple GPU operations through a single CPU operation.&lt;/p&gt;
+
+&lt;p&gt;Specifying &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;fullgraph&lt;/code&gt; to be &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;True&lt;/code&gt; ensures that there are no graph breaks in the underlying model, ensuring the fullest potential of &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;torch.compile&lt;/code&gt;. In our case, the following compiler flags were also important to be explicitly set:&lt;/p&gt;
+
+&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;torch._inductor.config.conv_1x1_as_mm = True
+torch._inductor.config.coordinate_descent_tuning = True
+torch._inductor.config.epilogue_fusion = False
+torch._inductor.config.coordinate_descent_check_all_directions = True
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;For the full list of compiler flags, refer to &lt;a href=&quot;https://github.com/pytorch/pytorch/blob/main/torch/_inductor/config.py&quot;&gt;this file.&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;We also change the memory layout of the UNet and the VAE to “channels_last” when compiling them to ensure maximum speed:&lt;/p&gt;
+
+&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;pipe.unet.to(memory_format=torch.channels_last)
+pipe.vae.to(memory_format=torch.channels_last)
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;In the next section, we’ll show how to improve the latency even further.&lt;/p&gt;
+
+&lt;h2 id=&quot;additional-optimizations&quot;&gt;Additional optimizations&lt;/h2&gt;
+
+&lt;h3 id=&quot;no-graph-breaks-during-torchcompile&quot;&gt;No graph breaks during &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;torch.compile&lt;/code&gt;&lt;/h3&gt;
+
+&lt;p&gt;Ensuring that the underlying model/method can be fully compiled is crucial for performance (&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;torch.compile&lt;/code&gt; with &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;fullgraph=True&lt;/code&gt;). This means having no graph breaks. We did this for the UNet and VAE by changing how we access the returning variables. Consider the following example:&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-generative-ai-3/fg5b.jpg&quot; alt=&quot;code example&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
+
+&lt;h3 id=&quot;getting-rid-of-gpu-syncs-after-compilation&quot;&gt;Getting rid of GPU syncs after compilation&lt;/h3&gt;
+
+&lt;p&gt;During the iterative reverse diffusion process, we &lt;a href=&quot;https://github.com/huggingface/diffusers/blob/1d686bac8146037e97f3fd8c56e4063230f71751/src/diffusers/pipelines/stable_diffusion_xl/pipeline_stable_diffusion_xl.py#L1228&quot;&gt;call&lt;/a&gt; &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;step()&lt;/code&gt; on the scheduler each time after the denoiser predicts the less noisy latent embeddings. Inside &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;step()&lt;/code&gt;, the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;sigmas&lt;/code&gt; variable is &lt;a href=&quot;https://github.com/huggingface/diffusers/blob/1d686bac8146037e97f3fd8c56e4063230f71751/src/diffusers/schedulers/scheduling_euler_discrete.py#L476&quot;&gt;indexed&lt;/a&gt;. If the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;sigmas&lt;/code&gt; array is placed on the GPU, indexing causes a communication sync between the CPU and GPU. This causes a latency, and it becomes more evident when the denoiser has already been compiled.&lt;/p&gt;
+
+&lt;p&gt;But if the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;sigmas &lt;/code&gt;array always stays on the CPU (refer to &lt;a href=&quot;https://github.com/huggingface/diffusers/blob/35a969d297cba69110d175ee79c59312b9f49e1e/src/diffusers/schedulers/scheduling_euler_discrete.py#L240&quot;&gt;this line&lt;/a&gt;), this sync doesn’t take place, hence improved latency. In general, any CPU &amp;lt;-&amp;gt; GPU communication sync should be none or be kept to a bare minimum as it can impact inference latency.&lt;/p&gt;
+
+&lt;h3 id=&quot;using-combined-projections-for-attention-ops&quot;&gt;Using combined projections for attention ops&lt;/h3&gt;
+
+&lt;p&gt;Both the UNet and the VAE used in SDXL make use of Transformer-like blocks. A Transformer block consists of attention blocks and feed-forward blocks.&lt;/p&gt;
+
+&lt;p&gt;In an attention block, the input is projected into three sub-spaces using three different projection matrices – Q, K, and V. In the naive implementation, these projections are performed separately on the input. But we can horizontally combine the projection matrices into a single matrix and perform the projection in one shot. This increases the size of the matmuls of the input projections and improves the impact of quantization (to be discussed next).&lt;/p&gt;
+
+&lt;p&gt;Enabling this kind of computation in Diffusers just takes a single line of code:&lt;/p&gt;
+
+&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;pipe.fuse_qkv_projections()
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;This will make the attention operations for both the UNet and the VAE take advantage of the combined projections. For the cross-attention layers, we only combine the key and value matrices. To learn more, you can refer to the official documentation &lt;a href=&quot;https://huggingface.co/docs/diffusers/main/en/api/pipelines/stable_diffusion/stable_diffusion_xl#diffusers.StableDiffusionXLPipeline.fuse_qkv_projections&quot;&gt;here&lt;/a&gt;. It’s worth noting that we &lt;a href=&quot;https://github.com/huggingface/diffusers/blob/35a969d297cba69110d175ee79c59312b9f49e1e/src/diffusers/models/attention_processor.py#L1356&quot;&gt;leverage&lt;/a&gt; PyTorch’s &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;scaled_dot_product_attention&lt;/code&gt; here internally.&lt;/p&gt;
+
+&lt;p&gt;These additional techniques improved the inference latency from &lt;strong&gt;2.54 seconds to 2.52 seconds&lt;/strong&gt;.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-generative-ai-3/fg6.png&quot; alt=&quot;SDXL Chart&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
+
+&lt;h2 id=&quot;dynamic-int8-quantization&quot;&gt;Dynamic int8 quantization&lt;/h2&gt;
+
+&lt;p&gt;We selectively apply &lt;a href=&quot;https://pytorch.org/tutorials/recipes/recipes/dynamic_quantization.html&quot;&gt;dynamic int8 quantization&lt;/a&gt; to both the UNet and the VAE. This is because quantization adds additional conversion overhead to the model that is hopefully made up for by faster matmuls (dynamic quantization). If the matmuls are too small, these techniques may degrade performance.&lt;/p&gt;
+
+&lt;p&gt;Through experimentation, we found that certain linear layers in the UNet and the VAE don’t benefit from dynamic int8 quantization. You can check out the full code for filtering those layers &lt;a href=&quot;https://github.com/huggingface/diffusion-fast/blob/0f169640b1db106fe6a479f78c1ed3bfaeba3386/utils/pipeline_utils.py#L16&quot;&gt;here&lt;/a&gt; (referred to as &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;dynamic_quant_filter_fn&lt;/code&gt; below).&lt;/p&gt;
+
+&lt;p&gt;We leverage the ultra-lightweight pure PyTorch library &lt;a href=&quot;https://github.com/pytorch-labs/ao&quot;&gt;torchao&lt;/a&gt; to use its user-friendly APIs for quantization:&lt;/p&gt;
+
+&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;from torchao.quantization import apply_dynamic_quant
+
+apply_dynamic_quant(pipe.unet, dynamic_quant_filter_fn)
+apply_dynamic_quant(pipe.vae, dynamic_quant_filter_fn)
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Since this quantization support is limited to linear layers only, we also turn suitable pointwise convolution layers into linear layers to maximize the benefit. We also specify the following compiler flags when using this option:&lt;/p&gt;
+
+&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;torch._inductor.config.force_fuse_int_mm_with_mul = True
+torch._inductor.config.use_mixed_mm = True
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;To prevent any numerical issues stemming from quantization, we run everything in the bfloat16 format.&lt;/p&gt;
+
+&lt;p&gt;Applying quantization this way improved the latency from &lt;strong&gt;2.52 seconds to 2.43 seconds&lt;/strong&gt;.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-generative-ai-3/fg7.png&quot; alt=&quot;SDXL Chart&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
+
+&lt;h2 id=&quot;resources&quot;&gt;Resources&lt;/h2&gt;
+
+&lt;p&gt;We welcome you to check out the following codebases to reproduce these numbers and extend the techniques to other text-to-image diffusion systems as well:&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;a href=&quot;https://github.com/huggingface/diffusion-fast&quot;&gt;diffusion-fast&lt;/a&gt; (repository providing all the code to reproduce the numbers and plots above)&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://github.com/pytorch-labs/ao&quot;&gt;torchao library&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://github.com/huggingface/diffusers&quot;&gt;Diffusers library&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://github.com/huggingface/peft&quot;&gt;PEFT library&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;&lt;strong&gt;Other links&lt;/strong&gt;&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;a href=&quot;https://huggingface.co/papers/2307.01952&quot;&gt;SDXL: Improving Latent Diffusion Models for High-Resolution Image Synthesis&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://huggingface.co/docs/diffusers/main/en/tutorials/fast_diffusion&quot;&gt;Fast diffusion documentation&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h2 id=&quot;improvements-in-other-pipelines&quot;&gt;Improvements in other pipelines&lt;/h2&gt;
+
+&lt;p&gt;We applied these techniques to other pipelines to test the generality of our approach. Below are our findings:&lt;/p&gt;
+
+&lt;h3 id=&quot;ssd-1b&quot;&gt;&lt;a href=&quot;https://huggingface.co/segmind/SSD-1B&quot;&gt;SSD-1B&lt;/a&gt;&lt;/h3&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-generative-ai-3/fg8.png&quot; alt=&quot;SSD-1B Chart&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
+
+&lt;h3 id=&quot;stable-diffusion-v1-5&quot;&gt;&lt;a href=&quot;https://huggingface.co/runwayml/stable-diffusion-v1-5&quot;&gt;Stable Diffusion v1-5&lt;/a&gt;&lt;/h3&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-generative-ai-3/fg9.png&quot; alt=&quot;Stable Diffusion v1-5 chart&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
+
+&lt;h3 id=&quot;pixart-alphapixart-xl-2-1024-ms&quot;&gt;&lt;a href=&quot;https://huggingface.co/PixArt-alpha/PixArt-XL-2-1024-MS&quot;&gt;PixArt-alpha/PixArt-XL-2-1024-MS&lt;/a&gt;&lt;/h3&gt;
+
+&lt;p&gt;It’s worth noting that PixArt-Alpha uses a Transformer-based architecture as its denoiser for the reverse diffusion process instead of a UNet.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-generative-ai-3/fg10.png&quot; alt=&quot;PixArt-alpha/PixArt-XL-2-1024-MS chart&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Note that for Stable Diffusion v1-5 and PixArt-Alpha, we didn’t explore the best shape combination criteria for applying dynamic int8 quantization. It might be possible to get better numbers with a better combination.&lt;/p&gt;
+
+&lt;p&gt;Collectively, the methods we presented offer substantial speedup over the baseline without degradation in the generation quality. Furthermore, we believe that these methods should complement other optimization methods popular in the community (such as &lt;a href=&quot;https://github.com/horseee/DeepCache&quot;&gt;DeepCache&lt;/a&gt;, &lt;a href=&quot;https://github.com/chengzeyi/stable-fast&quot;&gt;Stable Fast&lt;/a&gt;, etc.).&lt;/p&gt;
+
+&lt;h2 id=&quot;conclusion-and-next-steps&quot;&gt;Conclusion and next steps&lt;/h2&gt;
+
+&lt;p&gt;In this post, we presented a basket of simple yet effective techniques that can help improve the inference latency of text-to-image Diffusion models in pure PyTorch. In summary:&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;Using a reduced precision to perform our computations&lt;/li&gt;
+  &lt;li&gt;Scaled-dot product attention for running the attention blocks efficiently&lt;/li&gt;
+  &lt;li&gt;torch.compile with “max-autotune” to improve for latency&lt;/li&gt;
+  &lt;li&gt;Combining the different projections together for computing attention&lt;/li&gt;
+  &lt;li&gt;Dynamic int8 quantization&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;We believe there’s a lot to be explored in terms of how we apply quantization to a text-to-image diffusion system. We didn’t exhaustively explore which layers in the UNet and the VAE tend to benefit from dynamic quantization. There might be opportunities to further speed things up with a better combination of the layers being targeted for quantization.&lt;/p&gt;
+
+&lt;p&gt;We kept the text encoders of SDXL untouched other than just running them in bfloat16. Optimizing them might also lead to improvements in latency.&lt;/p&gt;
+
+&lt;h2 id=&quot;acknowledgements&quot;&gt;Acknowledgements&lt;/h2&gt;
+
+&lt;p&gt;Thanks to &lt;a href=&quot;https://madebyoll.in/&quot;&gt;Ollin Boer Bohan&lt;/a&gt; whose &lt;a href=&quot;https://huggingface.co/madebyollin/sdxl-vae-fp16-fix&quot;&gt;VAE&lt;/a&gt; was used throughout the benchmarking process as it is numerically more stable under reduced numerical precisions.&lt;/p&gt;
+
+&lt;p&gt;Thanks to Hugo Larcher from Hugging Face for helping with infrastructure.&lt;/p&gt;</content>
+
+      
+      
+      
+      
+      
+
+      <author>
+          <name>Sayak Paul and Patrick von Platen (Hugging Face 🤗)</name>
+        
+        
+      </author>
+
+      
+
+      
+
+      
+        <summary type="html">This post is the third part of a multi-series blog focused on how to accelerate generative AI models with pure, native PyTorch. We are excited to share a breadth of newly released PyTorch performance features alongside practical examples to see how far we can push PyTorch native performance. In part one, we showed how to accelerate Segment Anything over 8x using only pure, native PyTorch. In part two, we showed how to accelerate Llama-7B by almost 10x using only native PyTorch optimizations. In this blog, we’ll focus on speeding up text-to-image diffusion models by upto 3x.</summary>
+      
+
+      
+      
+    </entry>
   
     <entry>
       <title type="html">Understanding GPU Memory 2: Finding and Removing Reference Cycles</title>
@@ -2440,59 +2747,6 @@ def apply_sparse(model):
 
       
         <summary type="html">This post is the first part of a multi-series blog focused on how to accelerate generative AI models with pure, native PyTorch. We are excited to share a breadth of newly released PyTorch performance features alongside practical examples of how these features can be combined to see how far we can push PyTorch native performance.</summary>
-      
-
-      
-      
-    </entry>
-  
-    <entry>
-      <title type="html">🎉 PyTorch Docathon H2 2023 Wrap-up 🎉</title>
-      <link href="https://pytorch.org/blog/pytorch-docathon-h2-2023-wrap/" rel="alternate" type="text/html" title="🎉 PyTorch Docathon H2 2023 Wrap-up 🎉" />
-      <published>2023-11-16T00:00:00-08:00</published>
-      <updated>2023-11-16T00:00:00-08:00</updated>
-      <id>https://pytorch.org/blog/pytorch-docathon-h2-2023-wrap</id>
-      <content type="html" xml:base="https://pytorch.org/blog/pytorch-docathon-h2-2023-wrap/">&lt;p&gt;We are thrilled to announce the successful completion of the Fall 2023 PyTorch Docathon! The event was a resounding success, and we want to extend our heartfelt gratitude to all the participants who made it possible. Dedication, expertise, and tireless efforts of our open-source contributors have once again helped us to improve PyTorch documentation.&lt;/p&gt;
-
-&lt;p&gt;This Docathon ran from Nov 1 through Nov 15 with more than 170 registrants. The energy and enthusiasm were palpable, and entrants were judged on the difficulty of submissions that resulted in over TBA merged pull requests. We have fixed the PyTorch docstrings and made them compatible with the PEP 257 Python Docstring Conventions guidelines. We also have fixed multiple bugs in the pytorch/tutorials repo.&lt;/p&gt;
-
-&lt;p&gt;We want to give a special shout-out to our top contributors, who went above and beyond during this event. Your dedication and expertise have been invaluable in enhancing the PyTorch documentation and empowering developers worldwide.&lt;/p&gt;
-
-&lt;p&gt;Meet the top contributors:&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;First place: &lt;a href=&quot;https://github.com/ahoblitz&quot;&gt;ahoblitz&lt;/a&gt;, &lt;a href=&quot;https://github.com/spzala&quot;&gt;spzala&lt;/a&gt;, &lt;a href=&quot;https://github.com/alperenunlu&quot;&gt;alperenunlu&lt;/a&gt;, &lt;a href=&quot;https://github.com/ChanBong&quot;&gt;ChanBong&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;Second place: &lt;a href=&quot;https://github.com/nvs-abhilash&quot;&gt;nvs-abhilash&lt;/a&gt;, &lt;a href=&quot;https://github.com/bjhargrave&quot;&gt;bjhargrave&lt;/a&gt;, &lt;a href=&quot;https://github.com/zabboud&quot;&gt;zabboud&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;Third place: &lt;a href=&quot;https://github.com/guptaaryan16&quot;&gt;guptaaryan16&lt;/a&gt;, &lt;a href=&quot;https://github.com/min-jean-cho&quot;&gt;min-jean-cho&lt;/a&gt;, &lt;a href=&quot;https://github.com/markstur&quot;&gt;markstur&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;Honorable mentions: &lt;a href=&quot;https://github.com/RustyGrackle&quot;&gt;RustyGrackle&lt;/a&gt;, &lt;a href=&quot;https://github.com/Viditagarwal7479&quot;&gt;Viditagarwal7479&lt;/a&gt;, &lt;a href=&quot;https://github.com/Skylion007&quot;&gt;Skylion007&lt;/a&gt;&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;You can see the full docathon leaderboard published &lt;a href=&quot;https://github.com/pytorch/tutorials/blob/main/docathon-leaderboard.md&quot;&gt;here&lt;/a&gt;.&lt;/p&gt;
-
-&lt;p&gt;As we bring this Docathon to a close, we encourage each and every one of you to stay inspired and keep contributing to PyTorch documentation and code, and pushing the boundaries of what’s possible with PyTorch. Your collective efforts are shaping the landscape of deep learning and fostering innovation in the PyTorch community.&lt;/p&gt;
-
-&lt;p&gt;Thank you again for your participation and support. We look forward to seeing what you will achieve next!&lt;/p&gt;
-
-&lt;p&gt;Team PyTorch&lt;/p&gt;</content>
-
-      
-      
-      
-      
-      
-
-      <author>
-          <name>Facebook</name>
-        
-        
-      </author>
-
-      
-
-      
-
-      
-        <summary type="html">We are thrilled to announce the successful completion of the Fall 2023 PyTorch Docathon! The event was a resounding success, and we want to extend our heartfelt gratitude to all the participants who made it possible. Dedication, expertise, and tireless efforts of our open-source contributors have once again helped us to improve PyTorch documentation.</summary>
       
 
       
