@@ -59,7 +59,7 @@ These atomic rules offer a clean and streamlined way for model simplification an
 
 ### Case 2: Fuse horizontal MLP
 
-[MLP](https://fburl.com/wiki/2kypn658)s (Multilayer Perceptrons) are fundamental components of deep neural networks, often consisting of linear, normalization, and activation functions. In complex models, there’s often a need to fuse many horizontal MLPs. Traditional methods find and replace parallel MLPs with a fused module as shown in Fig.4,  but this isn’t always straightforward. Some models might not have normalization, or they might use different activation functions, making it hard to apply a one-size-fits-all rule.
+[MLP](https://en.wikipedia.org/wiki/Multilayer_perceptron)s (Multilayer Perceptrons) are fundamental components of deep neural networks, often consisting of linear, normalization, and activation functions. In complex models, there’s often a need to fuse many horizontal MLPs. Traditional methods find and replace parallel MLPs with a fused module as shown in Fig.4,  but this isn’t always straightforward. Some models might not have normalization, or they might use different activation functions, making it hard to apply a one-size-fits-all rule.
 
 This is where our atomic rules come in handy. These simplified rules target individual operators one at a time, making the process easier and more manageable. We use the following atomic rules for horizontal MLP fusion:
 
