@@ -18,7 +18,7 @@ In our previous [blog post](https://pytorch.org/blog/optimizing-production-pytor
 In this blog post, we propose a more generalized model transformation solution, serving as a plugin to the PT2 compiler as shown in Fig.1 which is more general, performant and user-friendly, bringing performance improvements to both model training and inference without manual efforts. As illustrated in Fig.2, by incorporating the previously user-defined transformations into the compiler, we have streamlined the production stack. These changes bring advantages to a broader range of PyTorch models, extending beyond just Meta models,  which has already been incorporated in PT2 and is ready for use to benefit all Pytorch models.
 
 
-![Fig.2 Simplified stack with PT2 compile mode.](/assets/images/empowering-models-performance/fig2.jpg){:style="width:100%;"}
+![Fig.2 Simplified stack with PT2 compile mode.](/assets/images/empowering-models-performance/fig2_update.jpg){:style="width:100%;"}
 
 <p style="line-height: 1.05"><small><em><strong>Fig. 2</strong>: Simplified stack with PT2 compile mode.</em></small></p>
 
