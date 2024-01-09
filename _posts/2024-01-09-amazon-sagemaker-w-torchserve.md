@@ -533,7 +533,7 @@ To get started, see [Supported algorithms, frameworks, and instances for multi-m
 <td>
 <img alt="James Wu" src="/assets/images/amazon-sagemaker-w-torchserve/fg12.jpg" style="width: 150px;">
 </td>
-<td>
+<td style="vertical-align: top;">
 <strong>James Wu</strong> is a Senior AI/ML Specialist Solution Architect at AWS. helping customers design and build AI/ML solutions. James’s work covers a wide range of ML use cases, with a primary interest in computer vision, deep learning, and scaling ML across the enterprise. Prior to joining AWS, James was an architect, developer, and technology leader for over 10 years, including 6 years in engineering and 4 years in marketing & advertising industries.
 </td>
 </tr>
@@ -542,7 +542,7 @@ To get started, see [Supported algorithms, frameworks, and instances for multi-m
 <td>
 <img alt="Li Ning" src="/assets/images/amazon-sagemaker-w-torchserve/fg13.jpg" style="width: 150px;">
 </td>
-<td>
+<td style="vertical-align: top;">
 
 <strong>Li Ning</strong> is a senior software engineer at AWS with a specialization in building large-scale AI solutions. As a tech lead for TorchServe, a project jointly developed by AWS and Meta, her passion lies in leveraging PyTorch and AWS SageMaker to help customers embrace AI for the greater good. Outside of her professional endeavors, Li enjoys swimming, traveling, following the latest advancements in technology, and spending quality time with her family.
 </td>
@@ -553,7 +553,7 @@ To get started, see [Supported algorithms, frameworks, and instances for multi-m
 <td>
 <img alt="Ankith Gunapal" src="/assets/images/amazon-sagemaker-w-torchserve/fg14.jpg" style="width: 150px;">
 </td>
-<td>
+<td style="vertical-align: top;">
 <strong>Ankith Gunapal</strong> is an AI Partner Engineer at Meta (PyTorch). He is passionate about model optimization and model serving, with experience ranging from RTL verification, embedded software, computer vision, to PyTorch. He holds a Master’s in Data Science and a Master’s in Telecommunications. Outside of work, Ankith is also an electronic dance music producer.
 
 </td>
@@ -564,7 +564,7 @@ To get started, see [Supported algorithms, frameworks, and instances for multi-m
 <td>
 <img alt="Saurabh Trikande" src="/assets/images/amazon-sagemaker-w-torchserve/fg15.jpg" style="width: 150px;">
 </td>
-<td>
+<td style="vertical-align: top;">
 <strong>Saurabh Trikande</strong> is a Senior Product Manager for Amazon SageMaker Inference. He is passionate about working with customers and is motivated by the goal of democratizing machine learning. He focuses on core challenges related to deploying complex ML applications, multi-tenant ML models, cost optimizations, and making deployment of deep learning models more accessible. In his spare time, Saurabh enjoys hiking, learning about innovative technologies, following TechCrunch and spending time with his family.
 
 </td>
@@ -575,7 +575,7 @@ To get started, see [Supported algorithms, frameworks, and instances for multi-m
 <td>
 <img alt="Subhash Talluri" src="/assets/images/amazon-sagemaker-w-torchserve/fg16.jpg" style="width: 150px;">
 </td>
-<td>
+<td style="vertical-align: top;">
 <strong>Subhash Talluri</strong> is a Lead AI/ML solutions architect of the Telecom Industry business unit at Amazon Web Services. He’s been leading development of innovative AI/ML solutions for Telecom customers and partners worldwide. He brings interdisciplinary expertise in engineering and computer science to help build scalable, secure, and compliant AI/ML solutions via cloud-optimized architectures on AWS.
 
 </td>
