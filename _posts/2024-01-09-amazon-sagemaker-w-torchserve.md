@@ -411,9 +411,9 @@ The benefits of SageMaker MMEs increase based on the scale of model consolidatio
 
 <table class="table table-bordered">
   <tr>
-   <td>Model
+   <td><strong>Model</strong>
    </td>
-   <td>GPU Memory (MiB)
+   <td><strong>GPU Memory (MiB)</strong>
    </td>
   </tr>
   <tr>
@@ -446,9 +446,9 @@ For example, consider 100 Stable Diffusion models. Each of the models on its own
   <tr>
    <td>
    </td>
-   <td>Single-model endpoint
+   <td><strong>Single-model endpoint</strong>
    </td>
-   <td>Multi-model endpoint
+   <td><strong>Multi-model endpoint</strong>
    </td>
   </tr>
   <tr>
