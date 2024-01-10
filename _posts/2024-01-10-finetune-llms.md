@@ -80,7 +80,7 @@ This is where the [`bitsandbytes`](https://github.com/TimDettmers/bitsandbytes) 
 
 ## QLoRA: One of the core contributions of `bitsandbytes` towards the democratization of AI
 
-Quantization of LLMs has largely focused on quantization for inference, but the [QLoRA](https://arxiv.org/abs/2305.14314) (_Q_uantized model weights + _Low-Rank_ _A_dapters) paper showed the breakthrough utility of using backpropagation through frozen, quantized weights at large model scales.
+Quantization of LLMs has largely focused on quantization for inference, but the [QLoRA](https://arxiv.org/abs/2305.14314) (Quantized model weights + Low-Rank Adapters) paper showed the breakthrough utility of using backpropagation through frozen, quantized weights at large model scales.
 
 With QLoRA we are matching 16-bit fine-tuning performance across all scales and models, while reducing fine-tuning memory footprint by more than 90%— thereby allowing fine-tuning of SOTA models on consumer-grade hardware.
 
