@@ -102,7 +102,7 @@ Let’s build up our kernel naively, starting with a “linear” load from glob
 
 To tackle this issue we can use an approach referred to as “tile-swizzling.”  The idea of this method is to launch our thread blocks in a more L2 cache friendly order.
 
-Let’s take a step back and familiarize ourselves with some Triton semantics and make a simple CUDA analogy to understand the concept better._ _Triton kernels launch “programs”. These so-called programs map to the concept of a Thread Block in CUDA and it is the basic unit of parallelism in a Triton Kernel. Every program has with it associated a “pid” and all the threads in a program are guaranteed to be executing the same instruction. 
+Let’s take a step back and familiarize ourselves with some Triton semantics and make a simple CUDA analogy to understand the concept better. Triton kernels launch “programs”. These so-called programs map to the concept of a Thread Block in CUDA and it is the basic unit of parallelism in a Triton Kernel. Every program has with it associated a “pid” and all the threads in a program are guaranteed to be executing the same instruction. 
 
 The Triton programs will be distributed onto your SMs in a naive-way if you do a simple linear mapping of “pid” to a 2D grid location of your output matrix C. 
 
