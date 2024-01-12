@@ -207,7 +207,8 @@ More research is required to understand how we can further optimize this kernel 
 
 ## Summary and Future work
 
-Triton extends PyTorch by allowing low level GPU optimizations to be done at a higher level of abstraction than CUDA programming, with the net result that adding optimized Triton kernels can help PyTorch models run faster. \
+Triton extends PyTorch by allowing low level GPU optimizations to be done at a higher level of abstraction than CUDA programming, with the net result that adding optimized Triton kernels can help PyTorch models run faster.
+
 Our goal in this post was to show an example of accelerating the GPTQ dequant kernel and provide a template workflow for how the accelerations were achieved.
 
 For future work, SplitK work decomposition for the matrix multiplication is a potential speed up we’ll investigate. 
