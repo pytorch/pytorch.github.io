@@ -47,7 +47,7 @@ The extension can be loaded as a Python module or linked as a C++ library. Pytho
 **To quantize the existing FP32 model to an int8 model using dynamic quantization, which is similar to static quantization:**
 
 1. Prepare the quantization configuration. For default dynamic quantization configuration, use **ipex.quantization.default_dynamic_qconfig**.
-2. Prepare the FP32 model by using the** ipex.quantization.prepare **method. Provide the parameters, such as FP32 model to quantize, the prepared configuration, example inputs, and information.
+2. Prepare the FP32 model by using the **ipex.quantization.prepare** method. Provide the parameters, such as FP32 model to quantize, the prepared configuration, example inputs, and information.
 3. Convert the model from FP32 to int8 using the **ipex.quantization.convert** method. The input model is the model prepared in Step 2.
 
 
