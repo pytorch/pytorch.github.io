@@ -4,6 +4,6 @@ summary: ''
 link: https://www.ibm.com/
 image: /assets/images/members/ibm-logo.svg
 class: pytorch-resource
-order: 5
+order: 6
 featured-home: true
 ---
