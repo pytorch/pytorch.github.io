@@ -40,13 +40,13 @@ To take a closer look at the performance bottleneck of the text decoder and voco
 
 
 
-(a) CPU and GPU trace for Text Decoder
+**(a)** CPU and GPU trace for Text Decoder
 
 
 ![CPU and GPU trace for Vocoder](/assets/images/accelerating-generative-ai-4/fg5.jpg){:style="width:100%;"}
 
 
-(b) CPU and GPU trace for Vocoder
+**(b)** CPU and GPU trace for Vocoder
 
 **Figure 3.** <span style="text-decoration:underline;">Text Decoder and Vocoder are heavily CPU-bound modules</span>. CPU and GPU trace for (a) Text Decoder (b) Vocoder for the 8th sample for English-Spanish translation example of [FLEURS](https://huggingface.co/datasets/google/fleurs) dataset. The trace is obtained by running inference with batch_size=1 on A100 gpu.
 
@@ -132,11 +132,11 @@ As a result of enabling torch.compile to KV cache reordering, the gpu kernels th
 
 ![CPU and GPU trace for KV cache reordering before enabling torch.compile](/assets/images/accelerating-generative-ai-4/fg12.png){:style="width:100%;"}
 
-(a) CPU and GPU trace for KV cache reordering **before** enabling torch.compile
+**(a)** CPU and GPU trace for KV cache reordering **before** enabling torch.compile
 
 ![CPU and GPU trace for KV cache reordering after enabling torch.compile](/assets/images/accelerating-generative-ai-4/fg13.png){:style="width:100%;"}
 
-(b) CPU and GPU trace for KV cache reordering **after** enabling torch.compile
+**(b)** CPU and GPU trace for KV cache reordering **after** enabling torch.compile
 
 **Figure 12.** CPU and GPU trace for KV cache reordering (a) before and (b) after enabling torch.compile
 
