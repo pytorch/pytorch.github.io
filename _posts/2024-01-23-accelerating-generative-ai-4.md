@@ -204,7 +204,7 @@ We also report the speedups for text decoder and vocoder using torch.compile wit
 ![End-to-end inference speedup of applying torch.compile and CUDA graph incrementally](/assets/images/accelerating-generative-ai-4/fg1.png){:style="width:100%;"}
 
 
-**Figure 16.** End-to-end inference speedup of applying torch.compile and CUDA graph incrementally. **a)** “Inc. Decoding”: Apply torch.compile only to the text decoder **b)** “Inc. Decoding w/ CUDA Graph”: Apply torch.compile + CUDA Graph to the text decoder **c)** “+KV Cache Reordering”: Additionally apply torch.compile to KV cache reordering operation upon b) **d)** “+Vocoder”: Additionally apply torch.compile to the vocoder upon c) **e) **“+Vocoder w/ CUDA Graph”: Additionally apply torch.compile + CUDA Graph to the vocoder upon d).
+**Figure 16.** End-to-end inference speedup of applying torch.compile and CUDA graph incrementally. **a)** “Inc. Decoding”: Apply torch.compile only to the text decoder **b)** “Inc. Decoding w/ CUDA Graph”: Apply torch.compile + CUDA Graph to the text decoder **c)** “+KV Cache Reordering”: Additionally apply torch.compile to KV cache reordering operation upon b) **d)** “+Vocoder”: Additionally apply torch.compile to the vocoder upon c) **e)** “+Vocoder w/ CUDA Graph”: Additionally apply torch.compile + CUDA Graph to the vocoder upon d).
 
 Figure 16 represents the cumulative effect of applying torch.compile with and without CUDA Graph to the modules. The results indicate a significant improvement in the end-to-end inference speedup, demonstrating the effectiveness of these techniques in optimizing the overall latency. As a result, we gain **2.7x** end-to-end inference speedup for Seamless M4T-v2 with batch_size=1.
 
