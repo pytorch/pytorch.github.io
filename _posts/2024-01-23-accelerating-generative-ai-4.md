@@ -17,7 +17,7 @@ In this blog, we’ll focus on speeding up FAIR’s Seamless M4T-v2 model result
 
 ## Introduction
 
-Seamless M4T is an open-source foundational speech/text translation and transcription technology developed by FAIR. Seamless M4T is a massively multilingual and multimodal machine translation model, with the [latest version](https://fb.workplace.com/groups/2447831298797573/permalink/3604327353147956/) (Seamless M4T-v2) released on November 30th, 2023. The high-level model architecture of Seamless M4T-v2 is illustrated in Figure 1.
+Seamless M4T is an open-source foundational speech/text translation and transcription technology developed by FAIR. Seamless M4T is a massively multilingual and multimodal machine translation model, with the [latest version](https://github.com/facebookresearch/seamless_communication) (Seamless M4T-v2) released on November 30th, 2023. The high-level model architecture of Seamless M4T-v2 is illustrated in Figure 1.
 
 
 ![Model Architecture of Seamless M4T-v2](/assets/images/accelerating-generative-ai-4/fg2.png){:style="width:100%;max-width:600px; display:block; margin-left: auto; margin-right: auto;"}
