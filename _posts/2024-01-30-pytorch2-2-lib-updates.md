@@ -49,7 +49,7 @@ We are bringing a number of improvements to the current PyTorch libraries, along
 
 TorchRL now provides one of the largest dataset hubs for offline RL and imitation learning, and it all comes under a single data format (TED, for TorchRL Episode Data format). This makes it possible to easily swap from different sources in a single training loop. It is also now possible to easily combine datasets of different sources through the ReplayBufferEnsemble class. The data processing is fully customizable. Sources include simulated tasks (Minari, D4RL, VD4RL), robotic datasets (Roboset, OpenX Embodied dataset) and gaming (GenDGRL/ProcGen, Atari/DQN). Check these out in the [documentation](https://pytorch.org/rl/reference/data.html#datasets). 
 
-Aside from these changes, our replay buffers can now be dumped on disk using the .dumps() method which will serialize the buffers on disk using the TensorDict API which is faster, safer and more efficient than using torch.save. 
+Aside from these changes, our replay buffers can now be dumped on disk using the `.dumps()` method which will serialize the buffers on disk using the TensorDict API which is faster, safer and more efficient than using torch.save. 
 
 Finally, replay buffers can now be  read and written from separate processes on the same machine without any extra code needed from the user!
 
