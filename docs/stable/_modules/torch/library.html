@@ -10,7 +10,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>torch.library &mdash; PyTorch 2.1 documentation</title>
+  <title>torch.library &mdash; PyTorch 2.2 documentation</title>
   
 
   
@@ -94,7 +94,19 @@
           </li>
 
           <li>
-            <a href="https://pytorch.org/mobile">Mobile</a>
+          <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="resource-option with-down-arrow">
+                Edge
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/edge">
+                  <span class="dropdown-title">About PyTorch Edge</span>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/executorch">
+                  <span class="dropdown-title">ExecuTorch</span>
+                </a>
+              </div>
+            </div>  
           </li>
 
           <li>
@@ -224,7 +236,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href='https://pytorch.org/docs/versions.html'>2.1 &#x25BC</a>
+      <a href='https://pytorch.org/docs/versions.html'>2.2 &#x25BC</a>
     </div>
     
 
@@ -348,6 +360,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../../checkpoint.html">torch.utils.checkpoint</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../cpp_extension.html">torch.utils.cpp_extension</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../data.html">torch.utils.data</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../deterministic.html">torch.utils.deterministic</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../jit_utils.html">torch.utils.jit</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../dlpack.html">torch.utils.dlpack</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../mobile_optimizer.html">torch.utils.mobile_optimizer</a></li>
@@ -448,18 +461,30 @@
               
   <h1>Source code for torch.library</h1><div class="highlight"><pre>
 <span></span><span class="kn">from</span> <span class="nn">._ops</span> <span class="kn">import</span> <span class="n">OpOverload</span>
-<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Set</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Set</span><span class="p">,</span> <span class="n">List</span>
 <span class="kn">import</span> <span class="nn">traceback</span>
 <span class="kn">import</span> <span class="nn">torch</span>
 <span class="kn">import</span> <span class="nn">weakref</span>
+<span class="kn">import</span> <span class="nn">functools</span>
+<span class="kn">import</span> <span class="nn">inspect</span>
+<span class="kn">import</span> <span class="nn">re</span>
+<span class="kn">import</span> <span class="nn">sys</span>
 
-<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;Library&#39;</span><span class="p">,</span> <span class="s1">&#39;impl&#39;</span><span class="p">,</span> <span class="s1">&#39;define&#39;</span><span class="p">,</span> <span class="s1">&#39;fallthrough_kernel&#39;</span><span class="p">]</span>
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s1">&#39;Library&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;impl&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;define&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;fallthrough_kernel&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;impl_abstract&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;get_ctx&#39;</span><span class="p">,</span>
+<span class="p">]</span>
 
 <span class="c1"># Set containing the combination of (namespace, operator, DispatchKey) for which a new kernel has been registered</span>
 <span class="c1"># The keys in the set are of the form `namespace + &quot;/&quot; + op_name + &quot;/&quot; + dispatch_key`.</span>
 <span class="c1"># This set is maintained to ensure that two libraries don&#39;t try to override the exact same functionality to avoid</span>
 <span class="c1"># libraries calling into kernels not intended to be called.</span>
 <span class="n">_impls</span><span class="p">:</span> <span class="n">Set</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+<span class="n">_defs</span><span class="p">:</span> <span class="n">Set</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
 
 <span class="c1"># prim is reserved by TorchScript interpreter</span>
 <span class="n">_reserved_namespaces</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;prim&#39;</span><span class="p">]</span>
@@ -497,27 +522,34 @@
 
         <span class="n">frame</span> <span class="o">=</span> <span class="n">traceback</span><span class="o">.</span><span class="n">extract_stack</span><span class="p">(</span><span class="n">limit</span><span class="o">=</span><span class="mi">3</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
         <span class="n">filename</span><span class="p">,</span> <span class="n">lineno</span> <span class="o">=</span> <span class="n">frame</span><span class="o">.</span><span class="n">filename</span><span class="p">,</span> <span class="n">frame</span><span class="o">.</span><span class="n">lineno</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">m</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">_dispatch_library</span><span class="p">(</span><span class="n">kind</span><span class="p">,</span> <span class="n">ns</span><span class="p">,</span> <span class="n">dispatch_key</span><span class="p">,</span> <span class="n">filename</span><span class="p">,</span> <span class="n">lineno</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">m</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">_dispatch_library</span><span class="p">(</span><span class="n">kind</span><span class="p">,</span> <span class="n">ns</span><span class="p">,</span> <span class="n">dispatch_key</span><span class="p">,</span> <span class="n">filename</span><span class="p">,</span> <span class="n">lineno</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">ns</span> <span class="o">=</span> <span class="n">ns</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_op_defs</span><span class="p">:</span> <span class="n">Set</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_op_impls</span><span class="p">:</span> <span class="n">Set</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_registration_handles</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="s2">&quot;torch._library.utils.RegistrationHandle&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">kind</span> <span class="o">=</span> <span class="n">kind</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">dispatch_key</span> <span class="o">=</span> <span class="n">dispatch_key</span>
         <span class="c1"># Use a finalizer to setup the &quot;destructor&quot; instead of __del__.</span>
         <span class="c1"># Python __del__ can lead to weird things (globals and locals may already</span>
         <span class="c1"># be gone when __del__ actually gets called!). finalizers help the</span>
         <span class="c1"># situation because it lets us capture references and keeps them alive</span>
-        <span class="n">weakref</span><span class="o">.</span><span class="n">finalize</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">_del_library</span><span class="p">,</span> <span class="n">_impls</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_op_impls</span><span class="p">)</span>
+        <span class="n">weakref</span><span class="o">.</span><span class="n">finalize</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">_del_library</span><span class="p">,</span> <span class="n">_impls</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_op_impls</span><span class="p">,</span> <span class="n">_defs</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_op_defs</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_registration_handles</span><span class="p">)</span>
 
     <span class="k">def</span> <span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;Library(kind=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">kind</span><span class="si">}</span><span class="s2">, ns=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">ns</span><span class="si">}</span><span class="s2">, dispatch_key=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">dispatch_key</span><span class="si">}</span><span class="s2">)&gt;&quot;</span>
 
-<div class="viewcode-block" id="Library.define"><a class="viewcode-back" href="../../library.html#torch.library.Library.define">[docs]</a>    <span class="k">def</span> <span class="nf">define</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">schema</span><span class="p">,</span> <span class="n">alias_analysis</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">):</span>
+<div class="viewcode-block" id="Library.define"><a class="viewcode-back" href="../../library.html#torch.library.Library.define">[docs]</a>    <span class="k">def</span> <span class="nf">define</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">schema</span><span class="p">,</span> <span class="n">alias_analysis</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">tags</span><span class="o">=</span><span class="p">()):</span>
 <span class="w">        </span><span class="sa">r</span><span class="sd">&#39;&#39;&#39;Defines a new operator and its semantics in the ns namespace.</span>
 
 <span class="sd">        Args:</span>
 <span class="sd">            schema: function schema to define a new operator.</span>
 <span class="sd">            alias_analysis (optional): Indicates if the aliasing properties of the operator arguments can be</span>
 <span class="sd">                                       inferred from the schema (default behavior) or not (&quot;CONSERVATIVE&quot;).</span>
+<span class="sd">            tags (Tag | Sequence[Tag]): one or more torch.Tag to apply to this</span>
+<span class="sd">                                       operator. Tagging an operator changes the operator&#39;s behavior</span>
+<span class="sd">                                       under various PyTorch subsystems; please read the docs for the</span>
+<span class="sd">                                       torch.Tag carefully before applying it.</span>
+
 <span class="sd">        Returns:</span>
 <span class="sd">            name of the operator as inferred from the schema.</span>
 
@@ -530,7 +562,14 @@
         <span class="c1"># AliasAnalysis type in C++</span>
         <span class="k">if</span> <span class="n">alias_analysis</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="s2">&quot;FROM_SCHEMA&quot;</span><span class="p">,</span> <span class="s2">&quot;CONSERVATIVE&quot;</span><span class="p">]:</span>
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Invalid alias_analysis type </span><span class="si">{</span><span class="n">alias_analysis</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">m</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">schema</span><span class="p">,</span> <span class="n">alias_analysis</span><span class="p">)</span></div>
+        <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">m</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">tags</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tag</span><span class="p">):</span>
+            <span class="n">tags</span> <span class="o">=</span> <span class="p">(</span><span class="n">tags</span><span class="p">,)</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">m</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">schema</span><span class="p">,</span> <span class="n">alias_analysis</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">tags</span><span class="p">))</span>
+        <span class="n">qualname</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">ns</span> <span class="o">+</span> <span class="s2">&quot;::&quot;</span> <span class="o">+</span> <span class="n">schema</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;(&quot;</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_op_defs</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">qualname</span><span class="p">)</span>
+        <span class="n">_defs</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">qualname</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">result</span></div>
 
 <div class="viewcode-block" id="Library.impl"><a class="viewcode-back" href="../../library.html#torch.library.Library.impl">[docs]</a>    <span class="k">def</span> <span class="nf">impl</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">op_name</span><span class="p">,</span> <span class="n">fn</span><span class="p">,</span> <span class="n">dispatch_key</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="p">):</span>
 <span class="w">        </span><span class="sa">r</span><span class="sd">&#39;&#39;&#39;Registers the function implementation for an operator defined in the library.</span>
@@ -587,31 +626,342 @@
                     <span class="s2">&quot; Instead we should let the operator decompose, and ensure that we have meta kernels&quot;</span>
                     <span class="s2">&quot; for the base ops that it decomposes into.&quot;</span><span class="p">)</span>
 
+        <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">m</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">m</span><span class="o">.</span><span class="n">impl</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">dispatch_key</span> <span class="k">if</span> <span class="n">dispatch_key</span> <span class="o">!=</span> <span class="s2">&quot;&quot;</span> <span class="k">else</span> <span class="s2">&quot;CompositeImplicitAutograd&quot;</span><span class="p">,</span> <span class="n">fn</span><span class="p">)</span>
 
         <span class="n">_impls</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_op_impls</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">key</span><span class="p">)</span></div></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_op_impls</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">key</span><span class="p">)</span></div>
+
+    <span class="k">def</span> <span class="nf">_destroy</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">m</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">for</span> <span class="n">handle</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_registration_handles</span><span class="p">:</span>
+            <span class="n">handle</span><span class="o">.</span><span class="n">destroy</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_registration_handles</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span></div>
 
 
-<span class="k">def</span> <span class="nf">_del_library</span><span class="p">(</span><span class="n">captured_impls</span><span class="p">,</span> <span class="n">op_impls</span><span class="p">):</span>
+<span class="k">def</span> <span class="nf">_del_library</span><span class="p">(</span><span class="n">captured_impls</span><span class="p">,</span> <span class="n">op_impls</span><span class="p">,</span> <span class="n">captured_defs</span><span class="p">,</span> <span class="n">op_defs</span><span class="p">,</span> <span class="n">registration_handles</span><span class="p">):</span>
     <span class="n">captured_impls</span> <span class="o">-=</span> <span class="n">op_impls</span>
+    <span class="n">captured_defs</span> <span class="o">-=</span> <span class="n">op_defs</span>
+    <span class="k">for</span> <span class="n">handle</span> <span class="ow">in</span> <span class="n">registration_handles</span><span class="p">:</span>
+        <span class="n">handle</span><span class="o">.</span><span class="n">destroy</span><span class="p">()</span>
 
 
-<span class="c1"># decorator to register python functions for library ops</span>
-<span class="c1"># Note: this decorator API should remain consistent with `Library.impl` API</span>
-<span class="k">def</span> <span class="nf">impl</span><span class="p">(</span><span class="n">lib</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">dispatch_key</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">):</span>
+<span class="n">_keep_alive</span> <span class="o">=</span> <span class="p">[]</span>
+
+
+<span class="n">NAMELESS_SCHEMA</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="sa">r</span><span class="s2">&quot;\(.*\) -&gt; .*&quot;</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="define"><a class="viewcode-back" href="../../library.html#torch.library.define">[docs]</a><span class="nd">@functools</span><span class="o">.</span><span class="n">singledispatch</span>
+<span class="k">def</span> <span class="nf">define</span><span class="p">(</span><span class="n">qualname</span><span class="p">,</span> <span class="n">schema</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">lib</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">tags</span><span class="o">=</span><span class="p">()):</span>
+<span class="w">    </span><span class="sa">r</span><span class="sd">&quot;&quot;&quot;Defines a new operator.</span>
+
+<span class="sd">    In PyTorch, defining an op (short for &quot;operator&quot;) is a two step-process:</span>
+<span class="sd">    - we need to define the op (by providing an operator name and schema)</span>
+<span class="sd">    - we need to implement behavior for how the operator interacts with</span>
+<span class="sd">    various PyTorch subsystems, like CPU/CUDA Tensors, Autograd, etc.</span>
+
+<span class="sd">    This entrypoint defines the custom operator (the first step)</span>
+<span class="sd">    you must then perform the second step by calling various</span>
+<span class="sd">    ``impl_*`` APIs, like :func:`torch.library.impl` or</span>
+<span class="sd">    :func:`torch.library.impl_abstract`.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        qualname (str): The qualified name for the operator. Should be</span>
+<span class="sd">            a string that looks like &quot;namespace::name&quot;, e.g. &quot;aten::sin&quot;.</span>
+<span class="sd">            Operators in PyTorch need a namespace to</span>
+<span class="sd">            avoid name collisions; a given operator may only be created once.</span>
+<span class="sd">            If you are writing a Python library, we recommend the namespace to</span>
+<span class="sd">            be the name of your top-level module.</span>
+<span class="sd">        schema (str): The schema of the operator. E.g. &quot;(Tensor x) -&gt; Tensor&quot;</span>
+<span class="sd">            for an op that accepts one Tensor and returns one Tensor. It does</span>
+<span class="sd">            not contain the operator name (that is passed in ``qualname``).</span>
+<span class="sd">        lib (Optional[Library]): If provided, the lifetime of this operator</span>
+<span class="sd">            will be tied to the lifetime of the Library object.</span>
+<span class="sd">        tags (Tag | Sequence[Tag]): one or more torch.Tag to apply to this</span>
+<span class="sd">            operator. Tagging an operator changes the operator&#39;s behavior</span>
+<span class="sd">            under various PyTorch subsystems; please read the docs for the</span>
+<span class="sd">            torch.Tag carefully before applying it.</span>
+
+<span class="sd">    Example::</span>
+<span class="sd">        &gt;&gt;&gt; # xdoctest: +REQUIRES(env:TORCH_DOCTEST_LIBRARY)</span>
+<span class="sd">        &gt;&gt;&gt; import torch</span>
+<span class="sd">        &gt;&gt;&gt; import numpy as np</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; # Define the operator</span>
+<span class="sd">        &gt;&gt;&gt; torch.library.define(&quot;mylib::sin&quot;, &quot;(Tensor x) -&gt; Tensor&quot;)</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; # Add implementations for the operator</span>
+<span class="sd">        &gt;&gt;&gt; @torch.library.impl(&quot;mylibrary::sin&quot;, &quot;cpu&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; def f(x):</span>
+<span class="sd">        &gt;&gt;&gt;     return torch.from_numpy(np.sin(x.numpy()))</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; # Call the new operator from torch.ops.</span>
+<span class="sd">        &gt;&gt;&gt; x = torch.randn(3)</span>
+<span class="sd">        &gt;&gt;&gt; y = torch.ops.mylib.sin(x)</span>
+<span class="sd">        &gt;&gt;&gt; assert torch.allclose(y, x)</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">qualname</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;define(qualname, schema): expected qualname &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;to be instance of str, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">qualname</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="n">namespace</span><span class="p">,</span> <span class="n">name</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">_library</span><span class="o">.</span><span class="n">utils</span><span class="o">.</span><span class="n">parse_namespace</span><span class="p">(</span><span class="n">qualname</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">lib</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">lib</span> <span class="o">=</span> <span class="n">Library</span><span class="p">(</span><span class="n">namespace</span><span class="p">,</span> <span class="s2">&quot;FRAGMENT&quot;</span><span class="p">)</span>
+        <span class="n">_keep_alive</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">lib</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">NAMELESS_SCHEMA</span><span class="o">.</span><span class="n">fullmatch</span><span class="p">(</span><span class="n">schema</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;define(qualname, schema, ...): expected schema &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;to look like e.g. </span><span class="se">\&quot;</span><span class="s2">(Tensor x) -&gt; Tensor</span><span class="se">\&quot;</span><span class="s2"> but &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;got </span><span class="se">\&quot;</span><span class="si">{</span><span class="n">schema</span><span class="si">}</span><span class="se">\&quot;</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="n">lib</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">name</span> <span class="o">+</span> <span class="n">schema</span><span class="p">,</span> <span class="n">alias_analysis</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="n">tags</span><span class="o">=</span><span class="n">tags</span><span class="p">)</span></div>
+
+
+<span class="nd">@define</span><span class="o">.</span><span class="n">register</span>
+<span class="k">def</span> <span class="nf">_</span><span class="p">(</span><span class="n">lib</span><span class="p">:</span> <span class="n">Library</span><span class="p">,</span> <span class="n">schema</span><span class="p">,</span> <span class="n">alias_analysis</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;The old torch.library.define.</span>
+<span class="sd">    We&#39;re keeping this around for BC reasons</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">def</span> <span class="nf">wrap</span><span class="p">(</span><span class="n">f</span><span class="p">):</span>
+        <span class="n">name</span> <span class="o">=</span> <span class="n">lib</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">schema</span><span class="p">,</span> <span class="n">alias_analysis</span><span class="p">)</span>
+        <span class="n">lib</span><span class="o">.</span><span class="n">impl</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">f</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">f</span>
+    <span class="k">return</span> <span class="n">wrap</span>
+
+
+<div class="viewcode-block" id="impl"><a class="viewcode-back" href="../../library.html#torch.library.impl">[docs]</a><span class="nd">@functools</span><span class="o">.</span><span class="n">singledispatch</span>
+<span class="k">def</span> <span class="nf">impl</span><span class="p">(</span><span class="n">qualname</span><span class="p">,</span> <span class="n">types</span><span class="p">,</span> <span class="n">func</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">lib</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Register an implementation for a device type for this operator.</span>
+
+<span class="sd">    You may pass &quot;default&quot; for ``types`` to register this implementation as the</span>
+<span class="sd">    default implementation for ALL device types.</span>
+<span class="sd">    Please only use this if the implementation truly supports all device types;</span>
+<span class="sd">    for example, this is true if it is a composition of built-in PyTorch operators.</span>
+
+<span class="sd">    Some valid types are: &quot;cpu&quot;, &quot;cuda&quot;, &quot;xla&quot;, &quot;mps&quot;, &quot;ipu&quot;, &quot;xpu&quot;.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        qualname (str): Should be a string that looks like &quot;namespace::operator_name&quot;.</span>
+<span class="sd">        types (str | Sequence[str]): The device types to register an impl to.</span>
+<span class="sd">        lib (Optional[Library]): If provided, the lifetime of this registration</span>
+<span class="sd">            will be tied to the lifetime of the Library object.</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; import torch</span>
+<span class="sd">        &gt;&gt;&gt; import numpy as np</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; # Define the operator</span>
+<span class="sd">        &gt;&gt;&gt; torch.library.define(&quot;mylibrary::sin&quot;, &quot;(Tensor x) -&gt; Tensor&quot;)</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; # Add implementations for the cpu device</span>
+<span class="sd">        &gt;&gt;&gt; @torch.library.impl(&quot;mylibrary::sin&quot;, &quot;cpu&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; def f(x):</span>
+<span class="sd">        &gt;&gt;&gt;     return torch.from_numpy(np.sin(x.numpy()))</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; x = torch.randn(3)</span>
+<span class="sd">        &gt;&gt;&gt; y = torch.ops.mylibrary.sin(x)</span>
+<span class="sd">        &gt;&gt;&gt; assert torch.allclose(y, x.sin())</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">types</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+        <span class="n">types</span> <span class="o">=</span> <span class="p">(</span><span class="n">types</span><span class="p">,)</span>
+    <span class="n">keys</span> <span class="o">=</span> <span class="nb">set</span><span class="p">({})</span>
+    <span class="k">for</span> <span class="n">typ</span> <span class="ow">in</span> <span class="n">types</span><span class="p">:</span>
+        <span class="n">is_dispatch_key</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">_parse_dispatch_key</span><span class="p">(</span><span class="n">typ</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">is_dispatch_key</span><span class="p">:</span>
+            <span class="c1"># We also support passing a DispatchKey to impl. Please prefer using</span>
+            <span class="c1"># the higher-level torch.library APIs and only pass DispatchKey to</span>
+            <span class="c1"># torch.library.impl with caution (or even better, don&#39;t use this</span>
+            <span class="c1"># option and file an issue on GitHub for what you need).</span>
+            <span class="c1"># We don&#39;t advertise this to users because</span>
+            <span class="c1"># it is very easy to shoot yourself in the foot.</span>
+            <span class="n">keys</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">typ</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">keys</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">_device_type_to_key</span><span class="p">(</span><span class="n">typ</span><span class="p">))</span>
+
+    <span class="k">def</span> <span class="nf">register</span><span class="p">(</span><span class="n">func</span><span class="p">):</span>
+        <span class="n">namespace</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">_library</span><span class="o">.</span><span class="n">utils</span><span class="o">.</span><span class="n">parse_namespace</span><span class="p">(</span><span class="n">qualname</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">lib</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">use_lib</span> <span class="o">=</span> <span class="n">Library</span><span class="p">(</span><span class="n">namespace</span><span class="p">,</span> <span class="s2">&quot;FRAGMENT&quot;</span><span class="p">)</span>
+            <span class="n">_keep_alive</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">use_lib</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">use_lib</span> <span class="o">=</span> <span class="n">lib</span>
+        <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">keys</span><span class="p">:</span>
+            <span class="n">use_lib</span><span class="o">.</span><span class="n">impl</span><span class="p">(</span><span class="n">qualname</span><span class="p">,</span> <span class="n">func</span><span class="p">,</span> <span class="n">key</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">func</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">register</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">register</span><span class="p">(</span><span class="n">func</span><span class="p">)</span></div>
+
+
+<span class="k">def</span> <span class="nf">_device_type_to_key</span><span class="p">(</span><span class="n">device_type</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">device_type</span> <span class="o">==</span> <span class="s2">&quot;default&quot;</span><span class="p">:</span>
+        <span class="c1"># This is technically not correct, because although all device_type</span>
+        <span class="c1"># DispatchKeys are included in CompositeExplicitAutograd,</span>
+        <span class="c1"># not everything in CompositeExplicitAutograd is associated with a</span>
+        <span class="c1"># device_type. I don&#39;t really care that much about the difference.</span>
+        <span class="k">return</span> <span class="s2">&quot;CompositeExplicitAutograd&quot;</span>
+    <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">_dispatch_key_for_device</span><span class="p">(</span><span class="n">device_type</span><span class="p">)</span>
+
+
+<span class="nd">@impl</span><span class="o">.</span><span class="n">register</span>
+<span class="k">def</span> <span class="nf">_</span><span class="p">(</span><span class="n">lib</span><span class="p">:</span> <span class="n">Library</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">dispatch_key</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Legacy torch.library.impl API. Kept around for BC&quot;&quot;&quot;</span>
     <span class="k">def</span> <span class="nf">wrap</span><span class="p">(</span><span class="n">f</span><span class="p">):</span>
         <span class="n">lib</span><span class="o">.</span><span class="n">impl</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">f</span><span class="p">,</span> <span class="n">dispatch_key</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">f</span>
     <span class="k">return</span> <span class="n">wrap</span>
 
 
-<span class="k">def</span> <span class="nf">define</span><span class="p">(</span><span class="n">lib</span><span class="p">,</span> <span class="n">schema</span><span class="p">,</span> <span class="n">alias_analysis</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">):</span>
-    <span class="k">def</span> <span class="nf">wrap</span><span class="p">(</span><span class="n">f</span><span class="p">):</span>
-        <span class="n">name</span> <span class="o">=</span> <span class="n">lib</span><span class="o">.</span><span class="n">define</span><span class="p">(</span><span class="n">schema</span><span class="p">,</span> <span class="n">alias_analysis</span><span class="p">)</span>
-        <span class="n">lib</span><span class="o">.</span><span class="n">impl</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">f</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">f</span>
-    <span class="k">return</span> <span class="n">wrap</span>
+
+<div class="viewcode-block" id="impl_abstract"><a class="viewcode-back" href="../../library.html#torch.library.impl_abstract">[docs]</a><span class="k">def</span> <span class="nf">impl_abstract</span><span class="p">(</span><span class="n">qualname</span><span class="p">,</span> <span class="n">func</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">lib</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">_stacklevel</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
+<span class="w">    </span><span class="sa">r</span><span class="sd">&quot;&quot;&quot;Register an abstract implementation for this operator.</span>
+
+<span class="sd">    An &quot;abstract implementation&quot; specifies the behavior of this operator on</span>
+<span class="sd">    Tensors that carry no data. Given some input Tensors with certain properties</span>
+<span class="sd">    (sizes/strides/storage_offset/device), it specifies what the properties of</span>
+<span class="sd">    the output Tensors are.</span>
+
+<span class="sd">    The abstract implementation has the same signature as the operator.</span>
+<span class="sd">    It is run for both FakeTensors and meta tensors. To write an abstract</span>
+<span class="sd">    implementation, assume that all Tensor inputs to the operator are</span>
+<span class="sd">    regular CPU/CUDA/Meta tensors, but they do not have storage, and</span>
+<span class="sd">    you are trying to return regular CPU/CUDA/Meta tensor(s) as output.</span>
+<span class="sd">    The abstract implementation must consist of only PyTorch operations</span>
+<span class="sd">    (and may not directly access the storage or data of any input or</span>
+<span class="sd">    intermediate Tensors).</span>
+
+<span class="sd">    This API may be used as a decorator (see examples).</span>
+
+<span class="sd">    For a detailed guide on custom ops, please see</span>
+<span class="sd">    https://docs.google.com/document/d/1W--T6wz8IY8fOI0Vm8BF44PdBgs283QvpelJZWieQWQ/edit</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; import torch</span>
+<span class="sd">        &gt;&gt;&gt; import numpy as np</span>
+<span class="sd">        &gt;&gt;&gt; from torch import Tensor</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; # Example 1: an operator without data-dependent output shape</span>
+<span class="sd">        &gt;&gt;&gt; torch.library.define(</span>
+<span class="sd">        &gt;&gt;&gt;     &quot;mylib::custom_linear&quot;,</span>
+<span class="sd">        &gt;&gt;&gt;     &quot;(Tensor x, Tensor weight, Tensor bias) -&gt; Tensor&quot;)</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; @torch.library.impl_abstract(&quot;mylib::custom_linear&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; def custom_linear_abstract(x, weight):</span>
+<span class="sd">        &gt;&gt;&gt;     assert x.dim() == 2</span>
+<span class="sd">        &gt;&gt;&gt;     assert weight.dim() == 2</span>
+<span class="sd">        &gt;&gt;&gt;     assert bias.dim() == 1</span>
+<span class="sd">        &gt;&gt;&gt;     assert x.shape[1] == weight.shape[1]</span>
+<span class="sd">        &gt;&gt;&gt;     assert weight.shape[0] == bias.shape[0]</span>
+<span class="sd">        &gt;&gt;&gt;     assert x.device == weight.device</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt;     return (x @ weight.t()) + bias</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; # Example 2: an operator with data-dependent output shape</span>
+<span class="sd">        &gt;&gt;&gt; torch.library.define(&quot;mylib::custom_nonzero&quot;, &quot;(Tensor x) -&gt; Tensor&quot;)</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; @torch.library.impl_abstract(&quot;mylib::custom_nonzero&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; def custom_nonzero_abstract(x):</span>
+<span class="sd">        &gt;&gt;&gt;     # Number of nonzero-elements is data-dependent.</span>
+<span class="sd">        &gt;&gt;&gt;     # Since we cannot peek at the data in an abstract impl,</span>
+<span class="sd">        &gt;&gt;&gt;     # we use the ctx object to construct a new symint that</span>
+<span class="sd">        &gt;&gt;&gt;     # represents the data-dependent size.</span>
+<span class="sd">        &gt;&gt;&gt;     ctx = torch.library.get_ctx()</span>
+<span class="sd">        &gt;&gt;&gt;     nnz = ctx.new_dynamic_size()</span>
+<span class="sd">        &gt;&gt;&gt;     shape = [nnz, x.dim()]</span>
+<span class="sd">        &gt;&gt;&gt;     result = x.new_empty(shape, dtype=torch.int64)</span>
+<span class="sd">        &gt;&gt;&gt;     return result</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; @torch.library.impl(&quot;mylib::custom_nonzero&quot;, &quot;cpu&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; def custom_nonzero_cpu(x):</span>
+<span class="sd">        &gt;&gt;&gt;     x_np = x.numpy()</span>
+<span class="sd">        &gt;&gt;&gt;     res = np.stack(np.nonzero(x_np), axis=1)</span>
+<span class="sd">        &gt;&gt;&gt;     return torch.tensor(res, device=x.device)</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">source</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">_library</span><span class="o">.</span><span class="n">utils</span><span class="o">.</span><span class="n">get_source</span><span class="p">(</span><span class="n">_stacklevel</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+    <span class="n">frame</span> <span class="o">=</span> <span class="n">sys</span><span class="o">.</span><span class="n">_getframe</span><span class="p">(</span><span class="n">_stacklevel</span><span class="p">)</span>
+    <span class="n">caller_module</span> <span class="o">=</span> <span class="n">inspect</span><span class="o">.</span><span class="n">getmodule</span><span class="p">(</span><span class="n">frame</span><span class="p">)</span>
+    <span class="c1"># Can be none if you call impl_abstract from somewhere there isn&#39;t a module</span>
+    <span class="c1"># (e.g. __main__)</span>
+    <span class="n">caller_module_name</span> <span class="o">=</span> <span class="kc">None</span> <span class="k">if</span> <span class="n">caller_module</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">caller_module</span><span class="o">.</span><span class="vm">__name__</span>
+
+    <span class="c1"># TODO(rzou): We&#39;re gonna need to stage this change with torchvision,</span>
+    <span class="c1"># since torchvision is github first.</span>
+    <span class="k">if</span> <span class="n">caller_module_name</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">caller_module_name</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;torchvision.&quot;</span><span class="p">):</span>
+        <span class="n">caller_module_name</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="k">def</span> <span class="nf">inner</span><span class="p">(</span><span class="n">func</span><span class="p">):</span>
+        <span class="n">entry</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">_library</span><span class="o">.</span><span class="n">simple_registry</span><span class="o">.</span><span class="n">singleton</span><span class="o">.</span><span class="n">find</span><span class="p">(</span><span class="n">qualname</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">caller_module_name</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">func_to_register</span> <span class="o">=</span> <span class="n">_check_pystubs_once</span><span class="p">(</span><span class="n">func</span><span class="p">,</span> <span class="n">qualname</span><span class="p">,</span> <span class="n">caller_module_name</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">func_to_register</span> <span class="o">=</span> <span class="n">func</span>
+
+        <span class="n">handle</span> <span class="o">=</span> <span class="n">entry</span><span class="o">.</span><span class="n">abstract_impl</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="n">func_to_register</span><span class="p">,</span> <span class="n">source</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">lib</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">lib</span><span class="o">.</span><span class="n">_registration_handles</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">handle</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">func</span>
+
+    <span class="k">if</span> <span class="n">func</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">inner</span>
+    <span class="k">return</span> <span class="n">inner</span><span class="p">(</span><span class="n">func</span><span class="p">)</span></div>
+
+
+<span class="c1"># If the op was defined in C++, then we want to make sure there was an</span>
+<span class="c1"># m.impl_abstract_pystub(module, ...) call and that the module is the</span>
+<span class="c1"># same as the module that called torch.library.impl_abstract.</span>
+<span class="k">def</span> <span class="nf">_check_pystubs_once</span><span class="p">(</span><span class="n">func</span><span class="p">,</span> <span class="n">qualname</span><span class="p">,</span> <span class="n">actual_module_name</span><span class="p">):</span>
+    <span class="n">checked</span> <span class="o">=</span> <span class="kc">False</span>
+
+    <span class="k">def</span> <span class="nf">inner</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="k">nonlocal</span> <span class="n">checked</span>
+        <span class="k">if</span> <span class="n">checked</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">func</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+        <span class="n">op</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">_library</span><span class="o">.</span><span class="n">utils</span><span class="o">.</span><span class="n">lookup_op</span><span class="p">(</span><span class="n">qualname</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">op</span><span class="o">.</span><span class="n">_defined_in_python</span><span class="p">:</span>
+            <span class="n">checked</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="k">return</span> <span class="n">func</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+        <span class="n">maybe_pystub</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">_dispatch_pystub</span><span class="p">(</span>
+            <span class="n">op</span><span class="o">.</span><span class="n">_schema</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
+            <span class="n">op</span><span class="o">.</span><span class="n">_schema</span><span class="o">.</span><span class="n">overload_name</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">maybe_pystub</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Operator &#39;</span><span class="si">{</span><span class="n">qualname</span><span class="si">}</span><span class="s2">&#39; was defined in C++ and has a Python &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;abstract impl. In this situation, it is required to have a &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;C++ `m.impl_abstract_pystub` call, but we could not find one.&quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;Please add a call to `m.impl_abstract_pystub(</span><span class="se">\&quot;</span><span class="si">{</span><span class="n">actual_module_name</span><span class="si">}</span><span class="se">\&quot;</span><span class="s2">);` &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;to the C++ TORCH_LIBRARY block the operator was &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;defined in.&quot;</span><span class="p">)</span>
+        <span class="n">pystub_module</span> <span class="o">=</span> <span class="n">maybe_pystub</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">actual_module_name</span> <span class="o">!=</span> <span class="n">pystub_module</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Operator &#39;</span><span class="si">{</span><span class="n">qualname</span><span class="si">}</span><span class="s2">&#39; specified that its python abstract impl &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;is in the Python module &#39;</span><span class="si">{</span><span class="n">pystub_module</span><span class="si">}</span><span class="s2">&#39; but it was actually found &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;in &#39;</span><span class="si">{</span><span class="n">actual_module_name</span><span class="si">}</span><span class="s2">&#39;. Please either move the abstract impl &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;or correct the m.impl_abstract_pystub call.&quot;</span><span class="p">)</span>
+        <span class="n">checked</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="k">return</span> <span class="n">func</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">inner</span>
+
+
+<span class="c1"># NOTE [ctx inside the fake implementation]</span>
+<span class="c1"># If a user has an operator with data-dependent output shape, then when writing</span>
+<span class="c1"># a fake implementation they must query the current ctx and use methods on the</span>
+<span class="c1"># ctx to construct a new unbacked symint.</span>
+<span class="c1">#</span>
+<span class="c1"># This is done via us setting the global_ctx_getter function every time a fake</span>
+<span class="c1"># implementation is invoked.</span>
+<div class="viewcode-block" id="get_ctx"><a class="viewcode-back" href="../../library.html#torch.library.get_ctx">[docs]</a><span class="k">def</span> <span class="nf">get_ctx</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="s2">&quot;torch._library.abstract_impl.AbstractImplCtx&quot;</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;get_ctx() returns the current AbstractImplCtx object.</span>
+
+<span class="sd">    Calling ``get_ctx()`` is only valid inside of an abstract impl</span>
+<span class="sd">    (see :func:`torch.library.impl_abstract` for more usage details.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">_library</span><span class="o">.</span><span class="n">abstract_impl</span><span class="o">.</span><span class="n">global_ctx_getter</span><span class="p">()</span></div>
 </pre></div>
 
              </article>
@@ -787,9 +1137,9 @@ if (url)
         <div class="copyright">
         <p>© Copyright The Linux Foundation. The PyTorch Foundation is a project of The Linux Foundation.
           For web site terms of use, trademark policy and other policies applicable to The PyTorch Foundation please see
-          <a href="www.linuxfoundation.org/policies/">www.linuxfoundation.org/policies/</a>. The PyTorch Foundation supports the PyTorch open source
+          <a href="https://www.linuxfoundation.org/policies/">www.linuxfoundation.org/policies/</a>. The PyTorch Foundation supports the PyTorch open source
           project, which has been established as PyTorch Project a Series of LF Projects, LLC. For policies applicable to the PyTorch Project a Series of LF Projects, LLC,
-          please see <a href="www.lfprojects.org/policies/">www.lfprojects.org/policies/</a>.</p>
+          please see <a href="https://www.lfprojects.org/policies/">www.lfprojects.org/policies/</a>.</p>
       </div>
      </div>
 
@@ -828,7 +1178,7 @@ if (url)
           </li>
             
           <li>
-            <a href="https://pytorch.org/mobile">Mobile</a>
+            <a href="">Mobile</a>
           </li>
 
           <li>

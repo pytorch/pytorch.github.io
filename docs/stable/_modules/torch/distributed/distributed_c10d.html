@@ -10,7 +10,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>torch.distributed.distributed_c10d &mdash; PyTorch 2.1 documentation</title>
+  <title>torch.distributed.distributed_c10d &mdash; PyTorch 2.2 documentation</title>
   
 
   
@@ -94,7 +94,19 @@
           </li>
 
           <li>
-            <a href="https://pytorch.org/mobile">Mobile</a>
+          <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="resource-option with-down-arrow">
+                Edge
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/edge">
+                  <span class="dropdown-title">About PyTorch Edge</span>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/executorch">
+                  <span class="dropdown-title">ExecuTorch</span>
+                </a>
+              </div>
+            </div>  
           </li>
 
           <li>
@@ -224,7 +236,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href='https://pytorch.org/docs/versions.html'>2.1 &#x25BC</a>
+      <a href='https://pytorch.org/docs/versions.html'>2.2 &#x25BC</a>
     </div>
     
 
@@ -348,6 +360,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../../../checkpoint.html">torch.utils.checkpoint</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../cpp_extension.html">torch.utils.cpp_extension</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../data.html">torch.utils.data</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../deterministic.html">torch.utils.deterministic</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../jit_utils.html">torch.utils.jit</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../dlpack.html">torch.utils.dlpack</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../mobile_optimizer.html">torch.utils.mobile_optimizer</a></li>
@@ -449,7 +462,9 @@
              <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
               
   <h1>Source code for torch.distributed.distributed_c10d</h1><div class="highlight"><pre>
-<span></span><span class="kn">import</span> <span class="nn">itertools</span>
+<span></span><span class="sd">&quot;&quot;&quot;Distributed Collective Communication (c10d).&quot;&quot;&quot;</span>
+
+<span class="kn">import</span> <span class="nn">itertools</span>
 <span class="kn">import</span> <span class="nn">collections.abc</span>
 <span class="kn">import</span> <span class="nn">contextlib</span>
 <span class="kn">import</span> <span class="nn">hashlib</span>
@@ -457,6 +472,7 @@
 <span class="kn">import</span> <span class="nn">logging</span>
 <span class="kn">import</span> <span class="nn">os</span>
 <span class="kn">import</span> <span class="nn">pickle</span>
+<span class="kn">import</span> <span class="nn">sys</span>
 <span class="kn">import</span> <span class="nn">time</span>
 <span class="kn">import</span> <span class="nn">warnings</span>
 <span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">namedtuple</span>
@@ -465,6 +481,7 @@
 
 <span class="kn">import</span> <span class="nn">torch</span>
 <span class="kn">from</span> <span class="nn">torch._C._distributed_c10d</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">AllgatherOptions</span><span class="p">,</span>
     <span class="n">AllreduceCoalescedOptions</span><span class="p">,</span>
     <span class="n">AllreduceOptions</span><span class="p">,</span>
     <span class="n">AllToAllOptions</span><span class="p">,</span>
@@ -483,23 +500,24 @@
     <span class="n">get_debug_level</span><span class="p">,</span>
     <span class="n">Work</span>
 <span class="p">)</span>
-<span class="kn">from</span> <span class="nn">.constants</span> <span class="kn">import</span> <span class="n">default_pg_timeout</span>
+<span class="kn">from</span> <span class="nn">.constants</span> <span class="kn">import</span> <span class="n">default_pg_timeout</span><span class="p">,</span> <span class="n">default_pg_nccl_timeout</span>
 <span class="kn">from</span> <span class="nn">.c10d_logger</span> <span class="kn">import</span> <span class="n">_exception_logger</span><span class="p">,</span> <span class="n">_time_logger</span>
 <span class="kn">from</span> <span class="nn">.rendezvous</span> <span class="kn">import</span> <span class="n">register_rendezvous_handler</span><span class="p">,</span> <span class="n">rendezvous</span>  <span class="c1"># noqa: F401</span>
+<span class="n">DistStoreError</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">_DistStoreError</span>
 
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
     <span class="s1">&#39;Backend&#39;</span><span class="p">,</span> <span class="s1">&#39;BackendConfig&#39;</span><span class="p">,</span> <span class="s1">&#39;GroupMember&#39;</span><span class="p">,</span> <span class="s1">&#39;P2POp&#39;</span><span class="p">,</span> <span class="s1">&#39;all_gather&#39;</span><span class="p">,</span> <span class="s1">&#39;all_gather_coalesced&#39;</span><span class="p">,</span>
-    <span class="s1">&#39;all_gather_multigpu&#39;</span><span class="p">,</span> <span class="s1">&#39;all_gather_object&#39;</span><span class="p">,</span> <span class="s1">&#39;all_reduce&#39;</span><span class="p">,</span>
-    <span class="s1">&#39;all_reduce_coalesced&#39;</span><span class="p">,</span> <span class="s1">&#39;all_reduce_multigpu&#39;</span><span class="p">,</span> <span class="s1">&#39;all_to_all&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;all_gather_object&#39;</span><span class="p">,</span> <span class="s1">&#39;all_reduce&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;all_reduce_coalesced&#39;</span><span class="p">,</span> <span class="s1">&#39;all_to_all&#39;</span><span class="p">,</span>
     <span class="s1">&#39;all_to_all_single&#39;</span><span class="p">,</span> <span class="s1">&#39;barrier&#39;</span><span class="p">,</span> <span class="s1">&#39;batch_isend_irecv&#39;</span><span class="p">,</span> <span class="s1">&#39;broadcast&#39;</span><span class="p">,</span>
-    <span class="s1">&#39;broadcast_multigpu&#39;</span><span class="p">,</span> <span class="s1">&#39;broadcast_object_list&#39;</span><span class="p">,</span> <span class="s1">&#39;destroy_process_group&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;broadcast_object_list&#39;</span><span class="p">,</span> <span class="s1">&#39;destroy_process_group&#39;</span><span class="p">,</span>
     <span class="s1">&#39;gather&#39;</span><span class="p">,</span> <span class="s1">&#39;gather_object&#39;</span><span class="p">,</span> <span class="s1">&#39;get_backend_config&#39;</span><span class="p">,</span> <span class="s1">&#39;get_backend&#39;</span><span class="p">,</span> <span class="s1">&#39;get_rank&#39;</span><span class="p">,</span>
     <span class="s1">&#39;get_world_size&#39;</span><span class="p">,</span> <span class="s1">&#39;group&#39;</span><span class="p">,</span> <span class="s1">&#39;init_process_group&#39;</span><span class="p">,</span> <span class="s1">&#39;irecv&#39;</span><span class="p">,</span>
     <span class="s1">&#39;is_gloo_available&#39;</span><span class="p">,</span> <span class="s1">&#39;is_initialized&#39;</span><span class="p">,</span> <span class="s1">&#39;is_mpi_available&#39;</span><span class="p">,</span> <span class="s1">&#39;is_backend_available&#39;</span><span class="p">,</span>
     <span class="s1">&#39;is_nccl_available&#39;</span><span class="p">,</span> <span class="s1">&#39;is_torchelastic_launched&#39;</span><span class="p">,</span> <span class="s1">&#39;is_ucc_available&#39;</span><span class="p">,</span>
     <span class="s1">&#39;isend&#39;</span><span class="p">,</span> <span class="s1">&#39;monitored_barrier&#39;</span><span class="p">,</span> <span class="s1">&#39;new_group&#39;</span><span class="p">,</span> <span class="s1">&#39;new_subgroups&#39;</span><span class="p">,</span>
-    <span class="s1">&#39;new_subgroups_by_enumeration&#39;</span><span class="p">,</span> <span class="s1">&#39;recv&#39;</span><span class="p">,</span> <span class="s1">&#39;reduce&#39;</span><span class="p">,</span> <span class="s1">&#39;reduce_multigpu&#39;</span><span class="p">,</span>
-    <span class="s1">&#39;reduce_scatter&#39;</span><span class="p">,</span> <span class="s1">&#39;reduce_scatter_multigpu&#39;</span><span class="p">,</span> <span class="s1">&#39;scatter&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;new_subgroups_by_enumeration&#39;</span><span class="p">,</span> <span class="s1">&#39;recv&#39;</span><span class="p">,</span> <span class="s1">&#39;reduce&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;reduce_scatter&#39;</span><span class="p">,</span> <span class="s1">&#39;scatter&#39;</span><span class="p">,</span>
     <span class="s1">&#39;scatter_object_list&#39;</span><span class="p">,</span> <span class="s1">&#39;send&#39;</span><span class="p">,</span> <span class="s1">&#39;supports_complex&#39;</span><span class="p">,</span>
     <span class="s1">&#39;AllreduceCoalescedOptions&#39;</span><span class="p">,</span> <span class="s1">&#39;AllreduceOptions&#39;</span><span class="p">,</span> <span class="s1">&#39;AllToAllOptions&#39;</span><span class="p">,</span>
     <span class="s1">&#39;BarrierOptions&#39;</span><span class="p">,</span> <span class="s1">&#39;BroadcastOptions&#39;</span><span class="p">,</span> <span class="s1">&#39;GatherOptions&#39;</span><span class="p">,</span> <span class="s1">&#39;PrefixStore&#39;</span><span class="p">,</span>
@@ -583,6 +601,7 @@
 <span class="c1"># We&#39;d like calls to unsupported ops to error out accordingly,</span>
 <span class="c1"># rather than returning garbage values.</span>
 <span class="k">def</span> <span class="nf">supports_complex</span><span class="p">(</span><span class="n">reduceOp</span><span class="p">:</span> <span class="n">ReduceOp</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return true if reduce ops is supported. False otherwise.&quot;&quot;&quot;</span>
     <span class="n">denyList</span> <span class="o">=</span> <span class="p">[</span>
         <span class="n">ReduceOp</span><span class="o">.</span><span class="n">MAX</span><span class="p">,</span>
         <span class="n">ReduceOp</span><span class="o">.</span><span class="n">MIN</span><span class="p">,</span>
@@ -596,8 +615,9 @@
 
 <div class="viewcode-block" id="Backend"><a class="viewcode-back" href="../../../distributed.html#torch.distributed.Backend">[docs]</a><span class="k">class</span> <span class="nc">Backend</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    An enum-like class of available backends: GLOO, NCCL, UCC, MPI, and other registered</span>
-<span class="sd">    backends.</span>
+<span class="sd">    An enum-like class for backends.</span>
+
+<span class="sd">    Available backends: GLOO, NCCL, UCC, MPI, and other registered backends.</span>
 
 <span class="sd">    The values of this class are lowercase strings, e.g., ``&quot;gloo&quot;``. They can</span>
 <span class="sd">    be accessed as attributes, e.g., ``Backend.NCCL``.</span>
@@ -633,7 +653,7 @@
         <span class="n">GLOO</span> <span class="p">:</span> <span class="p">[</span><span class="s2">&quot;cpu&quot;</span><span class="p">,</span> <span class="s2">&quot;cuda&quot;</span><span class="p">],</span>
         <span class="n">NCCL</span> <span class="p">:</span> <span class="p">[</span><span class="s2">&quot;cuda&quot;</span><span class="p">],</span>
         <span class="n">UCC</span> <span class="p">:</span> <span class="p">[</span><span class="s2">&quot;cpu&quot;</span><span class="p">,</span> <span class="s2">&quot;cuda&quot;</span><span class="p">],</span>
-        <span class="n">MPI</span> <span class="p">:</span> <span class="p">[</span><span class="s2">&quot;cpu&quot;</span><span class="p">],</span>
+        <span class="n">MPI</span> <span class="p">:</span> <span class="p">[</span><span class="s2">&quot;cpu&quot;</span><span class="p">,</span> <span class="s2">&quot;cuda&quot;</span><span class="p">],</span>
     <span class="p">}</span>
 
     <span class="n">backend_type_map</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">ProcessGroup</span><span class="o">.</span><span class="n">BackendType</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
@@ -644,6 +664,7 @@
     <span class="p">}</span>
 
     <span class="k">def</span> <span class="fm">__new__</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Create and return a new instance of the class.&quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Backend name must be a string, but got: </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
         <span class="n">value</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">Backend</span><span class="p">,</span> <span class="n">name</span><span class="o">.</span><span class="n">upper</span><span class="p">(),</span> <span class="n">Backend</span><span class="o">.</span><span class="n">UNDEFINED</span><span class="p">)</span>
@@ -655,7 +676,7 @@
 <div class="viewcode-block" id="Backend.register_backend"><a class="viewcode-back" href="../../../distributed.html#torch.distributed.Backend.register_backend">[docs]</a>    <span class="nd">@classmethod</span>
     <span class="k">def</span> <span class="nf">register_backend</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">func</span><span class="p">,</span> <span class="n">extended_api</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">devices</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Registers a new backend with the given name and instantiating function.</span>
+<span class="sd">        Register a new backend with the given name and instantiating function.</span>
 
 <span class="sd">        This class method is used by 3rd party ``ProcessGroup`` extension to</span>
 <span class="sd">        register new backends.</span>
@@ -715,8 +736,10 @@
         <span class="n">Backend</span><span class="o">.</span><span class="n">_plugins</span><span class="p">[</span><span class="n">name</span><span class="o">.</span><span class="n">upper</span><span class="p">()]</span> <span class="o">=</span> <span class="n">Backend</span><span class="o">.</span><span class="n">_BackendPlugin</span><span class="p">(</span><span class="n">func</span><span class="p">,</span> <span class="n">extended_api</span><span class="p">)</span></div></div>
 
 <span class="k">class</span> <span class="nc">BackendConfig</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Backend configuration class.&quot;&quot;&quot;</span>
 
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">backend</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Backend</span><span class="p">]):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Init.&quot;&quot;&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">device_backend_map</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">Backend</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
 
         <span class="k">if</span> <span class="n">backend</span> <span class="o">==</span> <span class="n">Backend</span><span class="o">.</span><span class="n">UNDEFINED</span><span class="p">:</span>
@@ -774,16 +797,18 @@
         <span class="p">)</span>
 
     <span class="k">def</span> <span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="c1"># string with all the device:backend pairs separated by commas</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return all the device:backend pairs separated by commas.&quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="s2">&quot;,&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">device</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="n">backend</span><span class="si">}</span><span class="s2">&quot;</span> <span class="k">for</span> <span class="n">device</span><span class="p">,</span> <span class="n">backend</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">device_backend_map</span><span class="o">.</span><span class="n">items</span><span class="p">())</span>
 
     <span class="k">def</span> <span class="nf">get_device_backend_map</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return backend map of the device.&quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">device_backend_map</span>
 
 <span class="k">class</span> <span class="nc">_reduce_op</span><span class="p">:</span>
 <span class="w">    </span><span class="sa">r</span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Deprecated enum-like class for reduction operations: ``SUM``, ``PRODUCT``,</span>
-<span class="sd">    ``MIN``, and ``MAX``.</span>
+<span class="sd">    Deprecated enum-like class.</span>
+
+<span class="sd">    For reduction operations: ``SUM``, ``PRODUCT``, ``MIN``, and ``MAX``.</span>
 
 <span class="sd">    :class:`~torch.distributed.ReduceOp` is recommended to use instead.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
@@ -826,6 +851,7 @@
 
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">op</span><span class="p">:</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">tensor</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">peer</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
                  <span class="n">group</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">ProcessGroup</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">tag</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Init.&quot;&quot;&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">op</span> <span class="o">=</span> <span class="n">op</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">tensor</span> <span class="o">=</span> <span class="n">tensor</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">peer</span> <span class="o">=</span> <span class="n">peer</span>
@@ -834,6 +860,7 @@
 
     <span class="k">def</span> <span class="fm">__new__</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">op</span><span class="p">:</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">tensor</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">peer</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
                 <span class="n">group</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">ProcessGroup</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">tag</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Create and return a new instance of the class.&quot;&quot;&quot;</span>
         <span class="n">_check_op</span><span class="p">(</span><span class="n">op</span><span class="p">)</span>
         <span class="n">_check_single_tensor</span><span class="p">(</span><span class="n">tensor</span><span class="p">,</span> <span class="s2">&quot;tensor&quot;</span><span class="p">)</span>
         <span class="k">return</span> <span class="nb">object</span><span class="o">.</span><span class="fm">__new__</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span></div>
@@ -875,11 +902,13 @@
 <span class="k">class</span> <span class="nc">_World</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Container class for c10d process group state.</span>
+
 <span class="sd">    This is used during registration and lookup of PG state.</span>
 
 <span class="sd">    .. warning:: This is an experimental API intended to expose the inner workings</span>
 <span class="sd">       of c10d and is subject to change..</span>
 <span class="sd">    &quot;&quot;&quot;</span>
+
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_default_pg</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_pg_coalesce_state</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="n">ProcessGroup</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">_CollOp</span><span class="p">,</span> <span class="n">P2POp</span><span class="p">]]]</span> <span class="o">=</span> <span class="p">{}</span>
@@ -888,8 +917,10 @@
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">default_pg</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        The default ProcessGroup includes all ranks of the cluster.</span>
-<span class="sd">        This is used by c10d APIs when a ProcessGroup is needed but None is provided.</span>
+<span class="sd">        Process group that includes all ranks of the cluster.</span>
+
+<span class="sd">        This default ProcessGroup is used by c10d APIs when a ProcessGroup is needed</span>
+<span class="sd">        but None is provided.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_default_pg</span>
 
@@ -900,7 +931,8 @@
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">pg_map</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="n">ProcessGroup</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Store</span><span class="p">]]]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Cached process groups</span>
+<span class="sd">        Provide Mapping from ProcessGroup to backend name and store.</span>
+
 <span class="sd">        For NCCL and GLOO pg, it is a map from ProcessGroup to (Backend, Store)</span>
 <span class="sd">        For MPI pg, it is a map from ProcessGroup to (Backend, None)</span>
 
@@ -922,7 +954,8 @@
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">pg_group_ranks</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="n">ProcessGroup</span><span class="p">,</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Process group&#39;s global rank to local rank mapping</span>
+<span class="sd">        Process group&#39;s global rank to local rank mapping.</span>
+
 <span class="sd">        TODO don&#39;t expose the map, expose fine grained ops</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">global</span> <span class="n">_pg_group_ranks</span>
@@ -931,7 +964,8 @@
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">pg_backend_config</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="n">ProcessGroup</span><span class="p">,</span> <span class="nb">str</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Process group&#39;s backend config</span>
+<span class="sd">        Process group&#39;s backend config.</span>
+
 <span class="sd">        TODO don&#39;t expose the map, expose fine grained ops</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">global</span> <span class="n">_pg_backend_config</span>
@@ -949,9 +983,7 @@
 
     <span class="nd">@group_count</span><span class="o">.</span><span class="n">setter</span>
     <span class="k">def</span> <span class="nf">group_count</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Count is used when computing the name of ProcessGroups when using global synchronization.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Use to compute the name of ProcessGroups when using global synchronization.&quot;&quot;&quot;</span>
         <span class="k">global</span> <span class="n">_group_count</span>
         <span class="n">_group_count</span> <span class="o">=</span> <span class="n">value</span>
 
@@ -976,19 +1008,26 @@
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">pg_config_info</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Union</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">str</span><span class="p">]]]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Returns a list of dict with process groups and backends with their unique IDs</span>
-<span class="sd">        and configurations (types and ranks).</span>
+<span class="sd">        Return a list of dict with process groups and backends.</span>
+
+<span class="sd">        Along with their unique IDs and configurations (types and ranks).</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">config_info</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">default_pg_size</span> <span class="o">=</span> <span class="n">_get_group_size</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
         <span class="k">for</span> <span class="n">pg</span><span class="p">,</span> <span class="n">backend</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">pg_map</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
             <span class="c1"># backend is a tuple with the first element being the backend type (&quot;nccl&quot;, etc.)</span>
             <span class="n">backend_type</span> <span class="o">=</span> <span class="n">Backend</span><span class="o">.</span><span class="n">backend_type_map</span><span class="p">[</span><span class="n">backend</span><span class="p">[</span><span class="mi">0</span><span class="p">]]</span>
+            <span class="n">ranks</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">pg_group_ranks</span><span class="p">[</span><span class="n">pg</span><span class="p">]</span>
             <span class="n">config_info</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
                 <span class="p">{</span>
-                    <span class="s2">&quot;pg_id&quot;</span><span class="p">:</span> <span class="n">pg</span><span class="o">.</span><span class="n">_id</span><span class="p">(),</span>
+                    <span class="s2">&quot;pg_name&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">pg_names</span><span class="p">[</span><span class="n">pg</span><span class="p">],</span>
                     <span class="s2">&quot;backend_id&quot;</span><span class="p">:</span> <span class="n">pg</span><span class="o">.</span><span class="n">_backend_id</span><span class="p">(</span><span class="n">backend_type</span><span class="p">),</span>
                     <span class="s2">&quot;backend_config&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">pg_backend_config</span><span class="p">[</span><span class="n">pg</span><span class="p">],</span>
-                    <span class="s2">&quot;ranks&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">pg_group_ranks</span><span class="p">[</span><span class="n">pg</span><span class="p">],</span>
+                    <span class="s2">&quot;ranks&quot;</span><span class="p">:</span> <span class="nb">list</span><span class="p">(</span><span class="n">ranks</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+                    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">ranks</span><span class="p">)</span> <span class="o">!=</span> <span class="n">default_pg_size</span>
+                    <span class="k">else</span> <span class="p">[],</span>  <span class="c1"># &#39;ranks&#39; is an empty list when all ranks are involved in a pg</span>
+                    <span class="s2">&quot;group_size&quot;</span><span class="p">:</span> <span class="nb">len</span><span class="p">(</span><span class="n">ranks</span><span class="p">),</span>
+                    <span class="s2">&quot;group_count&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">group_count</span><span class="p">,</span>
                 <span class="p">}</span>
             <span class="p">)</span>
         <span class="k">return</span> <span class="n">config_info</span>
@@ -999,9 +1038,11 @@
 
 <span class="k">class</span> <span class="nc">_WorldMeta</span><span class="p">(</span><span class="nb">type</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Meta class of ``group`` and ``GroupMember`` so they</span>
-<span class="sd">    can have the class property ``WORLD``.</span>
+<span class="sd">    Meta class of ``group`` and ``GroupMember``.</span>
+
+<span class="sd">    Allows them to have the class property ``WORLD``.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
+
     <span class="c1"># Points to the default PG once initialized.</span>
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">WORLD</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">ProcessGroup</span><span class="p">]:</span>
@@ -1012,20 +1053,43 @@
         <span class="n">_world</span><span class="o">.</span><span class="n">default_pg</span> <span class="o">=</span> <span class="n">pg</span>
 
 <span class="k">class</span> <span class="nc">group</span><span class="p">(</span><span class="n">metaclass</span><span class="o">=</span><span class="n">_WorldMeta</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Group class. Placeholder.&quot;&quot;&quot;</span>
+
     <span class="k">pass</span>
 
 <span class="k">class</span> <span class="nc">GroupMember</span><span class="p">(</span><span class="n">metaclass</span><span class="o">=</span><span class="n">_WorldMeta</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Group member class.&quot;&quot;&quot;</span>
+
     <span class="n">NON_GROUP_MEMBER</span> <span class="o">=</span> <span class="o">-</span><span class="mi">100</span>
 
+
+<span class="k">def</span> <span class="nf">_get_default_timeout</span><span class="p">(</span><span class="n">backend</span><span class="p">:</span> <span class="n">Backend</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">timedelta</span><span class="p">:</span>
+    <span class="c1"># see note on nccl vs other backend timeout (constants.py)</span>
+    <span class="k">if</span> <span class="n">backend</span> <span class="o">==</span> <span class="n">Backend</span><span class="o">.</span><span class="n">NCCL</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">default_pg_nccl_timeout</span><span class="p">,</span> <span class="n">timedelta</span><span class="p">):</span>
+            <span class="c1"># TODO moco benchmark on CPU initializes pgnccl backend today, triggered this assert in CI before it was</span>
+            <span class="c1"># changed to be a warning.  We should fix the moco model.</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="s2">&quot;Attempted to get default timeout for nccl backend, but NCCL support is not compiled&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">default_pg_timeout</span>
+        <span class="k">return</span> <span class="n">default_pg_nccl_timeout</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">default_pg_timeout</span>
+
+<span class="k">def</span> <span class="nf">_check_valid_timeout</span><span class="p">(</span><span class="n">timeout</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">timeout</span><span class="p">,</span> <span class="n">timedelta</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;Expected timeout argument to be of type datetime.timedelta, got </span><span class="si">{</span><span class="n">timeout</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="p">)</span>
 
 <span class="c1"># Default process group state</span>
 <span class="n">_default_pg_init_method</span> <span class="o">=</span> <span class="kc">None</span>
 
 <span class="n">STORE_BASED_BARRIER_PREFIX</span> <span class="o">=</span> <span class="s2">&quot;store_based_barrier_key&quot;</span>
 
-<span class="k">def</span> <span class="nf">_get_pg_default_device</span><span class="p">(</span><span class="n">group</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">ProcessGroup</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+<span class="k">def</span> <span class="nf">_get_pg_default_device</span><span class="p">(</span><span class="n">group</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">ProcessGroup</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Returns the device to use with ``group`` for control flow usage (object collectives, barrier).</span>
+<span class="sd">    Return the device to use with ``group`` for control flow usage (object collectives, barrier).</span>
+
 <span class="sd">    There are selection rules:</span>
 <span class="sd">        1. If user specifies exactly one backend in ``init_process_group`` call:</span>
 <span class="sd">            use that backend</span>
@@ -1093,6 +1157,8 @@
 <span class="nd">@_time_logger</span>
 <span class="k">def</span> <span class="nf">_store_based_barrier</span><span class="p">(</span><span class="n">rank</span><span class="p">,</span> <span class="n">store</span><span class="p">,</span> <span class="n">group_name</span><span class="p">,</span> <span class="n">rendezvous_count</span><span class="p">,</span> <span class="n">timeout</span><span class="p">,</span> <span class="n">logging_interval</span><span class="o">=</span><span class="n">timedelta</span><span class="p">(</span><span class="n">seconds</span><span class="o">=</span><span class="mi">10</span><span class="p">)):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Store based barrier for synchronizing processes.</span>
+
 <span class="sd">    Barrier based on store which is used for synchronizing processes after</span>
 <span class="sd">    ``init_process_group`` or ``new_group``. Intended to be used only with</span>
 <span class="sd">    those two methods and is not a generic alternative to ``barrier()``.</span>
@@ -1108,6 +1174,10 @@
     <span class="n">last_worker_key</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">store_key</span><span class="si">}</span><span class="s2">:last_worker&quot;</span>
     <span class="k">if</span> <span class="n">worker_count</span> <span class="o">==</span> <span class="n">world_size</span><span class="p">:</span>
         <span class="n">store</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">last_worker_key</span><span class="p">,</span> <span class="s2">&quot;1&quot;</span><span class="p">)</span>
+
+    <span class="c1"># adjust the timeout to be at least 10secs + 1sec per thousand ranks to reduce the odds of timeout</span>
+    <span class="c1"># this value was empirically found while scale testing.</span>
+    <span class="n">logging_interval</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">logging_interval</span><span class="p">,</span> <span class="n">timedelta</span><span class="p">(</span><span class="n">seconds</span><span class="o">=</span><span class="mi">10</span> <span class="o">+</span> <span class="n">world_size</span> <span class="o">/</span> <span class="mi">1000</span><span class="p">))</span>
 
     <span class="n">start</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
     <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
@@ -1126,7 +1196,7 @@
             <span class="p">)</span>
 
             <span class="k">if</span> <span class="n">timedelta</span><span class="p">(</span><span class="n">seconds</span><span class="o">=</span><span class="p">(</span><span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">-</span> <span class="n">start</span><span class="p">))</span> <span class="o">&gt;</span> <span class="n">timeout</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="k">raise</span> <span class="n">DistStoreError</span><span class="p">(</span>  <span class="c1"># noqa: TRY200</span>
                     <span class="s2">&quot;Timed out initializing process group in store based barrier on &quot;</span>
                     <span class="s2">&quot;rank </span><span class="si">{}</span><span class="s2">, for key: </span><span class="si">{}</span><span class="s2"> (world_size=</span><span class="si">{}</span><span class="s2">, num_workers_joined=</span><span class="si">{}</span><span class="s2">, timeout=</span><span class="si">{}</span><span class="s2">)&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
                         <span class="n">rank</span><span class="p">,</span> <span class="n">store_key</span><span class="p">,</span> <span class="n">world_size</span><span class="p">,</span> <span class="n">worker_count</span><span class="p">,</span> <span class="n">timeout</span>
@@ -1139,9 +1209,7 @@
 
 
 <span class="k">def</span> <span class="nf">_rank_not_in_group</span><span class="p">(</span><span class="n">group</span><span class="p">:</span> <span class="n">ProcessGroup</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Helper that checks if the current process&#39;s rank is not in a given group.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Check if the current process&#39;s rank is not in a given group.&quot;&quot;&quot;</span>
     <span class="k">if</span> <span class="n">group</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">return</span> <span class="kc">False</span>
     <span class="k">return</span> <span class="n">group</span> <span class="o">==</span> <span class="n">GroupMember</span><span class="o">.</span><span class="n">NON_GROUP_MEMBER</span>
@@ -1173,10 +1241,10 @@
     <span class="k">if</span> <span class="n">group</span> <span class="ow">is</span> <span class="n">GroupMember</span><span class="o">.</span><span class="n">WORLD</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">global_rank</span>
     <span class="k">if</span> <span class="n">group</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">_world</span><span class="o">.</span><span class="n">pg_group_ranks</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Group </span><span class="si">{</span><span class="n">group</span><span class="si">}</span><span class="s2"> is not registered, please create group with torch.distributed.new_group API&quot;</span><span class="p">)</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Group </span><span class="si">{</span><span class="n">group</span><span class="si">}</span><span class="s2"> is not registered, please create group with torch.distributed.new_group API&quot;</span><span class="p">)</span>
     <span class="n">group_ranks</span> <span class="o">=</span> <span class="n">_world</span><span class="o">.</span><span class="n">pg_group_ranks</span><span class="p">[</span><span class="n">group</span><span class="p">]</span>
     <span class="k">if</span> <span class="n">global_rank</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">group_ranks</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Global rank </span><span class="si">{</span><span class="n">global_rank</span><span class="si">}</span><span class="s2"> is not part of group </span><span class="si">{</span><span class="n">group</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Global rank </span><span class="si">{</span><span class="n">global_rank</span><span class="si">}</span><span class="s2"> is not part of group </span><span class="si">{</span><span class="n">group</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 
     <span class="k">return</span> <span class="n">group_ranks</span><span class="p">[</span><span class="n">global_rank</span><span class="p">]</span></div>
 
@@ -1198,17 +1266,15 @@
     <span class="k">if</span> <span class="n">group</span> <span class="ow">is</span> <span class="n">GroupMember</span><span class="o">.</span><span class="n">WORLD</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">group_rank</span>
     <span class="k">if</span> <span class="n">group</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">_world</span><span class="o">.</span><span class="n">pg_group_ranks</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Group </span><span class="si">{</span><span class="n">group</span><span class="si">}</span><span class="s2"> is not registered, please create group with torch.distributed.new_group API&quot;</span><span class="p">)</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Group </span><span class="si">{</span><span class="n">group</span><span class="si">}</span><span class="s2"> is not registered, please create group with torch.distributed.new_group API&quot;</span><span class="p">)</span>
     <span class="k">for</span> <span class="n">rank</span><span class="p">,</span> <span class="n">grp_rank</span> <span class="ow">in</span> <span class="n">_world</span><span class="o">.</span><span class="n">pg_group_ranks</span><span class="p">[</span><span class="n">group</span><span class="p">]</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
         <span class="k">if</span> <span class="n">grp_rank</span> <span class="o">==</span> <span class="n">group_rank</span><span class="p">:</span>
             <span class="k">return</span> <span class="n">rank</span>
-    <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Group rank </span><span class="si">{</span><span class="n">group_rank</span><span class="si">}</span><span class="s2"> is not part of group </span><span class="si">{</span><span class="n">group</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span></div>
+    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Group rank </span><span class="si">{</span><span class="n">group_rank</span><span class="si">}</span><span class="s2"> is not part of group </span><span class="si">{</span><span class="n">group</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span></div>
 
 <span class="c1"># TODO: remove this once the ecosystem moves away from it.</span>
 <span class="k">def</span> <span class="nf">_get_global_rank</span><span class="p">(</span><span class="n">group</span><span class="p">,</span> <span class="n">rank</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    This method is deprecated, please use get_global_rank.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Use get_global_rank as this method is deprecated.&quot;&quot;&quot;</span>
     <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
         <span class="s2">&quot;torch.distributed.distributed_c10d._get_global_rank is deprecated &quot;</span>
         <span class="s2">&quot;please use torch.distributed.distributed_c10d.get_global_rank instead&quot;</span>
@@ -1229,9 +1295,7 @@
     <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="n">_world</span><span class="o">.</span><span class="n">pg_group_ranks</span><span class="p">[</span><span class="n">group</span><span class="p">]</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span></div>
 
 <span class="k">def</span> <span class="nf">_get_group_size</span><span class="p">(</span><span class="n">group</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Helper that gets a given group&#39;s world size.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Get a given group&#39;s world size.&quot;&quot;&quot;</span>
     <span class="k">if</span> <span class="n">group</span> <span class="ow">is</span> <span class="n">GroupMember</span><span class="o">.</span><span class="n">WORLD</span> <span class="ow">or</span> <span class="n">group</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">default_pg</span> <span class="o">=</span> <span class="n">_get_default_group</span><span class="p">()</span>
         <span class="k">return</span> <span class="n">default_pg</span><span class="o">.</span><span class="n">size</span><span class="p">()</span>
@@ -1239,23 +1303,19 @@
 
 
 <span class="k">def</span> <span class="nf">_check_single_tensor</span><span class="p">(</span><span class="n">param</span><span class="p">,</span> <span class="n">param_name</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Helper to check that the parameter ``param_name`` is a single tensor.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Check that the parameter ``param_name`` is a single tensor.&quot;&quot;&quot;</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">param</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
-        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
             <span class="sa">f</span><span class="s2">&quot;Invalid function argument. Expected parameter `</span><span class="si">{</span><span class="n">param_name</span><span class="si">}</span><span class="s2">` to be of type torch.Tensor.&quot;</span>
         <span class="p">)</span>
 
 
 <span class="k">def</span> <span class="nf">_check_tensor_list</span><span class="p">(</span><span class="n">param</span><span class="p">,</span> <span class="n">param_name</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Helper to check that the parameter ``param_name`` is a list of tensors.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Check that the parameter ``param_name`` is a list of tensors.&quot;&quot;&quot;</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">param</span><span class="p">,</span> <span class="nb">list</span><span class="p">)</span> <span class="ow">or</span> <span class="ow">not</span> <span class="nb">all</span><span class="p">(</span>
         <span class="nb">isinstance</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">param</span>
     <span class="p">):</span>
-        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
             <span class="sa">f</span><span class="s2">&quot;Invalid function argument. Expected parameter `</span><span class="si">{</span><span class="n">param_name</span><span class="si">}</span><span class="s2">` to be of type List[torch.Tensor].&quot;</span>
         <span class="p">)</span>
 
@@ -1274,18 +1334,16 @@
             <span class="n">last_dtype</span> <span class="o">=</span> <span class="n">tensor_dtype</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="k">if</span> <span class="n">last_dtype</span> <span class="o">!=</span> <span class="n">tensor_dtype</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                     <span class="s2">&quot;Invalid usage of tensors with different dtypes&quot;</span>
                     <span class="sa">f</span><span class="s2">&quot;Found </span><span class="si">{</span><span class="n">last_dtype</span><span class="si">}</span><span class="s2"> and  </span><span class="si">{</span><span class="n">tensor</span><span class="o">.</span><span class="n">dtype</span><span class="si">}</span><span class="s2">&quot;</span>
                 <span class="p">)</span>
 
 
 <span class="k">def</span> <span class="nf">_check_op</span><span class="p">(</span><span class="n">op</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Helper to check that the ``op`` is either isend or irecv.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Check that the ``op`` is either isend or irecv.&quot;&quot;&quot;</span>
     <span class="k">if</span> <span class="n">op</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">[</span><span class="n">isend</span><span class="p">,</span> <span class="n">irecv</span><span class="p">]:</span>
-        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
             <span class="s2">&quot;Invalid ``op``. Expected ``op`` &quot;</span>
             <span class="s2">&quot;to be of type ``torch.distributed.isend`` or &quot;</span>
             <span class="s2">&quot;``torch.distributed.irecv``.&quot;</span>
@@ -1294,52 +1352,47 @@
 
 <span class="k">def</span> <span class="nf">_check_p2p_op_list</span><span class="p">(</span><span class="n">p2p_op_list</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Helper to check that the ``p2p_op_list`` is a list of P2POp instances and</span>
-<span class="sd">    all ops use the same group.</span>
+<span class="sd">    Check that the ``p2p_op_list`` is a list of P2POp instances.</span>
+
+<span class="sd">    Also, check that all ops use the same group.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">p2p_op_list</span><span class="p">,</span> <span class="nb">list</span><span class="p">)</span> <span class="ow">or</span> <span class="ow">not</span> <span class="nb">all</span><span class="p">(</span>
         <span class="nb">isinstance</span><span class="p">(</span><span class="n">p2p_op</span><span class="p">,</span> <span class="n">P2POp</span><span class="p">)</span> <span class="k">for</span> <span class="n">p2p_op</span> <span class="ow">in</span> <span class="n">p2p_op_list</span>
     <span class="p">):</span>
-        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
             <span class="s2">&quot;Invalid ``p2p_op_list``. Each op is expected to &quot;</span>
             <span class="s2">&quot;to be of type ``torch.distributed.P2POp``.&quot;</span>
         <span class="p">)</span>
 
     <span class="n">group</span> <span class="o">=</span> <span class="n">p2p_op_list</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">group</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="nb">all</span><span class="p">(</span><span class="n">group</span> <span class="o">==</span> <span class="n">p2p_op</span><span class="o">.</span><span class="n">group</span> <span class="k">for</span> <span class="n">p2p_op</span> <span class="ow">in</span> <span class="n">p2p_op_list</span><span class="p">):</span>
-        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;All ops need to use the same group.&quot;</span><span class="p">)</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;All ops need to use the same group.&quot;</span><span class="p">)</span>
 
 
 <div class="viewcode-block" id="is_mpi_available"><a class="viewcode-back" href="../../../distributed.html#torch.distributed.is_mpi_available">[docs]</a><span class="k">def</span> <span class="nf">is_mpi_available</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Checks if the MPI backend is available.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Check if the MPI backend is available.&quot;&quot;&quot;</span>
     <span class="k">return</span> <span class="n">_MPI_AVAILABLE</span></div>
 
 
 <div class="viewcode-block" id="is_nccl_available"><a class="viewcode-back" href="../../../distributed.html#torch.distributed.is_nccl_available">[docs]</a><span class="k">def</span> <span class="nf">is_nccl_available</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Checks if the NCCL backend is available.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Check if the NCCL backend is available.&quot;&quot;&quot;</span>
     <span class="k">return</span> <span class="n">_NCCL_AVAILABLE</span></div>
 
 
 <div class="viewcode-block" id="is_gloo_available"><a class="viewcode-back" href="../../../distributed.html#torch.distributed.is_gloo_available">[docs]</a><span class="k">def</span> <span class="nf">is_gloo_available</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Checks if the Gloo backend is available.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Check if the Gloo backend is available.&quot;&quot;&quot;</span>
     <span class="k">return</span> <span class="n">_GLOO_AVAILABLE</span></div>
 
 
 <span class="k">def</span> <span class="nf">is_ucc_available</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Checks if the UCC backend is available.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Check if the UCC backend is available.&quot;&quot;&quot;</span>
     <span class="k">return</span> <span class="n">_UCC_AVAILABLE</span>
 
 
 <span class="k">def</span> <span class="nf">is_backend_available</span><span class="p">(</span><span class="n">backend</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Check backend availability.</span>
+
 <span class="sd">    Checks if the given backend is available and supports the built-in backends or</span>
 <span class="sd">    third-party backends through function ``Backend.register_backend``.</span>
 
@@ -1357,16 +1410,15 @@
 
 
 <div class="viewcode-block" id="is_initialized"><a class="viewcode-back" href="../../../distributed.html#torch.distributed.is_initialized">[docs]</a><span class="k">def</span> <span class="nf">is_initialized</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Checking if the default process group has been initialized</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Check if the default process group has been initialized.&quot;&quot;&quot;</span>
     <span class="k">return</span> <span class="n">GroupMember</span><span class="o">.</span><span class="n">WORLD</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span></div>
 
 
 <div class="viewcode-block" id="is_torchelastic_launched"><a class="viewcode-back" href="../../../distributed.html#torch.distributed.is_torchelastic_launched">[docs]</a><span class="k">def</span> <span class="nf">is_torchelastic_launched</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Checks whether this process was launched with ``torch.distributed.elastic``</span>
-<span class="sd">    (aka torchelastic). The existence of ``TORCHELASTIC_RUN_ID`` environment</span>
+<span class="sd">    Check whether this process was launched with ``torch.distributed.elastic`` (aka torchelastic).</span>
+
+<span class="sd">    The existence of ``TORCHELASTIC_RUN_ID`` environment</span>
 <span class="sd">    variable is used as a proxy to determine whether the current process</span>
 <span class="sd">    was launched with torchelastic. This is a reasonable proxy since</span>
 <span class="sd">    ``TORCHELASTIC_RUN_ID`` maps to the rendezvous id which is always a</span>
@@ -1384,11 +1436,9 @@
 
 
 <span class="k">def</span> <span class="nf">_get_default_group</span><span class="p">():</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Getting the default process group created by init_process_group</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Get the default process group created by init_process_group.&quot;&quot;&quot;</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="n">is_initialized</span><span class="p">():</span>
-        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
             <span class="s2">&quot;Default process group has not been initialized, &quot;</span>
             <span class="s2">&quot;please make sure to call init_process_group.&quot;</span>
         <span class="p">)</span>
@@ -1396,11 +1446,9 @@
 
 
 <span class="k">def</span> <span class="nf">_get_default_store</span><span class="p">():</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Getting the default store created by init_process_group</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Get the default store created by init_process_group.&quot;&quot;&quot;</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="n">is_initialized</span><span class="p">():</span>
-        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
             <span class="s2">&quot;Default process group has not been initialized, &quot;</span>
             <span class="s2">&quot;please make sure to call init_process_group.&quot;</span>
         <span class="p">)</span>
@@ -1411,21 +1459,35 @@
 
 <span class="k">def</span> <span class="nf">_update_default_pg</span><span class="p">(</span><span class="n">pg</span><span class="p">):</span>
     <span class="n">_world</span><span class="o">.</span><span class="n">default_pg</span> <span class="o">=</span> <span class="n">pg</span>
+    <span class="n">rank</span> <span class="o">=</span> <span class="n">pg</span><span class="o">.</span><span class="n">rank</span><span class="p">()</span> <span class="k">if</span> <span class="n">pg</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">pg</span> <span class="o">!=</span> <span class="n">GroupMember</span><span class="o">.</span><span class="n">NON_GROUP_MEMBER</span> <span class="k">else</span> <span class="o">-</span><span class="mi">1</span>
+    <span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">_distributed_c10d</span><span class="o">.</span><span class="n">_set_global_rank</span><span class="p">(</span><span class="n">rank</span><span class="p">)</span>
 
 <span class="k">def</span> <span class="nf">get_backend_config</span><span class="p">(</span><span class="n">group</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">ProcessGroup</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Return the backend configuration of the given process group.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        group (ProcessGroup, optional): The process group to work on. The</span>
+<span class="sd">            default is the general main process group. If another specific group</span>
+<span class="sd">            is specified, the calling process must be part of :attr:`group`.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        The backend configuration of the given process group as a lower case string.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
     <span class="k">if</span> <span class="n">group</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">pg</span> <span class="o">=</span> <span class="n">_get_default_group</span><span class="p">()</span>
     <span class="k">else</span><span class="p">:</span>
         <span class="n">pg</span> <span class="o">=</span> <span class="n">group</span>
     <span class="k">if</span> <span class="n">_rank_not_in_group</span><span class="p">(</span><span class="n">pg</span><span class="p">):</span>
-        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Invalid process group specified&quot;</span><span class="p">)</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Invalid process group specified&quot;</span><span class="p">)</span>
     <span class="n">backend_config</span> <span class="o">=</span> <span class="n">_world</span><span class="o">.</span><span class="n">pg_backend_config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">pg</span><span class="p">)</span>
     <span class="k">assert</span> <span class="n">backend_config</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
     <span class="k">return</span> <span class="nb">str</span><span class="p">(</span><span class="n">backend_config</span><span class="p">)</span>
 
 <div class="viewcode-block" id="get_backend"><a class="viewcode-back" href="../../../distributed.html#torch.distributed.get_backend">[docs]</a><span class="k">def</span> <span class="nf">get_backend</span><span class="p">(</span><span class="n">group</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">ProcessGroup</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Returns the backend of the given process group.</span>
+<span class="sd">    Return the backend of the given process group.</span>
 
 <span class="sd">    Args:</span>
 <span class="sd">        group (ProcessGroup, optional): The process group to work on. The</span>
@@ -1441,7 +1503,7 @@
     <span class="k">else</span><span class="p">:</span>
         <span class="n">pg</span> <span class="o">=</span> <span class="n">group</span>
     <span class="k">if</span> <span class="n">_rank_not_in_group</span><span class="p">(</span><span class="n">pg</span><span class="p">):</span>
-        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Invalid process group specified&quot;</span><span class="p">)</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Invalid process group specified&quot;</span><span class="p">)</span>
     <span class="n">pg_store</span> <span class="o">=</span> <span class="n">_world</span><span class="o">.</span><span class="n">pg_map</span><span class="p">[</span><span class="n">pg</span><span class="p">]</span> <span class="k">if</span> <span class="n">pg</span> <span class="ow">in</span> <span class="n">_world</span><span class="o">.</span><span class="n">pg_map</span> <span class="k">else</span> <span class="kc">None</span>
     <span class="k">assert</span> <span class="n">pg_store</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
     <span class="k">return</span> <span class="n">pg_store</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span></div>
@@ -1452,7 +1514,7 @@
 <span class="k">def</span> <span class="nf">init_process_group</span><span class="p">(</span>
     <span class="n">backend</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Backend</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">init_method</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-    <span class="n">timeout</span><span class="p">:</span> <span class="n">timedelta</span> <span class="o">=</span> <span class="n">default_pg_timeout</span><span class="p">,</span>
+    <span class="n">timeout</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">timedelta</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">world_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span>
     <span class="n">rank</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span>
     <span class="n">store</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Store</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -1460,8 +1522,9 @@
     <span class="n">pg_options</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Initializes the default distributed process group, and this will also</span>
-<span class="sd">    initialize the distributed package.</span>
+<span class="sd">    Initialize the default distributed process group.</span>
+
+<span class="sd">    This will also initialize the distributed package.</span>
 
 <span class="sd">    There are 2 main ways to initialize a process group:</span>
 <span class="sd">        1. Specify ``store``, ``rank``, and ``world_size`` explicitly.</span>
@@ -1497,26 +1560,12 @@
 <span class="sd">                                to exchange connection/address information.</span>
 <span class="sd">                                Mutually exclusive with ``init_method``.</span>
 <span class="sd">        timeout (timedelta, optional): Timeout for operations executed against</span>
-<span class="sd">            the process group. Default value equals 30 minutes.</span>
-<span class="sd">            This is applicable for the ``gloo`` backend. For ``nccl``, this is</span>
-<span class="sd">            applicable only if the environment variable ``NCCL_BLOCKING_WAIT``</span>
-<span class="sd">            or ``NCCL_ASYNC_ERROR_HANDLING`` is set to 1. When</span>
-<span class="sd">            ``NCCL_BLOCKING_WAIT`` is set, this is the duration for which the</span>
-<span class="sd">            process will block and wait for collectives to complete before</span>
-<span class="sd">            throwing an exception. When ``NCCL_ASYNC_ERROR_HANDLING`` is set,</span>
-<span class="sd">            this is the duration after which collectives will be aborted</span>
-<span class="sd">            asynchronously and the process will crash. ``NCCL_BLOCKING_WAIT``</span>
-<span class="sd">            will provide errors to the user which can be caught and handled,</span>
-<span class="sd">            but due to its blocking nature, it has a performance overhead. On</span>
-<span class="sd">            the other hand, ``NCCL_ASYNC_ERROR_HANDLING`` has very little</span>
-<span class="sd">            performance overhead, but crashes the process on errors. This is</span>
-<span class="sd">            done since CUDA execution is async and it is no longer safe to</span>
-<span class="sd">            continue executing user code since failed async NCCL operations</span>
-<span class="sd">            might result in subsequent CUDA operations running on corrupted</span>
-<span class="sd">            data. Only one of these two environment variables should be set.</span>
-<span class="sd">            For ``ucc``, blocking wait is supported similar to NCCL. However,</span>
-<span class="sd">            async error handling is done differently since with UCC we have</span>
-<span class="sd">            progress thread and not watch-dog thread.</span>
+<span class="sd">            the process group. Default value is 10 minutes for NCCL and 30 minutes for other backends.</span>
+<span class="sd">            This is the duration after which collectives will be aborted asynchronously and the process will crash.</span>
+<span class="sd">            This is done since CUDA execution is async and it is no longer safe to continue executing user code since</span>
+<span class="sd">            failed async NCCL operations might result in subsequent CUDA operations running on corrupted data.</span>
+<span class="sd">            When TORCH_NCCL_BLOCKING_WAIT is set, the process will block and wait for this timeout.</span>
+
 <span class="sd">        group_name (str, optional, deprecated): Group name. This argument is ignored</span>
 <span class="sd">        pg_options (ProcessGroupOptions, optional): process group options</span>
 <span class="sd">            specifying what additional options need to be passed in during</span>
@@ -1542,13 +1591,8 @@
     <span class="k">global</span> <span class="n">_backend</span>
     <span class="k">global</span> <span class="n">_default_pg_init_method</span>
 
-    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">timeout</span><span class="p">,</span> <span class="n">timedelta</span><span class="p">):</span>
-        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
-            <span class="s2">&quot;Expected timeout argument to be of type datetime.timedelta&quot;</span>
-        <span class="p">)</span>
-
     <span class="k">if</span> <span class="n">GroupMember</span><span class="o">.</span><span class="n">WORLD</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;trying to initialize the default process group twice!&quot;</span><span class="p">)</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;trying to initialize the default process group twice!&quot;</span><span class="p">)</span>
 
     <span class="k">assert</span> <span class="p">(</span><span class="n">store</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">or</span> <span class="p">(</span>
         <span class="n">init_method</span> <span class="ow">is</span> <span class="kc">None</span>
@@ -1565,6 +1609,11 @@
     <span class="k">else</span><span class="p">:</span>
         <span class="n">backend</span> <span class="o">=</span> <span class="n">Backend</span><span class="p">(</span><span class="s2">&quot;undefined&quot;</span><span class="p">)</span>
 
+    <span class="k">if</span> <span class="n">timeout</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">timeout</span> <span class="o">=</span> <span class="n">_get_default_timeout</span><span class="p">(</span><span class="n">backend</span><span class="p">)</span>
+
+    <span class="n">_check_valid_timeout</span><span class="p">(</span><span class="n">timeout</span><span class="p">)</span>
+
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Group name is not visible to users unless they access</span>
 <span class="sd">    internals of c10d. This means we can ignore the value</span>
@@ -1580,7 +1629,7 @@
             <span class="p">)</span>
 
         <span class="n">default_pg</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">_new_process_group_helper</span><span class="p">(</span>
-            <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="p">[],</span> <span class="n">backend</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="n">group_name</span><span class="o">=</span><span class="n">group_name</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span>
+            <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="p">[],</span> <span class="n">backend</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="n">group_name</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span>
         <span class="p">)</span>
         <span class="n">_update_default_pg</span><span class="p">(</span><span class="n">default_pg</span><span class="p">)</span>
     <span class="k">else</span><span class="p">:</span>
@@ -1602,8 +1651,8 @@
             <span class="p">[],</span>
             <span class="n">backend</span><span class="p">,</span>
             <span class="n">store</span><span class="p">,</span>
+            <span class="n">group_name</span><span class="p">,</span>
             <span class="n">pg_options</span><span class="o">=</span><span class="n">pg_options</span><span class="p">,</span>
-            <span class="n">group_name</span><span class="o">=</span><span class="n">group_name</span><span class="p">,</span>
             <span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span>
         <span class="p">)</span>
         <span class="n">_update_default_pg</span><span class="p">(</span><span class="n">default_pg</span><span class="p">)</span>
@@ -1640,9 +1689,9 @@
     <span class="n">global_ranks_in_group</span><span class="p">,</span>
     <span class="n">backend</span><span class="p">,</span>
     <span class="n">store</span><span class="p">,</span>
+    <span class="n">group_name</span><span class="p">,</span>
     <span class="n">pg_options</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-    <span class="n">group_name</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-    <span class="n">timeout</span><span class="o">=</span><span class="n">default_pg_timeout</span><span class="p">,</span>
+    <span class="n">timeout</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
     <span class="n">pg_tag</span><span class="o">=</span><span class="kc">None</span>
 <span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
@@ -1657,15 +1706,13 @@
     <span class="k">global</span> <span class="n">_world</span>
 
     <span class="k">if</span> <span class="n">group_name</span> <span class="ow">in</span> <span class="n">_world</span><span class="o">.</span><span class="n">pg_names</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
-        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
             <span class="s2">&quot;The specified group name has already been &quot;</span>
             <span class="s2">&quot;created, please use a different group name&quot;</span>
         <span class="p">)</span>
 
-    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">timeout</span><span class="p">,</span> <span class="n">timedelta</span><span class="p">):</span>
-        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
-            <span class="s2">&quot;Expected timeout argument to be of type datetime.timedelta&quot;</span>
-        <span class="p">)</span>
+    <span class="c1"># Note: _new_process_group_helper is only called from init_process_group, which always provides a timeout value</span>
+    <span class="n">_check_valid_timeout</span><span class="p">(</span><span class="n">timeout</span><span class="p">)</span>
 
     <span class="k">if</span> <span class="n">pg_tag</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">[</span><span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">]:</span>
         <span class="c1"># creating with the same tag and rank set results in the same underlying PG</span>
@@ -1721,13 +1768,40 @@
                 <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span>
                     <span class="n">pg_options</span><span class="p">,</span> <span class="n">ProcessGroupNCCL</span><span class="o">.</span><span class="n">Options</span>
                 <span class="p">),</span> <span class="s2">&quot;Expected pg_options argument to be of type ProcessGroupNCCL.Options&quot;</span>
+                <span class="k">if</span> <span class="n">pg_options</span><span class="o">.</span><span class="n">_timeout</span> <span class="o">!=</span> <span class="n">timeout</span><span class="p">:</span>
+                    <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                        <span class="s2">&quot;pg_options._timeout was specified, &quot;</span>
+                        <span class="s2">&quot;but timeout kwarg has a default value that will always override it. &quot;</span>
+                    <span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="c1"># default pg_options for NCCL</span>
                 <span class="n">pg_options</span> <span class="o">=</span> <span class="n">ProcessGroupNCCL</span><span class="o">.</span><span class="n">Options</span><span class="p">()</span>
                 <span class="n">pg_options</span><span class="o">.</span><span class="n">is_high_priority_stream</span> <span class="o">=</span> <span class="kc">False</span>
-                <span class="n">pg_options</span><span class="o">.</span><span class="n">_timeout</span> <span class="o">=</span> <span class="n">timeout</span>
+            <span class="n">pg_options</span><span class="o">.</span><span class="n">_timeout</span> <span class="o">=</span> <span class="n">timeout</span>
 
-            <span class="n">backend_class</span> <span class="o">=</span> <span class="n">ProcessGroupNCCL</span><span class="p">(</span><span class="n">backend_prefix_store</span><span class="p">,</span> <span class="n">group_rank</span><span class="p">,</span> <span class="n">group_size</span><span class="p">,</span> <span class="n">pg_options</span><span class="p">)</span>
+            <span class="c1"># If our new group includes all ranks, we can reduce</span>
+            <span class="c1"># overhead by splitting the communicator (`nccCommSplit`).</span>
+
+            <span class="c1"># TODO: support this in the general case by calling</span>
+            <span class="c1"># `nccCommSplit` with `NCCL_SPLIT_NOCOLOR` for the ranks</span>
+            <span class="c1"># not in the communicator.</span>
+            <span class="n">split_from</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="k">if</span> <span class="p">(</span>
+                <span class="n">is_initialized</span><span class="p">()</span>
+                <span class="ow">and</span> <span class="n">_world</span><span class="o">.</span><span class="n">default_pg</span><span class="o">.</span><span class="n">_get_backend_name</span><span class="p">()</span> <span class="o">==</span> <span class="n">Backend</span><span class="o">.</span><span class="n">NCCL</span>
+                <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">global_ranks_in_group</span><span class="p">)</span> <span class="o">==</span> <span class="n">_world</span><span class="o">.</span><span class="n">default_pg</span><span class="o">.</span><span class="n">size</span><span class="p">()</span>
+            <span class="p">):</span>
+                <span class="c1"># If possible, find a backend to split from by peeling</span>
+                <span class="c1"># process group wrappers from the world&#39;s default pg.</span>
+                <span class="n">split_from</span> <span class="o">=</span> <span class="n">_world</span><span class="o">.</span><span class="n">default_pg</span><span class="o">.</span><span class="n">_get_backend</span><span class="p">(</span><span class="n">_get_pg_default_device</span><span class="p">())</span>
+                <span class="k">while</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">split_from</span><span class="p">,</span> <span class="n">_ProcessGroupWrapper</span><span class="p">):</span>
+                    <span class="n">split_from</span> <span class="o">=</span> <span class="n">split_from</span><span class="o">.</span><span class="n">wrapped_pg</span>
+
+                <span class="k">if</span> <span class="n">split_from</span><span class="p">:</span>
+                    <span class="n">pg_options</span><span class="o">.</span><span class="n">split_from</span> <span class="o">=</span> <span class="n">split_from</span>
+                    <span class="n">pg_options</span><span class="o">.</span><span class="n">split_color</span> <span class="o">=</span> <span class="n">_process_group_color</span><span class="p">(</span><span class="n">global_ranks_in_group</span><span class="p">)</span>
+            <span class="n">backend_class</span> <span class="o">=</span> <span class="n">ProcessGroupNCCL</span><span class="p">(</span>
+                <span class="n">backend_prefix_store</span><span class="p">,</span> <span class="n">group_rank</span><span class="p">,</span> <span class="n">group_size</span><span class="p">,</span> <span class="n">pg_options</span><span class="p">)</span>
             <span class="n">backend_type</span> <span class="o">=</span> <span class="n">ProcessGroup</span><span class="o">.</span><span class="n">BackendType</span><span class="o">.</span><span class="n">NCCL</span>
         <span class="k">elif</span> <span class="n">backend_str</span> <span class="o">==</span> <span class="n">Backend</span><span class="o">.</span><span class="n">UCC</span> <span class="ow">and</span> <span class="n">is_ucc_available</span><span class="p">():</span>
             <span class="c1"># TODO: once UCC plugin is fully deprecated, remove</span>
@@ -1802,8 +1876,11 @@
         <span class="n">pg</span><span class="o">.</span><span class="n">_register_backend</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="n">device</span><span class="p">),</span> <span class="n">backend_type</span><span class="p">,</span> <span class="n">backend_class</span><span class="p">)</span>
 
     <span class="c1"># update global state</span>
+    <span class="k">assert</span> <span class="n">group_name</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
     <span class="n">_world</span><span class="o">.</span><span class="n">pg_map</span><span class="p">[</span><span class="n">pg</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">backend</span><span class="p">,</span> <span class="n">prefix_store</span><span class="p">)</span>
     <span class="n">_world</span><span class="o">.</span><span class="n">pg_names</span><span class="p">[</span><span class="n">pg</span><span class="p">]</span> <span class="o">=</span> <span class="n">group_name</span>
+    <span class="n">pg</span><span class="o">.</span><span class="n">_set_group_name</span><span class="p">(</span><span class="n">group_name</span><span class="p">)</span>
+
     <span class="n">_world</span><span class="o">.</span><span class="n">pg_backend_config</span><span class="p">[</span><span class="n">pg</span><span class="p">]</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">backend_config</span><span class="p">)</span>
     <span class="c1"># &quot;&quot; is the default tag for user PGs</span>
     <span class="k">if</span> <span class="n">pg_tag</span> <span class="ow">in</span> <span class="p">[</span><span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">]:</span>
@@ -1818,7 +1895,7 @@
 
 <span class="k">def</span> <span class="nf">destroy_process_group</span><span class="p">(</span><span class="n">group</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">ProcessGroup</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Destroy a given process group, and deinitialize the distributed package</span>
+<span class="sd">    Destroy a given process group, and deinitialize the distributed package.</span>
 
 <span class="sd">    Args:</span>
 <span class="sd">        group (ProcessGroup, optional): The process group to be destroyed, if</span>
@@ -1838,7 +1915,7 @@
 
     <span class="k">assert</span> <span class="n">pg</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
     <span class="k">if</span> <span class="n">_world</span><span class="o">.</span><span class="n">pg_map</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">pg</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Invalid process group specified&quot;</span><span class="p">)</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Invalid process group specified&quot;</span><span class="p">)</span>
 
     <span class="c1"># When users register Python onCompletion hooks, those hooks will run on a</span>
     <span class="c1"># different thread than the main thread. Today, the ProcessGroup dtor does</span>
@@ -1898,8 +1975,7 @@
 
 <div class="viewcode-block" id="get_rank"><a class="viewcode-back" href="../../../distributed.html#torch.distributed.get_rank">[docs]</a><span class="k">def</span> <span class="nf">get_rank</span><span class="p">(</span><span class="n">group</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">ProcessGroup</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Returns the rank of the current process in the provided ``group`` or the</span>
-<span class="sd">    default group if none was provided.</span>
+<span class="sd">    Return the rank of the current process in the provided ``group``, default otherwise.</span>
 
 <span class="sd">    Rank is a unique identifier assigned to each process within a distributed</span>
 <span class="sd">    process group. They are always consecutive integers ranging from 0 to</span>
@@ -1926,7 +2002,7 @@
 
 <div class="viewcode-block" id="get_world_size"><a class="viewcode-back" href="../../../distributed.html#torch.distributed.get_world_size">[docs]</a><span class="k">def</span> <span class="nf">get_world_size</span><span class="p">(</span><span class="n">group</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">ProcessGroup</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Returns the number of processes in the current process group</span>
+<span class="sd">    Return the number of processes in the current process group.</span>
 
 <span class="sd">    Args:</span>
 <span class="sd">        group (ProcessGroup, optional): The process group to work on. If None,</span>
@@ -1945,7 +2021,7 @@
 
 <div class="viewcode-block" id="isend"><a class="viewcode-back" href="../../../distributed.html#torch.distributed.isend">[docs]</a><span class="k">def</span> <span class="nf">isend</span><span class="p">(</span><span class="n">tensor</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">dst</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">group</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">ProcessGroup</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">tag</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Work</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Sends a tensor asynchronously.</span>
+<span class="sd">    Send a tensor asynchronously.</span>
 
 <span class="sd">    .. warning::</span>
 <span class="sd">        Modifying ``tensor`` before the request completes causes undefined</span>
@@ -2021,12 +2097,12 @@
 <div class="viewcode-block" id="send"><a class="viewcode-back" href="../../../distributed.html#torch.distributed.send">[docs]</a><span class="nd">@_exception_logger</span>
 <span class="k">def</span> <span class="nf">send</span><span class="p">(</span><span class="n">tensor</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">dst</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">group</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">ProcessGroup</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">tag</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Sends a tensor synchronously.</span>
+<span class="sd">    Send a tensor synchronously.</span>
 
 <span class="sd">    Args:</span>
 <span class="sd">        tensor (Tensor): Tensor to send.</span>
 <span class="sd">        dst (int): Destination rank. Destination rank should not be the same</span>
-<span class="sd">        as the rank of the current process.</span>
+<span class="sd">            as the rank of the current process.</span>
 <span class="sd">        group (ProcessGroup, optional): The process group to work on. If None,</span>
 <span class="sd">            the default process group will be used.</span>
 <span class="sd">        tag (int, optional): Tag to match send with remote recv</span>
@@ -2098,7 +2174,7 @@
 <span class="k">class</span> <span class="nc">_IllegalWork</span><span class="p">(</span><span class="n">Work</span><span class="p">):</span>
     <span class="k">def</span> <span class="fm">__getattribute__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">):</span>
         <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;is_success&quot;</span><span class="p">,</span> <span class="s2">&quot;exception&quot;</span><span class="p">,</span> <span class="s2">&quot;wait&quot;</span><span class="p">,</span> <span class="s2">&quot;source_rank&quot;</span><span class="p">,</span> <span class="s2">&quot;_source_rank&quot;</span><span class="p">,</span> <span class="s2">&quot;result&quot;</span><span class="p">,</span> <span class="s2">&quot;synchronize&quot;</span><span class="p">]:</span>
-            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Illegal to call </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> on IllegalWork object&quot;</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Illegal to call </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> on IllegalWork object&quot;</span><span class="p">)</span>
 
 
 <span class="k">class</span> <span class="nc">_CoalescingManager</span><span class="p">:</span>
@@ -2121,7 +2197,7 @@
     <span class="n">async_ops</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">bool</span><span class="p">]</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
 <span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    A context manager used to coalesce collectives or P2P operations when possible.</span>
+<span class="sd">    Context manager used to coalesce collectives or P2P operations when possible.</span>
 
 <span class="sd">    Args:</span>
 <span class="sd">        group (`ProcessGroup`, optional): The process group to work on. If None,</span>
@@ -2150,7 +2226,7 @@
     <span class="n">group</span> <span class="o">=</span> <span class="n">group</span> <span class="ow">or</span> <span class="n">_get_default_group</span><span class="p">()</span>
     <span class="n">op_list</span> <span class="o">=</span> <span class="n">_world</span><span class="o">.</span><span class="n">pg_coalesce_state</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="n">group</span><span class="p">,</span> <span class="p">[])</span>
     <span class="k">if</span> <span class="n">op_list</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;ProcessGroup has non-empty op list at the start of coalescing&quot;</span><span class="p">)</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;ProcessGroup has non-empty op list at the start of coalescing&quot;</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">device</span><span class="p">:</span>
         <span class="n">group</span><span class="o">.</span><span class="n">_start_coalescing</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
     <span class="n">cm</span> <span class="o">=</span> <span class="n">_CoalescingManager</span><span class="p">()</span>
@@ -2222,8 +2298,8 @@
 
 <span class="sd">    Examples:</span>
 <span class="sd">        &gt;&gt;&gt; # xdoctest: +SKIP(&quot;no rank&quot;)</span>
-<span class="sd">        &gt;&gt;&gt; send_tensor = torch.arange(2) + 2 * rank</span>
-<span class="sd">        &gt;&gt;&gt; recv_tensor = torch.randn(2)</span>
+<span class="sd">        &gt;&gt;&gt; send_tensor = torch.arange(2, dtype=torch.float32) + 2 * rank</span>
+<span class="sd">        &gt;&gt;&gt; recv_tensor = torch.randn(2, dtype=torch.float32)</span>
 <span class="sd">        &gt;&gt;&gt; send_op = dist.P2POp(dist.isend, send_tensor, (rank + 1)%world_size)</span>
 <span class="sd">        &gt;&gt;&gt; recv_op = dist.P2POp(dist.irecv, recv_tensor, (rank - 1 + world_size)%world_size)</span>
 <span class="sd">        &gt;&gt;&gt; reqs = batch_isend_irecv([send_op, recv_op])</span>
@@ -2262,66 +2338,6 @@
         <span class="k">return</span> <span class="n">reqs</span></div>
 
 
-<div class="viewcode-block" id="broadcast_multigpu"><a class="viewcode-back" href="../../../distributed.html#torch.distributed.broadcast_multigpu">[docs]</a><span class="nd">@_exception_logger</span>
-<span class="k">def</span> <span class="nf">broadcast_multigpu</span><span class="p">(</span><span class="n">tensor_list</span><span class="p">,</span> <span class="n">src</span><span class="p">,</span> <span class="n">group</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">async_op</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">src_tensor</span><span class="o">=</span><span class="mi">0</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Broadcasts the tensor to the whole group with multiple GPU tensors</span>
-<span class="sd">    per node.</span>
-
-<span class="sd">    ``tensor`` must have the same number of elements in all the GPUs from</span>
-<span class="sd">    all processes participating in the collective. each tensor in the list must</span>
-<span class="sd">    be on a different GPU</span>
-
-<span class="sd">    Only nccl and gloo backend are currently supported</span>
-<span class="sd">    tensors should only be GPU tensors</span>
-
-<span class="sd">    Args:</span>
-<span class="sd">        tensor_list (List[Tensor]): Tensors that participate in the collective</span>
-<span class="sd">            operation. If ``src`` is the rank, then the specified ``src_tensor``</span>
-<span class="sd">            element of ``tensor_list`` (``tensor_list[src_tensor]``) will be</span>
-<span class="sd">            broadcast to all other tensors (on different GPUs) in the src process</span>
-<span class="sd">            and all tensors in ``tensor_list`` of other non-src processes.</span>
-<span class="sd">            You also need to make sure that ``len(tensor_list)`` is the same</span>
-<span class="sd">            for all the distributed processes calling this function.</span>
-
-<span class="sd">        src (int): Source rank.</span>
-<span class="sd">        group (ProcessGroup, optional): The process group to work on. If None,</span>
-<span class="sd">            the default process group will be used.</span>
-<span class="sd">        async_op (bool, optional): Whether this op should be an async op</span>
-<span class="sd">        src_tensor (int, optional): Source tensor rank within ``tensor_list``</span>
-
-<span class="sd">    Returns:</span>
-<span class="sd">        Async work handle, if async_op is set to True.</span>
-<span class="sd">        None, if not async_op or if not part of the group</span>
-
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
-        <span class="s2">&quot;torch.distributed.broadcast_multigpu will be deprecated. If you must &quot;</span>
-        <span class="s2">&quot;use it, please revisit our documentation later at &quot;</span>
-        <span class="s2">&quot;https://pytorch.org/docs/master/distributed.html#multi-gpu-collective-functions&quot;</span>
-    <span class="p">)</span>
-
-    <span class="k">if</span> <span class="n">_rank_not_in_group</span><span class="p">(</span><span class="n">group</span><span class="p">):</span>
-        <span class="n">_warn_not_in_group</span><span class="p">(</span><span class="s2">&quot;broadcast_multigpu&quot;</span><span class="p">)</span>
-        <span class="k">return</span>
-
-    <span class="n">opts</span> <span class="o">=</span> <span class="n">BroadcastOptions</span><span class="p">()</span>
-    <span class="n">opts</span><span class="o">.</span><span class="n">rootRank</span> <span class="o">=</span> <span class="n">src</span>
-    <span class="n">opts</span><span class="o">.</span><span class="n">rootTensor</span> <span class="o">=</span> <span class="n">src_tensor</span>
-
-    <span class="k">if</span> <span class="n">group</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">group</span> <span class="ow">is</span> <span class="n">GroupMember</span><span class="o">.</span><span class="n">WORLD</span><span class="p">:</span>
-        <span class="n">default_pg</span> <span class="o">=</span> <span class="n">_get_default_group</span><span class="p">()</span>
-        <span class="n">work</span> <span class="o">=</span> <span class="n">default_pg</span><span class="o">.</span><span class="n">broadcast</span><span class="p">(</span><span class="n">tensor_list</span><span class="p">,</span> <span class="n">opts</span><span class="p">)</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="n">group_src_rank</span> <span class="o">=</span> <span class="n">get_group_rank</span><span class="p">(</span><span class="n">group</span><span class="p">,</span> <span class="n">src</span><span class="p">)</span>
-        <span class="n">opts</span><span class="o">.</span><span class="n">rootRank</span> <span class="o">=</span> <span class="n">group_src_rank</span>
-        <span class="n">work</span> <span class="o">=</span> <span class="n">group</span><span class="o">.</span><span class="n">broadcast</span><span class="p">(</span><span class="n">tensor_list</span><span class="p">,</span> <span class="n">opts</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">async_op</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">work</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="n">work</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span></div>
-
-
 <div class="viewcode-block" id="broadcast"><a class="viewcode-back" href="../../../distributed.html#torch.distributed.broadcast">[docs]</a><span class="nd">@_exception_logger</span>
 <span class="k">def</span> <span class="nf">broadcast</span><span class="p">(</span><span class="n">tensor</span><span class="p">,</span> <span class="n">src</span><span class="p">,</span> <span class="n">group</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">async_op</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
@@ -2351,6 +2367,7 @@
     <span class="n">opts</span> <span class="o">=</span> <span class="n">BroadcastOptions</span><span class="p">()</span>
     <span class="n">opts</span><span class="o">.</span><span class="n">rootRank</span> <span class="o">=</span> <span class="n">src</span>
     <span class="n">opts</span><span class="o">.</span><span class="n">rootTensor</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">opts</span><span class="o">.</span><span class="n">asyncOp</span> <span class="o">=</span> <span class="n">async_op</span>
 
     <span class="k">if</span> <span class="n">group</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">group</span> <span class="ow">is</span> <span class="n">GroupMember</span><span class="o">.</span><span class="n">WORLD</span><span class="p">:</span>
         <span class="n">default_pg</span> <span class="o">=</span> <span class="n">_get_default_group</span><span class="p">()</span>
@@ -2364,72 +2381,10 @@
     <span class="k">else</span><span class="p">:</span>
         <span class="n">work</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span></div>
 
-<div class="viewcode-block" id="all_reduce_multigpu"><a class="viewcode-back" href="../../../distributed.html#torch.distributed.all_reduce_multigpu">[docs]</a><span class="nd">@_exception_logger</span>
-<span class="k">def</span> <span class="nf">all_reduce_multigpu</span><span class="p">(</span><span class="n">tensor_list</span><span class="p">,</span> <span class="n">op</span><span class="o">=</span><span class="n">ReduceOp</span><span class="o">.</span><span class="n">SUM</span><span class="p">,</span> <span class="n">group</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">async_op</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
-<span class="w">    </span><span class="sa">r</span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Reduces the tensor data across all machines in such a way that all get</span>
-<span class="sd">    the final result. This function reduces a number of tensors on every node,</span>
-<span class="sd">    while each tensor resides on different GPUs.</span>
-<span class="sd">    Therefore, the input tensor in the tensor list needs to be GPU tensors.</span>
-<span class="sd">    Also, each tensor in the tensor list needs to reside on a different GPU.</span>
-
-<span class="sd">    After the call, all ``tensor`` in ``tensor_list`` is going to be bitwise</span>
-<span class="sd">    identical in all processes.</span>
-
-<span class="sd">    Complex tensors are supported.</span>
-
-<span class="sd">    Only nccl and gloo backend is currently supported</span>
-<span class="sd">    tensors should only be GPU tensors</span>
-
-<span class="sd">    Args:</span>
-<span class="sd">        tensor_list (List[Tensor]): List of input and output tensors of</span>
-<span class="sd">            the collective. The function operates in-place and requires that</span>
-<span class="sd">            each tensor to be a GPU tensor on different GPUs.</span>
-<span class="sd">            You also need to make sure that ``len(tensor_list)`` is the same for</span>
-<span class="sd">            all the distributed processes calling this function.</span>
-<span class="sd">        op (optional): One of the values from</span>
-<span class="sd">            ``torch.distributed.ReduceOp``</span>
-<span class="sd">            enum.  Specifies an operation used for element-wise reductions.</span>
-<span class="sd">        group (ProcessGroup, optional): The process group to work on. If</span>
-<span class="sd">            ``None``, the default process group will be used.</span>
-<span class="sd">        async_op (bool, optional): Whether this op should be an async op</span>
-
-<span class="sd">    Returns:</span>
-<span class="sd">        Async work handle, if async_op is set to True.</span>
-<span class="sd">        None, if not async_op or if not part of the group</span>
-
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
-        <span class="s2">&quot;torch.distributed.all_reduce_multigpu will be deprecated. If you must &quot;</span>
-        <span class="s2">&quot;use it, please revisit our documentation later at &quot;</span>
-        <span class="s2">&quot;https://pytorch.org/docs/master/distributed.html#multi-gpu-collective-functions&quot;</span>
-    <span class="p">)</span>
-
-    <span class="k">if</span> <span class="n">_rank_not_in_group</span><span class="p">(</span><span class="n">group</span><span class="p">):</span>
-        <span class="k">return</span>
-
-    <span class="n">tensor_list</span> <span class="o">=</span> <span class="p">[</span>
-        <span class="n">t</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">t</span><span class="o">.</span><span class="n">is_complex</span><span class="p">()</span> <span class="k">else</span> <span class="n">torch</span><span class="o">.</span><span class="n">view_as_real</span><span class="p">(</span><span class="n">t</span><span class="p">)</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">tensor_list</span>
-    <span class="p">]</span>
-
-    <span class="n">opts</span> <span class="o">=</span> <span class="n">AllreduceOptions</span><span class="p">()</span>
-    <span class="n">opts</span><span class="o">.</span><span class="n">reduceOp</span> <span class="o">=</span> <span class="n">op</span>
-    <span class="k">if</span> <span class="n">group</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">default_pg</span> <span class="o">=</span> <span class="n">_get_default_group</span><span class="p">()</span>
-        <span class="n">work</span> <span class="o">=</span> <span class="n">default_pg</span><span class="o">.</span><span class="n">allreduce</span><span class="p">(</span><span class="n">tensor_list</span><span class="p">,</span> <span class="n">opts</span><span class="p">)</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="n">work</span> <span class="o">=</span> <span class="n">group</span><span class="o">.</span><span class="n">allreduce</span><span class="p">(</span><span class="n">tensor_list</span><span class="p">,</span> <span class="n">opts</span><span class="p">)</span>
-
-    <span class="k">if</span> <span class="n">async_op</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">work</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="n">work</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span></div>
-
 <div class="viewcode-block" id="all_reduce"><a class="viewcode-back" href="../../../distributed.html#torch.distributed.all_reduce">[docs]</a><span class="nd">@_exception_logger</span>
 <span class="k">def</span> <span class="nf">all_reduce</span><span class="p">(</span><span class="n">tensor</span><span class="p">,</span> <span class="n">op</span><span class="o">=</span><span class="n">ReduceOp</span><span class="o">.</span><span class="n">SUM</span><span class="p">,</span> <span class="n">group</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">async_op</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Reduces the tensor data across all machines in such a way that all get</span>
-<span class="sd">    the final result.</span>
+<span class="sd">    Reduces the tensor data across all machines in a way that all get the final result.</span>
 
 <span class="sd">    After the call ``tensor`` is going to be bitwise identical in all processes.</span>
 
@@ -2481,7 +2436,7 @@
 
     <span class="k">if</span> <span class="n">tensor</span><span class="o">.</span><span class="n">is_complex</span><span class="p">():</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">supports_complex</span><span class="p">(</span><span class="n">op</span><span class="p">):</span>
-            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;all_reduce does not support </span><span class="si">{</span><span class="n">op</span><span class="si">}</span><span class="s2"> on complex tensors&quot;</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;all_reduce does not support </span><span class="si">{</span><span class="n">op</span><span class="si">}</span><span class="s2"> on complex tensors&quot;</span><span class="p">)</span>
         <span class="n">tensor</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">view_as_real</span><span class="p">(</span><span class="n">tensor</span><span class="p">)</span>
 
     <span class="n">opts</span> <span class="o">=</span> <span class="n">AllreduceOptions</span><span class="p">()</span>
@@ -2509,6 +2464,7 @@
 <span class="k">def</span> <span class="nf">all_reduce_coalesced</span><span class="p">(</span><span class="n">tensors</span><span class="p">,</span> <span class="n">op</span><span class="o">=</span><span class="n">ReduceOp</span><span class="o">.</span><span class="n">SUM</span><span class="p">,</span> <span class="n">group</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">async_op</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    WARNING: at this time individual shape checking is not implemented across nodes.</span>
+
 <span class="sd">    For example, if the rank 0 node passes [torch.rand(4), torch.rand(2)] and the</span>
 <span class="sd">    rank 1 node passes [torch.rand(2), torch.rand(2), torch.rand(2)], the allreduce</span>
 <span class="sd">    operation will proceed without complaint and return erroneous outputs. This lack</span>
@@ -2551,7 +2507,7 @@
         <span class="k">return</span>
 
     <span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="n">t</span><span class="o">.</span><span class="n">is_complex</span><span class="p">()</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">tensors</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">supports_complex</span><span class="p">(</span><span class="n">op</span><span class="p">):</span>
-        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;all_reduce does not support </span><span class="si">{</span><span class="n">op</span><span class="si">}</span><span class="s2"> on complex tensors&quot;</span><span class="p">)</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;all_reduce does not support </span><span class="si">{</span><span class="n">op</span><span class="si">}</span><span class="s2"> on complex tensors&quot;</span><span class="p">)</span>
 
     <span class="n">tensors</span> <span class="o">=</span> <span class="p">[</span><span class="n">t</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">t</span><span class="o">.</span><span class="n">is_complex</span><span class="p">()</span> <span class="k">else</span> <span class="n">torch</span><span class="o">.</span><span class="n">view_as_real</span><span class="p">(</span><span class="n">t</span><span class="p">)</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">tensors</span><span class="p">]</span>
 
@@ -2567,68 +2523,6 @@
         <span class="k">return</span> <span class="n">work</span><span class="o">.</span><span class="n">get_future</span><span class="p">()</span>
     <span class="k">else</span><span class="p">:</span>
         <span class="n">work</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span>
-
-<div class="viewcode-block" id="reduce_multigpu"><a class="viewcode-back" href="../../../distributed.html#torch.distributed.reduce_multigpu">[docs]</a><span class="nd">@_exception_logger</span>
-<span class="k">def</span> <span class="nf">reduce_multigpu</span><span class="p">(</span>
-    <span class="n">tensor_list</span><span class="p">,</span> <span class="n">dst</span><span class="p">,</span> <span class="n">op</span><span class="o">=</span><span class="n">ReduceOp</span><span class="o">.</span><span class="n">SUM</span><span class="p">,</span> <span class="n">group</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">async_op</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">dst_tensor</span><span class="o">=</span><span class="mi">0</span>
-<span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Reduces the tensor data on multiple GPUs across all machines. Each tensor</span>
-<span class="sd">    in ``tensor_list`` should reside on a separate GPU</span>
-
-<span class="sd">    Only the GPU of ``tensor_list[dst_tensor]`` on the process with rank ``dst``</span>
-<span class="sd">    is going to receive the final result.</span>
-
-<span class="sd">    Only nccl backend is currently supported</span>
-<span class="sd">    tensors should only be GPU tensors</span>
-
-<span class="sd">    Args:</span>
-<span class="sd">        tensor_list (List[Tensor]): Input and output GPU tensors of the</span>
-<span class="sd">            collective. The function operates in-place.</span>
-<span class="sd">            You also need to make sure that ``len(tensor_list)`` is the same for</span>
-<span class="sd">            all the distributed processes calling this function.</span>
-<span class="sd">        dst (int): Destination rank</span>
-<span class="sd">        op (optional): One of the values from</span>
-<span class="sd">            ``torch.distributed.ReduceOp``</span>
-<span class="sd">            enum.  Specifies an operation used for element-wise reductions.</span>
-<span class="sd">        group (ProcessGroup, optional): The process group to work on. If None,</span>
-<span class="sd">            the default process group will be used.</span>
-<span class="sd">        async_op (bool, optional): Whether this op should be an async op</span>
-<span class="sd">        dst_tensor (int, optional): Destination tensor rank within</span>
-<span class="sd">                                    ``tensor_list``</span>
-
-<span class="sd">    Returns:</span>
-<span class="sd">        Async work handle, if async_op is set to True.</span>
-<span class="sd">        None, otherwise</span>
-
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
-        <span class="s2">&quot;torch.distributed.reduce_multigpu will be deprecated. If you must &quot;</span>
-        <span class="s2">&quot;use it, please revisit our documentation later at &quot;</span>
-        <span class="s2">&quot;https://pytorch.org/docs/master/distributed.html#multi-gpu-collective-functions&quot;</span>
-    <span class="p">)</span>
-
-    <span class="k">if</span> <span class="n">_rank_not_in_group</span><span class="p">(</span><span class="n">group</span><span class="p">):</span>
-        <span class="n">_warn_not_in_group</span><span class="p">(</span><span class="s2">&quot;reduce_multigpu&quot;</span><span class="p">)</span>
-        <span class="k">return</span>
-
-    <span class="n">opts</span> <span class="o">=</span> <span class="n">ReduceOptions</span><span class="p">()</span>
-    <span class="n">opts</span><span class="o">.</span><span class="n">reduceOp</span> <span class="o">=</span> <span class="n">op</span>
-    <span class="n">opts</span><span class="o">.</span><span class="n">rootRank</span> <span class="o">=</span> <span class="n">dst</span>
-    <span class="n">opts</span><span class="o">.</span><span class="n">rootTensor</span> <span class="o">=</span> <span class="n">dst_tensor</span>
-
-    <span class="k">if</span> <span class="n">group</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">group</span> <span class="ow">is</span> <span class="n">GroupMember</span><span class="o">.</span><span class="n">WORLD</span><span class="p">:</span>
-        <span class="n">default_pg</span> <span class="o">=</span> <span class="n">_get_default_group</span><span class="p">()</span>
-        <span class="n">work</span> <span class="o">=</span> <span class="n">default_pg</span><span class="o">.</span><span class="n">reduce</span><span class="p">(</span><span class="n">tensor_list</span><span class="p">,</span> <span class="n">opts</span><span class="p">)</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="n">group_dst_rank</span> <span class="o">=</span> <span class="n">get_group_rank</span><span class="p">(</span><span class="n">group</span><span class="p">,</span> <span class="n">dst</span><span class="p">)</span>
-        <span class="n">opts</span><span class="o">.</span><span class="n">rootRank</span> <span class="o">=</span> <span class="n">group_dst_rank</span>
-        <span class="n">work</span> <span class="o">=</span> <span class="n">group</span><span class="o">.</span><span class="n">reduce</span><span class="p">(</span><span class="n">tensor_list</span><span class="p">,</span> <span class="n">opts</span><span class="p">)</span>
-
-    <span class="k">if</span> <span class="n">async_op</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">work</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="n">work</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span></div>
 
 <div class="viewcode-block" id="reduce"><a class="viewcode-back" href="../../../distributed.html#torch.distributed.reduce">[docs]</a><span class="nd">@_exception_logger</span>
 <span class="k">def</span> <span class="nf">reduce</span><span class="p">(</span><span class="n">tensor</span><span class="p">,</span> <span class="n">dst</span><span class="p">,</span> <span class="n">op</span><span class="o">=</span><span class="n">ReduceOp</span><span class="o">.</span><span class="n">SUM</span><span class="p">,</span> <span class="n">group</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">async_op</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
@@ -2675,82 +2569,6 @@
     <span class="k">else</span><span class="p">:</span>
         <span class="n">work</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span></div>
 
-<div class="viewcode-block" id="all_gather_multigpu"><a class="viewcode-back" href="../../../distributed.html#torch.distributed.all_gather_multigpu">[docs]</a><span class="nd">@_exception_logger</span>
-<span class="k">def</span> <span class="nf">all_gather_multigpu</span><span class="p">(</span>
-    <span class="n">output_tensor_lists</span><span class="p">,</span> <span class="n">input_tensor_list</span><span class="p">,</span> <span class="n">group</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">async_op</span><span class="o">=</span><span class="kc">False</span>
-<span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Gathers tensors from the whole group in a list.</span>
-<span class="sd">    Each tensor in ``tensor_list`` should reside on a separate GPU</span>
-
-<span class="sd">    Only nccl backend is currently supported</span>
-<span class="sd">    tensors should only be GPU tensors</span>
-
-<span class="sd">    Complex tensors are supported.</span>
-
-<span class="sd">    Args:</span>
-<span class="sd">        output_tensor_lists (List[List[Tensor]]): Output lists. It should</span>
-<span class="sd">            contain correctly-sized tensors on each GPU to be used for output</span>
-<span class="sd">            of the collective, e.g. ``output_tensor_lists[i]`` contains the</span>
-<span class="sd">            all_gather result that resides on the GPU of</span>
-<span class="sd">            ``input_tensor_list[i]``.</span>
-
-<span class="sd">            Note that each element of ``output_tensor_lists`` has the size of</span>
-<span class="sd">            ``world_size * len(input_tensor_list)``, since the function all</span>
-<span class="sd">            gathers the result from every single GPU in the group. To interpret</span>
-<span class="sd">            each element of ``output_tensor_lists[i]``, note that</span>
-<span class="sd">            ``input_tensor_list[j]`` of rank k will be appear in</span>
-<span class="sd">            ``output_tensor_lists[i][k * world_size + j]``</span>
-
-<span class="sd">            Also note that ``len(output_tensor_lists)``, and the size of each</span>
-<span class="sd">            element in ``output_tensor_lists`` (each element is a list,</span>
-<span class="sd">            therefore ``len(output_tensor_lists[i])``) need to be the same</span>
-<span class="sd">            for all the distributed processes calling this function.</span>
-
-<span class="sd">        input_tensor_list (List[Tensor]): List of tensors(on different GPUs) to</span>
-<span class="sd">            be broadcast from current process.</span>
-<span class="sd">            Note that ``len(input_tensor_list)`` needs to be the same for</span>
-<span class="sd">            all the distributed processes calling this function.</span>
-
-<span class="sd">        group (ProcessGroup, optional): The process group to work on. If None,</span>
-<span class="sd">            the default process group will be used.</span>
-<span class="sd">        async_op (bool, optional): Whether this op should be an async op</span>
-
-<span class="sd">    Returns:</span>
-<span class="sd">        Async work handle, if async_op is set to True.</span>
-<span class="sd">        None, if not async_op or if not part of the group</span>
-
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
-        <span class="s2">&quot;torch.distributed.all_gather_multigpu will be deprecated. If you must &quot;</span>
-        <span class="s2">&quot;use it, please revisit our documentation later at &quot;</span>
-        <span class="s2">&quot;https://pytorch.org/docs/master/distributed.html#multi-gpu-collective-functions&quot;</span>
-    <span class="p">)</span>
-
-    <span class="k">if</span> <span class="n">_rank_not_in_group</span><span class="p">(</span><span class="n">group</span><span class="p">):</span>
-        <span class="n">_warn_not_in_group</span><span class="p">(</span><span class="s2">&quot;all_gather_multigpu&quot;</span><span class="p">)</span>
-        <span class="k">return</span>
-
-    <span class="n">output_tensor_lists</span> <span class="o">=</span> <span class="p">[</span>
-        <span class="p">[</span><span class="n">t</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">t</span><span class="o">.</span><span class="n">is_complex</span><span class="p">()</span> <span class="k">else</span> <span class="n">torch</span><span class="o">.</span><span class="n">view_as_real</span><span class="p">(</span><span class="n">t</span><span class="p">)</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">l</span><span class="p">]</span>
-        <span class="k">for</span> <span class="n">l</span> <span class="ow">in</span> <span class="n">output_tensor_lists</span>
-    <span class="p">]</span>
-    <span class="n">input_tensor_list</span> <span class="o">=</span> <span class="p">[</span>
-        <span class="n">t</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">t</span><span class="o">.</span><span class="n">is_complex</span><span class="p">()</span> <span class="k">else</span> <span class="n">torch</span><span class="o">.</span><span class="n">view_as_real</span><span class="p">(</span><span class="n">t</span><span class="p">)</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">input_tensor_list</span>
-    <span class="p">]</span>
-
-    <span class="k">if</span> <span class="n">group</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">default_pg</span> <span class="o">=</span> <span class="n">_get_default_group</span><span class="p">()</span>
-        <span class="n">work</span> <span class="o">=</span> <span class="n">default_pg</span><span class="o">.</span><span class="n">allgather</span><span class="p">(</span><span class="n">output_tensor_lists</span><span class="p">,</span> <span class="n">input_tensor_list</span><span class="p">)</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="n">work</span> <span class="o">=</span> <span class="n">group</span><span class="o">.</span><span class="n">allgather</span><span class="p">(</span><span class="n">output_tensor_lists</span><span class="p">,</span> <span class="n">input_tensor_list</span><span class="p">)</span>
-
-    <span class="k">if</span> <span class="n">async_op</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">work</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="n">work</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span></div>
-
-
 <span class="k">def</span> <span class="nf">_object_to_tensor</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="n">device</span><span class="p">):</span>
     <span class="n">f</span> <span class="o">=</span> <span class="n">io</span><span class="o">.</span><span class="n">BytesIO</span><span class="p">()</span>
     <span class="n">_pickler</span><span class="p">(</span><span class="n">f</span><span class="p">)</span><span class="o">.</span><span class="n">dump</span><span class="p">(</span><span class="n">obj</span><span class="p">)</span>
@@ -2772,9 +2590,10 @@
 <div class="viewcode-block" id="all_gather_object"><a class="viewcode-back" href="../../../distributed.html#torch.distributed.all_gather_object">[docs]</a><span class="nd">@_exception_logger</span>
 <span class="k">def</span> <span class="nf">all_gather_object</span><span class="p">(</span><span class="n">object_list</span><span class="p">,</span> <span class="n">obj</span><span class="p">,</span> <span class="n">group</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Gathers picklable objects from the whole group into a list. Similar to</span>
-<span class="sd">    :func:`all_gather`, but Python objects can be passed in. Note that the object</span>
-<span class="sd">    must be picklable in order to be gathered.</span>
+<span class="sd">    Gathers picklable objects from the whole group into a list.</span>
+
+<span class="sd">    Similar to :func:`all_gather`, but Python objects can be passed in.</span>
+<span class="sd">    Note that the object must be picklable in order to be gathered.</span>
 
 <span class="sd">    Args:</span>
 <span class="sd">        object_list (list[Any]): Output list. It should be correctly sized as the</span>
@@ -2865,6 +2684,7 @@
 <span class="k">def</span> <span class="nf">gather_object</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="n">object_gather_list</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">dst</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">group</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Gathers picklable objects from the whole group in a single process.</span>
+
 <span class="sd">    Similar to :func:`gather`, but Python objects can be passed in. Note that the</span>
 <span class="sd">    object must be picklable in order to be gathered.</span>
 
@@ -2974,8 +2794,9 @@
 <div class="viewcode-block" id="broadcast_object_list"><a class="viewcode-back" href="../../../distributed.html#torch.distributed.broadcast_object_list">[docs]</a><span class="nd">@_exception_logger</span>
 <span class="k">def</span> <span class="nf">broadcast_object_list</span><span class="p">(</span><span class="n">object_list</span><span class="p">,</span> <span class="n">src</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">group</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Broadcasts picklable objects in ``object_list`` to the whole group. Similar</span>
-<span class="sd">    to :func:`broadcast`, but Python objects can be passed in.</span>
+<span class="sd">    Broadcasts picklable objects in ``object_list`` to the whole group.</span>
+
+<span class="sd">    Similar to :func:`broadcast`, but Python objects can be passed in.</span>
 <span class="sd">    Note that all objects in ``object_list`` must be picklable in order to be</span>
 <span class="sd">    broadcasted.</span>
 
@@ -3086,8 +2907,9 @@
     <span class="n">scatter_object_output_list</span><span class="p">,</span> <span class="n">scatter_object_input_list</span><span class="p">,</span> <span class="n">src</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">group</span><span class="o">=</span><span class="kc">None</span>
 <span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Scatters picklable objects in ``scatter_object_input_list`` to the whole</span>
-<span class="sd">    group. Similar to :func:`scatter`, but Python objects can be passed in. On</span>
+<span class="sd">    Scatters picklable objects in ``scatter_object_input_list`` to the whole group.</span>
+
+<span class="sd">    Similar to :func:`scatter`, but Python objects can be passed in. On</span>
 <span class="sd">    each rank, the scattered object will be stored as the first element of</span>
 <span class="sd">    ``scatter_object_output_list``. Note that all objects in</span>
 <span class="sd">    ``scatter_object_input_list`` must be picklable in order to be scattered.</span>
@@ -3146,7 +2968,7 @@
         <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">scatter_object_output_list</span><span class="p">,</span> <span class="nb">list</span><span class="p">)</span>
         <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="n">scatter_object_output_list</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">1</span>
     <span class="p">):</span>
-        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
             <span class="s2">&quot;Expected argument scatter_object_output_list to be a list of size at least 1.&quot;</span>
         <span class="p">)</span>
 
@@ -3334,6 +3156,9 @@
         <span class="k">else</span> <span class="n">torch</span><span class="o">.</span><span class="n">view_as_real</span><span class="p">(</span><span class="n">input_tensor</span><span class="p">)</span>
     <span class="p">)</span>
 
+    <span class="n">opts</span> <span class="o">=</span> <span class="n">AllgatherOptions</span><span class="p">()</span>
+    <span class="n">opts</span><span class="o">.</span><span class="n">asyncOp</span> <span class="o">=</span> <span class="n">async_op</span>
+
     <span class="n">group</span> <span class="o">=</span> <span class="n">group</span> <span class="ow">or</span> <span class="n">_get_default_group</span><span class="p">()</span>
 
     <span class="k">if</span> <span class="n">group</span> <span class="ow">in</span> <span class="n">_world</span><span class="o">.</span><span class="n">pg_coalesce_state</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
@@ -3345,7 +3170,7 @@
         <span class="k">else</span><span class="p">:</span>
             <span class="k">return</span> <span class="kc">None</span>
 
-    <span class="n">work</span> <span class="o">=</span> <span class="n">group</span><span class="o">.</span><span class="n">_allgather_base</span><span class="p">(</span><span class="n">output_tensor</span><span class="p">,</span> <span class="n">input_tensor</span><span class="p">)</span>
+    <span class="n">work</span> <span class="o">=</span> <span class="n">group</span><span class="o">.</span><span class="n">_allgather_base</span><span class="p">(</span><span class="n">output_tensor</span><span class="p">,</span> <span class="n">input_tensor</span><span class="p">,</span> <span class="n">opts</span><span class="p">)</span>
 
     <span class="k">if</span> <span class="n">async_op</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">work</span>
@@ -3443,7 +3268,7 @@
     <span class="n">_check_tensor_list</span><span class="p">(</span><span class="n">input_tensor_list</span><span class="p">,</span> <span class="s2">&quot;input_tensor_list&quot;</span><span class="p">)</span>
     <span class="n">_ensure_all_tensors_same_dtype</span><span class="p">(</span><span class="n">input_tensor_list</span><span class="p">)</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">output_tensor_lists</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
-        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
             <span class="s2">&quot;Invalid function argument: output_tensor_lists should be a list&quot;</span>
         <span class="p">)</span>
     <span class="k">for</span> <span class="n">output_tensor_list</span> <span class="ow">in</span> <span class="n">output_tensor_lists</span><span class="p">:</span>
@@ -3619,6 +3444,7 @@
 
     <span class="n">opts</span> <span class="o">=</span> <span class="n">ScatterOptions</span><span class="p">()</span>
     <span class="n">opts</span><span class="o">.</span><span class="n">rootRank</span> <span class="o">=</span> <span class="n">src</span>
+    <span class="n">opts</span><span class="o">.</span><span class="n">asyncOp</span> <span class="o">=</span> <span class="n">async_op</span>
 
     <span class="k">if</span> <span class="n">group</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">group</span> <span class="ow">is</span> <span class="n">GroupMember</span><span class="o">.</span><span class="n">WORLD</span><span class="p">:</span>
         <span class="n">default_pg</span> <span class="o">=</span> <span class="n">_get_default_group</span><span class="p">()</span>
@@ -3627,76 +3453,6 @@
         <span class="n">group_src_rank</span> <span class="o">=</span> <span class="n">get_group_rank</span><span class="p">(</span><span class="n">group</span><span class="p">,</span> <span class="n">src</span><span class="p">)</span>
         <span class="n">opts</span><span class="o">.</span><span class="n">rootRank</span> <span class="o">=</span> <span class="n">group_src_rank</span>
         <span class="n">work</span> <span class="o">=</span> <span class="n">group</span><span class="o">.</span><span class="n">scatter</span><span class="p">(</span><span class="n">output_tensors</span><span class="p">,</span> <span class="n">input_tensors</span><span class="p">,</span> <span class="n">opts</span><span class="p">)</span>
-
-    <span class="k">if</span> <span class="n">async_op</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">work</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="n">work</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span></div>
-
-
-<div class="viewcode-block" id="reduce_scatter_multigpu"><a class="viewcode-back" href="../../../distributed.html#torch.distributed.reduce_scatter_multigpu">[docs]</a><span class="nd">@_exception_logger</span>
-<span class="k">def</span> <span class="nf">reduce_scatter_multigpu</span><span class="p">(</span>
-    <span class="n">output_tensor_list</span><span class="p">,</span> <span class="n">input_tensor_lists</span><span class="p">,</span> <span class="n">op</span><span class="o">=</span><span class="n">ReduceOp</span><span class="o">.</span><span class="n">SUM</span><span class="p">,</span> <span class="n">group</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">async_op</span><span class="o">=</span><span class="kc">False</span>
-<span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Reduce and scatter a list of tensors to the whole group.  Only nccl backend</span>
-<span class="sd">    is currently supported.</span>
-
-<span class="sd">    Each tensor in ``output_tensor_list`` should reside on a separate GPU, as</span>
-<span class="sd">    should each list of tensors in ``input_tensor_lists``.</span>
-
-<span class="sd">    Args:</span>
-<span class="sd">        output_tensor_list (List[Tensor]): Output tensors (on different GPUs)</span>
-<span class="sd">            to receive the result of the operation.</span>
-
-<span class="sd">            Note that ``len(output_tensor_list)`` needs to be the same for all</span>
-<span class="sd">            the distributed processes calling this function.</span>
-
-<span class="sd">        input_tensor_lists (List[List[Tensor]]): Input lists.  It should</span>
-<span class="sd">            contain correctly-sized tensors on each GPU to be used for input of</span>
-<span class="sd">            the collective, e.g. ``input_tensor_lists[i]`` contains the</span>
-<span class="sd">            reduce_scatter input that resides on the GPU of</span>
-<span class="sd">            ``output_tensor_list[i]``.</span>
-
-<span class="sd">            Note that each element of ``input_tensor_lists`` has the size of</span>
-<span class="sd">            ``world_size * len(output_tensor_list)``, since the function</span>
-<span class="sd">            scatters the result from every single GPU in the group.  To</span>
-<span class="sd">            interpret each element of ``input_tensor_lists[i]``, note that</span>
-<span class="sd">            ``output_tensor_list[j]`` of rank k receives the reduce-scattered</span>
-<span class="sd">            result from ``input_tensor_lists[i][k * world_size + j]``</span>
-
-<span class="sd">            Also note that ``len(input_tensor_lists)``, and the size of each</span>
-<span class="sd">            element in ``input_tensor_lists`` (each element is a list,</span>
-<span class="sd">            therefore ``len(input_tensor_lists[i])``) need to be the same for</span>
-<span class="sd">            all the distributed processes calling this function.</span>
-
-<span class="sd">        group (ProcessGroup, optional): The process group to work on. If None,</span>
-<span class="sd">            the default process group will be used.</span>
-<span class="sd">        async_op (bool, optional): Whether this op should be an async op.</span>
-
-<span class="sd">    Returns:</span>
-<span class="sd">        Async work handle, if async_op is set to True.</span>
-<span class="sd">        None, if not async_op or if not part of the group.</span>
-
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
-        <span class="s2">&quot;torch.distributed.reduce_scatter_multigpu will be deprecated. If you must &quot;</span>
-        <span class="s2">&quot;use it, please revisit our documentation later at &quot;</span>
-        <span class="s2">&quot;https://pytorch.org/docs/master/distributed.html#multi-gpu-collective-functions&quot;</span>
-    <span class="p">)</span>
-
-    <span class="k">if</span> <span class="n">_rank_not_in_group</span><span class="p">(</span><span class="n">group</span><span class="p">):</span>
-        <span class="n">_warn_not_in_group</span><span class="p">(</span><span class="s2">&quot;reduce_scatter_multigpu&quot;</span><span class="p">)</span>
-        <span class="k">return</span>
-
-    <span class="n">opts</span> <span class="o">=</span> <span class="n">ReduceScatterOptions</span><span class="p">()</span>
-    <span class="n">opts</span><span class="o">.</span><span class="n">reduceOp</span> <span class="o">=</span> <span class="n">op</span>
-
-    <span class="k">if</span> <span class="n">group</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">default_pg</span> <span class="o">=</span> <span class="n">_get_default_group</span><span class="p">()</span>
-        <span class="n">work</span> <span class="o">=</span> <span class="n">default_pg</span><span class="o">.</span><span class="n">reduce_scatter</span><span class="p">(</span><span class="n">output_tensor_list</span><span class="p">,</span> <span class="n">input_tensor_lists</span><span class="p">,</span> <span class="n">opts</span><span class="p">)</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="n">work</span> <span class="o">=</span> <span class="n">group</span><span class="o">.</span><span class="n">reduce_scatter</span><span class="p">(</span><span class="n">output_tensor_list</span><span class="p">,</span> <span class="n">input_tensor_lists</span><span class="p">,</span> <span class="n">opts</span><span class="p">)</span>
 
     <span class="k">if</span> <span class="n">async_op</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">work</span>
@@ -3810,6 +3566,7 @@
 
     <span class="n">opts</span> <span class="o">=</span> <span class="n">ReduceScatterOptions</span><span class="p">()</span>
     <span class="n">opts</span><span class="o">.</span><span class="n">reduceOp</span> <span class="o">=</span> <span class="n">op</span>
+    <span class="n">opts</span><span class="o">.</span><span class="n">asyncOp</span> <span class="o">=</span> <span class="n">async_op</span>
 
     <span class="n">group</span> <span class="o">=</span> <span class="n">group</span> <span class="ow">or</span> <span class="n">_get_default_group</span><span class="p">()</span>
 
@@ -3869,9 +3626,10 @@
     <span class="n">async_op</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
 <span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Each process splits input tensor and then scatters the split list</span>
-<span class="sd">    to all processes in a group. Then concatenate the received tensors from all</span>
-<span class="sd">    the processes in the group and return single output tensor.</span>
+<span class="sd">    Split input tensor and then scatter the split list to all processes in a group.</span>
+
+<span class="sd">    Later the received tensors are concatenated from all the processes in the group</span>
+<span class="sd">    and returned as a single output tensor.</span>
 
 <span class="sd">    Complex tensors are supported.</span>
 
@@ -3993,8 +3751,7 @@
 <div class="viewcode-block" id="all_to_all"><a class="viewcode-back" href="../../../distributed.html#torch.distributed.all_to_all">[docs]</a><span class="nd">@_exception_logger</span>
 <span class="k">def</span> <span class="nf">all_to_all</span><span class="p">(</span><span class="n">output_tensor_list</span><span class="p">,</span> <span class="n">input_tensor_list</span><span class="p">,</span> <span class="n">group</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">async_op</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Each process scatters list of input tensors to all processes in a group and</span>
-<span class="sd">    return gathered list of tensors in output list.</span>
+<span class="sd">    Scatters list of input tensors to all processes in a group and return gathered list of tensors in output list.</span>
 
 <span class="sd">    Complex tensors are supported.</span>
 
@@ -4111,9 +3868,8 @@
 
 <div class="viewcode-block" id="barrier"><a class="viewcode-back" href="../../../distributed.html#torch.distributed.barrier">[docs]</a><span class="nd">@_exception_logger</span>
 <span class="k">def</span> <span class="nf">barrier</span><span class="p">(</span><span class="n">group</span><span class="o">=</span><span class="n">GroupMember</span><span class="o">.</span><span class="n">WORLD</span><span class="p">,</span> <span class="n">async_op</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">device_ids</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
-
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Synchronizes all processes.</span>
+<span class="sd">    Synchronize all processes.</span>
 
 <span class="sd">    This collective blocks processes until the whole group enters this function,</span>
 <span class="sd">    if async_op is False, or if async work handle is called on wait().</span>
@@ -4138,7 +3894,7 @@
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">device_ids</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
             <span class="n">opts</span><span class="o">.</span><span class="n">device_ids</span> <span class="o">=</span> <span class="n">device_ids</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
                 <span class="s2">&quot;Invalid function argument: device_ids type should be List[int]&quot;</span>
             <span class="p">)</span>
 
@@ -4156,14 +3912,13 @@
 
 <div class="viewcode-block" id="monitored_barrier"><a class="viewcode-back" href="../../../distributed.html#torch.distributed.monitored_barrier">[docs]</a><span class="k">def</span> <span class="nf">monitored_barrier</span><span class="p">(</span><span class="n">group</span><span class="o">=</span><span class="n">GroupMember</span><span class="o">.</span><span class="n">WORLD</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">wait_all_ranks</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Synchronizes all processes similar to ``torch.distributed.barrier``, but takes</span>
-<span class="sd">    a configurable timeout and is able to report ranks that did not pass this</span>
-<span class="sd">    barrier within that timeout. Specifically, for non-zero ranks, will block</span>
-<span class="sd">    until a send/recv is processed from rank 0. Rank 0 will block until all send</span>
-<span class="sd">    /recv from other ranks are processed, and will report failures for ranks</span>
-<span class="sd">    that failed to respond in time. Note that if one rank does not reach the</span>
-<span class="sd">    monitored_barrier (for example due to a hang), all other ranks would fail</span>
-<span class="sd">    in monitored_barrier.</span>
+<span class="sd">    Synchronize processes similar to ``torch.distributed.barrier``, but consider a configurable timeout.</span>
+
+<span class="sd">    It is able to report ranks that did not pass this barrier within the provided timeout.</span>
+<span class="sd">    Specifically, for non-zero ranks, will block until a send/recv is processed from rank 0.</span>
+<span class="sd">    Rank 0 will block until all send /recv from other ranks are processed, and will report</span>
+<span class="sd">    failures for ranks that failed to respond in time. Note that if one rank does not reach the</span>
+<span class="sd">    monitored_barrier (for example due to a hang), all other ranks would fail in monitored_barrier.</span>
 
 <span class="sd">    This collective will block all processes/ranks in the group, until the</span>
 <span class="sd">    whole group exits the function successfully, making it useful for debugging</span>
@@ -4203,7 +3958,6 @@
 <span class="sd">        &gt;&gt;&gt; # indicating that ranks 1, 2, ... world_size - 1 did not call into</span>
 <span class="sd">        &gt;&gt;&gt; # monitored_barrier.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-
     <span class="c1"># Need to call rank not in group before using the group, otherwise</span>
     <span class="c1"># &quot;Invalid process group&quot; error is raised.</span>
     <span class="k">if</span> <span class="n">_rank_not_in_group</span><span class="p">(</span><span class="n">group</span><span class="p">):</span>
@@ -4211,10 +3965,19 @@
         <span class="k">return</span>
 
     <span class="k">if</span> <span class="n">get_backend</span><span class="p">(</span><span class="n">group</span><span class="p">)</span> <span class="o">!=</span> <span class="n">Backend</span><span class="o">.</span><span class="n">GLOO</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;monitored_barrier is only implemented for GLOO backend.&quot;</span><span class="p">)</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;monitored_barrier is only implemented for GLOO backend.&quot;</span><span class="p">)</span>
 
     <span class="k">if</span> <span class="n">timeout</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">timeout</span> <span class="o">=</span> <span class="n">default_pg_timeout</span>
+        <span class="n">timeout</span> <span class="o">=</span> <span class="n">_get_default_timeout</span><span class="p">(</span><span class="n">get_backend</span><span class="p">(</span><span class="n">group</span><span class="p">))</span>
+    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">timeout</span><span class="p">,</span> <span class="nb">float</span><span class="p">):</span>
+        <span class="c1"># TODO(whc) aparently some existing test case for monitored_barrier passes in a timeout in float format?</span>
+        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+            <span class="s2">&quot;Please specify timeout arg as a timedelta. &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;Converting current value of </span><span class="si">{</span><span class="n">timeout</span><span class="si">}</span><span class="s2"> assuming it represents seconds&quot;</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">timeout</span> <span class="o">=</span> <span class="n">timedelta</span><span class="p">(</span><span class="n">seconds</span><span class="o">=</span><span class="n">timeout</span><span class="p">)</span>
+
+    <span class="n">_check_valid_timeout</span><span class="p">(</span><span class="n">timeout</span><span class="p">)</span>
 
     <span class="n">group_to_use</span> <span class="o">=</span> <span class="n">_get_default_group</span><span class="p">()</span> <span class="k">if</span> <span class="n">group</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">group</span>
     <span class="k">return</span> <span class="n">group_to_use</span><span class="o">.</span><span class="n">monitored_barrier</span><span class="p">(</span><span class="n">timeout</span><span class="p">,</span> <span class="n">wait_all_ranks</span><span class="o">=</span><span class="n">wait_all_ranks</span><span class="p">)</span></div>
@@ -4228,6 +3991,8 @@
     <span class="n">world_size</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
     <span class="n">timeout</span><span class="p">:</span> <span class="n">timedelta</span> <span class="o">=</span> <span class="n">default_pg_timeout</span><span class="p">,</span>
 <span class="p">):</span>
+    <span class="c1"># (whc) this appears to be just for the gloo backend? if so, `default_pg_timeout` is appropriate...</span>
+
     <span class="c1"># Create a separate prefix store for the helper process group.</span>
     <span class="n">prefix</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">PG_WRAPPER_STORE_PREFIX</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="n">store_prefix</span><span class="si">}</span><span class="s2">&quot;</span>
     <span class="n">store</span> <span class="o">=</span> <span class="n">PrefixStore</span><span class="p">(</span><span class="n">prefix</span><span class="p">,</span> <span class="n">store</span><span class="p">)</span>
@@ -4236,11 +4001,19 @@
     <span class="n">wrapped_pg</span> <span class="o">=</span> <span class="n">_ProcessGroupWrapper</span><span class="p">(</span><span class="n">wrapped_pg</span><span class="p">,</span> <span class="n">helper_pg</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">wrapped_pg</span>
 
+<span class="c1"># helper function for deterministically hashing a list of ranks</span>
+<span class="k">def</span> <span class="nf">_hash_ranks</span><span class="p">(</span><span class="n">ranks</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">int</span><span class="p">]):</span>
+    <span class="k">return</span> <span class="n">hashlib</span><span class="o">.</span><span class="n">sha1</span><span class="p">(</span><span class="nb">bytes</span><span class="p">(</span><span class="s2">&quot;_&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">map</span><span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="n">ranks</span><span class="p">)),</span> <span class="s2">&quot;utf-8&quot;</span><span class="p">))</span><span class="o">.</span><span class="n">hexdigest</span><span class="p">()</span>
+
+<span class="c1"># Takes a list of ranks and computes an integer color</span>
+<span class="k">def</span> <span class="nf">_process_group_color</span><span class="p">(</span><span class="n">ranks</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">int</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+    <span class="c1"># Convert our hash to an int, but avoid negative numbers by shifting a bit.</span>
+    <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">_hash_ranks</span><span class="p">(</span><span class="n">ranks</span><span class="p">),</span> <span class="mi">16</span><span class="p">)</span> <span class="o">%</span> <span class="p">(</span><span class="n">sys</span><span class="o">.</span><span class="n">maxsize</span> <span class="o">&gt;&gt;</span> <span class="mi">1</span><span class="p">)</span>
 
 <span class="k">def</span> <span class="nf">_process_group_name</span><span class="p">(</span><span class="n">ranks</span><span class="p">,</span> <span class="n">use_hashed_name</span><span class="p">):</span>
     <span class="k">global</span> <span class="n">_world</span>
     <span class="k">if</span> <span class="n">use_hashed_name</span><span class="p">:</span>
-        <span class="n">pg_name</span> <span class="o">=</span> <span class="n">hashlib</span><span class="o">.</span><span class="n">sha1</span><span class="p">(</span><span class="nb">bytes</span><span class="p">(</span><span class="s2">&quot;_&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">map</span><span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="n">ranks</span><span class="p">)),</span> <span class="s2">&quot;utf-8&quot;</span><span class="p">))</span><span class="o">.</span><span class="n">hexdigest</span><span class="p">()</span>
+        <span class="n">pg_name</span> <span class="o">=</span> <span class="n">_hash_ranks</span><span class="p">(</span><span class="n">ranks</span><span class="p">)</span>
         <span class="k">while</span> <span class="n">pg_name</span> <span class="ow">in</span> <span class="n">_world</span><span class="o">.</span><span class="n">pg_names</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
             <span class="n">pg_name</span> <span class="o">=</span> <span class="n">hashlib</span><span class="o">.</span><span class="n">sha1</span><span class="p">(</span><span class="nb">bytes</span><span class="p">(</span><span class="n">pg_name</span> <span class="o">+</span> <span class="s2">&quot;_&quot;</span><span class="p">,</span> <span class="s2">&quot;utf-8&quot;</span><span class="p">))</span><span class="o">.</span><span class="n">hexdigest</span><span class="p">()</span>
     <span class="k">else</span><span class="p">:</span>
@@ -4257,9 +4030,9 @@
 
 
 <div class="viewcode-block" id="new_group"><a class="viewcode-back" href="../../../distributed.html#torch.distributed.new_group">[docs]</a><span class="nd">@_time_logger</span>
-<span class="k">def</span> <span class="nf">new_group</span><span class="p">(</span><span class="n">ranks</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="n">default_pg_timeout</span><span class="p">,</span> <span class="n">backend</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">pg_options</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">use_local_synchronization</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+<span class="k">def</span> <span class="nf">new_group</span><span class="p">(</span><span class="n">ranks</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">backend</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">pg_options</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">use_local_synchronization</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Creates a new distributed group.</span>
+<span class="sd">    Create a new distributed group.</span>
 
 <span class="sd">    This function requires that all processes in the main group (i.e. all</span>
 <span class="sd">    processes that are part of the distributed job) enter this function, even</span>
@@ -4280,24 +4053,7 @@
 <span class="sd">    Args:</span>
 <span class="sd">        ranks (list[int]): List of ranks of group members. If ``None``, will be</span>
 <span class="sd">            set to all ranks. Default is ``None``.</span>
-<span class="sd">        timeout (timedelta, optional): Timeout for operations executed against</span>
-<span class="sd">            the process group. Default value equals 30 minutes.</span>
-<span class="sd">            This is applicable for the ``gloo`` backend. For ``nccl``, this is</span>
-<span class="sd">            applicable only if the environment variable ``NCCL_BLOCKING_WAIT``</span>
-<span class="sd">            or ``NCCL_ASYNC_ERROR_HANDLING`` is set to 1. When</span>
-<span class="sd">            ``NCCL_BLOCKING_WAIT`` is set, this is the duration for which the</span>
-<span class="sd">            process will block and wait for collectives to complete before</span>
-<span class="sd">            throwing an exception. When ``NCCL_ASYNC_ERROR_HANDLING`` is set,</span>
-<span class="sd">            this is the duration after which collectives will be aborted</span>
-<span class="sd">            asynchronously and the process will crash. ``NCCL_BLOCKING_WAIT``</span>
-<span class="sd">            will provide errors to the user which can be caught and handled,</span>
-<span class="sd">            but due to its blocking nature, it has a performance overhead. On</span>
-<span class="sd">            the other hand, ``NCCL_ASYNC_ERROR_HANDLING`` has very little</span>
-<span class="sd">            performance overhead, but crashes the process on errors. This is</span>
-<span class="sd">            done since CUDA execution is async and it is no longer safe to</span>
-<span class="sd">            continue executing user code since failed async NCCL operations</span>
-<span class="sd">            might result in subsequent CUDA operations running on corrupted</span>
-<span class="sd">            data. Only one of these two environment variables should be set.</span>
+<span class="sd">        timeout (timedelta, optional): see `init_process_group` for details and default value.</span>
 <span class="sd">        backend (str or Backend, optional): The backend to use. Depending on</span>
 <span class="sd">            build-time configurations, valid values are ``gloo`` and ``nccl``.</span>
 <span class="sd">            By default uses the same backend as the global group. This field</span>
@@ -4333,14 +4089,14 @@
 
 <span class="k">def</span> <span class="nf">_new_group_with_tag</span><span class="p">(</span>
     <span class="n">ranks</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-    <span class="n">timeout</span><span class="o">=</span><span class="n">default_pg_timeout</span><span class="p">,</span>
+    <span class="n">timeout</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
     <span class="n">backend</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
     <span class="n">pg_options</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
     <span class="n">pg_tag</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
     <span class="n">use_local_synchronization</span><span class="o">=</span><span class="kc">False</span>
 <span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    This is a variant of ``new_group`` that exposes tag creation.</span>
+<span class="sd">    Variant of ``new_group`` that exposes tag creation.</span>
 
 <span class="sd">    :: N.B. The mechanism is experimental and tied to the functional collectives effort, see</span>
 <span class="sd">    ``torch.distributed._functional_collectives`` for reference on how to use it.</span>
@@ -4352,15 +4108,23 @@
     <span class="n">global_rank</span> <span class="o">=</span> <span class="n">default_pg</span><span class="o">.</span><span class="n">rank</span><span class="p">()</span>
     <span class="n">global_world_size</span> <span class="o">=</span> <span class="n">default_pg</span><span class="o">.</span><span class="n">size</span><span class="p">()</span>
 
+
     <span class="c1"># Default to the same backend as the global process group</span>
     <span class="c1"># if the backend is not specified.</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="n">backend</span><span class="p">:</span>
         <span class="n">backend</span> <span class="o">=</span> <span class="n">default_backend</span>
     <span class="n">backend</span> <span class="o">=</span> <span class="n">Backend</span><span class="p">(</span><span class="n">backend</span><span class="p">)</span>
+
+    <span class="c1"># this timeout defaulting/validation is used for all the new_groups/new_subgroups variants,</span>
+    <span class="c1"># which may just pass their timeout value (or None)</span>
+    <span class="k">if</span> <span class="n">timeout</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">timeout</span> <span class="o">=</span> <span class="n">_get_default_timeout</span><span class="p">(</span><span class="n">backend</span><span class="p">)</span>
+    <span class="n">_check_valid_timeout</span><span class="p">(</span><span class="n">timeout</span><span class="p">)</span>
+
     <span class="k">if</span> <span class="n">use_local_synchronization</span><span class="p">:</span>
         <span class="c1"># MPI backend doesn&#39;t have have a way for us to perform a partial sync</span>
         <span class="k">if</span> <span class="n">backend</span> <span class="o">==</span> <span class="n">Backend</span><span class="o">.</span><span class="n">MPI</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;MPI backend doesn&#39;t support use_local_synchronization=True&quot;</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;MPI backend doesn&#39;t support use_local_synchronization=True&quot;</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">ranks</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">get_rank</span><span class="p">()</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">ranks</span><span class="p">:</span>
             <span class="k">return</span> <span class="kc">None</span>
 
@@ -4369,7 +4133,7 @@
         <span class="n">ranks</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">ranks</span><span class="p">)</span>
         <span class="n">group_world_size</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">ranks</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">group_world_size</span> <span class="o">&gt;</span> <span class="n">global_world_size</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                 <span class="s2">&quot;the new group&#39;s world size should be less or &quot;</span>
                 <span class="s2">&quot;equal to the world size set by &quot;</span>
                 <span class="s2">&quot;init_process_group&quot;</span>
@@ -4377,8 +4141,8 @@
         <span class="c1"># check ranks&#39; sanity</span>
         <span class="k">for</span> <span class="n">rank</span> <span class="ow">in</span> <span class="n">ranks</span><span class="p">:</span>
             <span class="k">if</span> <span class="n">rank</span> <span class="o">&lt;</span> <span class="mi">0</span> <span class="ow">or</span> <span class="n">rank</span> <span class="o">&gt;=</span> <span class="n">global_world_size</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
-                    <span class="s2">&quot;The new group&#39;s rank should be within the &quot;</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;The new group&#39;s rank should be within &quot;</span>
                     <span class="s2">&quot;the world_size set by init_process_group&quot;</span>
                 <span class="p">)</span>
         <span class="k">if</span> <span class="n">global_rank</span> <span class="ow">in</span> <span class="n">ranks</span><span class="p">:</span>
@@ -4398,7 +4162,7 @@
         <span class="n">ranks</span><span class="p">,</span>
         <span class="n">backend</span><span class="p">,</span>
         <span class="n">default_store</span><span class="p">,</span>
-        <span class="n">group_name</span><span class="o">=</span><span class="n">group_name</span><span class="p">,</span>
+        <span class="n">group_name</span><span class="p">,</span>
         <span class="n">pg_options</span><span class="o">=</span><span class="n">pg_options</span><span class="p">,</span>
         <span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">,</span>
         <span class="n">pg_tag</span><span class="o">=</span><span class="n">pg_tag</span>
@@ -4438,12 +4202,14 @@
 <span class="k">def</span> <span class="nf">new_subgroups</span><span class="p">(</span>
     <span class="n">group_size</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
     <span class="n">group</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-    <span class="n">timeout</span><span class="o">=</span><span class="n">default_pg_timeout</span><span class="p">,</span>
+    <span class="n">timeout</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
     <span class="n">backend</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
     <span class="n">pg_options</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
 <span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Creates subgroups of equal size. By default, it creates intra-machine subgroups,</span>
+<span class="sd">    Create subgroups of equal size.</span>
+
+<span class="sd">    By default, it creates intra-machine subgroups,</span>
 <span class="sd">    where each of which contains all the ranks of a machine, based on the assumption</span>
 <span class="sd">    that each machine has the same number of devices.</span>
 
@@ -4477,24 +4243,7 @@
 <span class="sd">            the default subgroup size is equal to the number of devices on each machine,</span>
 <span class="sd">            based on the assumption that each machine has exactly the same</span>
 <span class="sd">            number of devices. Default is ``None``.</span>
-<span class="sd">        timeout (timedelta, optional): Timeout for operations executed against</span>
-<span class="sd">            the process group. Default value equals 30 minutes.</span>
-<span class="sd">            This is applicable for the ``gloo`` backend. For ``nccl``, this is</span>
-<span class="sd">            applicable only if the environment variable ``NCCL_BLOCKING_WAIT``</span>
-<span class="sd">            or ``NCCL_ASYNC_ERROR_HANDLING`` is set to 1. When</span>
-<span class="sd">            ``NCCL_BLOCKING_WAIT`` is set, this is the duration for which the</span>
-<span class="sd">            process will block and wait for collectives to complete before</span>
-<span class="sd">            throwing an exception. When ``NCCL_ASYNC_ERROR_HANDLING`` is set,</span>
-<span class="sd">            this is the duration after which collectives will be aborted</span>
-<span class="sd">            asynchronously and the process will crash. ``NCCL_BLOCKING_WAIT``</span>
-<span class="sd">            will provide errors to the user which can be caught and handled,</span>
-<span class="sd">            but due to its blocking nature, it has a performance overhead. On</span>
-<span class="sd">            the other hand, ``NCCL_ASYNC_ERROR_HANDLING`` has very little</span>
-<span class="sd">            performance overhead, but crashes the process on errors. This is</span>
-<span class="sd">            done since CUDA execution is async and it is no longer safe to</span>
-<span class="sd">            continue executing user code since failed async NCCL operations</span>
-<span class="sd">            might result in subsequent CUDA operations running on corrupted</span>
-<span class="sd">            data. Only one of these two environment variables should be set.</span>
+<span class="sd">        timeout (timedelta, optional): see `init_process_group` for details and default value.</span>
 <span class="sd">        backend (str or Backend, optional): The backend to use. Depending on</span>
 <span class="sd">            build-time configurations, valid values are ``gloo`` and ``nccl``.</span>
 <span class="sd">            By default uses the same backend as the global group. This field</span>
@@ -4569,14 +4318,15 @@
 
 <span class="k">def</span> <span class="nf">new_subgroups_by_enumeration</span><span class="p">(</span>
     <span class="n">ranks_per_subgroup_list</span><span class="p">,</span>
-    <span class="n">timeout</span><span class="o">=</span><span class="n">default_pg_timeout</span><span class="p">,</span>
+    <span class="n">timeout</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
     <span class="n">backend</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
     <span class="n">pg_options</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
 <span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Creates subgroups by dividing the global world, where the division is specified by</span>
-<span class="sd">    a nested list of ranks. The subgroups cannot have overlap, and some ranks may not have</span>
-<span class="sd">    to be in any subgroup.</span>
+<span class="sd">    Create subgroups by dividing the global world.</span>
+
+<span class="sd">    The division is specified by a nested list of ranks. The subgroups cannot have</span>
+<span class="sd">    overlap, and some ranks may not have to be in any subgroup.</span>
 
 <span class="sd">    This is a convenience API that calls ``new_group`` to generate multiple subgroups.</span>
 <span class="sd">    It requires that all processes in the main group (i.e. all</span>
@@ -4597,25 +4347,8 @@
 <span class="sd">    Args:</span>
 <span class="sd">        ranks_per_subgroup_list (list[list[int]]): A nested list of ranks of</span>
 <span class="sd">            group members.</span>
-<span class="sd">        timeout (timedelta, optional): Timeout for operations executed against</span>
-<span class="sd">            the process group. Default value equals 30 minutes.</span>
-<span class="sd">            This is applicable for the ``gloo`` backend. For ``nccl``, this is</span>
-<span class="sd">            applicable only if the environment variable ``NCCL_BLOCKING_WAIT``</span>
-<span class="sd">            or ``NCCL_ASYNC_ERROR_HANDLING`` is set to 1. When</span>
-<span class="sd">            ``NCCL_BLOCKING_WAIT`` is set, this is the duration for which the</span>
-<span class="sd">            process will block and wait for collectives to complete before</span>
-<span class="sd">            throwing an exception. When ``NCCL_ASYNC_ERROR_HANDLING`` is set,</span>
-<span class="sd">            this is the duration after which collectives will be aborted</span>
-<span class="sd">            asynchronously and the process will crash. ``NCCL_BLOCKING_WAIT``</span>
-<span class="sd">            will provide errors to the user which can be caught and handled,</span>
-<span class="sd">            but due to its blocking nature, it has a performance overhead. On</span>
-<span class="sd">            the other hand, ``NCCL_ASYNC_ERROR_HANDLING`` has very little</span>
-<span class="sd">            performance overhead, but crashes the process on errors. This is</span>
-<span class="sd">            done since CUDA execution is async and it is no longer safe to</span>
-<span class="sd">            continue executing user code since failed async NCCL operations</span>
-<span class="sd">            might result in subsequent CUDA operations running on corrupted</span>
-<span class="sd">            data. Only one of these two environment variables should be set.</span>
-<span class="sd">         backend (str or Backend, optional): The backend to use. Depending on</span>
+<span class="sd">        timeout (timedelta, optional): see `init_process_group` for details and default value.</span>
+<span class="sd">        backend (str or Backend, optional): The backend to use. Depending on</span>
 <span class="sd">             build-time configurations, valid values are ``gloo`` and ``nccl``.</span>
 <span class="sd">             By default uses the same backend as the global group. This field</span>
 <span class="sd">             should be given as a lowercase string (e.g., ``&quot;gloo&quot;``), which can</span>
@@ -4713,21 +4446,21 @@
     <span class="k">return</span> <span class="n">_new_group_with_tag</span><span class="p">(</span><span class="n">my_ranks</span><span class="p">,</span> <span class="n">pg_tag</span><span class="o">=</span><span class="n">tag</span><span class="p">)</span>
 
 <span class="k">def</span> <span class="nf">_get_group_tag</span><span class="p">(</span><span class="n">pg</span><span class="p">:</span> <span class="n">ProcessGroup</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Returns the tag associated with ``pg``.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the tag associated with ``pg``.&quot;&quot;&quot;</span>
     <span class="n">tag</span> <span class="o">=</span> <span class="n">_world</span><span class="o">.</span><span class="n">pg_to_tag</span><span class="p">[</span><span class="n">pg</span><span class="p">]</span>
     <span class="k">if</span> <span class="n">tag</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;user:&quot;</span><span class="p">):</span>
         <span class="n">tag</span> <span class="o">=</span> <span class="n">tag</span><span class="p">[</span><span class="mi">5</span><span class="p">:]</span>
     <span class="k">return</span> <span class="n">tag</span>
 
 <span class="k">def</span> <span class="nf">_get_process_group_name</span><span class="p">(</span><span class="n">pg</span><span class="p">:</span> <span class="n">ProcessGroup</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-    <span class="k">return</span> <span class="n">_world</span><span class="o">.</span><span class="n">pg_names</span><span class="p">[</span><span class="n">pg</span><span class="p">]</span>
+    <span class="k">return</span> <span class="n">_world</span><span class="o">.</span><span class="n">pg_names</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">pg</span><span class="p">,</span> <span class="s2">&quot;None&quot;</span><span class="p">)</span>
+
+<span class="k">def</span> <span class="nf">_get_process_group_store</span><span class="p">(</span><span class="n">pg</span><span class="p">:</span> <span class="n">ProcessGroup</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Store</span><span class="p">:</span>
+    <span class="k">return</span> <span class="n">_world</span><span class="o">.</span><span class="n">pg_map</span><span class="p">[</span><span class="n">pg</span><span class="p">][</span><span class="mi">1</span><span class="p">]</span>
 
 <span class="c1"># This ops are not friently to TorchDynamo. So, we decide to disallow these ops</span>
 <span class="c1"># in FX graph, allowing them to run them on eager, with torch.compile.</span>
 <span class="n">dynamo_unsupported_distributed_c10d_ops</span> <span class="o">=</span> <span class="p">[</span>
-    <span class="n">all_reduce_multigpu</span><span class="p">,</span>
     <span class="n">recv</span><span class="p">,</span>
     <span class="n">all_gather_object</span><span class="p">,</span>
     <span class="n">all_gather_coalesced</span><span class="p">,</span>
@@ -4739,14 +4472,10 @@
     <span class="n">gather</span><span class="p">,</span>
     <span class="n">broadcast_object_list</span><span class="p">,</span>
     <span class="n">barrier</span><span class="p">,</span>
-    <span class="n">reduce_multigpu</span><span class="p">,</span>
     <span class="n">scatter</span><span class="p">,</span>
     <span class="n">scatter_object_list</span><span class="p">,</span>
     <span class="n">reduce</span><span class="p">,</span>
-    <span class="n">reduce_scatter_multigpu</span><span class="p">,</span>
     <span class="n">all_gather</span><span class="p">,</span>
-    <span class="n">broadcast_multigpu</span><span class="p">,</span>
-    <span class="n">all_gather_multigpu</span><span class="p">,</span>
     <span class="n">reduce_scatter</span><span class="p">,</span>
     <span class="n">all_gather_into_tensor</span><span class="p">,</span>
     <span class="n">broadcast</span><span class="p">,</span>
@@ -4928,9 +4657,9 @@ if (url)
         <div class="copyright">
         <p>© Copyright The Linux Foundation. The PyTorch Foundation is a project of The Linux Foundation.
           For web site terms of use, trademark policy and other policies applicable to The PyTorch Foundation please see
-          <a href="www.linuxfoundation.org/policies/">www.linuxfoundation.org/policies/</a>. The PyTorch Foundation supports the PyTorch open source
+          <a href="https://www.linuxfoundation.org/policies/">www.linuxfoundation.org/policies/</a>. The PyTorch Foundation supports the PyTorch open source
           project, which has been established as PyTorch Project a Series of LF Projects, LLC. For policies applicable to the PyTorch Project a Series of LF Projects, LLC,
-          please see <a href="www.lfprojects.org/policies/">www.lfprojects.org/policies/</a>.</p>
+          please see <a href="https://www.lfprojects.org/policies/">www.lfprojects.org/policies/</a>.</p>
       </div>
      </div>
 
@@ -4969,7 +4698,7 @@ if (url)
           </li>
             
           <li>
-            <a href="https://pytorch.org/mobile">Mobile</a>
+            <a href="">Mobile</a>
           </li>
 
           <li>
