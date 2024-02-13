@@ -242,7 +242,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href='https://pytorch.org/docs/versions.html'>main (2.3.0a0+git663dd5d ) &#x25BC</a>
+      <a href='https://pytorch.org/docs/versions.html'>main (2.3.0a0+git55483fc ) &#x25BC</a>
     </div>
     
 
@@ -1472,6 +1472,12 @@
     <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s2">&quot;TORCH_DIST_INIT_BARRIER&quot;</span><span class="p">,</span> <span class="s2">&quot;0&quot;</span><span class="p">))</span>
 
 
+<span class="k">def</span> <span class="nf">_abort_in_destroy_pg</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+    <span class="c1"># Environment variable to control whether to abort the communicators when users call destroy_process_group()</span>
+    <span class="n">env</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s2">&quot;TORCH_NCCL_ABORT_IN_DESTROY_PG&quot;</span><span class="p">,</span> <span class="s2">&quot;0&quot;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">env</span> <span class="o">==</span> <span class="s2">&quot;1&quot;</span> <span class="ow">or</span> <span class="n">env</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="o">==</span> <span class="s2">&quot;true&quot;</span>
+
+
 <span class="k">def</span> <span class="nf">_get_default_group</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">ProcessGroup</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Get the default process group created by init_process_group.&quot;&quot;&quot;</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="n">is_initialized</span><span class="p">():</span>
@@ -1812,6 +1818,21 @@
 
     <span class="k">return</span> <span class="n">split_from</span>
 
+<span class="k">def</span> <span class="nf">_shutdown_backend</span><span class="p">(</span><span class="n">pg</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Try to shut down the backend of a process group.</span>
+<span class="sd">    Currently, only ProcessGroupNCCL backend is supported.</span>
+<span class="sd">    No op for other backends.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">backend</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">backend</span> <span class="o">=</span> <span class="n">pg</span><span class="o">.</span><span class="n">_get_backend</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s2">&quot;cuda&quot;</span><span class="p">))</span>
+    <span class="k">except</span> <span class="ne">RuntimeError</span><span class="p">:</span>
+        <span class="k">pass</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">backend</span><span class="p">,</span> <span class="n">ProcessGroupNCCL</span><span class="p">):</span>
+        <span class="c1"># explictly call shutdown to ensure that NCCL resources are released</span>
+        <span class="n">backend</span><span class="o">.</span><span class="n">_shutdown</span><span class="p">()</span>
+
 <span class="k">def</span> <span class="nf">_new_process_group_helper</span><span class="p">(</span>
     <span class="n">group_size</span><span class="p">,</span>
     <span class="n">group_rank</span><span class="p">,</span>
@@ -2081,6 +2102,12 @@
         <span class="n">pg</span><span class="o">.</span><span class="n">_wait_for_pending_works</span><span class="p">()</span>
 
     <span class="k">if</span> <span class="n">group</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">group</span> <span class="o">==</span> <span class="n">GroupMember</span><span class="o">.</span><span class="n">WORLD</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">_abort_in_destroy_pg</span><span class="p">():</span>
+            <span class="c1"># shutdown all backends in the order of pg names. shutting down in order because</span>
+            <span class="c1"># ncclCommAbort() was a &#39;collective&#39; call in some versions of NCCL.</span>
+            <span class="k">for</span> <span class="n">pg_to_shutdown</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">_world</span><span class="o">.</span><span class="n">pg_names</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">_world</span><span class="o">.</span><span class="n">pg_names</span><span class="p">[</span><span class="n">x</span><span class="p">],</span> <span class="n">reverse</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+                <span class="n">_shutdown_backend</span><span class="p">(</span><span class="n">pg_to_shutdown</span><span class="p">)</span>
+
         <span class="n">_update_default_pg</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
         <span class="n">_world</span><span class="o">.</span><span class="n">pg_map</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
         <span class="n">_world</span><span class="o">.</span><span class="n">pg_names</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
@@ -2102,6 +2129,8 @@
         <span class="c1"># process group is in good state, we aren&#39;t dealing with failures.</span>
         <span class="n">_world</span><span class="o">.</span><span class="n">group_count</span> <span class="o">=</span> <span class="mi">0</span>
     <span class="k">else</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">_abort_in_destroy_pg</span><span class="p">():</span>
+            <span class="n">_shutdown_backend</span><span class="p">(</span><span class="n">pg</span><span class="p">)</span>
         <span class="k">del</span> <span class="n">_world</span><span class="o">.</span><span class="n">pg_map</span><span class="p">[</span><span class="n">pg</span><span class="p">]</span>
         <span class="k">del</span> <span class="n">_world</span><span class="o">.</span><span class="n">pg_names</span><span class="p">[</span><span class="n">pg</span><span class="p">]</span>
         <span class="k">del</span> <span class="n">_world</span><span class="o">.</span><span class="n">pg_group_ranks</span><span class="p">[</span><span class="n">pg</span><span class="p">]</span>
