@@ -242,7 +242,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href='https://pytorch.org/docs/versions.html'>main (2.3.0a0+git1e9fafc ) &#x25BC</a>
+      <a href='https://pytorch.org/docs/versions.html'>main (2.3.0a0+gitab38354 ) &#x25BC</a>
     </div>
     
 
@@ -488,19 +488,27 @@
 <span class="sd">:func:`is_available()` to determine if your system supports XPU.</span>
 <span class="sd">&quot;&quot;&quot;</span>
 <span class="kn">import</span> <span class="nn">threading</span>
+<span class="kn">import</span> <span class="nn">traceback</span>
 <span class="kn">from</span> <span class="nn">functools</span> <span class="kn">import</span> <span class="n">lru_cache</span>
-<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Union</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Union</span>
 
 <span class="kn">import</span> <span class="nn">torch</span>
 <span class="kn">import</span> <span class="nn">torch._C</span>
 <span class="kn">from</span> <span class="nn">..</span> <span class="kn">import</span> <span class="n">device</span> <span class="k">as</span> <span class="n">_device</span>
-<span class="kn">from</span> <span class="nn">._utils</span> <span class="kn">import</span> <span class="n">_dummy_type</span><span class="p">,</span> <span class="n">_get_device_index</span>
+<span class="kn">from</span> <span class="nn">.._utils</span> <span class="kn">import</span> <span class="n">_dummy_type</span><span class="p">,</span> <span class="n">_LazySeedTracker</span>
+<span class="kn">from</span> <span class="nn">._utils</span> <span class="kn">import</span> <span class="n">_get_device_index</span>
 <span class="kn">from</span> <span class="nn">.streams</span> <span class="kn">import</span> <span class="n">Event</span><span class="p">,</span> <span class="n">Stream</span>
 
 <span class="n">_initialized</span> <span class="o">=</span> <span class="kc">False</span>
+<span class="n">_tls</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">local</span><span class="p">()</span>
 <span class="n">_initialization_lock</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Lock</span><span class="p">()</span>
+<span class="n">_queued_calls</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span>
+    <span class="n">Tuple</span><span class="p">[</span><span class="n">Callable</span><span class="p">[[],</span> <span class="kc">None</span><span class="p">],</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span>
+<span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>  <span class="c1"># don&#39;t invoke these until initialization occurs</span>
 <span class="n">_is_in_bad_fork</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="p">,</span> <span class="s2">&quot;_xpu_isInBadFork&quot;</span><span class="p">,</span> <span class="k">lambda</span><span class="p">:</span> <span class="kc">False</span><span class="p">)</span>
 <span class="n">_device_t</span> <span class="o">=</span> <span class="n">Union</span><span class="p">[</span><span class="n">_device</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="kc">None</span><span class="p">]</span>
+<span class="n">_lazy_seed_tracker</span> <span class="o">=</span> <span class="n">_LazySeedTracker</span><span class="p">()</span>
+<span class="n">default_generators</span><span class="p">:</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">Generator</span><span class="p">]</span> <span class="o">=</span> <span class="p">()</span>  <span class="c1"># type: ignore[assignment]</span>
 
 
 <span class="k">def</span> <span class="nf">_is_compiled</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
@@ -547,6 +555,20 @@
     <span class="k">return</span> <span class="n">_initialized</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">_is_in_bad_fork</span><span class="p">()</span></div>
 
 
+<span class="k">def</span> <span class="nf">_lazy_call</span><span class="p">(</span><span class="nb">callable</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">is_initialized</span><span class="p">():</span>
+        <span class="nb">callable</span><span class="p">()</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">global</span> <span class="n">_lazy_seed_tracker</span>
+        <span class="k">if</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;seed_all&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">):</span>
+            <span class="n">_lazy_seed_tracker</span><span class="o">.</span><span class="n">queue_seed_all</span><span class="p">(</span><span class="nb">callable</span><span class="p">,</span> <span class="n">traceback</span><span class="o">.</span><span class="n">format_stack</span><span class="p">())</span>
+        <span class="k">elif</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;seed&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">):</span>
+            <span class="n">_lazy_seed_tracker</span><span class="o">.</span><span class="n">queue_seed</span><span class="p">(</span><span class="nb">callable</span><span class="p">,</span> <span class="n">traceback</span><span class="o">.</span><span class="n">format_stack</span><span class="p">())</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># Don&#39;t store the actual traceback to avoid memory cycle</span>
+            <span class="n">_queued_calls</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="nb">callable</span><span class="p">,</span> <span class="n">traceback</span><span class="o">.</span><span class="n">format_stack</span><span class="p">()))</span>
+
+
 <div class="viewcode-block" id="init"><a class="viewcode-back" href="../../generated/torch.xpu.init.html#torch.xpu.init">[docs]</a><span class="k">def</span> <span class="nf">init</span><span class="p">():</span>
 <span class="w">    </span><span class="sa">r</span><span class="sd">&quot;&quot;&quot;Initialize PyTorch&#39;s XPU state.</span>
 <span class="sd">    This is a Python API about lazy initialization that avoids initializing</span>
@@ -557,8 +579,8 @@
 
 
 <span class="k">def</span> <span class="nf">_lazy_init</span><span class="p">():</span>
-    <span class="k">global</span> <span class="n">_initialized</span>
-    <span class="k">if</span> <span class="n">is_initialized</span><span class="p">():</span>
+    <span class="k">global</span> <span class="n">_initialized</span><span class="p">,</span> <span class="n">_queued_calls</span>
+    <span class="k">if</span> <span class="n">is_initialized</span><span class="p">()</span> <span class="ow">or</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">_tls</span><span class="p">,</span> <span class="s2">&quot;is_initializing&quot;</span><span class="p">):</span>
         <span class="k">return</span>
     <span class="k">with</span> <span class="n">_initialization_lock</span><span class="p">:</span>
         <span class="c1"># This test was was protected via GIL. Double-check whether XPU has</span>
@@ -575,6 +597,26 @@
             <span class="k">raise</span> <span class="ne">AssertionError</span><span class="p">(</span><span class="s2">&quot;Torch not compiled with XPU enabled&quot;</span><span class="p">)</span>
         <span class="c1"># This function inits XPU backend and detects bad fork processing.</span>
         <span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">_xpu_init</span><span class="p">()</span>
+        <span class="c1"># Some of the queued calls may reentrantly call _lazy_init(); We need to</span>
+        <span class="c1"># just return without initializing in that case.</span>
+        <span class="n">_tls</span><span class="o">.</span><span class="n">is_initializing</span> <span class="o">=</span> <span class="kc">True</span>
+
+        <span class="k">for</span> <span class="n">calls</span> <span class="ow">in</span> <span class="n">_lazy_seed_tracker</span><span class="o">.</span><span class="n">get_calls</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">calls</span><span class="p">:</span>
+                <span class="n">_queued_calls</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">calls</span><span class="p">)</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">queued_call</span><span class="p">,</span> <span class="n">orig_traceback</span> <span class="ow">in</span> <span class="n">_queued_calls</span><span class="p">:</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="n">queued_call</span><span class="p">()</span>
+                <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                    <span class="n">msg</span> <span class="o">=</span> <span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;XPU call failed lazily at initialization with error: </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="si">}</span><span class="se">\n\n</span><span class="s2">&quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;XPU call was originally invoked at:</span><span class="se">\n\n</span><span class="si">{</span><span class="s1">&#39;&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">orig_traceback</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+                    <span class="p">)</span>
+                    <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span> <span class="kn">from</span> <span class="nn">e</span>
+        <span class="k">finally</span><span class="p">:</span>
+            <span class="nb">delattr</span><span class="p">(</span><span class="n">_tls</span><span class="p">,</span> <span class="s2">&quot;is_initializing&quot;</span><span class="p">)</span>
         <span class="n">_initialized</span> <span class="o">=</span> <span class="kc">True</span>
 
 
@@ -839,12 +881,63 @@
         <span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">_xpu_emptyCache</span><span class="p">()</span></div>
 
 
+<span class="k">def</span> <span class="nf">_get_generator</span><span class="p">(</span><span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">_C</span><span class="o">.</span><span class="n">Generator</span><span class="p">:</span>
+<span class="w">    </span><span class="sa">r</span><span class="sd">&quot;&quot;&quot;Return the XPU Generator object for the given device.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        device (torch.device): selected device.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">idx</span> <span class="o">=</span> <span class="n">device</span><span class="o">.</span><span class="n">index</span>
+    <span class="k">if</span> <span class="n">idx</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">idx</span> <span class="o">=</span> <span class="n">current_device</span><span class="p">()</span>
+    <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">xpu</span><span class="o">.</span><span class="n">default_generators</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span>
+
+
+<span class="k">def</span> <span class="nf">_set_rng_state_offset</span><span class="p">(</span>
+    <span class="n">offset</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">device</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;xpu&quot;</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sa">r</span><span class="sd">&quot;&quot;&quot;Set the random number generator state offset of the specified GPU.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        offset (int): The desired offset</span>
+<span class="sd">        device (torch.device or int, optional): The device to set the RNG state.</span>
+<span class="sd">            Default: ``&#39;xpu&#39;`` (i.e., ``torch.device(&#39;xpu&#39;)``, the current XPU device).</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">final_device</span> <span class="o">=</span> <span class="n">_get_device</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">cb</span><span class="p">():</span>
+        <span class="n">default_generator</span> <span class="o">=</span> <span class="n">_get_generator</span><span class="p">(</span><span class="n">final_device</span><span class="p">)</span>
+        <span class="n">default_generator</span><span class="o">.</span><span class="n">set_offset</span><span class="p">(</span><span class="n">offset</span><span class="p">)</span>
+
+    <span class="n">_lazy_call</span><span class="p">(</span><span class="n">cb</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">_get_rng_state_offset</span><span class="p">(</span><span class="n">device</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;xpu&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">    </span><span class="sa">r</span><span class="sd">&quot;&quot;&quot;Return the random number generator state offset of the specified GPU.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        device (torch.device or int, optional): The device to return the RNG state offset of.</span>
+<span class="sd">            Default: ``&#39;xpu&#39;`` (i.e., ``torch.device(&#39;xpu&#39;)``, the current XPU device).</span>
+
+<span class="sd">    .. warning::</span>
+<span class="sd">        This function eagerly initializes XPU.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">_lazy_init</span><span class="p">()</span>
+    <span class="n">final_device</span> <span class="o">=</span> <span class="n">_get_device</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
+    <span class="n">default_generator</span> <span class="o">=</span> <span class="n">_get_generator</span><span class="p">(</span><span class="n">final_device</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">default_generator</span><span class="o">.</span><span class="n">get_offset</span><span class="p">()</span>
+
+
+<span class="kn">from</span> <span class="nn">.random</span> <span class="kn">import</span> <span class="o">*</span>  <span class="c1"># noqa: F403</span>
+
+
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
     <span class="s2">&quot;Event&quot;</span><span class="p">,</span>
     <span class="s2">&quot;Stream&quot;</span><span class="p">,</span>
     <span class="s2">&quot;StreamContext&quot;</span><span class="p">,</span>
     <span class="s2">&quot;current_device&quot;</span><span class="p">,</span>
     <span class="s2">&quot;current_stream&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;default_generators&quot;</span><span class="p">,</span>
     <span class="s2">&quot;device&quot;</span><span class="p">,</span>
     <span class="s2">&quot;device_of&quot;</span><span class="p">,</span>
     <span class="s2">&quot;device_count&quot;</span><span class="p">,</span>
@@ -852,12 +945,21 @@
     <span class="s2">&quot;get_device_capability&quot;</span><span class="p">,</span>
     <span class="s2">&quot;get_device_name&quot;</span><span class="p">,</span>
     <span class="s2">&quot;get_device_properties&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;get_rng_state&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;get_rng_state_all&quot;</span><span class="p">,</span>
     <span class="s2">&quot;get_stream&quot;</span><span class="p">,</span>
     <span class="s2">&quot;init&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;initial_seed&quot;</span><span class="p">,</span>
     <span class="s2">&quot;is_available&quot;</span><span class="p">,</span>
     <span class="s2">&quot;is_bf16_supported&quot;</span><span class="p">,</span>
     <span class="s2">&quot;is_initialized&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;manual_seed&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;manual_seed_all&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;seed&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;seed_all&quot;</span><span class="p">,</span>
     <span class="s2">&quot;set_device&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;set_rng_state&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;set_rng_state_all&quot;</span><span class="p">,</span>
     <span class="s2">&quot;set_stream&quot;</span><span class="p">,</span>
     <span class="s2">&quot;stream&quot;</span><span class="p">,</span>
     <span class="s2">&quot;streams&quot;</span><span class="p">,</span>
