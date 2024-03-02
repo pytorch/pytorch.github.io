@@ -242,7 +242,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href='https://pytorch.org/docs/versions.html'>main (2.3.0a0+git33da8d5 ) &#x25BC</a>
+      <a href='https://pytorch.org/docs/versions.html'>main (2.3.0a0+gitc8e56b4 ) &#x25BC</a>
     </div>
     
 
@@ -483,22 +483,36 @@
               
   <h1>Source code for torch.distributed.checkpoint.format_utils</h1><div class="highlight"><pre>
 <span></span><span class="kn">import</span> <span class="nn">os</span>
-<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Union</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">cast</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Union</span>
 
 <span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">import</span> <span class="nn">torch.distributed</span> <span class="k">as</span> <span class="nn">dist</span>
 <span class="kn">import</span> <span class="nn">torch.distributed.checkpoint</span> <span class="k">as</span> <span class="nn">dcp</span>
+<span class="kn">from</span> <span class="nn">torch.distributed._shard._utils</span> <span class="kn">import</span> <span class="n">narrow_tensor_by_index</span>
 <span class="kn">from</span> <span class="nn">torch.distributed.checkpoint</span> <span class="kn">import</span> <span class="n">FileSystemReader</span>
+<span class="kn">from</span> <span class="nn">torch.distributed.checkpoint._nested_dict</span> <span class="kn">import</span> <span class="n">flatten_state_dict</span>
 <span class="kn">from</span> <span class="nn">torch.distributed.checkpoint._traverse</span> <span class="kn">import</span> <span class="n">set_element</span>
 <span class="kn">from</span> <span class="nn">torch.distributed.checkpoint.default_planner</span> <span class="kn">import</span> <span class="n">DefaultLoadPlanner</span>
 <span class="kn">from</span> <span class="nn">torch.distributed.checkpoint.metadata</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">Metadata</span><span class="p">,</span>
     <span class="n">STATE_DICT_TYPE</span><span class="p">,</span>
+    <span class="n">STORAGE_TYPES</span><span class="p">,</span>
+    <span class="n">TensorProperties</span><span class="p">,</span>
     <span class="n">TensorStorageMetadata</span><span class="p">,</span>
 <span class="p">)</span>
+<span class="kn">from</span> <span class="nn">torch.distributed.checkpoint.planner</span> <span class="kn">import</span> <span class="n">LoadItemType</span><span class="p">,</span> <span class="n">LoadPlan</span><span class="p">,</span> <span class="n">LoadPlanner</span>
+<span class="kn">from</span> <span class="nn">torch.distributed.checkpoint.planner_helpers</span> <span class="kn">import</span> <span class="n">_create_chunk_list</span>
 <span class="kn">from</span> <span class="nn">torch.distributed.checkpoint.state_dict_loader</span> <span class="kn">import</span> <span class="n">_load_state_dict</span>
+<span class="kn">from</span> <span class="nn">torch.distributed.checkpoint.storage</span> <span class="kn">import</span> <span class="n">StorageReader</span>
+<span class="kn">from</span> <span class="nn">torch.futures</span> <span class="kn">import</span> <span class="n">Future</span>
 
 
-<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;dcp_to_torch_save&quot;</span><span class="p">,</span> <span class="s2">&quot;torch_save_to_dcp&quot;</span><span class="p">]</span>
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s2">&quot;dcp_to_torch_save&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;torch_save_to_dcp&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;BroadcastingTorchSaveReader&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;DynamicMetaLoadPlanner&quot;</span><span class="p">,</span>
+<span class="p">]</span>
 
 
 <span class="k">class</span> <span class="nc">_EmptyStateDictLoadPlanner</span><span class="p">(</span><span class="n">DefaultLoadPlanner</span><span class="p">):</span>
@@ -536,6 +550,160 @@
                 <span class="n">state_dict</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">v</span>
 
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">set_up_planner</span><span class="p">(</span><span class="n">state_dict</span><span class="p">,</span> <span class="n">metadata</span><span class="p">,</span> <span class="n">is_coordinator</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="BroadcastingTorchSaveReader"><a class="viewcode-back" href="../../../../distributed.checkpoint.html#torch.distributed.checkpoint.format_utils.BroadcastingTorchSaveReader">[docs]</a><span class="k">class</span> <span class="nc">BroadcastingTorchSaveReader</span><span class="p">(</span><span class="n">StorageReader</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    StorageReader for reading a Torch Save file. This reader will read the entire checkpoint</span>
+<span class="sd">    on the coordinator rank, and then broadcast and shard each tensor to all ranks.</span>
+
+<span class="sd">    . N.B. Intended to be used with DynamicMetaLoadPlanner</span>
+
+<span class="sd">    .. warning::</span>
+<span class="sd">        Current implementation only supports loading Tensors.</span>
+
+<span class="sd">    &gt;&gt;&gt; # xdoctest: +SKIP(&quot;undefined vars&quot;)</span>
+<span class="sd">    &gt;&gt;&gt; sd = {&quot;mode&quot;: model}</span>
+<span class="sd">    &gt;&gt;&gt; dcp.load(</span>
+<span class="sd">    &gt;&gt;&gt;    sd,</span>
+<span class="sd">    &gt;&gt;&gt;    storage_reader=BroadcastingTorchSaveReader(),</span>
+<span class="sd">    &gt;&gt;&gt;    planner=DynamicMetaLoadPlanner(),</span>
+<span class="sd">    &gt;&gt;&gt;    checkpoint_id=&quot;path_to_model.pt&quot;</span>
+<span class="sd">    &gt;&gt;&gt; )</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">checkpoint_id</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">os</span><span class="o">.</span><span class="n">PathLike</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">coordinator_rank</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">checkpoint_id</span> <span class="o">=</span> <span class="n">checkpoint_id</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">coordinator_rank</span> <span class="o">=</span> <span class="n">coordinator_rank</span>
+
+<div class="viewcode-block" id="BroadcastingTorchSaveReader.read_metadata"><a class="viewcode-back" href="../../../../distributed.checkpoint.html#torch.distributed.checkpoint.format_utils.BroadcastingTorchSaveReader.read_metadata">[docs]</a>    <span class="k">def</span> <span class="nf">read_metadata</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Metadata</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Extends the default StorageReader to support building the metadata file&quot;&quot;&quot;</span>
+        <span class="c1"># Metadata is built in planner.set_up_planner, since we are not actually reading metadata from</span>
+        <span class="c1"># the disk</span>
+        <span class="k">return</span> <span class="n">Metadata</span><span class="p">(</span><span class="n">state_dict_metadata</span><span class="o">=</span><span class="p">{})</span></div>
+
+<div class="viewcode-block" id="BroadcastingTorchSaveReader.read_data"><a class="viewcode-back" href="../../../../distributed.checkpoint.html#torch.distributed.checkpoint.format_utils.BroadcastingTorchSaveReader.read_data">[docs]</a>    <span class="k">def</span> <span class="nf">read_data</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">plan</span><span class="p">:</span> <span class="n">LoadPlan</span><span class="p">,</span> <span class="n">planner</span><span class="p">:</span> <span class="n">LoadPlanner</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Future</span><span class="p">[</span><span class="kc">None</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Reads torch save data on the coordinator rank, and broadcast afterwards</span>
+<span class="sd">        this incurrs a communication cost, but avoids having to load</span>
+<span class="sd">        the entire checkpoint on each rank, hopefully preventing OOM issues</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">planner</span> <span class="o">=</span> <span class="n">cast</span><span class="p">(</span><span class="n">DefaultLoadPlanner</span><span class="p">,</span> <span class="n">planner</span><span class="p">)</span>
+
+        <span class="c1"># data is read in on the coordinator rank, and broadcast afterwards</span>
+        <span class="c1"># this incurrs a communication cost, but it avoids having to load</span>
+        <span class="c1"># the entire checkpoint on each rank, hopefully preventing OOM issues</span>
+        <span class="c1"># TODO: read on each host, instead of only the coordinator</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">is_coordinator</span><span class="p">:</span>
+            <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">checkpoint_id</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+            <span class="n">torch_state_dict</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">checkpoint_id</span><span class="p">,</span> <span class="n">map_location</span><span class="o">=</span><span class="s2">&quot;cpu&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">planner</span><span class="o">.</span><span class="n">flatten_state_dict</span><span class="p">:</span>
+                <span class="n">torch_state_dict</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">flatten_state_dict</span><span class="p">(</span><span class="n">torch_state_dict</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">torch_state_dict</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="k">for</span> <span class="n">req</span> <span class="ow">in</span> <span class="n">plan</span><span class="o">.</span><span class="n">items</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">req</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="n">LoadItemType</span><span class="o">.</span><span class="n">BYTE_IO</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Non-tensor value identified at </span><span class="si">{</span><span class="n">req</span><span class="o">.</span><span class="n">storage_index</span><span class="o">.</span><span class="n">fqn</span><span class="si">}</span><span class="s2">. &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;At this time </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> only supports loading Tensors.&quot;</span>
+                <span class="p">)</span>
+
+            <span class="c1">#  Broadcast the tensor from the coordinator rank</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">is_coordinator</span><span class="p">:</span>
+                <span class="n">tensor</span> <span class="o">=</span> <span class="n">torch_state_dict</span><span class="p">[</span><span class="n">req</span><span class="o">.</span><span class="n">storage_index</span><span class="o">.</span><span class="n">fqn</span><span class="p">]</span><span class="o">.</span><span class="n">cuda</span><span class="p">()</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">tensor</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">empty_like</span><span class="p">(</span><span class="n">planner</span><span class="o">.</span><span class="n">state_dict</span><span class="p">[</span><span class="n">req</span><span class="o">.</span><span class="n">storage_index</span><span class="o">.</span><span class="n">fqn</span><span class="p">])</span>
+
+            <span class="n">dist</span><span class="o">.</span><span class="n">broadcast</span><span class="p">(</span><span class="n">tensor</span><span class="p">,</span> <span class="n">src</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">coordinator_rank</span><span class="p">,</span> <span class="n">async_op</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+            <span class="n">tensor</span> <span class="o">=</span> <span class="n">narrow_tensor_by_index</span><span class="p">(</span><span class="n">tensor</span><span class="p">,</span> <span class="n">req</span><span class="o">.</span><span class="n">storage_offsets</span><span class="p">,</span> <span class="n">req</span><span class="o">.</span><span class="n">lengths</span><span class="p">)</span>
+            <span class="n">target_tensor</span> <span class="o">=</span> <span class="n">planner</span><span class="o">.</span><span class="n">resolve_tensor</span><span class="p">(</span><span class="n">req</span><span class="p">)</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span>
+            <span class="k">assert</span> <span class="n">target_tensor</span><span class="o">.</span><span class="n">size</span><span class="p">()</span> <span class="o">==</span> <span class="n">tensor</span><span class="o">.</span><span class="n">size</span><span class="p">(),</span> <span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;req </span><span class="si">{</span><span class="n">req</span><span class="o">.</span><span class="n">storage_index</span><span class="si">}</span><span class="s2"> mismatch sizes, &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">target_tensor</span><span class="o">.</span><span class="n">size</span><span class="p">()</span><span class="si">}</span><span class="s2"> vs </span><span class="si">{</span><span class="n">tensor</span><span class="o">.</span><span class="n">size</span><span class="p">()</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+            <span class="n">target_tensor</span><span class="o">.</span><span class="n">copy_</span><span class="p">(</span><span class="n">tensor</span><span class="p">)</span>
+            <span class="n">planner</span><span class="o">.</span><span class="n">commit_tensor</span><span class="p">(</span><span class="n">req</span><span class="p">,</span> <span class="n">target_tensor</span><span class="p">)</span>
+
+        <span class="n">fut</span><span class="p">:</span> <span class="n">Future</span> <span class="o">=</span> <span class="n">Future</span><span class="p">()</span>
+        <span class="n">fut</span><span class="o">.</span><span class="n">set_result</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">fut</span></div>
+
+<div class="viewcode-block" id="BroadcastingTorchSaveReader.set_up_storage_reader"><a class="viewcode-back" href="../../../../distributed.checkpoint.html#torch.distributed.checkpoint.format_utils.BroadcastingTorchSaveReader.set_up_storage_reader">[docs]</a>    <span class="k">def</span> <span class="nf">set_up_storage_reader</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">metadata</span><span class="p">:</span> <span class="n">Metadata</span><span class="p">,</span> <span class="n">is_coordinator</span><span class="p">:</span> <span class="nb">bool</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Implementation of the StorageReader method&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">is_coordinator</span> <span class="o">=</span> <span class="n">is_coordinator</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">is_coordinator</span><span class="p">:</span>
+            <span class="k">assert</span> <span class="n">dist</span><span class="o">.</span><span class="n">get_rank</span><span class="p">()</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">coordinator_rank</span>
+
+        <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">checkpoint_id</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span></div>
+
+<div class="viewcode-block" id="BroadcastingTorchSaveReader.prepare_local_plan"><a class="viewcode-back" href="../../../../distributed.checkpoint.html#torch.distributed.checkpoint.format_utils.BroadcastingTorchSaveReader.prepare_local_plan">[docs]</a>    <span class="k">def</span> <span class="nf">prepare_local_plan</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">plan</span><span class="p">:</span> <span class="n">LoadPlan</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">LoadPlan</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Implementation of the StorageReader method&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">plan</span></div>
+
+<div class="viewcode-block" id="BroadcastingTorchSaveReader.prepare_global_plan"><a class="viewcode-back" href="../../../../distributed.checkpoint.html#torch.distributed.checkpoint.format_utils.BroadcastingTorchSaveReader.prepare_global_plan">[docs]</a>    <span class="k">def</span> <span class="nf">prepare_global_plan</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">global_plan</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">LoadPlan</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">LoadPlan</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Implementation of the StorageReader method&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">global_plan</span></div>
+
+<div class="viewcode-block" id="BroadcastingTorchSaveReader.reset"><a class="viewcode-back" href="../../../../distributed.checkpoint.html#torch.distributed.checkpoint.format_utils.BroadcastingTorchSaveReader.reset">[docs]</a>    <span class="k">def</span> <span class="nf">reset</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">checkpoint_id</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">os</span><span class="o">.</span><span class="n">PathLike</span><span class="p">,</span> <span class="kc">None</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Implementation of the StorageReader method&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">checkpoint_id</span> <span class="o">=</span> <span class="n">checkpoint_id</span></div>
+
+<div class="viewcode-block" id="BroadcastingTorchSaveReader.validate_checkpoint_id"><a class="viewcode-back" href="../../../../distributed.checkpoint.html#torch.distributed.checkpoint.format_utils.BroadcastingTorchSaveReader.validate_checkpoint_id">[docs]</a>    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">validate_checkpoint_id</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">checkpoint_id</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">os</span><span class="o">.</span><span class="n">PathLike</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Implementation of the StorageReader method&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">isfile</span><span class="p">(</span><span class="n">checkpoint_id</span><span class="p">)</span></div></div>
+
+
+<div class="viewcode-block" id="DynamicMetaLoadPlanner"><a class="viewcode-back" href="../../../../distributed.checkpoint.html#torch.distributed.checkpoint.format_utils.DynamicMetaLoadPlanner">[docs]</a><span class="k">class</span> <span class="nc">DynamicMetaLoadPlanner</span><span class="p">(</span><span class="n">DefaultLoadPlanner</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Extension of DefaultLoadPlanner, which creates a new Metadata object based on the passed in state dict,</span>
+<span class="sd">    avoiding the need to read metadata from disk. This is useful when reading formats which don&#39;t have a</span>
+<span class="sd">    metadata file, like Torch Save files.</span>
+
+<span class="sd">    . N.B. Intended to be used with BroadcastingTorchSaveReader</span>
+
+<span class="sd">    .. warning::</span>
+<span class="sd">        Current implementation only supports loading Tensors.</span>
+
+<span class="sd">    &gt;&gt;&gt; # xdoctest: +SKIP(&quot;undefined vars&quot;)</span>
+<span class="sd">    &gt;&gt;&gt; sd = {&quot;mode&quot;: model}</span>
+<span class="sd">    &gt;&gt;&gt; dcp.load(</span>
+<span class="sd">    &gt;&gt;&gt;    sd,</span>
+<span class="sd">    &gt;&gt;&gt;    storage_reader=BroadcastingTorchSaveReader(),</span>
+<span class="sd">    &gt;&gt;&gt;    planner=DynamicMetaLoadPlanner(),</span>
+<span class="sd">    &gt;&gt;&gt;    checkpoint_id=&quot;path_to_model.pt&quot;</span>
+<span class="sd">    &gt;&gt;&gt; )</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="DynamicMetaLoadPlanner.set_up_planner"><a class="viewcode-back" href="../../../../distributed.checkpoint.html#torch.distributed.checkpoint.format_utils.DynamicMetaLoadPlanner.set_up_planner">[docs]</a>    <span class="k">def</span> <span class="nf">set_up_planner</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">state_dict</span><span class="p">:</span> <span class="n">STATE_DICT_TYPE</span><span class="p">,</span>
+        <span class="n">metadata</span><span class="p">:</span> <span class="n">Metadata</span><span class="p">,</span>
+        <span class="n">is_coordinator</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Setups of the planner, extnding default behavior by creating the Metadata object from the state dict&quot;&quot;&quot;</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">set_up_planner</span><span class="p">(</span><span class="n">state_dict</span><span class="p">,</span> <span class="n">metadata</span><span class="p">,</span> <span class="n">is_coordinator</span><span class="p">)</span>
+
+        <span class="n">state_dict_metadata</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">STORAGE_TYPES</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">tensor</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">state_dict</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">torch</span><span class="o">.</span><span class="n">is_tensor</span><span class="p">(</span><span class="n">tensor</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Non-tensor value identified at </span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">. &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;At this time </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> only supports loading Tensors.&quot;</span>
+                <span class="p">)</span>
+
+            <span class="n">state_dict_metadata</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">TensorStorageMetadata</span><span class="p">(</span>
+                <span class="n">TensorProperties</span><span class="p">(</span><span class="n">dtype</span><span class="o">=</span><span class="n">tensor</span><span class="o">.</span><span class="n">dtype</span><span class="p">),</span>
+                <span class="n">tensor</span><span class="o">.</span><span class="n">size</span><span class="p">(),</span>
+                <span class="n">_create_chunk_list</span><span class="p">(</span><span class="n">tensor</span><span class="p">),</span>
+            <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">metadata</span> <span class="o">=</span> <span class="n">Metadata</span><span class="p">(</span><span class="n">state_dict_metadata</span><span class="o">=</span><span class="n">state_dict_metadata</span><span class="p">)</span></div></div>
 
 
 <div class="viewcode-block" id="dcp_to_torch_save"><a class="viewcode-back" href="../../../../distributed.checkpoint.html#torch.distributed.checkpoint.format_utils.dcp_to_torch_save">[docs]</a><span class="k">def</span> <span class="nf">dcp_to_torch_save</span><span class="p">(</span>
