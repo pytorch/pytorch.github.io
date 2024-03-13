@@ -1,0 +1,6 @@
+﻿torch.arccosh
+=============
+
+.. currentmodule:: torch
+
+.. autofunction:: arccosh
