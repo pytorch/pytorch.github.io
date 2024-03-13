@@ -4,7 +4,7 @@
   <generator uri="https://jekyllrb.com/" version="3.9.0">Jekyll</generator>
   <link href="https://pytorch.org/feed.xml" rel="self" type="application/atom+xml" />
   <link href="https://pytorch.org/" rel="alternate" type="text/html" />
-  <updated>2024-03-12T18:03:34-07:00</updated>
+  <updated>2024-03-13T08:34:15-07:00</updated>
   <id>https://pytorch.org/feed.xml</id>
 
   
@@ -29,6 +29,488 @@
 
   
   
+  
+    <entry>
+      <title type="html">Maximizing training throughput using PyTorch FSDP</title>
+      <link href="https://pytorch.org/blog/maximizing-training/" rel="alternate" type="text/html" title="Maximizing training throughput using PyTorch FSDP" />
+      <published>2024-03-13T00:00:00-07:00</published>
+      <updated>2024-03-13T00:00:00-07:00</updated>
+      <id>https://pytorch.org/blog/maximizing-training</id>
+      <content type="html" xml:base="https://pytorch.org/blog/maximizing-training/">&lt;p&gt;In this blog, we demonstrate the scalability of FSDP with a pre-training exemplar, a 7B model trained for 2T tokens, and share various techniques we used to achieve a rapid training speed of 3,700 tokens/sec/GPU, or 40B tokens/day on 128 A100 GPUs. This translates to a model FLOPS utilization (MFU) and hardware FLOPS utilization (HFU) of 57%. Additionally, we have observed near linear scaling of FSDP to 512 GPUs, implying that training a 7B model on 512 GPUs to 2T tokens using this method would take just under two weeks.&lt;/p&gt;
+
+&lt;p&gt;IBM researchers trained a Meta Llama 2 7B architecture to 2T tokens, which we will refer to as LlamaT(est). This model demonstrates comparable model quality as Llama 2 on various academic benchmarks. All of the &lt;a href=&quot;https://github.com/foundation-model-stack/fms-fsdp&quot;&gt;training code&lt;/a&gt;, along with our methodology to achieve this throughput, can be found in this blog. We also share the configuration knobs that work well for the Llama 2 models – 7B, 13B, 34B, and 70B for A100s and H100s.&lt;/p&gt;
+
+&lt;p&gt;In this process, we also propose a _new _selective activation checkpointing mechanism that applies to FSDP which gives us a 10% boost beyond out-of-the box FSDP. We have open sourced the &lt;a href=&quot;https://github.com/foundation-model-stack/fms-fsdp&quot;&gt;training code base&lt;/a&gt; and an associated scalable data loader as the methodology to achieve this throughput.&lt;/p&gt;
+
+&lt;p&gt;One key benefit of a PyTorch native pathway for training is the ability  to seamlessly train on multiple hardware backends. For example, the recent end-to-end stack for training that was released by AllenAI through OLMo also leverages PyTorch FSDP for training on AMD and NVIDIA GPUs. There are three main components that we leverage from FSDP to achieve our throughput:&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;&lt;a href=&quot;https://pytorch.org/tutorials/intermediate/scaled_dot_product_attention_tutorial.html&quot;&gt;SDPA Flash attention&lt;/a&gt;, that enables fused attention kernels and efficient attention computation&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://engineering.fb.com/2021/07/15/open-source/fsdp/&quot;&gt;Overlap&lt;/a&gt; in computation and communication allows for better utilization of the GPU&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://arxiv.org/pdf/2205.05198.pdf&quot;&gt;Selective activation checkpointing&lt;/a&gt; enables us to tradeoff between GPU memory and compute&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;IBM has been working closely with Team PyTorch at Meta on &lt;a href=&quot;https://arxiv.org/abs/2304.11277&quot;&gt;PyTorch FSDP&lt;/a&gt; for nearly two years: introducing the &lt;a href=&quot;https://pytorch.org/blog/scaling-pytorch-fsdp-for-training-foundation-models-on-ibm-cloud/&quot;&gt;rate limiter&lt;/a&gt; for achieving better throughput on Ethernet interconnects, &lt;a href=&quot;https://pytorch.org/blog/performant-distributed-checkpointing/&quot;&gt;distributed checkpointing&lt;/a&gt; to improve the checkpoint times by an order of magnitude, and implementing the early version of checkpointing for the hybrid sharding mode of FSDP. Late last year, we used FSDP to train a model end-to-end.&lt;/p&gt;
+
+&lt;h2 id=&quot;training-details&quot;&gt;Training Details&lt;/h2&gt;
+
+&lt;p&gt;The 7B model is trained on 128 A100 GPUs with 400Gbps network connectivity and GPU direct RDMA. We use SDPA FlashAttention v2 for attention computation, and for this model we turned off activation checkpointing that limits the batch size, but provides the highest throughput – batch size is 1 million tokens per batch for 128 GPUs and improves throughput by about 10% when compared to activation checkpointing. With these parameters, we have an almost full overlap in computation and communication. We use the AdamW optimizer in 32-bit with beta1 of 0.9 and beta2 of 0.95, weight decay of 0.1, and a learning rate ending at 3e-5 with a warmup to max learning rate of 3e-4 and a cosine schedule to reduce to 3e-5 over 2T tokens. The training was performed using mixed precision bf16 on an internal dataset. The training stack is using IBM’s &lt;a href=&quot;https://github.com/foundation-model-stack/foundation-model-stack/blob/main/fms/models/llama.py&quot;&gt;Foundation Model Stack&lt;/a&gt; for model architecture and PyTorch nightlies post-2.2 release for FSDP and SDPA. We tried a few different nightlies during the time period of Nov 2023 through Feb 2024 and we observed an improvement in the throughput.&lt;/p&gt;
+
+&lt;h3 id=&quot;selective-activation-checkpointing&quot;&gt;Selective activation checkpointing&lt;/h3&gt;
+
+&lt;p&gt;We jointly implemented a simple and effective mechanism of selective activation checkpointing (AC). In FSDP, the common practice is to checkpoint each transformer block. A simple extension is to checkpoint every _n _blocks and reduce the amount of recomputation, while increasing the memory needed. This is quite effective for the 13B model size, increasing the throughput by 10%. For the 7B model size, we did not need activation checkpointing at all. Future versions of FSDP will provide selective activation checkpointing at an operator level, enabling an optimal compute-memory tradeoff. The code for the above is implemented &lt;a href=&quot;https://github.com/foundation-model-stack/fms-fsdp/blob/main/fms_fsdp/policies/ac_handler.py&quot;&gt;here&lt;/a&gt;.&lt;/p&gt;
+
+&lt;h3 id=&quot;throughput-and-mfu-hfu-computation&quot;&gt;Throughput and MFU, HFU computation&lt;/h3&gt;
+
+&lt;p&gt;While we only trained the 7B model to 2T tokens, we performed numerous experiments on the other model sizes to provide the best configuration options. This is summarized in the table below for two types of infrastructure —  an A100 cluster with 128 GPUs and 400Gbps inter-node interconnect, and an H100 cluster with 96 GPUs and 800Gbps inter-node interconnect.&lt;/p&gt;
+
+&lt;table class=&quot;table table-bordered&quot;&gt;
+  &lt;tr&gt;
+   &lt;td&gt;
+&lt;strong&gt;Model size&lt;/strong&gt;
+
+
+   &lt;/td&gt;
+   &lt;td&gt;
+&lt;strong&gt;Batch size&lt;/strong&gt;
+
+
+   &lt;/td&gt;
+   &lt;td&gt;
+&lt;strong&gt;Activation checkpoint&lt;/strong&gt;
+
+
+   &lt;/td&gt;
+   &lt;td&gt;
+&lt;strong&gt;Throughput tokens/sec/GPU (A100 80GB and 400Gbps interconnect)&lt;/strong&gt;
+
+
+   &lt;/td&gt;
+   &lt;td&gt;
+&lt;strong&gt;MFU % (A100 80GB)&lt;/strong&gt;
+
+
+   &lt;/td&gt;
+   &lt;td&gt;
+&lt;strong&gt;HFU % (A100 80GB)&lt;/strong&gt;
+
+
+   &lt;/td&gt;
+   &lt;td&gt;
+&lt;strong&gt;Throughput tokens/sec/GPU (H100 80GB and 800Gbps interconnect)&lt;/strong&gt;
+
+
+   &lt;/td&gt;
+   &lt;td&gt;
+&lt;strong&gt;MFU % (H100 80GB)&lt;/strong&gt;
+
+
+   &lt;/td&gt;
+   &lt;td&gt;
+&lt;strong&gt;HFU % (H100 80GB)&lt;/strong&gt;
+
+
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;
+7B
+
+
+   &lt;/td&gt;
+   &lt;td&gt;
+2
+
+
+   &lt;/td&gt;
+   &lt;td&gt;
+No
+
+
+   &lt;/td&gt;
+   &lt;td&gt;
+3700
+
+
+   &lt;/td&gt;
+   &lt;td&gt;
+0.57
+
+
+   &lt;/td&gt;
+   &lt;td&gt;
+0.57
+
+
+   &lt;/td&gt;
+   &lt;td&gt;
+7500
+
+
+   &lt;/td&gt;
+   &lt;td&gt;
+0.37
+
+
+   &lt;/td&gt;
+   &lt;td&gt;
+0.37
+
+
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;
+13B
+
+
+   &lt;/td&gt;
+   &lt;td&gt;
+2
+
+
+   &lt;/td&gt;
+   &lt;td&gt;
+Selective
+
+
+   &lt;/td&gt;
+   &lt;td&gt;
+1800
+
+
+   &lt;/td&gt;
+   &lt;td&gt;
+0.51
+
+
+   &lt;/td&gt;
+   &lt;td&gt;
+0.59
+
+
+   &lt;/td&gt;
+   &lt;td&gt;
+3800
+
+
+   &lt;/td&gt;
+   &lt;td&gt;
+0.35
+
+
+   &lt;/td&gt;
+   &lt;td&gt;
+0.40
+
+
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;
+34B
+
+
+   &lt;/td&gt;
+   &lt;td&gt;
+2
+
+
+   &lt;/td&gt;
+   &lt;td&gt;
+Yes
+
+
+   &lt;/td&gt;
+   &lt;td&gt;
+700
+
+
+   &lt;/td&gt;
+   &lt;td&gt;
+0.47
+
+
+   &lt;/td&gt;
+   &lt;td&gt;
+0.64
+
+
+   &lt;/td&gt;
+   &lt;td&gt;
+1550
+
+
+   &lt;/td&gt;
+   &lt;td&gt;
+0.32
+
+
+   &lt;/td&gt;
+   &lt;td&gt;
+0.44
+
+
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;
+70B
+
+
+   &lt;/td&gt;
+   &lt;td&gt;
+2
+
+
+   &lt;/td&gt;
+   &lt;td&gt;
+Yes
+
+
+   &lt;/td&gt;
+   &lt;td&gt;
+370
+
+
+   &lt;/td&gt;
+   &lt;td&gt;
+0.50
+
+
+   &lt;/td&gt;
+   &lt;td&gt;
+0.67
+
+
+   &lt;/td&gt;
+   &lt;td&gt;
+800
+
+
+   &lt;/td&gt;
+   &lt;td&gt;
+0.34
+
+
+   &lt;/td&gt;
+   &lt;td&gt;
+0.45
+
+
+   &lt;/td&gt;
+  &lt;/tr&gt;
+&lt;/table&gt;
+
+&lt;p&gt;&lt;em&gt;Table 1: Model and Hardware FLOPS utilization of various model sizes on A100 and H100 GPUs&lt;/em&gt;&lt;/p&gt;
+
+&lt;p&gt;HFU numbers are computed using the &lt;a href=&quot;https://github.com/pytorch/pytorch/blob/2240018c03744ee34ea14ad53481db934c37e384/torch/utils/flop_counter.py#L336&quot;&gt;PyTorch FLOP counter&lt;/a&gt; and the theoretical bf16 performance of A100 and H100 GPUs, whereas MFU numbers are computed using the methodology outlined in &lt;a href=&quot;https://github.com/karpathy/nanoGPT&quot;&gt;NanoGPT&lt;/a&gt; and the &lt;a href=&quot;https://github.com/pytorch/pytorch/blob/2240018c03744ee34ea14ad53481db934c37e384/torch/utils/flop_counter.py#L336&quot;&gt;PaLM paper&lt;/a&gt;. We also note that the batch sizes we use for the larger models are intentionally kept at 2 per GPU to mimic choices made in training models of 4k sequence length and achieve this up to 512 GPUs without exceeding the 4M tokens popular batch size. Beyond that, we would need tensor parallelism or sequence parallelism.&lt;/p&gt;
+
+&lt;p&gt;We note in the table above that for A100s, that activation recomputation causes the MFU to reduce, while HFU increases! With the introduction of better activation checkpointing schemes, we expect MFU to increase and catch up with HFU. However, we observe that for H100s, both MFU and HFU are relatively low. We analyze the PyTorch profile traces on H100 and observe that there is a 10% gap due to network “peeking” out. In addition, we  hypothesize that the HBM bandwidth of H100s is the cause for the reduced HFU/MFU on H100s and not being able to obtain the 3x improvement (H100s are theoretically 3x faster than A100s - &lt;a href=&quot;https://github.com/stas00/ml-engineering/tree/master/compute/accelerator#tflops-comparison-table&quot;&gt;312 vs 989TFLOPS&lt;/a&gt;, but only have &amp;lt;2x the HBM bandwidth than A100s - &lt;a href=&quot;https://github.com/stas00/ml-engineering/tree/master/compute/accelerator#accelerator-memory-size-and-speed&quot;&gt;2.0 vs 3.35TBps&lt;/a&gt;). We plan to try out other configuration options like Tensor Parallel to improve the knobs for the 70B model on H100s.&lt;/p&gt;
+
+&lt;h3 id=&quot;model-details&quot;&gt;Model details&lt;/h3&gt;
+
+&lt;p&gt;The loss curve for training is shown in the below figure.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/maximizing-training/loss_curve.png&quot; alt=&quot;loss curve for training&quot; style=&quot;width:100%;display: block; max-width: 600px; margin-right: auto; margin-left: auto&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;em&gt;Figure 1: LlamaT training loss curve&lt;/em&gt;&lt;/p&gt;
+
+&lt;p&gt;The 2T checkpoint is converted to Hugging Face format by a script that is provided in the repository and we then use &lt;a href=&quot;https://github.com/EleutherAI/lm-evaluation-harness&quot;&gt;lm-evaluation-harness&lt;/a&gt; to compute key academic benchmarks and compare that by running it on Llama2-7B. These results are captured in the below table.&lt;/p&gt;
+
+&lt;table class=&quot;table table-bordered&quot;&gt;
+  &lt;tr&gt;
+   &lt;td&gt;&lt;strong&gt;Evaluation metric&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;Llama2-7B (baseline)&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;LlamaT-7B&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;MMLU (zero shot)
+   &lt;/td&gt;
+   &lt;td&gt;0.41
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;0.43&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;MMLU (5-shot weighted avg)
+   &lt;/td&gt;
+   &lt;td&gt;0.47
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;0.50&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;Arc challenge
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;0.46&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;0.44
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;Arc easy
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;0.74&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;0.71
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;Boolq
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;0.78&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;0.76
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;Copa
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;0.87&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;0.83
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;Hellaswag
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;0.76&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;0.74
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;Openbookqa
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;0.44&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;0.42
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;Piqa
+   &lt;/td&gt;
+   &lt;td&gt;0.79
+   &lt;/td&gt;
+   &lt;td&gt;0.79
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;Sciq
+   &lt;/td&gt;
+   &lt;td&gt;0.91
+   &lt;/td&gt;
+   &lt;td&gt;0.91
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;Winogrande
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;0.69&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;0.67
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;Truthfulqa
+   &lt;/td&gt;
+   &lt;td&gt;0.39
+   &lt;/td&gt;
+   &lt;td&gt;0.39
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;GSM8k (8-shot)
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;0.13&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;0.11
+   &lt;/td&gt;
+  &lt;/tr&gt;
+&lt;/table&gt;
+
+&lt;p&gt;&lt;em&gt;Table 1: LM eval harness scores&lt;/em&gt;&lt;/p&gt;
+
+&lt;p&gt;We observe that the model performs competitively with Llama2 (bolder is better).&lt;/p&gt;
+
+&lt;h3 id=&quot;training-chronicles&quot;&gt;Training chronicles&lt;/h3&gt;
+
+&lt;p&gt;Training was stable with no crashes, though we did observe a few hiccups:&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;0-200B tokens&lt;/strong&gt;: We observed a slowdown in the iteration time (time taken to execute one training step). We stopped the job to ensure that the data loader was not causing any slowdowns and the checkpointing was performant and accurate. We did not find any issues. By this time, HSDP checkpointing code was available in PyTorch, and we took this opportunity to make the switch to PyTorch checkpointing code.&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;200B tokens-1.9T&lt;/strong&gt;: We did not do any manual intervention in the job in late December. When we came back early January, disk space had exceeded and checkpoints were failing to be written, although the training job continued. The last known checkpoint was 1.5T.&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;1.5T-1.7T&lt;/strong&gt;: We evaluated the 1.5T checkpoint with lm-evaluation-harness and discovered that model has been trained with an extra special token between two documents due to the Hugging Face tokenizer introducing a separator token and our dataloader also appending its own document separator. We modified the dataloader to eliminate the extra special token, and continued training with the modified dataloader from 1.7T token onwards.&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;1.7T-2T&lt;/strong&gt;: The loss initially spiked due to the change in the special tokens which was quickly recovered in a few billion tokens. The training finished without any other manual intervention!&lt;/p&gt;
+
+&lt;h3 id=&quot;key-takeaways-and-even-more-speed&quot;&gt;Key takeaways and even more speed&lt;/h3&gt;
+
+&lt;p&gt;We demonstrated how one can use FSDP to train a model to 2T tokens with an excellent performance of 3700 tokens/sec/GPU and that generates a good quality model. As part of this exercise, we open sourced all our code for training and the knobs to achieve this throughput. These knobs can be leveraged by not only large-scale runs, but also smaller scale tuning runs. You can find the code &lt;a href=&quot;https://github.com/foundation-model-stack/fms-fsdp&quot;&gt;here&lt;/a&gt;.&lt;/p&gt;
+
+&lt;p&gt;FSDP APIs implement the &lt;a href=&quot;https://pytorch.org/docs/stable/fsdp.html&quot;&gt;ZeRO&lt;/a&gt; algorithms in a PyTorch native manner and allow for tuning and training of large models. In the past, we have seen FSDP proof points (&lt;a href=&quot;https://github.com/tatsu-lab/stanford_alpaca&quot;&gt;Stanford Alpaca&lt;/a&gt;, &lt;a href=&quot;https://huggingface.co/blog/ram-efficient-pytorch-fsdp&quot;&gt;Hugging Face&lt;/a&gt;, &lt;a href=&quot;https://github.com/facebookresearch/llama-recipes&quot;&gt;Llama 2 recipes&lt;/a&gt;) on tuning a variety of LLMs (such as Meta Llama 2  7B to 70B Llama) using simple training loops and achieving good throughputs and training times.&lt;/p&gt;
+
+&lt;p&gt;Finally, we note that there are several levers for speeding up training:&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;Node optimizations that can speedup specific operations (e.g., attention computation using Flash Attention V2)&lt;/li&gt;
+  &lt;li&gt;Graph optimizations (e.g., fusing kernels, torch.compile)&lt;/li&gt;
+  &lt;li&gt;Overlap in compute-communications&lt;/li&gt;
+  &lt;li&gt;Activation recomputation&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;We have leveraged 1, 3, and a variation of 4 in this blog and are working closely with Team PyTorch at Meta to get torch.compile (2) as well as a more advanced version of 4 with per-operator selective activation recomputation. We plan to share a simple formatting code and example data to ingest into our data loader to enable others to use the code base for training of models.&lt;/p&gt;
+
+&lt;h2 id=&quot;acknowledgements&quot;&gt;Acknowledgements&lt;/h2&gt;
+
+&lt;p&gt;There are several teams that have been involved in reaching this proof point and we would like to thank the teams across Meta and IBM. Specifically, we extend our gratitude to the PyTorch distributed team, Facebook Research and Applied AI teams that built the &lt;a href=&quot;https://arxiv.org/abs/2304.11277&quot;&gt;FSDP APIs&lt;/a&gt; and made enhancements based on our feedback. We also wish to thank the data team at IBM Research that curated the data corpus used in this exercise and the infrastructure team at IBM Research (especially, Claudia Misale, Shweta Salaria, and Seetharami Seelam) that optimized NCCL and network configurations. By building and leveraging all of these components, we have successfully demonstrated the LlamaT proof point.&lt;/p&gt;
+
+&lt;p&gt;The selective activation checkpointing was conceptualized at IBM by Linsong Chu, Davis Wertheimer, Mudhakar Srivatsa, and Raghu Ganti and implemented by Less Wright at Meta.&lt;/p&gt;
+
+&lt;p&gt;Special thanks to &lt;a href=&quot;https://www.linkedin.com/in/stasbekman/?originalSubdomain=ca&quot;&gt;Stas Bekman&lt;/a&gt; and &lt;a href=&quot;https://minjiazhang.github.io/&quot;&gt;Minjia Zhang&lt;/a&gt;, who provided extensive feedback and helped improve the blog. Their insights have been invaluable in highlighting key aspects of optimizing the training and exploring further enhancements.&lt;/p&gt;
+
+&lt;h2 id=&quot;appendix&quot;&gt;Appendix&lt;/h2&gt;
+
+&lt;h3 id=&quot;communication-computation-overlap&quot;&gt;Communication computation overlap&lt;/h3&gt;
+
+&lt;p&gt;Another key aspect of training in a multi-node setting is the ability to overlap communication and computation. In FSDP, there are multiple opportunities for overlapping – during the FSDP unit gathering phase at forward pass as well as the backward pass computation. Overlapping the gather during forward pass while the computation of the previous unit and overlapping backward computation with the next unit gathering and gradient scattering help improve GPU utilization by nearly 2x. We illustrate this on the 400Gbps network interconnect with A100 80GB GPUs. In the case of HSDP, there is no inter-node traffic during the pre-fetch stage for forward pass and the overlap is only for the backward gradient computation phase. Of course, HSDP is feasible only when the model can be sharded within a single node, limiting the size of models to around 30B parameters.&lt;/p&gt;
+
+&lt;p&gt;The below figure shows three steps in FSDP with the communication between nodes at the bottom and the compute stream at the top of the second half of the image. For the 7B model with no activation recomputation, we observe the overlap to be complete. In practice, the overlap percentage possible is 90% since the first block during forward pass and the last block during backward pass are not able to overlap.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/maximizing-training/overlap_zoomed_out.png&quot; alt=&quot;three steps in FSDP with the communication between nodes at the bottom and the compute stream at the top of the second half&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;A zoomed in view of the above three-step process is shown below for a single step. We can clearly see the granularity of the computation and communication and how they overlap in an interleaved manner.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/maximizing-training/overlap_zoomed_in.png&quot; alt=&quot;zoomed in view of the above three-step process&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;</content>
+
+      
+      
+      
+      
+      
+
+      <author>
+          <name>Team PyTorch at IBM and Team PyTorch at Meta</name>
+        
+        
+      </author>
+
+      
+
+      
+
+      
+        <summary type="html">In this blog, we demonstrate the scalability of FSDP with a pre-training exemplar, a 7B model trained for 2T tokens, and share various techniques we used to achieve a rapid training speed of 3,700 tokens/sec/GPU, or 40B tokens/day on 128 A100 GPUs. This translates to a model FLOPS utilization (MFU) and hardware FLOPS utilization (HFU) of 57%. Additionally, we have observed near linear scaling of FSDP to 512 GPUs, implying that training a 7B model on 512 GPUs to 2T tokens using this method would take just under two weeks.</summary>
+      
+
+      
+      
+    </entry>
   
     <entry>
       <title type="html">PyTorch 2 paper and tutorial @ ASPLOS 2024</title>
@@ -1874,313 +2356,6 @@ with Image.open(io.BytesIO(base64_bytes_masks)) as f:
 
       
         <summary type="html">Multi-model endpoints (MMEs) are a powerful feature of Amazon SageMaker designed to simplify the deployment and operation of machine learning (ML) models. With MMEs, you can host multiple models on a single serving container and host all the models behind a single endpoint. The SageMaker platform automatically manages the loading and unloading of models and scales resources based on traffic patterns, reducing the operational burden of managing a large quantity of models. This feature is particularly beneficial for deep learning and generative AI models that require accelerated compute. The cost savings achieved through resource sharing and simplified model management makes SageMaker MMEs an excellent choice for you to host models at scale on AWS.</summary>
-      
-
-      
-      
-    </entry>
-  
-    <entry>
-      <title type="html">Accelerating Generative AI Part III: Diffusion, Fast</title>
-      <link href="https://pytorch.org/blog/accelerating-generative-ai-3/" rel="alternate" type="text/html" title="Accelerating Generative AI Part III: Diffusion, Fast" />
-      <published>2024-01-03T00:00:00-08:00</published>
-      <updated>2024-01-03T00:00:00-08:00</updated>
-      <id>https://pytorch.org/blog/accelerating-generative-ai-3</id>
-      <content type="html" xml:base="https://pytorch.org/blog/accelerating-generative-ai-3/">&lt;p&gt;This post is the third part of a multi-series blog focused on how to accelerate generative AI models with pure, native PyTorch. We are excited to share a breadth of newly released PyTorch performance features alongside practical examples to see how far we can push PyTorch native performance. In part one, we showed how to accelerate &lt;a href=&quot;https://pytorch.org/blog/accelerating-generative-ai/&quot;&gt;Segment Anything over 8x&lt;/a&gt; using only pure, native PyTorch. In part two, we showed how to accelerate &lt;a href=&quot;https://pytorch.org/blog/accelerating-generative-ai-2/&quot;&gt;Llama-7B by almost 10x&lt;/a&gt; using only native PyTorch optimizations. In this blog, we’ll focus on speeding up text-to-image diffusion models by upto 3x.&lt;/p&gt;
-
-&lt;p&gt;We will leverage an array of optimizations including:&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;Running with the bfloat16 precision&lt;/li&gt;
-  &lt;li&gt;scaled_dot_product_attention (SPDA)&lt;/li&gt;
-  &lt;li&gt;torch.compile&lt;/li&gt;
-  &lt;li&gt;Combining q,k,v projections for attention computation&lt;/li&gt;
-  &lt;li&gt;Dynamic int8 quantization&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;We will primarily focus on Stable Diffusion XL (SDXL), demonstrating a latency improvement of 3x. These techniques are PyTorch-native, which means you don’t have to rely on any third-party libraries or any C++ code to take advantage of them.&lt;/p&gt;
-
-&lt;p&gt;Enabling these optimizations with the 🤗Diffusers library takes just a few lines of code. If you’re already feeling excited and cannot wait to jump to the code, check out the accompanying repository here: &lt;a href=&quot;https://github.com/huggingface/diffusion-fast&quot;&gt;https://github.com/huggingface/diffusion-fast&lt;/a&gt;.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-generative-ai-3/fg1.png&quot; alt=&quot;SDXL Chart&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;em&gt;(The discussed techniques are not SDXL-specific and can be used to speed up other text-to-image diffusion systems, as shown later.)&lt;/em&gt;&lt;/p&gt;
-
-&lt;p&gt;Below, you can find some blog posts on similar topics:&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;&lt;a href=&quot;https://pytorch.org/blog/accelerated-diffusers-pt-20/&quot;&gt;Accelerated Diffusers with PyTorch 2.0&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://huggingface.co/blog/simple_sdxl_optimizations&quot;&gt;Exploring simple optimizations for SDXL&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://pytorch.org/blog/accelerated-generative-diffusion-models/&quot;&gt;Accelerated Generative Diffusion Models with PyTorch 2&lt;/a&gt;&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;h2 id=&quot;setup&quot;&gt;Setup&lt;/h2&gt;
-
-&lt;p&gt;We will demonstrate the optimizations and their respective speed-up gains using the 🤗&lt;a href=&quot;https://github.com/huggingface/diffusers&quot;&gt;Diffusers library&lt;/a&gt;. Apart from that, we will make use of the following PyTorch-native libraries and environments:&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;Torch nightly (to benefit from the fastest kernels for efficient attention; 2.3.0.dev20231218+cu121)&lt;/li&gt;
-  &lt;li&gt;🤗 PEFT (version: 0.7.1)&lt;/li&gt;
-  &lt;li&gt;torchao (commit SHA: 54bcd5a10d0abbe7b0c045052029257099f83fd9)&lt;/li&gt;
-  &lt;li&gt;CUDA 12.1&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;For an easier reproduction environment, you can also refer to this &lt;a href=&quot;https://github.com/huggingface/sdxl-fast/blob/main/Dockerfile&quot;&gt;Dockerfile&lt;/a&gt;. The benchmarking numbers presented in this post come from a 400W 80GB A100 GPU (with its clock rate set to its maximum capacity).&lt;/p&gt;
-
-&lt;p&gt;Since we use an A100 GPU (Ampere architecture) here, we can specify &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;torch.set_float32_matmul_precision(&quot;high&quot;)&lt;/code&gt; to benefit from the &lt;a href=&quot;https://blogs.nvidia.com/blog/tensorfloat-32-precision-format/&quot;&gt;TF32 precision format&lt;/a&gt;.&lt;/p&gt;
-
-&lt;h2 id=&quot;run-inference-using-a-reduced-precision&quot;&gt;Run inference using a reduced precision&lt;/h2&gt;
-
-&lt;p&gt;Running SDXL in Diffusers just takes a few lines of code:&lt;/p&gt;
-
-&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;from diffusers import StableDiffusionXLPipeline
-
-## Load the pipeline in full-precision and place its model components on CUDA.
-pipe = StableDiffusionXLPipeline.from_pretrained(&quot;stabilityai/stable-diffusion-xl-base-1.0&quot;).to(&quot;cuda&quot;)
-
-## Run the attention ops without efficiency.
-pipe.unet.set_default_attn_processor()
-pipe.vae.set_default_attn_processor()
-
-prompt = &quot;Astronaut in a jungle, cold color palette, muted colors, detailed, 8k&quot;
-image = pipe(prompt, num_inference_steps=30).images[0]
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;But this isn’t very practical as it takes &lt;strong&gt;7.36 seconds&lt;/strong&gt; to generate a single image with 30 steps. This is our baseline which we will try to optimize one step at a time.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-generative-ai-3/fg2.png&quot; alt=&quot;SDXL Chart&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;Here, we’re running the pipeline with the full precision. We can immediately cut down the inference time by using a reduced precision such as &lt;a href=&quot;https://cloud.google.com/tpu/docs/bfloat16&quot;&gt;bfloat16&lt;/a&gt;. Besides, modern GPUs come with dedicated cores for running accelerated computation benefiting from reduced precision. To run the computations of the pipeline in the bfloat16 precision, we just need to specify the data type while initializing the pipeline:&lt;/p&gt;
-
-&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;from diffusers import StableDiffusionXLPipeline
-
-pipe = StableDiffusionXLPipeline.from_pretrained(
-	&quot;stabilityai/stable-diffusion-xl-base-1.0&quot;, torch_dtype=torch.bfloat16
-).to(&quot;cuda&quot;)
-
-## Run the attention ops without efficiency.
-pipe.unet.set_default_attn_processor()
-pipe.vae.set_default_attn_processor()
-prompt = &quot;Astronaut in a jungle, cold color palette, muted colors, detailed, 8k&quot;
-image = pipe(prompt, num_inference_steps=30).images[0]
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-generative-ai-3/fg3.png&quot; alt=&quot;SDXL Chart&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;By using a reduced precision, we’re able to cut down the inference latency from &lt;strong&gt;7.36 seconds to 4.63 seconds&lt;/strong&gt;.&lt;/p&gt;
-
-&lt;p&gt;&lt;strong&gt;Some notes on the use of bfloat16&lt;/strong&gt;&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;Using a reduced numerical precision (such as float16, bfloat16) to run inference doesn’t affect the generation quality but significantly improves latency.&lt;/li&gt;
-  &lt;li&gt;The benefits of using the &lt;a href=&quot;https://cloud.google.com/tpu/docs/bfloat16&quot;&gt;bfloat16&lt;/a&gt; numerical precision as compared to float16 are hardware-dependent. Modern generations of GPUs tend to favor bfloat16.&lt;/li&gt;
-  &lt;li&gt;Furthermore, in our experiments, we bfloat16 to be much more resilient when used with quantization in comparison to float16.&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;&lt;em&gt;(We later ran the experiments in float16 and found out that the recent versions of torchao do not incur numerical problems from float16.)&lt;/em&gt;&lt;/p&gt;
-
-&lt;h2 id=&quot;use-sdpa-for-performing-attention-computations&quot;&gt;Use SDPA for performing attention computations&lt;/h2&gt;
-
-&lt;p&gt;By default, Diffusers uses &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;scaled_dot_product_attention&lt;/code&gt; (SDPA) for performing attention-related computations when using PyTorch 2. SDPA provides faster and more efficient kernels to run intensive attention-related operations. To run the pipeline SDPA, we simply don’t set any attention processor like so:&lt;/p&gt;
-
-&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;from diffusers import StableDiffusionXLPipeline
-
-pipe = StableDiffusionXLPipeline.from_pretrained(
-	&quot;stabilityai/stable-diffusion-xl-base-1.0&quot;, torch_dtype=torch.bfloat16
-).to(&quot;cuda&quot;)
-
-prompt = &quot;Astronaut in a jungle, cold color palette, muted colors, detailed, 8k&quot;
-image = pipe(prompt, num_inference_steps=30).images[0]
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;SDPA gives a nice boost from &lt;strong&gt;4.63 seconds to 3.31 seconds&lt;/strong&gt;.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-generative-ai-3/fg4.png&quot; alt=&quot;SDXL Chart&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
-
-&lt;h2 id=&quot;compiling-the-unet-and-vae&quot;&gt;Compiling the UNet and VAE&lt;/h2&gt;
-
-&lt;p&gt;We can ask PyTorch to perform some low-level optimizations (such as operator fusion and launching faster kernels with CUDA graphs) by using &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;torch.compile&lt;/code&gt;. For the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;StableDiffusionXLPipeline&lt;/code&gt;, we compile the denoiser (UNet) and the VAE:&lt;/p&gt;
-
-&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;from diffusers import StableDiffusionXLPipeline
-import torch
-
-pipe = StableDiffusionXLPipeline.from_pretrained(
-    &quot;stabilityai/stable-diffusion-xl-base-1.0&quot;, torch_dtype=torch.bfloat16
-).to(&quot;cuda&quot;)
-
-## Compile the UNet and VAE.
-pipe.unet = torch.compile(pipe.unet, mode=&quot;max-autotune&quot;, fullgraph=True)
-pipe.vae.decode = torch.compile(pipe.vae.decode, mode=&quot;max-autotune&quot;, fullgraph=True)
-
-prompt = &quot;Astronaut in a jungle, cold color palette, muted colors, detailed, 8k&quot;
-
-## First call to `pipe` will be slow, subsequent ones will be faster.
-image = pipe(prompt, num_inference_steps=30).images[0]
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;Using SDPA attention and compiling both the UNet and VAE reduces the latency from &lt;strong&gt;3.31 seconds to 2.54 seconds&lt;/strong&gt;.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-generative-ai-3/fg5.png&quot; alt=&quot;SDXL Chart&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;strong&gt;Notes on &lt;code&gt;torch.compile&lt;/code&gt;&lt;/strong&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;torch.compile&lt;/code&gt; offers different backends and modes. As we’re aiming for maximum inference speed, we opt for the inductor backend using the “max-autotune”. “max-autotune” uses CUDA graphs and optimizes the compilation graph specifically for latency. Using CUDA graphs greatly reduces the overhead of launching GPU operations. It saves time by using a mechanism to launch multiple GPU operations through a single CPU operation.&lt;/p&gt;
-
-&lt;p&gt;Specifying &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;fullgraph&lt;/code&gt; to be &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;True&lt;/code&gt; ensures that there are no graph breaks in the underlying model, ensuring the fullest potential of &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;torch.compile&lt;/code&gt;. In our case, the following compiler flags were also important to be explicitly set:&lt;/p&gt;
-
-&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;torch._inductor.config.conv_1x1_as_mm = True
-torch._inductor.config.coordinate_descent_tuning = True
-torch._inductor.config.epilogue_fusion = False
-torch._inductor.config.coordinate_descent_check_all_directions = True
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;For the full list of compiler flags, refer to &lt;a href=&quot;https://github.com/pytorch/pytorch/blob/main/torch/_inductor/config.py&quot;&gt;this file.&lt;/a&gt;&lt;/p&gt;
-
-&lt;p&gt;We also change the memory layout of the UNet and the VAE to “channels_last” when compiling them to ensure maximum speed:&lt;/p&gt;
-
-&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;pipe.unet.to(memory_format=torch.channels_last)
-pipe.vae.to(memory_format=torch.channels_last)
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;In the next section, we’ll show how to improve the latency even further.&lt;/p&gt;
-
-&lt;h2 id=&quot;additional-optimizations&quot;&gt;Additional optimizations&lt;/h2&gt;
-
-&lt;h3 id=&quot;no-graph-breaks-during-torchcompile&quot;&gt;No graph breaks during &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;torch.compile&lt;/code&gt;&lt;/h3&gt;
-
-&lt;p&gt;Ensuring that the underlying model/method can be fully compiled is crucial for performance (&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;torch.compile&lt;/code&gt; with &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;fullgraph=True&lt;/code&gt;). This means having no graph breaks. We did this for the UNet and VAE by changing how we access the returning variables. Consider the following example:&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-generative-ai-3/fg5b.jpg&quot; alt=&quot;code example&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
-
-&lt;h3 id=&quot;getting-rid-of-gpu-syncs-after-compilation&quot;&gt;Getting rid of GPU syncs after compilation&lt;/h3&gt;
-
-&lt;p&gt;During the iterative reverse diffusion process, we &lt;a href=&quot;https://github.com/huggingface/diffusers/blob/1d686bac8146037e97f3fd8c56e4063230f71751/src/diffusers/pipelines/stable_diffusion_xl/pipeline_stable_diffusion_xl.py#L1228&quot;&gt;call&lt;/a&gt; &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;step()&lt;/code&gt; on the scheduler each time after the denoiser predicts the less noisy latent embeddings. Inside &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;step()&lt;/code&gt;, the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;sigmas&lt;/code&gt; variable is &lt;a href=&quot;https://github.com/huggingface/diffusers/blob/1d686bac8146037e97f3fd8c56e4063230f71751/src/diffusers/schedulers/scheduling_euler_discrete.py#L476&quot;&gt;indexed&lt;/a&gt;. If the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;sigmas&lt;/code&gt; array is placed on the GPU, indexing causes a communication sync between the CPU and GPU. This causes a latency, and it becomes more evident when the denoiser has already been compiled.&lt;/p&gt;
-
-&lt;p&gt;But if the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;sigmas &lt;/code&gt;array always stays on the CPU (refer to &lt;a href=&quot;https://github.com/huggingface/diffusers/blob/35a969d297cba69110d175ee79c59312b9f49e1e/src/diffusers/schedulers/scheduling_euler_discrete.py#L240&quot;&gt;this line&lt;/a&gt;), this sync doesn’t take place, hence improved latency. In general, any CPU &amp;lt;-&amp;gt; GPU communication sync should be none or be kept to a bare minimum as it can impact inference latency.&lt;/p&gt;
-
-&lt;h3 id=&quot;using-combined-projections-for-attention-ops&quot;&gt;Using combined projections for attention ops&lt;/h3&gt;
-
-&lt;p&gt;Both the UNet and the VAE used in SDXL make use of Transformer-like blocks. A Transformer block consists of attention blocks and feed-forward blocks.&lt;/p&gt;
-
-&lt;p&gt;In an attention block, the input is projected into three sub-spaces using three different projection matrices – Q, K, and V. In the naive implementation, these projections are performed separately on the input. But we can horizontally combine the projection matrices into a single matrix and perform the projection in one shot. This increases the size of the matmuls of the input projections and improves the impact of quantization (to be discussed next).&lt;/p&gt;
-
-&lt;p&gt;Enabling this kind of computation in Diffusers just takes a single line of code:&lt;/p&gt;
-
-&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;pipe.fuse_qkv_projections()
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;This will make the attention operations for both the UNet and the VAE take advantage of the combined projections. For the cross-attention layers, we only combine the key and value matrices. To learn more, you can refer to the official documentation &lt;a href=&quot;https://huggingface.co/docs/diffusers/main/en/api/pipelines/stable_diffusion/stable_diffusion_xl#diffusers.StableDiffusionXLPipeline.fuse_qkv_projections&quot;&gt;here&lt;/a&gt;. It’s worth noting that we &lt;a href=&quot;https://github.com/huggingface/diffusers/blob/35a969d297cba69110d175ee79c59312b9f49e1e/src/diffusers/models/attention_processor.py#L1356&quot;&gt;leverage&lt;/a&gt; PyTorch’s &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;scaled_dot_product_attention&lt;/code&gt; here internally.&lt;/p&gt;
-
-&lt;p&gt;These additional techniques improved the inference latency from &lt;strong&gt;2.54 seconds to 2.52 seconds&lt;/strong&gt;.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-generative-ai-3/fg6.png&quot; alt=&quot;SDXL Chart&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
-
-&lt;h2 id=&quot;dynamic-int8-quantization&quot;&gt;Dynamic int8 quantization&lt;/h2&gt;
-
-&lt;p&gt;We selectively apply &lt;a href=&quot;https://pytorch.org/tutorials/recipes/recipes/dynamic_quantization.html&quot;&gt;dynamic int8 quantization&lt;/a&gt; to both the UNet and the VAE. This is because quantization adds additional conversion overhead to the model that is hopefully made up for by faster matmuls (dynamic quantization). If the matmuls are too small, these techniques may degrade performance.&lt;/p&gt;
-
-&lt;p&gt;Through experimentation, we found that certain linear layers in the UNet and the VAE don’t benefit from dynamic int8 quantization. You can check out the full code for filtering those layers &lt;a href=&quot;https://github.com/huggingface/diffusion-fast/blob/0f169640b1db106fe6a479f78c1ed3bfaeba3386/utils/pipeline_utils.py#L16&quot;&gt;here&lt;/a&gt; (referred to as &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;dynamic_quant_filter_fn&lt;/code&gt; below).&lt;/p&gt;
-
-&lt;p&gt;We leverage the ultra-lightweight pure PyTorch library &lt;a href=&quot;https://github.com/pytorch-labs/ao&quot;&gt;torchao&lt;/a&gt; to use its user-friendly APIs for quantization:&lt;/p&gt;
-
-&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;from torchao.quantization import apply_dynamic_quant
-
-apply_dynamic_quant(pipe.unet, dynamic_quant_filter_fn)
-apply_dynamic_quant(pipe.vae, dynamic_quant_filter_fn)
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;Since this quantization support is limited to linear layers only, we also turn suitable pointwise convolution layers into linear layers to maximize the benefit. We also specify the following compiler flags when using this option:&lt;/p&gt;
-
-&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;torch._inductor.config.force_fuse_int_mm_with_mul = True
-torch._inductor.config.use_mixed_mm = True
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;To prevent any numerical issues stemming from quantization, we run everything in the bfloat16 format.&lt;/p&gt;
-
-&lt;p&gt;Applying quantization this way improved the latency from &lt;strong&gt;2.52 seconds to 2.43 seconds&lt;/strong&gt;.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-generative-ai-3/fg7.png&quot; alt=&quot;SDXL Chart&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
-
-&lt;h2 id=&quot;resources&quot;&gt;Resources&lt;/h2&gt;
-
-&lt;p&gt;We welcome you to check out the following codebases to reproduce these numbers and extend the techniques to other text-to-image diffusion systems as well:&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;&lt;a href=&quot;https://github.com/huggingface/diffusion-fast&quot;&gt;diffusion-fast&lt;/a&gt; (repository providing all the code to reproduce the numbers and plots above)&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://github.com/pytorch-labs/ao&quot;&gt;torchao library&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://github.com/huggingface/diffusers&quot;&gt;Diffusers library&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://github.com/huggingface/peft&quot;&gt;PEFT library&lt;/a&gt;&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;&lt;strong&gt;Other links&lt;/strong&gt;&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;&lt;a href=&quot;https://huggingface.co/papers/2307.01952&quot;&gt;SDXL: Improving Latent Diffusion Models for High-Resolution Image Synthesis&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://huggingface.co/docs/diffusers/main/en/tutorials/fast_diffusion&quot;&gt;Fast diffusion documentation&lt;/a&gt;&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;h2 id=&quot;improvements-in-other-pipelines&quot;&gt;Improvements in other pipelines&lt;/h2&gt;
-
-&lt;p&gt;We applied these techniques to other pipelines to test the generality of our approach. Below are our findings:&lt;/p&gt;
-
-&lt;h3 id=&quot;ssd-1b&quot;&gt;&lt;a href=&quot;https://huggingface.co/segmind/SSD-1B&quot;&gt;SSD-1B&lt;/a&gt;&lt;/h3&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-generative-ai-3/fg8.png&quot; alt=&quot;SSD-1B Chart&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
-
-&lt;h3 id=&quot;stable-diffusion-v1-5&quot;&gt;&lt;a href=&quot;https://huggingface.co/runwayml/stable-diffusion-v1-5&quot;&gt;Stable Diffusion v1-5&lt;/a&gt;&lt;/h3&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-generative-ai-3/fg9.png&quot; alt=&quot;Stable Diffusion v1-5 chart&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
-
-&lt;h3 id=&quot;pixart-alphapixart-xl-2-1024-ms&quot;&gt;&lt;a href=&quot;https://huggingface.co/PixArt-alpha/PixArt-XL-2-1024-MS&quot;&gt;PixArt-alpha/PixArt-XL-2-1024-MS&lt;/a&gt;&lt;/h3&gt;
-
-&lt;p&gt;It’s worth noting that PixArt-Alpha uses a Transformer-based architecture as its denoiser for the reverse diffusion process instead of a UNet.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-generative-ai-3/fg10.png&quot; alt=&quot;PixArt-alpha/PixArt-XL-2-1024-MS chart&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;Note that for Stable Diffusion v1-5 and PixArt-Alpha, we didn’t explore the best shape combination criteria for applying dynamic int8 quantization. It might be possible to get better numbers with a better combination.&lt;/p&gt;
-
-&lt;p&gt;Collectively, the methods we presented offer substantial speedup over the baseline without degradation in the generation quality. Furthermore, we believe that these methods should complement other optimization methods popular in the community (such as &lt;a href=&quot;https://github.com/horseee/DeepCache&quot;&gt;DeepCache&lt;/a&gt;, &lt;a href=&quot;https://github.com/chengzeyi/stable-fast&quot;&gt;Stable Fast&lt;/a&gt;, etc.).&lt;/p&gt;
-
-&lt;h2 id=&quot;conclusion-and-next-steps&quot;&gt;Conclusion and next steps&lt;/h2&gt;
-
-&lt;p&gt;In this post, we presented a basket of simple yet effective techniques that can help improve the inference latency of text-to-image Diffusion models in pure PyTorch. In summary:&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;Using a reduced precision to perform our computations&lt;/li&gt;
-  &lt;li&gt;Scaled-dot product attention for running the attention blocks efficiently&lt;/li&gt;
-  &lt;li&gt;torch.compile with “max-autotune” to improve for latency&lt;/li&gt;
-  &lt;li&gt;Combining the different projections together for computing attention&lt;/li&gt;
-  &lt;li&gt;Dynamic int8 quantization&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;We believe there’s a lot to be explored in terms of how we apply quantization to a text-to-image diffusion system. We didn’t exhaustively explore which layers in the UNet and the VAE tend to benefit from dynamic quantization. There might be opportunities to further speed things up with a better combination of the layers being targeted for quantization.&lt;/p&gt;
-
-&lt;p&gt;We kept the text encoders of SDXL untouched other than just running them in bfloat16. Optimizing them might also lead to improvements in latency.&lt;/p&gt;
-
-&lt;h2 id=&quot;acknowledgements&quot;&gt;Acknowledgements&lt;/h2&gt;
-
-&lt;p&gt;Thanks to &lt;a href=&quot;https://madebyoll.in/&quot;&gt;Ollin Boer Bohan&lt;/a&gt; whose &lt;a href=&quot;https://huggingface.co/madebyollin/sdxl-vae-fp16-fix&quot;&gt;VAE&lt;/a&gt; was used throughout the benchmarking process as it is numerically more stable under reduced numerical precisions.&lt;/p&gt;
-
-&lt;p&gt;Thanks to Hugo Larcher from Hugging Face for helping with infrastructure.&lt;/p&gt;</content>
-
-      
-      
-      
-      
-      
-
-      <author>
-          <name>Sayak Paul and Patrick von Platen (Hugging Face 🤗)</name>
-        
-        
-      </author>
-
-      
-
-      
-
-      
-        <summary type="html">This post is the third part of a multi-series blog focused on how to accelerate generative AI models with pure, native PyTorch. We are excited to share a breadth of newly released PyTorch performance features alongside practical examples to see how far we can push PyTorch native performance. In part one, we showed how to accelerate Segment Anything over 8x using only pure, native PyTorch. In part two, we showed how to accelerate Llama-7B by almost 10x using only native PyTorch optimizations. In this blog, we’ll focus on speeding up text-to-image diffusion models by upto 3x.</summary>
       
 
       
