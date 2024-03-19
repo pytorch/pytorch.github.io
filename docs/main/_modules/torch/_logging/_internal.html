@@ -242,7 +242,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href='https://pytorch.org/docs/versions.html'>main (2.3.0a0+gite61c8ef ) &#x25BC</a>
+      <a href='https://pytorch.org/docs/versions.html'>main (2.4.0a0+gite6cf3e9 ) &#x25BC</a>
     </div>
     
 
@@ -481,22 +481,39 @@
               
   <h1>Source code for torch._logging._internal</h1><div class="highlight"><pre>
 <span></span><span class="kn">import</span> <span class="nn">functools</span>
+<span class="kn">import</span> <span class="nn">hashlib</span>
 <span class="kn">import</span> <span class="nn">itertools</span>
+<span class="kn">import</span> <span class="nn">json</span>
 <span class="kn">import</span> <span class="nn">logging</span>
 <span class="kn">import</span> <span class="nn">os</span>
 <span class="kn">import</span> <span class="nn">os.path</span>
 <span class="kn">import</span> <span class="nn">re</span>
+<span class="kn">import</span> <span class="nn">tempfile</span>
 <span class="kn">from</span> <span class="nn">dataclasses</span> <span class="kn">import</span> <span class="n">dataclass</span><span class="p">,</span> <span class="n">field</span>
 <span class="kn">from</span> <span class="nn">importlib</span> <span class="kn">import</span> <span class="nb">__import__</span>
-<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Set</span><span class="p">,</span> <span class="n">Union</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Set</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Union</span>
 <span class="kn">from</span> <span class="nn">weakref</span> <span class="kn">import</span> <span class="n">WeakSet</span>
 
 <span class="n">log</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+
+<span class="c1"># This is a synthetic logger which doesn&#39;t correspond to an actual logger,</span>
+<span class="c1"># but handles all of our &quot;tracing&quot; logging, which is structured and doesn&#39;t go</span>
+<span class="c1"># to stderr but always goes to a dedicated log file.  We don&#39;t put these</span>
+<span class="c1"># loggers in the classic module hierarchy, because we don&#39;t want a suppression</span>
+<span class="c1"># of logs to also cause a trace to get suppressed (traces typically are not</span>
+<span class="c1"># collected, unless we are in prod, in which case they always are collected.)</span>
+<span class="c1">#</span>
+<span class="c1"># TODO: Maybe we should allow for some sub-hierarchy so you can control which</span>
+<span class="c1"># traces you want to collect, for performance reasons.</span>
+<span class="c1">#</span>
+<span class="c1"># See https://docs.google.com/document/d/1CX_hJ0PNy9f3R1y8TJrfkSeLkvGjjjLU84BSXgS2AZ8/edit</span>
+<span class="n">trace_log</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="s2">&quot;torch.__trace&quot;</span><span class="p">)</span>
 
 <span class="n">DEFAULT_LOG_LEVEL</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">WARNING</span>
 <span class="n">LOG_ENV_VAR</span> <span class="o">=</span> <span class="s2">&quot;TORCH_LOGS&quot;</span>
 <span class="n">LOG_OUT_ENV_VAR</span> <span class="o">=</span> <span class="s2">&quot;TORCH_LOGS_OUT&quot;</span>
 <span class="n">LOG_FORMAT_ENV_VAR</span> <span class="o">=</span> <span class="s2">&quot;TORCH_LOGS_FORMAT&quot;</span>
+<span class="n">TRACE_ENV_VAR</span> <span class="o">=</span> <span class="s2">&quot;TORCH_TRACE&quot;</span>
 
 
 <span class="nd">@dataclass</span>
@@ -1179,6 +1196,10 @@
 
 <span class="c1"># apply custom formats to artifacts when necessary</span>
 <span class="k">class</span> <span class="nc">TorchLogsFormatter</span><span class="p">(</span><span class="n">logging</span><span class="o">.</span><span class="n">Formatter</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">trace</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_is_trace</span> <span class="o">=</span> <span class="n">trace</span>
+
     <span class="k">def</span> <span class="nf">format</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">record</span><span class="p">):</span>
         <span class="n">artifact_name</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="n">record</span><span class="o">.</span><span class="n">name</span><span class="p">),</span> <span class="s2">&quot;artifact_name&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">artifact_name</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
@@ -1207,13 +1228,16 @@
                 <span class="n">s</span> <span class="o">=</span> <span class="n">s</span> <span class="o">+</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span>
             <span class="n">s</span> <span class="o">=</span> <span class="n">s</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">formatStack</span><span class="p">(</span><span class="n">record</span><span class="o">.</span><span class="n">stack_info</span><span class="p">)</span>
 
-        <span class="n">lines</span> <span class="o">=</span> <span class="n">s</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">)</span>
         <span class="n">record</span><span class="o">.</span><span class="n">rankprefix</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
-        <span class="k">if</span> <span class="n">dist</span><span class="o">.</span><span class="n">is_available</span><span class="p">()</span> <span class="ow">and</span> <span class="n">dist</span><span class="o">.</span><span class="n">is_initialized</span><span class="p">():</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_trace</span> <span class="ow">and</span> <span class="n">dist</span><span class="o">.</span><span class="n">is_available</span><span class="p">()</span> <span class="ow">and</span> <span class="n">dist</span><span class="o">.</span><span class="n">is_initialized</span><span class="p">():</span>
             <span class="n">record</span><span class="o">.</span><span class="n">rankprefix</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;[rank</span><span class="si">{</span><span class="n">dist</span><span class="o">.</span><span class="n">get_rank</span><span class="p">()</span><span class="si">}</span><span class="s2">]:&quot;</span>
 
         <span class="n">record</span><span class="o">.</span><span class="n">traceid</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
-        <span class="k">if</span> <span class="p">(</span><span class="n">trace_id</span> <span class="o">:=</span> <span class="n">torch</span><span class="o">.</span><span class="n">_guards</span><span class="o">.</span><span class="n">CompileContext</span><span class="o">.</span><span class="n">current_trace_id</span><span class="p">())</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_trace</span>
+            <span class="ow">and</span> <span class="p">(</span><span class="n">trace_id</span> <span class="o">:=</span> <span class="n">torch</span><span class="o">.</span><span class="n">_guards</span><span class="o">.</span><span class="n">CompileContext</span><span class="o">.</span><span class="n">current_trace_id</span><span class="p">())</span>
+            <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+        <span class="p">):</span>
             <span class="n">record</span><span class="o">.</span><span class="n">traceid</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot; [</span><span class="si">{</span><span class="n">trace_id</span><span class="si">}</span><span class="s2">]&quot;</span>
 
         <span class="n">glog_level_to_abbr</span> <span class="o">=</span> <span class="p">{</span>
@@ -1226,12 +1250,24 @@
 
         <span class="n">shortlevel</span> <span class="o">=</span> <span class="n">glog_level_to_abbr</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">record</span><span class="o">.</span><span class="n">levelname</span><span class="p">,</span> <span class="n">record</span><span class="o">.</span><span class="n">levelname</span><span class="p">)</span>
 
+        <span class="n">record</span><span class="o">.</span><span class="n">artifactprefix</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">artifact_name</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">record</span><span class="o">.</span><span class="n">artifactprefix</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot; [__</span><span class="si">{</span><span class="n">artifact_name</span><span class="si">}</span><span class="s2">]&quot;</span>
+
         <span class="n">prefix</span> <span class="o">=</span> <span class="p">(</span>
             <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">record</span><span class="o">.</span><span class="n">rankprefix</span><span class="si">}{</span><span class="n">shortlevel</span><span class="si">}{</span><span class="n">record</span><span class="o">.</span><span class="n">asctime</span><span class="si">}</span><span class="s2">.</span><span class="si">{</span><span class="nb">int</span><span class="p">(</span><span class="n">record</span><span class="o">.</span><span class="n">msecs</span><span class="o">*</span><span class="mi">1000</span><span class="p">)</span><span class="si">:</span><span class="s2">06d</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">record</span><span class="o">.</span><span class="n">thread</span><span class="si">}</span><span class="s2"> &quot;</span>
             <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">relpath</span><span class="p">(</span><span class="n">record</span><span class="o">.</span><span class="n">pathname</span><span class="p">,</span><span class="w"> </span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">dirname</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">dirname</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="vm">__file__</span><span class="p">)))</span><span class="si">}</span><span class="s2">:&quot;</span>
-            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">record</span><span class="o">.</span><span class="n">lineno</span><span class="si">}</span><span class="s2">]</span><span class="si">{</span><span class="n">record</span><span class="o">.</span><span class="n">traceid</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">record</span><span class="o">.</span><span class="n">lineno</span><span class="si">}</span><span class="s2">]</span><span class="si">{</span><span class="n">record</span><span class="o">.</span><span class="n">traceid</span><span class="si">}{</span><span class="n">record</span><span class="o">.</span><span class="n">artifactprefix</span><span class="si">}</span><span class="s2">&quot;</span>
         <span class="p">)</span>
-        <span class="k">return</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">prefix</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">l</span><span class="si">}</span><span class="s2">&quot;</span> <span class="k">for</span> <span class="n">l</span> <span class="ow">in</span> <span class="n">lines</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_trace</span><span class="p">:</span>
+            <span class="k">assert</span> <span class="n">s</span> <span class="o">==</span> <span class="s2">&quot;&quot;</span>
+            <span class="n">r</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">prefix</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">record</span><span class="o">.</span><span class="n">metadata</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="k">if</span> <span class="n">record</span><span class="o">.</span><span class="n">payload</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">r</span> <span class="o">+=</span> <span class="s2">&quot;&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="se">\n\t</span><span class="si">{</span><span class="n">l</span><span class="si">}</span><span class="s2">&quot;</span> <span class="k">for</span> <span class="n">l</span> <span class="ow">in</span> <span class="n">record</span><span class="o">.</span><span class="n">payload</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">))</span>
+            <span class="k">return</span> <span class="n">r</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">lines</span> <span class="o">=</span> <span class="n">s</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">prefix</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">l</span><span class="si">}</span><span class="s2">&quot;</span> <span class="k">for</span> <span class="n">l</span> <span class="ow">in</span> <span class="n">lines</span><span class="p">)</span>
 
 
 <span class="k">def</span> <span class="nf">_default_formatter</span><span class="p">():</span>
@@ -1239,6 +1275,8 @@
     <span class="k">if</span> <span class="n">fmt</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">TorchLogsFormatter</span><span class="p">()</span>
     <span class="k">else</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">fmt</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;short&quot;</span><span class="p">,</span> <span class="s2">&quot;basic&quot;</span><span class="p">):</span>
+            <span class="n">fmt</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">BASIC_FORMAT</span>
         <span class="k">return</span> <span class="n">logging</span><span class="o">.</span><span class="n">Formatter</span><span class="p">(</span><span class="n">fmt</span><span class="p">)</span>
 
 
@@ -1288,6 +1326,9 @@
         <span class="n">log</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="n">artifact_log_qname</span><span class="p">)</span>
         <span class="n">log</span><span class="o">.</span><span class="n">setLevel</span><span class="p">(</span><span class="n">logging</span><span class="o">.</span><span class="n">NOTSET</span><span class="p">)</span>
         <span class="n">log</span><span class="o">.</span><span class="n">propagate</span> <span class="o">=</span> <span class="kc">True</span>
+
+    <span class="n">trace_log</span><span class="o">.</span><span class="n">propagate</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="n">_clear_handlers</span><span class="p">(</span><span class="n">trace_log</span><span class="p">)</span>
 
 
 <span class="k">def</span> <span class="nf">_get_log_state</span><span class="p">():</span>
@@ -1343,6 +1384,105 @@
         <span class="n">log</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="n">artifact_log_qname</span><span class="p">)</span>
         <span class="n">configure_artifact_log</span><span class="p">(</span><span class="n">log</span><span class="p">)</span>
 
+    <span class="c1"># Setup handler for the special trace_log, with different default</span>
+    <span class="c1"># configuration</span>
+    <span class="n">trace_dir_name</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">TRACE_ENV_VAR</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="c1"># This handler may remove itself if trace_dir_name is None and we are not</span>
+    <span class="c1"># actually in an FB environment.  This allows us to defer actually</span>
+    <span class="c1"># initializing it until we actually need to log anything.  This is</span>
+    <span class="c1"># important because JK initializes a C++ singleton, which will pork our</span>
+    <span class="c1"># process if we subsequently fork.</span>
+    <span class="n">handler</span> <span class="o">=</span> <span class="n">LazyTraceHandler</span><span class="p">(</span><span class="n">trace_dir_name</span><span class="p">)</span>
+    <span class="c1"># This log is ALWAYS at debug level.  We will additionally test if there</span>
+    <span class="c1"># are any handlers before deciding to actually call logging on this.  Do</span>
+    <span class="c1"># not manually call</span>
+    <span class="n">trace_log</span><span class="o">.</span><span class="n">setLevel</span><span class="p">(</span><span class="n">logging</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">)</span>
+    <span class="n">trace_log_handler</span> <span class="o">=</span> <span class="n">_track_handler</span><span class="p">(</span><span class="n">handler</span><span class="p">)</span>
+    <span class="n">trace_log_handler</span><span class="o">.</span><span class="n">setFormatter</span><span class="p">(</span><span class="n">TorchLogsFormatter</span><span class="p">(</span><span class="n">trace</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
+    <span class="n">trace_log</span><span class="o">.</span><span class="n">addHandler</span><span class="p">(</span><span class="n">trace_log_handler</span><span class="p">)</span>
+
+
+<span class="k">class</span> <span class="nc">LazyTraceHandler</span><span class="p">(</span><span class="n">logging</span><span class="o">.</span><span class="n">StreamHandler</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Like FileHandler, but the file is allocated lazily only upon the first log message&quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">root_dir</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]):</span>
+        <span class="c1"># This is implemented in the same way that delay is implemented on</span>
+        <span class="c1"># FileHandler</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">root_dir</span> <span class="o">=</span> <span class="n">root_dir</span>
+        <span class="n">logging</span><span class="o">.</span><span class="n">Handler</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stream</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_builtin_open</span> <span class="o">=</span> <span class="nb">open</span>
+
+    <span class="c1"># cloned from FileHandler in cpython</span>
+    <span class="k">def</span> <span class="nf">close</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">acquire</span><span class="p">()</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">stream</span><span class="p">:</span>
+                    <span class="k">try</span><span class="p">:</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">flush</span><span class="p">()</span>
+                    <span class="k">finally</span><span class="p">:</span>
+                        <span class="n">stream</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">stream</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">stream</span> <span class="o">=</span> <span class="kc">None</span>
+                        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">stream</span><span class="p">,</span> <span class="s2">&quot;close&quot;</span><span class="p">):</span>
+                            <span class="n">stream</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+            <span class="k">finally</span><span class="p">:</span>
+                <span class="c1"># Issue #19523: call unconditionally to</span>
+                <span class="c1"># prevent a handler leak when delay is set</span>
+                <span class="c1"># Also see Issue #42378: we also rely on</span>
+                <span class="c1"># self._closed being set to True there</span>
+                <span class="n">logging</span><span class="o">.</span><span class="n">StreamHandler</span><span class="o">.</span><span class="n">close</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
+        <span class="k">finally</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">release</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">emit</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">record</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">stream</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">ok</span> <span class="o">=</span> <span class="kc">False</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">root_dir</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">TRACE_LOG_DIR</span> <span class="o">=</span> <span class="s2">&quot;/logs&quot;</span>
+                <span class="n">open_func</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_builtin_open</span>
+
+                <span class="kn">import</span> <span class="nn">torch.version</span> <span class="k">as</span> <span class="nn">torch_version</span>
+
+                <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">torch_version</span><span class="p">,</span> <span class="s2">&quot;git_version&quot;</span><span class="p">):</span>
+                    <span class="n">log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;LazyTraceHandler: disabled because not fbcode&quot;</span><span class="p">)</span>
+                <span class="k">elif</span> <span class="ow">not</span> <span class="n">torch</span><span class="o">.</span><span class="n">_utils_internal</span><span class="o">.</span><span class="n">justknobs_check</span><span class="p">(</span><span class="s2">&quot;pytorch/trace:enable&quot;</span><span class="p">):</span>
+                    <span class="n">log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                        <span class="s2">&quot;LazyTraceHandler: disabled because justknobs_check(&#39;pytorch/trace:enable&#39;) returned False&quot;</span>
+                    <span class="p">)</span>
+                <span class="k">elif</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">TRACE_LOG_DIR</span><span class="p">):</span>
+                    <span class="n">log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                        <span class="s2">&quot;LazyTraceHandler: disabled because </span><span class="si">%s</span><span class="s2"> does not exist&quot;</span><span class="p">,</span>
+                        <span class="n">TRACE_LOG_DIR</span><span class="p">,</span>
+                    <span class="p">)</span>
+                <span class="k">elif</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">access</span><span class="p">(</span><span class="n">TRACE_LOG_DIR</span><span class="p">,</span> <span class="n">os</span><span class="o">.</span><span class="n">W_OK</span><span class="p">):</span>
+                    <span class="n">log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                        <span class="s2">&quot;LazyTraceHandler: disabled because </span><span class="si">%s</span><span class="s2"> is not writeable&quot;</span><span class="p">,</span>
+                        <span class="n">TRACE_LOG_DIR</span><span class="p">,</span>
+                    <span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">root_dir</span> <span class="o">=</span> <span class="n">TRACE_LOG_DIR</span>
+
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">root_dir</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">os</span><span class="o">.</span><span class="n">makedirs</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">root_dir</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+                <span class="n">ranksuffix</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+                <span class="k">if</span> <span class="n">dist</span><span class="o">.</span><span class="n">is_available</span><span class="p">()</span> <span class="ow">and</span> <span class="n">dist</span><span class="o">.</span><span class="n">is_initialized</span><span class="p">():</span>
+                    <span class="n">ranksuffix</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;rank_</span><span class="si">{</span><span class="n">dist</span><span class="o">.</span><span class="n">get_rank</span><span class="p">()</span><span class="si">}</span><span class="s2">_&quot;</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">stream</span> <span class="o">=</span> <span class="n">tempfile</span><span class="o">.</span><span class="n">NamedTemporaryFile</span><span class="p">(</span>
+                    <span class="n">mode</span><span class="o">=</span><span class="s2">&quot;w+&quot;</span><span class="p">,</span>
+                    <span class="n">suffix</span><span class="o">=</span><span class="s2">&quot;.log&quot;</span><span class="p">,</span>
+                    <span class="n">prefix</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;dedicated_log_torch_trace_</span><span class="si">{</span><span class="n">ranksuffix</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+                    <span class="nb">dir</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">root_dir</span><span class="p">,</span>
+                    <span class="n">delete</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="n">log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;LazyTraceHandler: logging to </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">stream</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="c1"># We go poof, remove and no-op</span>
+                <span class="n">trace_log</span><span class="o">.</span><span class="n">removeHandler</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
+                <span class="k">return</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">stream</span><span class="p">:</span>
+            <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="n">record</span><span class="p">)</span>
+
 
 <span class="nd">@functools</span><span class="o">.</span><span class="n">lru_cache</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
 <span class="k">def</span> <span class="nf">warning_once</span><span class="p">(</span><span class="n">logger_obj</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
@@ -1365,7 +1505,65 @@
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">func</span><span class="p">(</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">kwargs</span><span class="p">)</span>
 
 
+<span class="k">def</span> <span class="nf">trace_structured</span><span class="p">(</span>
+    <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="c1"># NB: metadata expected to be dict so adding more info is forward compatible</span>
+    <span class="c1"># Tuple[str, int] is a special case for string interning</span>
+    <span class="n">metadata_fn</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">Union</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]]]</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">payload_fn</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">object</span><span class="p">]]]</span> <span class="o">=</span> <span class="k">lambda</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">suppress_context</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+<span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    metadata is an arbitrary JSON compatible struct, but it&#39;s expected to not be</span>
+<span class="sd">    too long (e.g., less than 1MB)</span>
+
+<span class="sd">    payload is an arbitrary string, which can be arbitrarily long (but expected to have</span>
+<span class="sd">    newlines so no lines are too long)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">assert</span> <span class="s2">&quot;name&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;rank&quot;</span><span class="p">,</span> <span class="s2">&quot;frame_id&quot;</span><span class="p">,</span> <span class="s2">&quot;frame_compile_id&quot;</span><span class="p">,</span> <span class="s2">&quot;attempt&quot;</span><span class="p">]</span>
+    <span class="k">assert</span> <span class="nb">callable</span><span class="p">(</span>
+        <span class="n">metadata_fn</span>
+    <span class="p">),</span> <span class="sa">f</span><span class="s2">&quot;metadata_fn should be callable, but got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">metadata_fn</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+    <span class="k">assert</span> <span class="nb">callable</span><span class="p">(</span>
+        <span class="n">payload_fn</span>
+    <span class="p">),</span> <span class="sa">f</span><span class="s2">&quot;payload_fn should be callable, but got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">payload_fn</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+    <span class="c1"># trace_log never propagates and is ALWAYS DEBUG, so also check that there</span>
+    <span class="c1"># are handlers instead of checking the log level</span>
+    <span class="k">if</span> <span class="n">trace_log</span><span class="o">.</span><span class="n">handlers</span><span class="p">:</span>
+        <span class="n">record</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">object</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">record</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">metadata_fn</span><span class="p">()</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">suppress_context</span><span class="p">:</span>
+            <span class="c1"># TODO: Actually, the rank probably should just be emitted once at</span>
+            <span class="c1"># the top, and not repeatedly spammed in all the logs, since it</span>
+            <span class="c1"># never changes and we assume no interleaving</span>
+            <span class="k">if</span> <span class="n">dist</span><span class="o">.</span><span class="n">is_available</span><span class="p">()</span> <span class="ow">and</span> <span class="n">dist</span><span class="o">.</span><span class="n">is_initialized</span><span class="p">():</span>
+                <span class="n">record</span><span class="p">[</span><span class="s2">&quot;rank&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">dist</span><span class="o">.</span><span class="n">get_rank</span><span class="p">()</span>
+            <span class="k">if</span> <span class="p">(</span>
+                <span class="n">trace_id</span> <span class="o">:=</span> <span class="n">torch</span><span class="o">.</span><span class="n">_guards</span><span class="o">.</span><span class="n">CompileContext</span><span class="o">.</span><span class="n">current_trace_id</span><span class="p">()</span>
+            <span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">record</span><span class="p">[</span><span class="s2">&quot;frame_id&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">trace_id</span><span class="o">.</span><span class="n">compile_id</span><span class="o">.</span><span class="n">frame_id</span>
+                <span class="n">record</span><span class="p">[</span><span class="s2">&quot;frame_compile_id&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">trace_id</span><span class="o">.</span><span class="n">compile_id</span><span class="o">.</span><span class="n">frame_compile_id</span>
+                <span class="n">record</span><span class="p">[</span><span class="s2">&quot;attempt&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">trace_id</span><span class="o">.</span><span class="n">attempt</span>
+        <span class="n">payload</span> <span class="o">=</span> <span class="n">payload_fn</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">payload</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">payload</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">payload</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
+                    <span class="c1"># special case to look better</span>
+                    <span class="n">payload</span> <span class="o">=</span> <span class="s2">&quot;[</span><span class="se">\n</span><span class="s2">&quot;</span> <span class="o">+</span> <span class="s2">&quot;,</span><span class="se">\n</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">i</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">payload</span><span class="p">)</span> <span class="o">+</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">]&quot;</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="c1"># force newlines so we are unlikely to overflow line limit</span>
+                    <span class="n">payload</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">payload</span><span class="p">,</span> <span class="n">indent</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+            <span class="n">h</span> <span class="o">=</span> <span class="n">hashlib</span><span class="o">.</span><span class="n">md5</span><span class="p">()</span>
+            <span class="n">h</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">payload</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="s2">&quot;utf-8&quot;</span><span class="p">))</span>
+            <span class="n">record</span><span class="p">[</span><span class="s2">&quot;has_payload&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">h</span><span class="o">.</span><span class="n">hexdigest</span><span class="p">()</span>
+        <span class="n">trace_log</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
+            <span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="n">extra</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;metadata&quot;</span><span class="p">:</span> <span class="n">record</span><span class="p">,</span> <span class="s2">&quot;payload&quot;</span><span class="p">:</span> <span class="n">payload</span><span class="p">},</span> <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span>
+        <span class="p">)</span>
+
+
 <span class="kn">import</span> <span class="nn">torch._guards</span>
+<span class="kn">import</span> <span class="nn">torch._utils_internal</span>
 <span class="kn">import</span> <span class="nn">torch.distributed</span> <span class="k">as</span> <span class="nn">dist</span>
 </pre></div>
 
