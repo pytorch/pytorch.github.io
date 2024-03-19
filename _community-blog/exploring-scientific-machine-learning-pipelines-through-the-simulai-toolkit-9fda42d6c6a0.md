@@ -1,5 +1,5 @@
 ---
-category: community
+category: community-blog
 title: 'Exploring scientific machine learning pipelines through the SimulAI toolkit'
 author: Joao Lucas de Sousa Almeida
 url: https://medium.com/pytorch/exploring-scientific-machine-learning-pipelines-through-the-simulai-toolkit-9fda42d6c6a0
