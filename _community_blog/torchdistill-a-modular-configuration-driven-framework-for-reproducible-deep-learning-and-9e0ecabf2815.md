@@ -1,8 +1,7 @@
 ---
-category: community-blog
 title: 'torchdistill — a modular, configuration-driven framework for reproducible deep learning and knowledge distillation experiments'
 author: Yoshitomo Matsubara
-url: https://medium.com/pytorch/torchdistill-a-modular-configuration-driven-framework-for-reproducible-deep-learning-and-9e0ecabf2815
+ext_url: https://medium.com/pytorch/torchdistill-a-modular-configuration-driven-framework-for-reproducible-deep-learning-and-9e0ecabf2815
 date: Jan 4, 2024
 ---
 
