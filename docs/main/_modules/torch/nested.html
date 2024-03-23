@@ -242,7 +242,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href='https://pytorch.org/docs/versions.html'>main (2.4.0a0+git4b53590 ) &#x25BC</a>
+      <a href='https://pytorch.org/docs/versions.html'>main (2.4.0a0+git29bca85 ) &#x25BC</a>
     </div>
     
 
@@ -480,9 +480,10 @@
              <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
               
   <h1>Source code for torch.nested</h1><div class="highlight"><pre>
-<span></span><span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Union</span><span class="p">,</span> <span class="n">Sequence</span>
+<span></span><span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Union</span>
 
 <span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">import</span> <span class="nn">torch.nn.functional</span> <span class="k">as</span> <span class="nn">F</span>
 <span class="kn">from</span> <span class="nn">torch</span> <span class="kn">import</span> <span class="n">SymInt</span><span class="p">,</span> <span class="n">Tensor</span>
 <span class="kn">from</span> <span class="nn">torch._C</span> <span class="kn">import</span> <span class="n">_add_docstr</span><span class="p">,</span> <span class="n">_nested</span>  <span class="c1"># type: ignore[attr-defined]</span>
 
@@ -492,6 +493,7 @@
     <span class="s2">&quot;to_padded_tensor&quot;</span><span class="p">,</span>
     <span class="s2">&quot;as_nested_tensor&quot;</span><span class="p">,</span>
     <span class="s2">&quot;nested_tensor&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;nested_tensor_from_jagged&quot;</span><span class="p">,</span>
     <span class="s2">&quot;narrow&quot;</span><span class="p">,</span>
 <span class="p">]</span>
 
@@ -499,19 +501,29 @@
 
 
 <div class="viewcode-block" id="as_nested_tensor"><a class="viewcode-back" href="../../nested.html#torch.nested.as_nested_tensor">[docs]</a><span class="k">def</span> <span class="nf">as_nested_tensor</span><span class="p">(</span>
-    <span class="n">tensor_list</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Tensor</span><span class="p">],</span>
+    <span class="n">ts</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="n">Tensor</span><span class="p">],</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">Tensor</span><span class="p">,</span> <span class="o">...</span><span class="p">]],</span>
     <span class="n">dtype</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">DType</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">device</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Device</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">layout</span><span class="o">=</span><span class="kc">None</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tensor</span><span class="p">:</span>
 <span class="w">    </span><span class="sa">r</span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Constructs a nested tensor preserving autograd history from :attr:`tensor_list` a list of tensors.</span>
+<span class="sd">    Constructs a nested tensor preserving autograd history from a tensor or a list / tuple of</span>
+<span class="sd">    tensors.</span>
 
-<span class="sd">    .. note::</span>
-<span class="sd">        Tensors within the list are always copied by this function due to current nested tensor semantics.</span>
+<span class="sd">    If a nested tensor is passed, it will be returned directly unless the device / dtype / layout</span>
+<span class="sd">    differ. Note that converting device / dtype will result in a copy, while converting layout</span>
+<span class="sd">    is not currently supported by this function.</span>
+
+<span class="sd">    If a non-nested tensor is passed, it is treated as a batch of constituents of consistent size.</span>
+<span class="sd">    A copy will be incurred if the passed device / dtype differ from those of the input OR if</span>
+<span class="sd">    the input is non-contiguous. Otherwise, the input&#39;s storage will be used directly.</span>
+
+<span class="sd">    If a tensor list is provided, tensors in the list are always copied during construction of</span>
+<span class="sd">    the nested tensor.</span>
 
 <span class="sd">    Args:</span>
-<span class="sd">        tensor_list (List[Tensor]): a list of tensors with the same ndim</span>
+<span class="sd">        ts (Tensor or List[Tensor] or Tuple[Tensor]): a tensor to treat as a nested tensor OR a</span>
+<span class="sd">            list / tuple of tensors with the same ndim</span>
 
 <span class="sd">    Keyword arguments:</span>
 <span class="sd">        dtype (:class:`torch.dtype`, optional): the desired type of returned nested tensor.</span>
@@ -534,23 +546,64 @@
 <span class="sd">        tensor([1., 1., 1.])</span>
 <span class="sd">        &gt;&gt;&gt; b.grad</span>
 <span class="sd">        tensor([0., 0., 0., 0., 0.])</span>
+<span class="sd">        &gt;&gt;&gt; c = torch.randn(3, 5, requires_grad=True)</span>
+<span class="sd">        &gt;&gt;&gt; nt2 = torch.nested.as_nested_tensor(c)</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">tensor_list</span><span class="p">,</span> <span class="nb">list</span><span class="p">)</span> <span class="ow">or</span> <span class="nb">any</span><span class="p">(</span>
-        <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">)</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">tensor_list</span>
-    <span class="p">):</span>
+    <span class="n">is_tensor_list</span> <span class="o">=</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">ts</span><span class="p">,</span> <span class="p">(</span><span class="nb">list</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">))</span> <span class="ow">and</span> <span class="nb">all</span><span class="p">(</span><span class="nb">isinstance</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">)</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">ts</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">ts</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">is_tensor_list</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
-            <span class="s2">&quot;as_nested_tensor(): Expected first argument to be a list of tensors &quot;</span>
+            <span class="s2">&quot;as_nested_tensor(): Expected first argument to be a tensor or a list / tuple of tensors &quot;</span>
         <span class="p">)</span>
+    <span class="c1"># convert tuple -&gt; list if needed</span>
+    <span class="k">if</span> <span class="n">is_tensor_list</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">ts</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
+        <span class="n">ts</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">ts</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">ts</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">)</span> <span class="ow">and</span> <span class="n">ts</span><span class="o">.</span><span class="n">dim</span><span class="p">()</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;as_nested_tensor(): Expected tensor argument to have dim() &gt; 1&quot;</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">ts</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">)</span> <span class="ow">and</span> <span class="n">ts</span><span class="o">.</span><span class="n">is_nested</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">layout</span> <span class="o">==</span> <span class="n">ts</span><span class="o">.</span><span class="n">layout</span><span class="p">:</span>
+            <span class="c1"># return input directly or input copied to device / dtype</span>
+            <span class="k">return</span> <span class="n">ts</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># TODO: Just use nt.to(layout=layout) when it exists.</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;as_nested_tensor(): Converting between nested tensor layouts is not supported&quot;</span><span class="p">)</span>
 
     <span class="k">if</span> <span class="n">layout</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">layout</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">strided</span>
     <span class="k">if</span> <span class="n">layout</span> <span class="o">==</span> <span class="n">torch</span><span class="o">.</span><span class="n">strided</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">_nested_tensor_from_tensor_list</span><span class="p">(</span><span class="n">tensor_list</span><span class="p">,</span> <span class="n">dtype</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="n">device</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">ts</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">):</span>
+            <span class="c1"># contiguous() might be necessary to get flattened view.</span>
+            <span class="c1"># we could probably be more precise about when to do this as an optimization</span>
+            <span class="n">buffer</span> <span class="o">=</span> <span class="n">ts</span><span class="o">.</span><span class="n">contiguous</span><span class="p">()</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">)</span>
+            <span class="n">nested_sizes</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="n">t</span><span class="o">.</span><span class="n">shape</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">ts</span><span class="p">])</span>
+            <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">_nested_view_from_buffer</span><span class="p">(</span>
+                <span class="n">buffer</span><span class="p">,</span>
+                <span class="n">nested_sizes</span><span class="p">,</span>
+                <span class="o">*</span><span class="n">torch</span><span class="o">.</span><span class="n">_nested_compute_contiguous_strides_offsets</span><span class="p">(</span><span class="n">nested_sizes</span><span class="p">))</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">ts</span><span class="p">,</span> <span class="nb">list</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">_nested_tensor_from_tensor_list</span><span class="p">(</span><span class="n">ts</span><span class="p">,</span> <span class="n">dtype</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="n">device</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
     <span class="k">elif</span> <span class="n">layout</span> <span class="o">==</span> <span class="n">torch</span><span class="o">.</span><span class="n">jagged</span><span class="p">:</span>
-        <span class="kn">from</span> <span class="nn">torch.nested._internal.nested_tensor</span> <span class="kn">import</span> <span class="n">jagged_from_list</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">ts</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">):</span>
+            <span class="c1"># contiguous() might be necessary to get flattened view.</span>
+            <span class="c1"># we could probably be more precise about when to do this as an optimization</span>
+            <span class="n">values</span> <span class="o">=</span> <span class="n">ts</span><span class="o">.</span><span class="n">contiguous</span><span class="p">()</span><span class="o">.</span><span class="n">flatten</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">)</span>
+            <span class="n">batch_size</span> <span class="o">=</span> <span class="n">ts</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="n">seq_len</span> <span class="o">=</span> <span class="n">ts</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+            <span class="n">offsets</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">batch_size</span> <span class="o">*</span> <span class="n">seq_len</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">seq_len</span><span class="p">,</span>
+                                   <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
 
-        <span class="n">nt</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">jagged_from_list</span><span class="p">(</span><span class="n">tensor_list</span><span class="p">,</span> <span class="n">offsets</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">nt</span>
+            <span class="kn">from</span> <span class="nn">torch.nested._internal.nested_tensor</span> <span class="kn">import</span> <span class="n">nested_view_from_values_offsets</span>
+
+            <span class="k">return</span> <span class="n">nested_view_from_values_offsets</span><span class="p">(</span><span class="n">values</span><span class="p">,</span> <span class="n">offsets</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="kn">from</span> <span class="nn">torch.nested._internal.nested_tensor</span> <span class="kn">import</span> <span class="n">jagged_from_list</span>
+
+            <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">ts</span><span class="p">,</span> <span class="nb">list</span><span class="p">)</span>
+            <span class="n">nt</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">jagged_from_list</span><span class="p">(</span><span class="n">ts</span><span class="p">,</span> <span class="n">offsets</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">nt</span>
     <span class="k">else</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Specified layout is unsupported for nested tensors: </span><span class="si">{</span><span class="n">layout</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span></div>
 
@@ -652,11 +705,8 @@
             <span class="n">requires_grad</span><span class="o">=</span><span class="n">requires_grad</span><span class="p">,</span>
             <span class="n">pin_memory</span><span class="o">=</span><span class="n">pin_memory</span><span class="p">)</span>
     <span class="k">elif</span> <span class="n">layout</span> <span class="o">==</span> <span class="n">torch</span><span class="o">.</span><span class="n">jagged</span><span class="p">:</span>
-        <span class="c1"># Need to:</span>
-        <span class="c1">#   * Detach tensors to discard autograd history</span>
-        <span class="c1">#   * Wrap lists of scalars as tensors</span>
-        <span class="n">list_of_tensors</span> <span class="o">=</span> <span class="p">[</span><span class="n">t</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">)</span> <span class="k">else</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="n">t</span><span class="p">)</span>
-                           <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">tensor_list</span><span class="p">]</span>
+        <span class="c1"># Need to wrap lists of scalars as tensors</span>
+        <span class="n">list_of_tensors</span> <span class="o">=</span> <span class="p">[</span><span class="n">t</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">)</span> <span class="k">else</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="n">t</span><span class="p">)</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">tensor_list</span><span class="p">]</span>
 
         <span class="kn">from</span> <span class="nn">torch.nested._internal.nested_tensor</span> <span class="kn">import</span> <span class="n">jagged_from_list</span>
 
@@ -736,6 +786,90 @@
         <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Specified layout is unsupported for nested narrow: </span><span class="si">{</span><span class="n">layout</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 
     <span class="k">return</span> <span class="n">nt</span>
+
+
+<span class="k">def</span> <span class="nf">nested_tensor_from_jagged</span><span class="p">(</span>
+    <span class="n">values</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span>
+    <span class="n">offsets</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">lengths</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">jagged_dim</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tensor</span><span class="p">:</span>
+<span class="w">    </span><span class="sa">r</span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">Constructs a jagged layout nested tensor from the given jagged components. The jagged layout</span>
+<span class="sd">consists of a required values buffer with the jagged dimension packed into a single dimension.</span>
+<span class="sd">The offsets / lengths metadata determines how this dimension is split into batch elements</span>
+<span class="sd">and are expected to be allocated on the same device as the values buffer.</span>
+
+<span class="sd">Expected metadata formats:</span>
+<span class="sd">    * offsets: Indices within the packed dimension splitting it into heterogeneously-sized</span>
+<span class="sd">      batch elements. Example: [0, 2, 3, 6] indicates that a packed jagged dim of size 6</span>
+<span class="sd">      should be conceptually split into batch elements of length [2, 1, 3]. Note that both the</span>
+<span class="sd">      beginning and ending offsets are required for kernel convenience (i.e. shape batch_size + 1).</span>
+<span class="sd">    * lengths: Lengths of the individual batch elements; shape == batch_size. Example: [2, 1, 3]</span>
+<span class="sd">      indicates that a packed jagged dim of size 6 should be conceptually split into batch</span>
+<span class="sd">      elements of length [2, 1, 3].</span>
+
+<span class="sd">Note that it can be useful to provide both offsets and lengths. This describes a nested tensor</span>
+<span class="sd">with &quot;holes&quot;, where the offsets indicate the start position of each batch item and the length</span>
+<span class="sd">specifies the total number of elements (see example below).</span>
+
+<span class="sd">The returned jagged layout nested tensor will be a view of the input values tensor.</span>
+
+<span class="sd">Args:</span>
+<span class="sd">    values (:class:`torch.Tensor`): The underlying buffer in the shape of</span>
+<span class="sd">        (sum_B(*), D_1, ..., D_N). The jagged dimension is packed into a single dimension,</span>
+<span class="sd">        with the offsets / lengths metadata used to distinguish batch elements.</span>
+<span class="sd">    offsets (optional :class:`torch.Tensor`): Offsets into the jagged dimension of shape B + 1.</span>
+<span class="sd">    lengths (optional :class:`torch.Tensor`): Lengths of the batch elements of shape B.</span>
+<span class="sd">    jagged_dim (optional int): Indicates which dimension in values is the packed jagged</span>
+<span class="sd">        dimension. If None, this is set to dim=1 (i.e. the dimension immediately following</span>
+<span class="sd">        the batch dimension). Default: None</span>
+
+<span class="sd">Example::</span>
+
+<span class="sd">    &gt;&gt;&gt; values = torch.randn(12, 5)</span>
+<span class="sd">    &gt;&gt;&gt; offsets = torch.tensor([0, 3, 5, 6, 10, 12])</span>
+<span class="sd">    &gt;&gt;&gt; nt = nested_tensor_from_jagged(values, offsets)</span>
+<span class="sd">    &gt;&gt;&gt; # 3D shape with the middle dimension jagged</span>
+<span class="sd">    &gt;&gt;&gt; nt.shape</span>
+<span class="sd">    torch.Size([5, j2, 5])</span>
+<span class="sd">    &gt;&gt;&gt; # Length of each item in the batch:</span>
+<span class="sd">    &gt;&gt;&gt; offsets.diff()</span>
+<span class="sd">    tensor([3, 2, 1, 4, 2])</span>
+
+<span class="sd">    &gt;&gt;&gt; values = torch.randn(6, 5)</span>
+<span class="sd">    &gt;&gt;&gt; offsets = torch.tensor([0, 2, 3, 6])</span>
+<span class="sd">    &gt;&gt;&gt; lengths = torch.tensor([1, 1, 2])</span>
+<span class="sd">    &gt;&gt;&gt; # NT with holes</span>
+<span class="sd">    &gt;&gt;&gt; nt = nested_tensor_from_jagged(values, offsets, lengths)</span>
+<span class="sd">    &gt;&gt;&gt; a, b, c = nt.unbind()</span>
+<span class="sd">    &gt;&gt;&gt; # Batch item 1 consists of indices [0, 1)</span>
+<span class="sd">    &gt;&gt;&gt; torch.equal(a, values[0:1, :])</span>
+<span class="sd">    True</span>
+<span class="sd">    &gt;&gt;&gt; # Batch item 2 consists of indices [2, 3)</span>
+<span class="sd">    &gt;&gt;&gt; torch.equal(b, values[2:3, :])</span>
+<span class="sd">    True</span>
+<span class="sd">    &gt;&gt;&gt; # Batch item 3 consists of indices [3, 5)</span>
+<span class="sd">    &gt;&gt;&gt; torch.equal(c, values[3:5, :])</span>
+<span class="sd">    True</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">offsets</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">lengths</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;nested_tensor_from_jagged(): At least one of offsets or lengths is required.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># TODO: Truly support offsets=None at some point?</span>
+            <span class="c1"># For now, just convert lengths -&gt; offsets for kernel convenience</span>
+            <span class="n">offsets</span> <span class="o">=</span> <span class="n">F</span><span class="o">.</span><span class="n">pad</span><span class="p">(</span><span class="n">lengths</span><span class="o">.</span><span class="n">cumsum</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">))</span>
+            <span class="n">lengths</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="k">if</span> <span class="n">jagged_dim</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">jagged_dim</span> <span class="o">=</span> <span class="mi">1</span>
+
+    <span class="kn">from</span> <span class="nn">torch.nested._internal.nested_tensor</span> <span class="kn">import</span> <span class="n">nested_view_from_values_offsets_lengths</span>
+
+    <span class="k">return</span> <span class="n">nested_view_from_values_offsets_lengths</span><span class="p">(</span><span class="n">values</span><span class="p">,</span> <span class="n">offsets</span><span class="p">,</span> <span class="n">lengths</span><span class="p">,</span> <span class="n">ragged_idx</span><span class="o">=</span><span class="n">jagged_dim</span><span class="p">)</span>
 </pre></div>
 
              </article>
