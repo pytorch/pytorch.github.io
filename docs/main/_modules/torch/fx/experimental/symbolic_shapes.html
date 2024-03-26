@@ -242,7 +242,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href='https://pytorch.org/docs/versions.html'>main (2.4.0a0+gite75ecd5 ) &#x25BC</a>
+      <a href='https://pytorch.org/docs/versions.html'>main (2.4.0a0+giteda279c ) &#x25BC</a>
     </div>
     
 
@@ -2422,6 +2422,14 @@
         <span class="n">duck_shape</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
         <span class="c1"># For debugging</span>
         <span class="n">co_fields</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="c1"># When True, whenever safe, we will generate a deferred runtime assert</span>
+        <span class="c1"># instead of a guard whenever we know that an expression must be True,</span>
+        <span class="c1"># otherwise it would be an error, even for backed SymInts (where we</span>
+        <span class="c1"># could ostensibly unconditionally generate guards).  This is useful</span>
+        <span class="c1"># for export, where preventing &quot;error checking&quot; sizes from showing up</span>
+        <span class="c1"># in guards is helpful, since these guards in some sense are overly</span>
+        <span class="c1"># pedantic.  See also https://github.com/pytorch/pytorch/issues/121749</span>
+        <span class="n">prefer_deferred_runtime_asserts_over_guards</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
         <span class="c1"># XXX Add any new settings that could affect FakeTensor evaluation</span>
         <span class="c1"># to: torch._subclasses.fake_tensor._ShapeEnvSettings</span>
     <span class="p">):</span>
@@ -2493,6 +2501,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">num_deferred_runtime_asserts</span> <span class="o">=</span> <span class="mi">0</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">assume_static_by_default</span> <span class="o">=</span> <span class="n">assume_static_by_default</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">specialize_zero_one</span> <span class="o">=</span> <span class="n">specialize_zero_one</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">prefer_deferred_runtime_asserts_over_guards</span> <span class="o">=</span> <span class="n">prefer_deferred_runtime_asserts_over_guards</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">duck_shape</span> <span class="o">=</span> <span class="n">duck_shape</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">log</span> <span class="o">=</span> <span class="n">log</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">log</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;create_env&quot;</span><span class="p">)</span>
@@ -2808,51 +2817,9 @@
 <span class="sd">        introduce new symbolic variables.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
 
-        <span class="c1"># Dynamo may want to wrap FakeTensors with SymInt sizes up e.g. make_fx(opt_f(), tracing_mode=&quot;symbolic&quot;).</span>
-        <span class="c1"># We create symbols in shape_env using the backed hints behind SymInt.</span>
-
-        <span class="c1"># Case 1: when SymInt is backed, dynamo can proceed with FakeTensors that have concrete shape.</span>
-        <span class="c1"># produce_guards will trigger specializations on the outer stuff</span>
-
-        <span class="c1"># Case 2: when the SymInt is unbacked, we will throw an data dependent error in require_hint().</span>
-        <span class="c1">#</span>
-        <span class="c1"># It&#39;s probably good for now but it&#39;s important to note that this approach has implications for</span>
-        <span class="c1"># the original shape_env when checking guards in different order.</span>
-
-        <span class="c1"># Example:</span>
-        <span class="c1"># ---------</span>
-        <span class="c1"># Consider a function &quot;opt_f&quot; as shown below:</span>
-
-        <span class="c1"># @torch.compile()</span>
-        <span class="c1"># def opt_f(x: bool, y: Tensor):</span>
-        <span class="c1">#   if x == True:</span>
-        <span class="c1">#     return y + torch.randn([4])</span>
-        <span class="c1">#   else:</span>
-        <span class="c1">#     return y</span>
-        <span class="c1"># Depending on the sequence of calls, we might install two different sets of guards:</span>
-
-        <span class="c1"># 1. opt_f(False, y):</span>
-        <span class="c1">#    - &quot;x == False&quot; (always works for any size y)</span>
-
-        <span class="c1"># 2. opt_f(True, y):</span>
-        <span class="c1">#    - Triggers recompilation and results in guards like:</span>
-        <span class="c1">#      - &quot;x == True and y.size(0) == 4&quot;</span>
-        <span class="c1">#      - (or &quot;y.size(0) == 4 and x == True&quot;)</span>
-
-        <span class="c1"># The order of checking the guards matters. In this specific example:</span>
-        <span class="c1"># If True branch guard check precedes False branch and for True branch, y.size(0) check precedes x == True,</span>
-        <span class="c1"># we may have an unnessary shape speciliazation for y.</span>
-        <span class="k">def</span> <span class="nf">maybe_specialize_sym_int_with_hint</span><span class="p">(</span><span class="n">maybe_sym</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
-            <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">maybe_sym</span><span class="p">,</span> <span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">SymInt</span><span class="p">))</span>
-            <span class="k">if</span> <span class="n">is_symbolic</span><span class="p">(</span><span class="n">maybe_sym</span><span class="p">):</span>
-                <span class="k">assert</span> <span class="n">maybe_sym</span><span class="o">.</span><span class="n">node</span><span class="o">.</span><span class="n">shape_env</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">self</span><span class="p">,</span> \
-                    <span class="s2">&quot;expect the symbol is created from an shape env other than current one.&quot;</span>
-                <span class="k">return</span> <span class="n">maybe_sym</span><span class="o">.</span><span class="n">node</span><span class="o">.</span><span class="n">require_hint</span><span class="p">()</span>
-            <span class="k">return</span> <span class="n">maybe_sym</span>
-
-        <span class="n">ex_size</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">maybe_specialize_sym_int_with_hint</span><span class="p">(</span><span class="n">sz</span><span class="p">)</span> <span class="k">for</span> <span class="n">sz</span> <span class="ow">in</span> <span class="n">ex</span><span class="o">.</span><span class="n">size</span><span class="p">())</span>
-        <span class="n">ex_stride</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">maybe_specialize_sym_int_with_hint</span><span class="p">(</span><span class="n">sd</span><span class="p">)</span> <span class="k">for</span> <span class="n">sd</span> <span class="ow">in</span> <span class="n">ex</span><span class="o">.</span><span class="n">stride</span><span class="p">())</span>
-        <span class="n">ex_storage_offset</span> <span class="o">=</span> <span class="n">maybe_specialize_sym_int_with_hint</span><span class="p">(</span><span class="n">ex</span><span class="o">.</span><span class="n">storage_offset</span><span class="p">())</span>
+        <span class="n">ex_size</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_maybe_specialize_sym_int_with_hint</span><span class="p">(</span><span class="n">sz</span><span class="p">)</span> <span class="k">for</span> <span class="n">sz</span> <span class="ow">in</span> <span class="n">ex</span><span class="o">.</span><span class="n">size</span><span class="p">())</span>
+        <span class="n">ex_stride</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_maybe_specialize_sym_int_with_hint</span><span class="p">(</span><span class="n">sd</span><span class="p">)</span> <span class="k">for</span> <span class="n">sd</span> <span class="ow">in</span> <span class="n">ex</span><span class="o">.</span><span class="n">stride</span><span class="p">())</span>
+        <span class="n">ex_storage_offset</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_maybe_specialize_sym_int_with_hint</span><span class="p">(</span><span class="n">ex</span><span class="o">.</span><span class="n">storage_offset</span><span class="p">())</span>
 
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_create_symbolic_sizes_strides_storage_offset</span><span class="p">(</span>
             <span class="n">ex_size</span><span class="p">,</span>
@@ -2862,6 +2829,48 @@
             <span class="n">source</span><span class="p">,</span>
             <span class="n">symbolic_context</span><span class="o">=</span><span class="n">symbolic_context</span><span class="p">,</span>
         <span class="p">)</span></div>
+
+    <span class="c1"># Dynamo may want to wrap FakeTensors with SymInt sizes up e.g. make_fx(opt_f(), tracing_mode=&quot;symbolic&quot;).</span>
+    <span class="c1"># We create symbols in shape_env using the backed hints behind SymInt.</span>
+
+    <span class="c1"># Case 1: when SymInt is backed, dynamo can proceed with FakeTensors that have concrete shape.</span>
+    <span class="c1"># produce_guards will trigger specializations on the outer stuff</span>
+
+    <span class="c1"># Case 2: when the SymInt is unbacked, we will throw an data dependent error in require_hint().</span>
+    <span class="c1">#</span>
+    <span class="c1"># It&#39;s probably good for now but it&#39;s important to note that this approach has implications for</span>
+    <span class="c1"># the original shape_env when checking guards in different order.</span>
+
+    <span class="c1"># Example:</span>
+    <span class="c1"># ---------</span>
+    <span class="c1"># Consider a function &quot;opt_f&quot; as shown below:</span>
+
+    <span class="c1"># @torch.compile()</span>
+    <span class="c1"># def opt_f(x: bool, y: Tensor):</span>
+    <span class="c1">#   if x == True:</span>
+    <span class="c1">#     return y + torch.randn([4])</span>
+    <span class="c1">#   else:</span>
+    <span class="c1">#     return y</span>
+    <span class="c1"># Depending on the sequence of calls, we might install two different sets of guards:</span>
+
+    <span class="c1"># 1. opt_f(False, y):</span>
+    <span class="c1">#    - &quot;x == False&quot; (always works for any size y)</span>
+
+    <span class="c1"># 2. opt_f(True, y):</span>
+    <span class="c1">#    - Triggers recompilation and results in guards like:</span>
+    <span class="c1">#      - &quot;x == True and y.size(0) == 4&quot;</span>
+    <span class="c1">#      - (or &quot;y.size(0) == 4 and x == True&quot;)</span>
+
+    <span class="c1"># The order of checking the guards matters. In this specific example:</span>
+    <span class="c1"># If True branch guard check precedes False branch and for True branch, y.size(0) check precedes x == True,</span>
+    <span class="c1"># we may have an unnessary shape speciliazation for y.</span>
+    <span class="k">def</span> <span class="nf">_maybe_specialize_sym_int_with_hint</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">maybe_sym</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+        <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">maybe_sym</span><span class="p">,</span> <span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">SymInt</span><span class="p">))</span>
+        <span class="k">if</span> <span class="n">is_symbolic</span><span class="p">(</span><span class="n">maybe_sym</span><span class="p">):</span>
+            <span class="k">assert</span> <span class="n">maybe_sym</span><span class="o">.</span><span class="n">node</span><span class="o">.</span><span class="n">shape_env</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">self</span><span class="p">,</span> \
+                <span class="s2">&quot;expect the symbol is created from an shape env other than current one.&quot;</span>
+            <span class="k">return</span> <span class="n">maybe_sym</span><span class="o">.</span><span class="n">node</span><span class="o">.</span><span class="n">require_hint</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">maybe_sym</span>
 
     <span class="nd">@record_shapeenv_event</span><span class="p">()</span>
     <span class="k">def</span> <span class="nf">_create_symbolic_sizes_strides_storage_offset</span><span class="p">(</span>
@@ -4846,7 +4855,7 @@
 
         <span class="c1"># Attempt to eliminate the unbacked SymInt</span>
         <span class="n">new_expr</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_maybe_evaluate_static</span><span class="p">(</span><span class="n">expr</span><span class="p">,</span> <span class="n">unbacked_only</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">new_expr</span><span class="o">.</span><span class="n">free_symbols</span> <span class="o">&lt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">var_to_val</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">prefer_deferred_runtime_asserts_over_guards</span> <span class="ow">and</span> <span class="n">new_expr</span><span class="o">.</span><span class="n">free_symbols</span> <span class="o">&lt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">var_to_val</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
             <span class="c1"># Do a normal guard</span>
             <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">evaluate_expr</span><span class="p">(</span><span class="n">new_expr</span><span class="p">,</span> <span class="n">fx_node</span><span class="o">=</span><span class="n">fx_node</span><span class="p">)</span>
         <span class="c1"># NB: Don&#39;t use new_expr as expr; it could contain gunk like shape0</span>
@@ -4877,7 +4886,10 @@
             <span class="n">ra</span> <span class="o">=</span> <span class="n">RuntimeAssert</span><span class="p">(</span><span class="n">expr</span><span class="p">,</span> <span class="n">msg</span><span class="p">,</span> <span class="n">stack</span><span class="p">)</span>
             <span class="c1"># TODO: Do this in a way that is less janky than int(s.name[1:])</span>
             <span class="n">cands</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">([</span><span class="n">s</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">expr</span><span class="o">.</span><span class="n">free_symbols</span> <span class="k">if</span> <span class="n">s</span><span class="o">.</span><span class="n">name</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;u&quot;</span><span class="p">)],</span> <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">s</span><span class="p">:</span> <span class="nb">int</span><span class="p">(</span><span class="n">s</span><span class="o">.</span><span class="n">name</span><span class="p">[</span><span class="mi">1</span><span class="p">:]))</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">deferred_runtime_asserts</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="n">cands</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="p">[])</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">ra</span><span class="p">)</span>
+            <span class="c1"># Is None when prefer_deferred_runtime_asserts_over_guards=True</span>
+            <span class="c1"># and the guard in question has no unbacked SymInts in front</span>
+            <span class="n">ix</span> <span class="o">=</span> <span class="n">cands</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="k">if</span> <span class="n">cands</span> <span class="k">else</span> <span class="kc">None</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">deferred_runtime_asserts</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="n">ix</span><span class="p">,</span> <span class="p">[])</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">ra</span><span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">num_deferred_runtime_asserts</span> <span class="o">+=</span> <span class="mi">1</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_update_version_counter</span><span class="p">()</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_log_guard</span><span class="p">(</span><span class="s2">&quot;runtime_assert&quot;</span><span class="p">,</span> <span class="n">orig_expr</span><span class="p">,</span> <span class="n">forcing_spec</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
