@@ -3,12 +3,14 @@ var supportedOperatingSystems = new Map([
   ['linux', 'linux'],
   ['mac', 'macos'],
   ['win', 'windows'],
+  ['linux', 'linux'],
 ]);
 
 var archInfoMap = new Map([
   ['cuda', {title: "CUDA", platforms: new Set(['linux', 'windows'])}],
   ['rocm', {title: "ROCm", platforms: new Set(['linux'])}],
-  ['accnone', {title: "CPU", platforms: new Set(['linux', 'macos', 'windows'])}]
+  ['accnone', {title: "CPU", platforms: new Set(['linux', 'macos', 'windows'])}],
+  ['intelgaudi', {title: "intelgaudi", platforms: new Set(['linux']) }]
 ]);
 
 let version_map={{ ACC ARCH MAP }}
