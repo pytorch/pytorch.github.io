@@ -10,7 +10,7 @@ var archInfoMap = new Map([
   ['cuda', {title: "CUDA", platforms: new Set(['linux', 'windows']) }],
   ['rocm', {title: "ROCm", platforms: new Set(['linux']) }],
   ['accnone', {title: "CPU", platforms: new Set(['linux', 'macos', 'windows'])}],
-  ['intelgaudi', {title: "intelgaudi", platforms: new Set(['linux']) }]
+  ['accelerators', {title: "accelerators", platforms: new Set(['linux'])}]
 ]);
 
 let version_map={"nightly": {"accnone": ["cpu", ""], "cuda.x": ["cuda", "11.8"], "cuda.y": ["cuda", "12.1"], "rocm5.x": ["rocm", "6.0"]}, "release": {"accnone": ["cpu", ""], "cuda.x": ["cuda", "11.8"], "cuda.y": ["cuda", "12.1"], "rocm5.x": ["rocm", "5.7"]}}
@@ -48,7 +48,10 @@ language.on("click", function() {
   selectedOption(language, this, "language");
 });
 cuda.on("click", function() {
-  selectedOption(cuda, this, "cuda");
+  if(this.id != 'accelerators') {
+    accelerator = null;
+    selectedOption(cuda, this, "cuda");
+  }
 });
 ptbuild.on("click", function() {
   selectedOption(ptbuild, this, "ptbuild")
@@ -125,20 +128,22 @@ function disableUnsupportedPlatforms(os) {
 function chooseAccelerator(acceleratorName){
   accelerator = acceleratorName;
   document.getElementById('accelerator').innerHTML = accelerator;
+  selectedOption(cuda, this, "cuda");
 }
 
 // Change compute versions depending on build type
 function changeVersion(ptbuild) {
-
   if(ptbuild == "preview")
     archMap = version_map.nightly
   else
-    archMap = version_map.release
+  archMap = version_map.release
 
   for (const [arch_key, info] of archInfoMap) {
     var elems = document.querySelectorAll('[id^="'+arch_key+'"]');
     for (var i=0; i < elems.length;i++) {
-      elems[i].children[0].textContent = info.title + " " + archMap[elems[i].id][1]
+      if (elems[i].id != 'accelerators'){
+        elems[i].children[0].textContent = info.title + " " + archMap[elems[i].id][1]
+      }
     }
   }
   var stable_element = document.getElementById("stable");
