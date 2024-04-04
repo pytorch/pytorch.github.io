@@ -3,17 +3,18 @@ var supportedOperatingSystems = new Map([
   ['linux', 'linux'],
   ['mac', 'macos'],
   ['win', 'windows'],
-  ['linux', 'linux'],
 ]);
 
 var archInfoMap = new Map([
   ['cuda', {title: "CUDA", platforms: new Set(['linux', 'windows']) }],
   ['rocm', {title: "ROCm", platforms: new Set(['linux']) }],
   ['accnone', {title: "CPU", platforms: new Set(['linux', 'macos', 'windows'])}],
-  ['accelerators', {title: "accelerators", platforms: new Set(['linux'])}]
+  ['huaweiascend', {title: "Huawei Ascend", platforms: new Set(['linux'])}],
+  ['intelgaudi', {title: "Intel Gaudi", platforms: new Set(['linux'])}],
+  ['intelxeon', {title: "Intel Xeon", platforms: new Set(['linux'])}],
 ]);
 
-let version_map={"nightly": {"accnone": ["cpu", ""], "cuda.x": ["cuda", "11.8"], "cuda.y": ["cuda", "12.1"], "rocm5.x": ["rocm", "6.0"]}, "release": {"accnone": ["cpu", ""], "cuda.x": ["cuda", "11.8"], "cuda.y": ["cuda", "12.1"], "rocm5.x": ["rocm", "5.7"]}}
+let version_map={"nightly": {"accnone": ["cpu", ""], "cuda.x": ["cuda", "11.8"], "cuda.y": ["cuda", "12.1"], "rocm5.x": ["rocm", "6.0"]}, "release": {"accnone": ["cpu", ""], "cuda.x": ["cuda", "11.8"], "cuda.y": ["cuda", "12.1"], "rocm5.x": ["rocm", "5.7"], "huaweiascend": ["huaweiascend", ""], "intelgaudi": ["intelgaudi", ""], "intelxeon": ["intelxeon", ""]}}
 let stable_version="Stable (2.2.2)";
 
 var default_selected_os = getAnchorSelectedOS() || getDefaultSelectedOS();
@@ -122,13 +123,23 @@ function disableUnsupportedPlatforms(os) {
       elems[i].style.textDecoration = supported ? "" : "line-through";
     }
   }
+  if (accelerator) {
+    disableUnsupportedAccelerator(os);
+  }
+}
+
+// Disable accelerator not supported on OS
+function disableUnsupportedAccelerator(os) {
+  let supported = archInfoMap.get(accelerator.toLowerCase().replace(" ", "")).platforms.has(os);
+  document.getElementById("accelerators").style.textDecoration = supported ? "" : "line-through";
 }
 
 // Choose accelerator
 function chooseAccelerator(acceleratorName){
   accelerator = acceleratorName;
-  document.getElementById('accelerator').innerHTML = accelerator;
+  document.getElementById("accelerator").innerHTML = accelerator;
   selectedOption(cuda, this, "cuda");
+  disableUnsupportedAccelerator(opts.os);
 }
 
 // Change compute versions depending on build type
@@ -141,9 +152,7 @@ function changeVersion(ptbuild) {
   for (const [arch_key, info] of archInfoMap) {
     var elems = document.querySelectorAll('[id^="'+arch_key+'"]');
     for (var i=0; i < elems.length;i++) {
-      if (elems[i].id != 'accelerators'){
         elems[i].children[0].textContent = info.title + " " + archMap[elems[i].id][1]
-      }
     }
   }
   var stable_element = document.getElementById("stable");
