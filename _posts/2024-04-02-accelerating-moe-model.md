@@ -124,7 +124,7 @@ For future work, we intend to move this into a CUDA kernel which will ensure ful
 
 ## 7.0 Reproducibility
 
-We have [open sourced ](https://github.com/pytorch-labs/applied-ai/tree/main/triton/inference/col_major_moe_gemm)the Triton kernel code along with an easy to run performance benchmark for readers interested in comparing or verifying the performance on their own GPU.
+We have [open sourced](https://github.com/pytorch-labs/applied-ai/tree/main/kernels/triton/inference/col_major_moe_gemm) the Triton kernel code along with an easy to run performance benchmark for readers interested in comparing or verifying the performance on their own GPU.
 
 ## Acknowledgements
 
