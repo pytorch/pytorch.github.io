@@ -8,7 +8,7 @@ author: Adnan Hoque, Less Wright, Antoni Virós Martin, Chih-Chieh Yang
 
 We show that by implementing column-major scheduling to improve data locality, we can accelerate the core Triton GEMM (General Matrix-Matrix Multiply) kernel for MoEs (Mixture of Experts) up to 4x on A100, and up to 4.4x on H100 Nvidia GPUs. This post demonstrates several different work decomposition and scheduling algorithms for MoE GEMMs and shows, at the hardware level, why column-major scheduling produces the highest speedup.
 
-Repo and code available at: [https://github.com/pytorch-labs/applied-ai/tree/main/triton/](https://github.com/pytorch-labs/applied-ai/tree/main/triton/inference/col_major_moe_gemm).
+Repo and code available at: [https://github.com/pytorch-labs/applied-ai/tree/main/kernels/triton/inference/col_major_moe_gemm](https://github.com/pytorch-labs/applied-ai/tree/main/kernels/triton/inference/col_major_moe_gemm).
 
 
 ![Figure 1A. Optimized Fused MoE GEMM Kernel TFLOPs on A100 for varying Batch Sizes M](/assets/images/accelerating-moe-model/fig-7.png){:style="width:100%;display: block; max-width: 600px; margin-right: auto; margin-left: auto"}
@@ -128,4 +128,4 @@ We have [open sourced](https://github.com/pytorch-labs/applied-ai/tree/main/kern
 
 ## Acknowledgements
 
-We want to thank Daniel Han, Raghu Ganti, Mudhakar Srivatsa, Bert Maher, Gregory Chanan, Eli Uriegas, and Geeta Chauhan for their review of the presented material and Woo Suk from the vLLM team as we built on his implementation of the Fused MoE kernel.
+We want to thank Daniel Han, Raghu Ganti, Mudhakar Srivatsa, Bert Maher, Gregory Chanan, Eli Uriegas, and Geeta Chauhan for their review of the presented material and Woosuk from the vLLM team as we built on his implementation of the Fused MoE kernel.
