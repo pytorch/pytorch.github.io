@@ -11,10 +11,10 @@ var archInfoMap = new Map([
   ['accnone', {title: "CPU", platforms: new Set(['linux', 'macos', 'windows'])}],
   ['huaweiascend', {title: "Huawei Ascend", platforms: new Set(['linux'])}],
   ['intelgaudi', {title: "Intel Gaudi", platforms: new Set(['linux'])}],
-  ['intelxeon', {title: "Intel Xeon", platforms: new Set(['linux'])}],
+  ['intelxeon', {title: "Intel Extension for PyTorch", platforms: new Set(['linux'])}],
 ]);
 
-let version_map={"nightly": {"accnone": ["cpu", ""], "cuda.x": ["cuda", "11.8"], "cuda.y": ["cuda", "12.1"], "rocm5.x": ["rocm", "6.0"]}, "release": {"accnone": ["cpu", ""], "cuda.x": ["cuda", "11.8"], "cuda.y": ["cuda", "12.1"], "rocm5.x": ["rocm", "5.7"], "huaweiascend": ["huaweiascend", ""], "intelgaudi": ["intelgaudi", ""], "intelxeon": ["intelxeon", ""]}}
+let version_map = { "nightly": { "accnone": ["cpu", ""], "cuda.x": ["cuda", "11.8"], "cuda.y": ["cuda", "12.1"], "rocm5.x": ["rocm", "6.0"] }, "release": { "accnone": ["cpu", ""], "cuda.x": ["cuda", "11.8"], "cuda.y": ["cuda", "12.1"], "rocm5.x": ["rocm", "5.7"], "huaweiascend": ["huaweiascend", ""], "intelgaudi": ["intelgaudi", ""], "intelxeon": ["intelxeon", ""]}}
 let stable_version="Stable (2.2.2)";
 
 var default_selected_os = getAnchorSelectedOS() || getDefaultSelectedOS();
@@ -130,7 +130,9 @@ function disableUnsupportedPlatforms(os) {
 
 // Disable accelerator not supported on OS
 function disableUnsupportedAccelerator(os) {
-  let supported = archInfoMap.get(accelerator.toLowerCase().replace(" ", "")).platforms.has(os);
+  console.log(accelerator.toLowerCase().replace(" ", ""));
+  console.log(archInfoMap);
+  let supported = archInfoMap.get(accelerator.toLowerCase().replaceAll(" ", "")).platforms.has(os);
   document.getElementById("accelerators").style.textDecoration = supported ? "" : "line-through";
 }
 
@@ -246,7 +248,7 @@ function buildMatcher() {
     "," +
     opts.os.toLowerCase() +
     "," +
-    (accelerator ? accelerator.toLowerCase().replace(' ', '') : opts.cuda.toLowerCase()) +
+    (accelerator ? accelerator.toLowerCase().replaceAll(' ', '') : opts.cuda.toLowerCase()) +
     "," +
     opts.language.toLowerCase()
   );
@@ -331,7 +333,7 @@ function commandMessage(key) {
     "stable,pip,linux,cuda.x,python": "pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118",
     "stable,pip,linux,cuda.y,python": "pip3 install torch torchvision torchaudio",
     "stable,pip,linux,rocm5.x,python": "pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/rocm5.7",
-    "stable,pip,linux,intelxeon,python": "pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu <br /> pip3 install intel-extension-for-pytorch",
+    "stable,pip,linux,intelxeon,python": "# CPU <br /> pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu <br /> pip3 install intel-extension-for-pytorch <br /><br /> # CPU <br /> pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/gpu <br /> pip3 install intel-extension-for-pytorch",
     "stable,conda,linux,cuda.x,python": "conda install pytorch torchvision torchaudio pytorch-cuda=11.8 -c pytorch -c nvidia",
     "stable,conda,linux,cuda.y,python": "conda install pytorch torchvision torchaudio pytorch-cuda=12.1 -c pytorch -c nvidia",
     "stable,conda,linux,rocm5.x,python": "<b>NOTE:</b> Conda packages are not currently available for ROCm, please use pip instead<br />",
