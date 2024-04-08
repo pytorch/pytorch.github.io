@@ -130,8 +130,6 @@ function disableUnsupportedPlatforms(os) {
 
 // Disable accelerator not supported on OS
 function disableUnsupportedAccelerator(os) {
-  console.log(accelerator.toLowerCase().replace(" ", ""));
-  console.log(archInfoMap);
   let supported = archInfoMap.get(accelerator.toLowerCase().replaceAll(" ", "")).platforms.has(os);
   document.getElementById("accelerators").style.textDecoration = supported ? "" : "line-through";
 }
@@ -140,6 +138,7 @@ function disableUnsupportedAccelerator(os) {
 function chooseAccelerator(acceleratorName){
   accelerator = acceleratorName;
   document.getElementById("accelerator").innerHTML = accelerator;
+  document.getElementById("accelerators").addClass("selected");
   selectedOption(cuda, this, "cuda");
   disableUnsupportedAccelerator(opts.os);
 }
@@ -180,6 +179,9 @@ function changeAccNoneName(osname) {
 function selectedOption(option, selection, category) {
   $(option).removeClass("selected");
   $(selection).addClass("selected");
+  if (!accelerator) {
+    document.getElementById("accelerators").removeClass("selected");
+  }
   opts[category] = selection.id;
   if (category === "pm") {
     var elements = document.getElementsByClassName("language")[0].children;
