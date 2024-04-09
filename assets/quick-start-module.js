@@ -138,7 +138,6 @@ function disableUnsupportedAccelerator(os) {
 function chooseAccelerator(acceleratorName){
   accelerator = acceleratorName;
   document.getElementById("accelerator").innerHTML = accelerator;
-  document.getElementById("accelerators").classList.addClass("selected");
   selectedOption(cuda, this, "cuda");
   disableUnsupportedAccelerator(opts.os);
 }
@@ -180,7 +179,9 @@ function selectedOption(option, selection, category) {
   $(option).removeClass("selected");
   $(selection).addClass("selected");
   if (!accelerator) {
-    document.getElementById("accelerators").classList.removeClass("selected");
+    $('#accelerators').removeClass("selected");
+  } else {
+    $('#accelerators').addClass("selected");
   }
   opts[category] = selection.id;
   if (category === "pm") {
