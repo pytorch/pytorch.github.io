@@ -336,7 +336,7 @@ function commandMessage(key) {
     "stable,pip,linux,cuda.x,python": "pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118",
     "stable,pip,linux,cuda.y,python": "pip3 install torch torchvision torchaudio",
     "stable,pip,linux,rocm5.x,python": "pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/rocm5.7",
-    "stable,pip,linux,intelextensionforpytorch,python": "# CPU <br /> pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu <br /> pip3 install intel-extension-for-pytorch <br /><br /> # GPU <br /> pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu <br /> pip3 install intel-extension-for-pytorch",
+    "stable,pip,linux,intelextensionforpytorch,python": "# CPU <br /> pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu <br /> pip3 install intel-extension-for-pytorch <br /><br /> # GPU (latest supported PyTorch version is 2.1) <br /> pip3 install torch==2.1.0.post0 torchvision==0.16.0.post0 torchaudio==2.1.0.post0 intel-extension-for-pytorch==2.1.20+xpu oneccl_bind_pt==2.1.200+xpu --extra-index-url https://pytorch-extension.intel.com/release-whl/stable/xpu/us/",
     "stable,conda,linux,cuda.x,python": "conda install pytorch torchvision torchaudio pytorch-cuda=11.8 -c pytorch -c nvidia",
     "stable,conda,linux,cuda.y,python": "conda install pytorch torchvision torchaudio pytorch-cuda=12.1 -c pytorch -c nvidia",
     "stable,conda,linux,rocm5.x,python": "<b>NOTE:</b> Conda packages are not currently available for ROCm, please use pip instead<br />",
