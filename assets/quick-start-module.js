@@ -70,7 +70,6 @@ $(function() {
   }
 });
 
-
 // determine os (mac, linux, windows) based on user's platform
 function getDefaultSelectedOS() {
   var platform = navigator.platform.toLowerCase();
@@ -158,8 +157,6 @@ function changeVersion(ptbuild) {
   var stable_element = document.getElementById("stable");
   stable_element.children[0].textContent = stable_version;
 }
-
-
 
 // Change accnone name depending on OS type
 function changeAccNoneName(osname) {
@@ -336,8 +333,8 @@ function commandMessage(key) {
     "stable,pip,linux,cuda.x,python": "pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118",
     "stable,pip,linux,cuda.y,python": "pip3 install torch torchvision torchaudio",
     "stable,pip,linux,rocm5.x,python": "pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/rocm5.7",
-    "stable,pip,linux,intelgaudi,python": "# Follow instructions at this URL: <a href='https://docs.habana.ai/en/latest/'>https://docs.habana.ai/en/latest/</a>",
-    "stable,pip,linux,intelextensionforpytorch,python": "# CPU <br /> pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu <br /> pip3 install intel-extension-for-pytorch <br /><br /> # GPU (latest supported PyTorch version is 2.1) <br /> pip3 install torch==2.1.0.post0 torchvision==0.16.0.post0 torchaudio==2.1.0.post0 intel-extension-for-pytorch==2.1.20+xpu oneccl_bind_pt==2.1.200+xpu --extra-index-url https://pytorch-extension.intel.com/release-whl/stable/xpu/us/",
+    "stable,pip,linux,intelgaudi,python": "<b>NOTE:</b> PyTorch 2.2 is not yet supported. For installation commands please refer to <a href='" + document.location.origin + "/get-started/previous-versions/#linux-and-windows-3'>previous versions</a> of PyTorch and <a href='https://docs.habana.ai/en/latest/'>Intel Gaudi documentation</a>.",
+    "stable,pip,linux,intelextensionforpytorch,python": "# CPU <br /> pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu <br /> pip3 install intel-extension-for-pytorch <br /><br /> # GPU <br /> <b>NOTE:</b> PyTorch 2.2 is not yet supported. <br /> For installation command please refer to <a href='" + document.location.origin + "/get-started/previous-versions/#linux-and-windows-9'>previous versions</a> of PyTorch.",
     "stable,conda,linux,cuda.x,python": "conda install pytorch torchvision torchaudio pytorch-cuda=11.8 -c pytorch -c nvidia",
     "stable,conda,linux,cuda.y,python": "conda install pytorch torchvision torchaudio pytorch-cuda=12.1 -c pytorch -c nvidia",
     "stable,conda,linux,rocm5.x,python": "<b>NOTE:</b> Conda packages are not currently available for ROCm, please use pip instead<br />",
