@@ -101,6 +101,10 @@ pip install torch==2.2.0 torchvision==0.17.0 torchaudio==2.2.0 --index-url https
 pip install torch==2.2.0 torchvision==0.17.0 torchaudio==2.2.0 --index-url https://download.pytorch.org/whl/cu121
 # CPU only
 pip install torch==2.2.0 torchvision==0.17.0 torchaudio==2.2.0 --index-url https://download.pytorch.org/whl/cpu
+# Intel Gaudi
+wget https: //vault.habana.ai/artifactory/gaudi-pt-modules/1.15.0/479/pytorch/ubuntu2204/pytorch_modules-v2.2.0_1.15.0_479.tgz
+tar xf pytorch_modules-v2.2.0_1.15.0_479.tgz
+pip install *.whl
 ```
 
 ### v2.1.2
@@ -230,6 +234,8 @@ pip install torch==2.1.0 torchvision==0.16.0 torchaudio==2.1.0 --index-url https
 pip install torch==2.1.0 torchvision==0.16.0 torchaudio==2.1.0 --index-url https://download.pytorch.org/whl/cu121
 # CPU only
 pip install torch==2.1.0 torchvision==0.16.0 torchaudio==2.1.0 --index-url https://download.pytorch.org/whl/cpu
+# GPU - Intel Extension for PyTorch
+pip3 install torch==2.1.0.post0 torchvision==0.16.0.post0 torchaudio==2.1.0.post0 intel-extension-for-pytorch==2.1.20+xpu oneccl_bind_pt==2.1.200+xpu --extra-index-url https://pytorch-extension.intel.com/release-whl/stable/xpu/us/
 ```
 
 ### v2.0.1
