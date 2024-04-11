@@ -146,12 +146,12 @@ function changeVersion(ptbuild) {
   if(ptbuild == "preview")
     archMap = version_map.nightly
   else
-  archMap = version_map.release
+    archMap = version_map.release
 
   for (const [arch_key, info] of archInfoMap) {
     var elems = document.querySelectorAll('[id^="'+arch_key+'"]');
     for (var i=0; i < elems.length;i++) {
-        elems[i].children[0].textContent = info.title + " " + archMap[elems[i].id][1]
+      elems[i].children[0].textContent = info.title + " " + archMap[elems[i].id][1]
     }
   }
   var stable_element = document.getElementById("stable");
