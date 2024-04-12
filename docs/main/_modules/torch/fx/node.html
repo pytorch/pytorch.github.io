@@ -242,7 +242,7 @@
           <div class="pytorch-left-menu-search">
             
     <div class="version">
-      <a href='https://pytorch.org/docs/versions.html'>main (2.4.0a0+gite6cf3e9 ) &#x25BC</a>
+      <a href='https://pytorch.org/docs/versions.html'>main (2.4.0a0+git064a650 ) &#x25BC</a>
     </div>
     
 
@@ -521,12 +521,15 @@
     <span class="n">torch</span><span class="o">.</span><span class="n">amp</span><span class="o">.</span><span class="n">_exit_autocast</span><span class="p">,</span>
 <span class="p">}</span>
 
+<span class="c1"># TODO: Either refactor this into 2 functions 1 dce for functional graphs and 1 dce for all graphs,</span>
+<span class="c1"># or add logic to correctly mark all inplace ops as side effectful.</span>
 <span class="n">_side_effectful_functions</span><span class="p">:</span> <span class="n">Set</span><span class="p">[</span><span class="n">Callable</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
     <span class="n">torch</span><span class="o">.</span><span class="n">_assert</span><span class="p">,</span>
     <span class="n">torch</span><span class="o">.</span><span class="n">_assert_async</span><span class="p">,</span>
     <span class="n">_ops</span><span class="o">.</span><span class="n">aten</span><span class="o">.</span><span class="n">_assert_async</span><span class="o">.</span><span class="n">msg</span><span class="p">,</span>
     <span class="n">_ops</span><span class="o">.</span><span class="n">aten</span><span class="o">.</span><span class="n">_assert_scalar</span><span class="o">.</span><span class="n">default</span><span class="p">,</span>
     <span class="n">_ops</span><span class="o">.</span><span class="n">aten</span><span class="o">.</span><span class="n">copy_</span><span class="o">.</span><span class="n">default</span><span class="p">,</span>
+    <span class="n">_ops</span><span class="o">.</span><span class="n">aten</span><span class="o">.</span><span class="n">index_put_</span><span class="o">.</span><span class="n">default</span><span class="p">,</span>
     <span class="n">_ops</span><span class="o">.</span><span class="n">aten</span><span class="o">.</span><span class="n">sym_constrain_range</span><span class="o">.</span><span class="n">default</span><span class="p">,</span>
     <span class="n">_ops</span><span class="o">.</span><span class="n">aten</span><span class="o">.</span><span class="n">sym_constrain_range_for_size</span><span class="o">.</span><span class="n">default</span><span class="p">,</span>
     <span class="n">_ops</span><span class="o">.</span><span class="n">profiler</span><span class="o">.</span><span class="n">_record_function_enter</span><span class="p">,</span>
@@ -716,6 +719,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_prev</span> <span class="o">=</span> <span class="bp">self</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_next</span> <span class="o">=</span> <span class="bp">self</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_erased</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_sort_key</span> <span class="o">=</span> <span class="p">()</span>
 
         <span class="c1"># If set, use this fn to print this node</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_repr_fn</span> <span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Callable</span><span class="p">[[</span><span class="n">Node</span><span class="p">],</span> <span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span>
@@ -766,7 +770,31 @@
         <span class="n">x</span><span class="o">.</span><span class="n">_remove_from_list</span><span class="p">()</span>
         <span class="n">p</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_prev</span>
         <span class="n">p</span><span class="o">.</span><span class="n">_next</span><span class="p">,</span> <span class="n">x</span><span class="o">.</span><span class="n">_prev</span> <span class="o">=</span> <span class="n">x</span><span class="p">,</span> <span class="n">p</span>
-        <span class="n">x</span><span class="o">.</span><span class="n">_next</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_prev</span> <span class="o">=</span> <span class="bp">self</span><span class="p">,</span> <span class="n">x</span></div>
+        <span class="n">x</span><span class="o">.</span><span class="n">_next</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_prev</span> <span class="o">=</span> <span class="bp">self</span><span class="p">,</span> <span class="n">x</span>
+
+        <span class="c1"># compute x._sort_key</span>
+        <span class="n">psk</span> <span class="o">=</span> <span class="n">x</span><span class="o">.</span><span class="n">_prev</span><span class="o">.</span><span class="n">_sort_key</span>
+        <span class="n">nsk</span> <span class="o">=</span> <span class="n">x</span><span class="o">.</span><span class="n">_next</span><span class="o">.</span><span class="n">_sort_key</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">psk</span><span class="p">)</span> <span class="o">&gt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">nsk</span><span class="p">):</span>
+            <span class="o">*</span><span class="n">prefix</span><span class="p">,</span> <span class="n">idx</span> <span class="o">=</span> <span class="n">psk</span><span class="p">[:</span><span class="nb">len</span><span class="p">(</span><span class="n">nsk</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span>
+            <span class="n">x</span><span class="o">.</span><span class="n">_sort_key</span> <span class="o">=</span> <span class="p">(</span><span class="o">*</span><span class="n">prefix</span><span class="p">,</span> <span class="n">idx</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="nb">len</span><span class="p">(</span><span class="n">psk</span><span class="p">)</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">nsk</span><span class="p">):</span>
+            <span class="o">*</span><span class="n">prefix</span><span class="p">,</span> <span class="n">idx</span> <span class="o">=</span> <span class="n">nsk</span><span class="p">[:</span><span class="nb">len</span><span class="p">(</span><span class="n">psk</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span>
+            <span class="n">x</span><span class="o">.</span><span class="n">_sort_key</span> <span class="o">=</span> <span class="p">(</span><span class="o">*</span><span class="n">prefix</span><span class="p">,</span> <span class="n">idx</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>  <span class="c1"># same length, increase length by 1</span>
+            <span class="n">x</span><span class="o">.</span><span class="n">_sort_key</span> <span class="o">=</span> <span class="p">(</span><span class="o">*</span><span class="n">psk</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span></div>
+
+    <span class="k">def</span> <span class="fm">__gt__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">:</span> <span class="s1">&#39;Node&#39;</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sort_key</span> <span class="o">&gt;</span> <span class="n">other</span><span class="o">.</span><span class="n">_sort_key</span>
+
+    <span class="k">def</span> <span class="fm">__lt__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">:</span> <span class="s1">&#39;Node&#39;</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sort_key</span> <span class="o">&lt;</span> <span class="n">other</span><span class="o">.</span><span class="n">_sort_key</span>
+
+    <span class="k">def</span> <span class="fm">__ge__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">:</span> <span class="s1">&#39;Node&#39;</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span> <span class="o">&gt;</span> <span class="n">other</span> <span class="ow">or</span> <span class="bp">self</span> <span class="o">==</span> <span class="n">other</span>
+
+    <span class="k">def</span> <span class="fm">__le__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">:</span> <span class="s1">&#39;Node&#39;</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span> <span class="o">&lt;</span> <span class="n">other</span> <span class="ow">or</span> <span class="bp">self</span> <span class="o">==</span> <span class="n">other</span>
 
 <div class="viewcode-block" id="Node.append"><a class="viewcode-back" href="../../../fx.html#torch.fx.Node.append">[docs]</a>    <span class="nd">@compatibility</span><span class="p">(</span><span class="n">is_backward_compatible</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
     <span class="k">def</span> <span class="nf">append</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">:</span> <span class="s1">&#39;Node&#39;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
