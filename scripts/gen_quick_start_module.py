@@ -215,7 +215,7 @@ def main():
     versions_str = json.dumps(gen_install_matrix(versions))
     template = template.replace("{{ installMatrix }}", versions_str)
     template = template.replace("{{ VERSION }}", f"\"Stable ({versions['latest_stable']})\"")
-    #print(template.replace("{{ ACC ARCH MAP }}", json.dumps(acc_arch_ver_map)))
+    print(template.replace("{{ ACC ARCH MAP }}", json.dumps(acc_arch_ver_map)))
 
 if __name__ == "__main__":
     main()
