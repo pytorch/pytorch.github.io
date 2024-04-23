@@ -21,7 +21,6 @@ class OperatingSystem(Enum):
     LINUX: str = "linux"
     WINDOWS: str = "windows"
     MACOS: str = "macos"
-    MACOS_ARM64: str = "macos_arm64"
 
 PRE_CXX11_ABI = "pre-cxx11"
 CXX11_ABI = "cxx11-abi"
@@ -31,7 +30,6 @@ DEFAULT = "default"
 ENABLE = "enable"
 DISABLE = "disable"
 MACOS = "macos"
-MACOS_ARM64 = "macos-arm64"
 
 # Mapping json to release matrix default values
 acc_arch_ver_default = {
@@ -39,13 +37,13 @@ acc_arch_ver_default = {
         "accnone": ("cpu", ""),
         "cuda.x": ("cuda", "11.8"),
         "cuda.y": ("cuda", "12.1"),
-        "rocm5.x": ("rocm", "5.7")
+        "rocm5.x": ("rocm", "6.0")
         },
     "release": {
         "accnone": ("cpu", ""),
         "cuda.x": ("cuda", "11.8"),
         "cuda.y": ("cuda", "12.1"),
-        "rocm5.x": ("rocm", "5.7")
+        "rocm5.x": ("rocm", "6.0")
         }
     }
 
@@ -59,8 +57,7 @@ LIBTORCH_DWNL_INSTR = {
         CXX11_ABI: "Download here (cxx11 ABI):",
         RELEASE: "Download here (Release version):",
         DEBUG: "Download here (Debug version):",
-        MACOS: "Download x86 libtorch here (ROCm and CUDA are not supported):",
-        MACOS_ARM64: "Download arm64 libtorch here (ROCm and CUDA are not supported):",
+        MACOS: "Download arm64 libtorch here (ROCm and CUDA are not supported):",
     }
 
 def load_json_from_basedir(filename: str):
@@ -124,16 +121,6 @@ def update_versions(versions, release_matrix, release_version):
                     if (x["package_type"], x["gpu_arch_type"], x["gpu_arch_version"]) ==
                     (package_type, gpu_arch_type, gpu_arch_version)
                     ]
-                # MACOS and MACOS_ARM64 release matrices are reduced to
-                # one single matrix in get started page. This is the only
-                # OS that this logic applies to. Hence this logic is needed.
-                pkg_arch_matrix_arm64 = []
-                if os_key == OperatingSystem.MACOS.value and package_type == "libtorch":
-                    pkg_arch_matrix_arm64 = [
-                        x for x in release_matrix[OperatingSystem.MACOS_ARM64.value]
-                        if (x["package_type"], x["gpu_arch_type"], x["gpu_arch_version"]) ==
-                        (package_type, gpu_arch_type, gpu_arch_version)
-                        ]
 
                 if pkg_arch_matrix:
                     if package_type != "libtorch":
@@ -155,10 +142,6 @@ def update_versions(versions, release_matrix, release_version):
                         elif os_key == OperatingSystem.MACOS.value:
                             if instr["versions"] is not None:
                                 instr["versions"][LIBTORCH_DWNL_INSTR[MACOS]] = pkg_arch_matrix[0]["installation"]
-                                if len(pkg_arch_matrix_arm64) > 0:
-                                    instr["versions"][LIBTORCH_DWNL_INSTR[MACOS_ARM64]] = pkg_arch_matrix_arm64[0]["installation"]
-                                else:
-                                    instr["versions"].pop(LIBTORCH_DWNL_INSTR[MACOS_ARM64], None)
 
 # This method is used for generating new quick-start-module.js
 # from the versions json object
@@ -232,7 +215,7 @@ def main():
     versions_str = json.dumps(gen_install_matrix(versions))
     template = template.replace("{{ installMatrix }}", versions_str)
     template = template.replace("{{ VERSION }}", f"\"Stable ({versions['latest_stable']})\"")
-    print(template.replace("{{ ACC ARCH MAP }}", json.dumps(acc_arch_ver_map)))
+    #print(template.replace("{{ ACC ARCH MAP }}", json.dumps(acc_arch_ver_map)))
 
 if __name__ == "__main__":
     main()
