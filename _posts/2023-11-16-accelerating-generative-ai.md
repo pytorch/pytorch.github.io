@@ -16,7 +16,7 @@ As announced during the [PyTorch Developer Conference 2023](https://www.youtube.
 * [Nested Tensor:](https://pytorch.org/tutorials/prototype/nestedtensor.html) Batch together non-uniformly sized data into a single Tensor, such as images of different sizes.
 * **Custom operators with Triton:** Write GPU operations using Triton Python DSL and easily integrate it into PyTorch's various components with custom operator registration.
 
-We encourage readers to copy-paste code from [our implementation of SAM on Github](https://github.com/pytorch-labs/segment-anything-fast) and [ask us questions](https://github.com/pytorch-labs/segment-anything-fast/issues) on Github.
+We encourage readers to copy-paste code from [our implementation of SAM on Github](https://github.com/pytorch-labs/segment-anything-fast) and [ask us questions](https://github.com/pytorch-labs/segment-anything-fast/issues) on GitHub.
 
 
 ![A quick glimpse of increasing throughput and decreasing memory overhead](/assets/images/accelerating-generative-ai/bar_chart_7.png){:style="width:100%;"}
@@ -38,7 +38,7 @@ The SAM architecture [described[ in its paper](https://arxiv.org/abs/2304.02643)
 
 ## Optimizations
 
-Below we tell the story of optimizing SAM: profiling, identifying bottlenecks, and building new features into PyTorch that solve these problems. Throughout, we showcase our new PyTorch features: **torch.compile, SDPA, Triton kernels, Nested Tensor and semi-structured sparsity.** The following sections are progressively built upon each other, ending with our SAM-fast, now [available on Github](https://github.com/pytorch-labs/segment-anything-fast). We motivate each feature using real kernel and memory traces, using fully PyTorch native tooling, and visualize these traces with [Perfetto UI](https://perfetto.dev/). 
+Below we tell the story of optimizing SAM: profiling, identifying bottlenecks, and building new features into PyTorch that solve these problems. Throughout, we showcase our new PyTorch features: **torch.compile, SDPA, Triton kernels, Nested Tensor, and semi-structured sparsity.** The following sections are progressively built upon each other, ending with our SAM-fast, now [available on Github](https://github.com/pytorch-labs/segment-anything-fast). We motivate each feature using real kernel and memory traces, using fully PyTorch native tooling, and visualize these traces with [Perfetto UI](https://perfetto.dev/). 
 
 
 ### Baseline
@@ -54,7 +54,7 @@ The first is long calls to aten::index, the underlying call resulting from a Ten
 
 The second is significant time spent on GPU in matrix multiplication (dark green on stream 7 7 above). This is common in Transformers. We can significantly speed up SAM if we can reduce the amount of GPU time spent on matrix multiplication.
 
-We can measure the throughput (img/s) and memory overhead (GiB) from out of the box SAM to establish a baseline:
+We can measure the throughput (img/s) and memory overhead (GiB) from out-of-the-box SAM to establish a baseline:
 
 ![throughput (img/s) and memory overhead (GiB) from out of the box SAM](/assets/images/accelerating-generative-ai/bar_chart_0.png){:style="width:100%;"}
 
@@ -62,7 +62,7 @@ We can measure the throughput (img/s) and memory overhead (GiB) from out of the 
 
 ### Bfloat16 Half precision (+GPU syncs and batching)
 
-To address the first issue of less time spent in matrix multiplication, we can turn to [bfloat16](https://en.wikipedia.org/wiki/Bfloat16_floating-point_format). Bfloat16 is a commonly used half-precision type. Through less precision per parameter and activations, we can save significant time and memory in computation. With reducing precision of parameters, it’s critical to validate end to end model accuracy. 
+To address the first issue of less time spent in matrix multiplication, we can turn to [bfloat16](https://en.wikipedia.org/wiki/Bfloat16_floating-point_format). Bfloat16 is a commonly used half-precision type. Through less precision per parameter and activations, we can save significant time and memory in computation. With reducing precision of parameters, it’s critical to validate end-to-end model accuracy. 
 
 
 ![replacing padding dtypes with half precision, bfloat16](/assets/images/accelerating-generative-ai/bfloat16_snippet.jpg){:style="width:100%;"}
@@ -89,7 +89,7 @@ After applying these changes, we begin to see significant time between individua
 
 ![profile SAM inference with batch size 8](/assets/images/accelerating-generative-ai/bfloat16_trace.jpg){:style="width:100%;"}
 
-Looking at the time spent per-kernel, we obverse most of SAM’s GPU time spent on elementwise kernels and softmax operation. With this we now see that matrix multiplications have become a much smaller relative overhead.
+Looking at the time spent per-kernel, we observe most of SAM’s GPU time is spent on elementwise kernels and softmax operation. With this, we now see that matrix multiplications have become a much smaller relative overhead.
 
 ![matrix multiplications have become a much smaller relative overhead](/assets/images/accelerating-generative-ai/bfloat16_kernels.jpg){:style="width:100%;"}
 
@@ -138,7 +138,7 @@ torch.compile is working beautifully. We launch a single CUDA graph, which makes
 ![the percentage of GPU time spent in specific kernels](/assets/images/accelerating-generative-ai/compile_kernels.jpg){:style="width:100%;"}
 
 
-We now see softmax makes up a significant portion of the time followed by various GEMM variants. In summary we observe the following measurements for batch size 8 and above changes.
+We now see softmax makes up a significant portion of the time followed by various GEMM variants. In summary, we observe the following measurements for batch size 8 and above changes.
 
 
 
@@ -158,7 +158,7 @@ _PyTorch native attention implementation, [see code here](https://github.com/pyt
 
 **Kernel trace**
 
-We can now see that in particular the memory efficient attention kernel is taking up a large amount of computational time on the GPU:
+We can now see that in particular the memory-efficient attention kernel is taking up a large amount of computational time on the GPU:
 
 
 ![memory efficient attention kernel is taking up a large amount of computational time on the GPU](/assets/images/accelerating-generative-ai/sdpa_kernels.jpg){:style="width:100%;display: block;max-width:600px; margin-left:auto; margin-right:auto;"}
@@ -201,7 +201,7 @@ This is a great example of extending PyTorch with a new kernel, straightforwardl
 ![kernel trace](/assets/images/accelerating-generative-ai/triton_kernels.jpg){:style="width:100%;display: block;max-width:600px; margin-left:auto; margin-right:auto;"}
 
 
-With our custom positional Triton kernel we observe the following measurements for batch size 32.
+With our custom positional Triton kernel, we observe the following measurements for batch size 32.
 
 
 
@@ -214,7 +214,7 @@ With our custom positional Triton kernel we observe the following measurements f
 
 We have spent a lot of time on the image encoder. This makes sense, since it takes up the most amount of computational time. At this point however it is fairly well optimized and the operator that takes the most time would require significant additional investment to be improved.
 
-We discovered an interesting observation with the [mask prediction pipeline](https://github.com/pytorch-labs/segment-anything-fast/blob/7cd6ba3cea451602acb7d36d176da06c70ac68f1/experiments/eval_combo.py#L137-L157): for each image we have there is an associated size, coords, and fg_labels Tensor. Each of these tensors are of different batch sizes. Each image itself is also of a different size. This representation of data looks like [Jagged Data](https://en.wikipedia.org/wiki/Jagged_array). With PyTorch’s recently released [NestedTensor](https://pytorch.org/tutorials/prototype/nestedtensor.html), we can modify our data pipeline batch coords and fg_labels Tensors into a single NestedTensor. This can have significant performance benefits for the prompt encoder and mask decoder that follow the image encoder. Invoking:
+We discovered an interesting observation with the [mask prediction pipeline](https://github.com/pytorch-labs/segment-anything-fast/blob/7cd6ba3cea451602acb7d36d176da06c70ac68f1/experiments/eval_combo.py#L137-L157): for each image we have there is an associated size, coords, and fg_labels Tensor. Each of these tensors is of different batch sizes. Each image itself is also of a different size. This representation of data looks like [Jagged Data](https://en.wikipedia.org/wiki/Jagged_array). With PyTorch’s recently released [NestedTensor](https://pytorch.org/tutorials/prototype/nestedtensor.html), we can modify our data pipeline batch coords and fg_labels Tensors into a single NestedTensor. This can have significant performance benefits for the prompt encoder and mask decoder that follow the image encoder. Invoking:
 
 
 ```
@@ -257,7 +257,7 @@ While it’s common to see some accuracy regression when quantizing models at in
 
 Matrix multiplications are still our bottleneck. We can turn to the model acceleration playbook with another classic method to approximate matrix multiplication: sparsification. By sparsifying our matrices (i.e., zeroing out values), we could theoretically use fewer bits to store weight and activation tensors. The process by which we decide which weights in the tensor to set to zero is called pruning. The idea behind pruning is that small weights in a weight tensor contribute little to the net output of a layer, typically the product of weights with activations. Pruning away small weights can potentially reduce model size without significant loss of accuracy. 
 
-Methods for pruning are varied, from completely unstructured, wherein weights are greedily pruned to highly structured, wherein large sub-components of a tensor are pruned a time. Choice of method is not trivial. While unstructured pruning may have the theoretically least impact on accuracy, GPUs are also highly efficient with multiplying large, dense matrices and may suffer significant performance degradation in sparse regimes. One recent pruning method supported in PyTorch seeks to strike a balance, called semi-structured (or 2:4) sparsity. This sparse storage reduces the original tensor by a significant 50%, while simultaneously resulting in a dense tensor output that can leverage highly performant, 2:4 GPU kernels. See the following picture for an illustration.
+Methods for pruning are varied, from completely unstructured, wherein weights are greedily pruned to highly structured, wherein large sub-components of a tensor are pruned a time. The choice of method is not trivial. While unstructured pruning may have the theoretically least impact on accuracy, GPUs are also highly efficient with multiplying large, dense matrices and may suffer significant performance degradation in sparse regimes. One recent pruning method supported in PyTorch seeks to strike a balance, called semi-structured (or 2:4) sparsity. This sparse storage reduces the original tensor by a significant 50%, while simultaneously resulting in a dense tensor output that can leverage highly performant, 2:4 GPU kernels. See the following picture for an illustration.
 
 
 ![dense tensor output that can leverage highly performant, 2:4 GPU kernels](/assets/images/accelerating-generative-ai/sparse_image.png){:style="width:100%;display: block;max-width:600px; margin-left:auto; margin-right:auto;"}
