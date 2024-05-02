@@ -121,7 +121,7 @@ To show the impact of CUDA graphs, we then created a graph of the TK-GEMM kernel
 
 **Figure 8.** Simulated Llama3-70B Attention Layer with TK-GEMM and CUDA Graphs
 
-In practice, this optimization would result in a **6.4x_ _**speedup of a single attention layer in Llama3-70B, over naively using TK-GEMM in a model without CUDA graphs. 
+In practice, this optimization would result in a **6.4x** speedup of a single attention layer in Llama3-70B, over naively using TK-GEMM in a model without CUDA graphs. 
 
 ## 6.0 Potential Future Optimization Paths
 
