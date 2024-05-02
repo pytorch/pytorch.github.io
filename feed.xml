@@ -4,7 +4,7 @@
   <generator uri="https://jekyllrb.com/" version="3.9.0">Jekyll</generator>
   <link href="https://pytorch.org/feed.xml" rel="self" type="application/atom+xml" />
   <link href="https://pytorch.org/" rel="alternate" type="text/html" />
-  <updated>2024-04-30T09:54:02-07:00</updated>
+  <updated>2024-05-02T00:00:04-07:00</updated>
   <id>https://pytorch.org/feed.xml</id>
 
   
@@ -29,6 +29,167 @@
 
   
   
+  
+    <entry>
+      <title type="html">Accelerating Llama3 FP8 Inference with Triton Kernels</title>
+      <link href="https://pytorch.org/blog/accelerating-llama3/" rel="alternate" type="text/html" title="Accelerating Llama3 FP8 Inference with Triton Kernels" />
+      <published>2024-05-01T00:00:00-07:00</published>
+      <updated>2024-05-01T00:00:00-07:00</updated>
+      <id>https://pytorch.org/blog/accelerating-llama3</id>
+      <content type="html" xml:base="https://pytorch.org/blog/accelerating-llama3/">&lt;h2 id=&quot;10-summary&quot;&gt;1.0 Summary&lt;/h2&gt;
+
+&lt;p&gt;We present an optimized Triton FP8 GEMM (General Matrix-Matrix Multiply) kernel TK-GEMM, which leverages SplitK parallelization. For small batch size inference, TK-GEMM delivers up to &lt;strong&gt;1.94x&lt;/strong&gt; over the base Triton matmul implementation, &lt;strong&gt;1.87x&lt;/strong&gt; speedup over cuBLAS FP8 and &lt;strong&gt;1.71x&lt;/strong&gt; over cuBLAS FP16 for Llama3-70B inference problem sizes on NVIDIA H100 GPUs.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-llama3/fig1.png&quot; alt=&quot;TK-GEMM Speedup over PyTorch (calling cuBLAS) for Llama3-70B Attention Layer Matrix Shapes (N=K=8192)&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Figure 1.&lt;/strong&gt; TK-GEMM Speedup over PyTorch (calling cuBLAS) for Llama3-70B Attention Layer Matrix Shapes (N=K=8192)&lt;/p&gt;
+
+&lt;p&gt;In this blog, we will cover how we designed an optimized kernel using &lt;a href=&quot;https://github.com/openai/triton&quot;&gt;Triton&lt;/a&gt; for FP8 inference and tuned it for Lama3-70B inference. We will cover FP8 (8-bit floating point), a new datatype supported by Hopper generation GPUs (SM90), the key SM90 features that Triton supports, and how we modified the parallelization to be able to maximize memory throughput for memory-bound (inference) problem sizes.&lt;/p&gt;
+
+&lt;p&gt;We also dedicate a section on CUDA graphs, an important technology that will help materialize kernel level speedups and enable developers who want to use Triton kernels in production settings to get additional performance gain.&lt;/p&gt;
+
+&lt;p&gt;Repo and code available at: &lt;a href=&quot;https://github.com/pytorch-labs/applied-ai&quot;&gt;https://github.com/pytorch-labs/applied-ai&lt;/a&gt;&lt;/p&gt;
+
+&lt;h2 id=&quot;20-fp8-datatype&quot;&gt;2.0 FP8 Datatype&lt;/h2&gt;
+
+&lt;p&gt;The FP8 datatype was &lt;a href=&quot;https://arxiv.org/pdf/2209.05433.pdf&quot;&gt;introduced&lt;/a&gt; jointly by Nvidia, Arm and Intel and serves as a successor to 16-bit floating point types.  With half the bit count, it has the potential to provide significant throughput improvements over its predecessors for Transformer networks. The FP8 datatype consists of 2 formats:&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;E4M3&lt;/strong&gt; (4-bit exponent and 3-bit mantissa).  Able to store +/ 448 and nan.&lt;br /&gt;
+&lt;strong&gt;E5M2&lt;/strong&gt; (5-bit exponent and 2-bit mantissa).  Able to store +/- 57,334, nan and inf.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-llama3/fig2.png&quot; alt=&quot;BF16, FP16, FP8 E4M3 and FP8 E5M2&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Above:&lt;/strong&gt; &lt;em&gt;BF16, FP16, FP8 E4M3 and FP8 E5M2.&lt;/em&gt;&lt;br /&gt;
+&lt;em&gt;To show precision differences, the closest representation to 0.3952 is shown in each format.&lt;/em&gt;&lt;br /&gt;
+&lt;em&gt;Image Credit: &lt;a href=&quot;https://docs.nvidia.com/deeplearning/transformer-engine/user-guide/examples/fp8_primer.html&quot;&gt;Nvidia&lt;/a&gt;&lt;/em&gt;&lt;/p&gt;
+
+&lt;p&gt;We use E4M3 in inference and forward pass training due its higher precision and E5M2 in training backward pass due to its higher dynamic range. Nvidia has designed their H100 FP8 Tensor Core to provide a peak of 3958 TFLOPS, &lt;strong&gt;2x&lt;/strong&gt; the FLOPS of the FP16 Tensor Core.&lt;/p&gt;
+
+&lt;p&gt;We designed our Triton kernel with these hardware innovations in mind and in the rest of the blog we will discuss methods to leverage and verify that these features are indeed being utilized by the Triton compiler.&lt;/p&gt;
+
+&lt;h2 id=&quot;30-triton-hopper-support-and-fp8-tensor-core-instruction&quot;&gt;3.0 Triton Hopper Support and FP8 Tensor Core Instruction&lt;/h2&gt;
+
+&lt;p&gt;The Hopper GPU architecture has added the following &lt;a href=&quot;https://arxiv.org/abs/2402.13499&quot;&gt;new features&lt;/a&gt; that we can expect will accelerate FP8 GEMM.&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;TMA (Tensor Memory Accelerator) Hardware Unit&lt;/li&gt;
+  &lt;li&gt;WGMMA (Warp Group Matrix Multiply-Accumulate Instruction)&lt;/li&gt;
+  &lt;li&gt;Threadblock Clusters&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;Triton currently takes advantage of one of these features, the &lt;em&gt;wgmma&lt;/em&gt; instruction, whereas PyTorch (calling cuBLAS) leverages all 3 which makes these speedups even more impressive. To fully take advantage of the Hopper FP8 Tensor Core, the wgmma is necessary even though the older mma.sync instruction is still supported.&lt;/p&gt;
+
+&lt;p&gt;The key difference between the mma and wgmma instructions is that instead of 1 CUDA warp being responsible for an output shard, an entire warp group, 4 CUDA warps, &lt;em&gt;asynchronously&lt;/em&gt; contributes to an output shard.&lt;/p&gt;
+
+&lt;p&gt;To see what this instruction looks like in practice, and to verify that our Triton Kernel is indeed utilizing this feature we analyzed the PTX and SASS assembly using &lt;a href=&quot;https://developer.nvidia.com/nsight-compute&quot;&gt;nsight compute&lt;/a&gt;.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-llama3/fig3.png&quot; alt=&quot;PTX Assembly&quot; style=&quot;width:100%;display:block;max-width:600px;margin-left:auto;margin-right:auto;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Figure 2.&lt;/strong&gt; PTX Assembly&lt;/p&gt;
+
+&lt;p&gt;This instruction is further lowered into a QGMMA instruction in SASS.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-llama3/fig4.png&quot; alt=&quot;SASS Assembly&quot; style=&quot;width:100%;display:block;max-width:600px;margin-left:auto;margin-right:auto;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Figure 3.&lt;/strong&gt; SASS Assembly&lt;/p&gt;
+
+&lt;p&gt;Both instructions tell us that we are multiplying two FP8 E4M3 input tensors and accumulating in F32, which confirms that the TK-GEMM Kernel is utilizing the FP8 Tensor Core and the lowering is being done correctly.&lt;/p&gt;
+
+&lt;h2 id=&quot;40-splitk-work-decomposition&quot;&gt;4.0 SplitK Work Decomposition&lt;/h2&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-llama3/fig5.png&quot; alt=&quot;TK-GEMM vs Base Triton GEMM TFLOPS for M = 1-64&quot; style=&quot;width:100%;display:block;max-width:600px;margin-left:auto;margin-right:auto;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Figure 4.&lt;/strong&gt; TK-GEMM vs Base Triton GEMM TFLOPS for M = 1-64&lt;/p&gt;
+
+&lt;p&gt;The base Triton FP8 GEMM implementation does &lt;a href=&quot;https://github.com/openai/triton/issues/3104&quot;&gt;not perform&lt;/a&gt; well for the small M regime, where for a matrix multiplication of A (&lt;em&gt;MxN&lt;/em&gt;) x B (&lt;em&gt;NxK&lt;/em&gt;), &lt;em&gt;M&lt;/em&gt; &amp;lt; &lt;em&gt;N&lt;/em&gt;, &lt;em&gt;K&lt;/em&gt;. To optimize for this type matrix profile we applied a SplitK work decomposition instead of the Data Parallel decomposition found in the base Triton kernel. This greatly improved latencies for the small M regime.&lt;/p&gt;
+
+&lt;p&gt;For background, SplitK launches additional thread blocks along the k dimension to calculate partial output sums. The partial results from each thread block are then summed using an atomic reduction.  This allows for finer grained work decomposition with resultant performance improvements.  More details on SplitK are available in our &lt;a href=&quot;https://arxiv.org/abs/2402.00025&quot;&gt;arxiv paper&lt;/a&gt;.&lt;/p&gt;
+
+&lt;p&gt;After carefully tuning the other relevant hyperparameters for our kernel such as tile sizes, number of warps and the number of pipeline stages to Llama3-70B problem sizes we were able to produce up to &lt;strong&gt;1.94x&lt;/strong&gt; speedup over the Triton &lt;a href=&quot;https://triton-lang.org/main/getting-started/tutorials/03-matrix-multiplication.html&quot;&gt;base implementation&lt;/a&gt;. For a more comprehensive introduction to hyperparameter tuning, see our &lt;a href=&quot;https://pytorch.org/blog/accelerating-moe-model/#30-work-decomposition---splitk&quot;&gt;blog&lt;/a&gt;.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-llama3/fig6.png&quot; alt=&quot;NCU profiler times for TK-GEMM under varying batch sizes, and compared with PyTorch (calling cuBLAS) FP8 and FP16.&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Above&lt;/strong&gt;: &lt;em&gt;NCU profiler times for TK-GEMM under varying batch sizes, and compared with PyTorch (calling cuBLAS) FP8 and FP16.&lt;/em&gt;&lt;/p&gt;
+
+&lt;p&gt;Note that starting at M=32, the cuBLAS FP8 kernel starts to outperform TK-GEMM. For M &amp;gt;= 32, we suspect that hyperparameters we found are not optimal, and thus another set of experiments is required to determine the optimal parameters for the mid-sized M regime.&lt;/p&gt;
+
+&lt;h2 id=&quot;50-cuda-graphs-to-enable-end-to-end-speedup&quot;&gt;5.0 CUDA Graphs to Enable End-to-End Speedup&lt;/h2&gt;
+
+&lt;p&gt;To be able to realize these speedups in an end-to-end setting, we must take into account both the kernel execution time (GPU duration) as well as the wall time (CPU+GPU) duration. Triton kernels, which are handwritten (as opposed to torch compile generated) are known to suffer from high-kernel launch latencies. If we use &lt;a href=&quot;https://pytorch.org/docs/stable/profiler.html&quot;&gt;torch profiler&lt;/a&gt; to trace the TK-GEMM kernel we can see the call stack on the CPU side to pinpoint exactly what is causing the slowdown.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-llama3/fig7.png&quot; alt=&quot;CPU Launch Overhead: 2.413ms&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Figure 5.&lt;/strong&gt; CPU Launch Overhead: 2.413ms&lt;/p&gt;
+
+&lt;p&gt;From above, we see that the majority of the wall time of our optimized kernel is dominated by JIT (Just-in-Time) compilation overhead. To combat this we can use CUDA graphs.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-llama3/fig8.png&quot; alt=&quot;CUDA Graphs Visualization&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Figure 6.&lt;/strong&gt; CUDA Graphs Visualization&lt;br /&gt;
+&lt;em&gt;Image Credit: &lt;a href=&quot;https://pytorch.org/blog/accelerating-pytorch-with-cuda-graphs/&quot;&gt;PyTorch&lt;/a&gt;&lt;/em&gt;&lt;/p&gt;
+
+&lt;p&gt;The key idea is instead of multiple kernel launches, we instead can create and instantiate a graph (1 time cost) and then submit that instance of the graph for execution. To illustrate this point we simulate a Llama3-70B Attention layer, As shown in the below figure generated using &lt;a href=&quot;https://developer.nvidia.com/nsight-systems&quot;&gt;nsight systems&lt;/a&gt;, the time between each GEMM is &lt;strong&gt;&lt;em&gt;165us&lt;/em&gt;&lt;/strong&gt; compared to the &lt;strong&gt;&lt;em&gt;12us&lt;/em&gt;&lt;/strong&gt; spent on the actual matmul due the CPU kernel launch overhead. This means that &lt;strong&gt;&lt;em&gt;92%&lt;/em&gt;&lt;/strong&gt; of the time of the time in an Attention layer the GPU is idle and not doing any work.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-llama3/fig9.png&quot; alt=&quot;Simulated Llama3-70B Attention Layer with TK-GEMM&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Figure 7.&lt;/strong&gt; Simulated Llama3-70B Attention Layer with TK-GEMM&lt;/p&gt;
+
+&lt;p&gt;To show the impact of CUDA graphs, we then created a graph of the TK-GEMM kernel in the toy Attention layer and replayed the graph. Below, we can see that the gaps between kernel executions are reduced to 6.65us.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-llama3/fig10.png&quot; alt=&quot;Simulated Llama3-70B Attention Layer with TK-GEMM and CUDA Graphs&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Figure 8.&lt;/strong&gt; Simulated Llama3-70B Attention Layer with TK-GEMM and CUDA Graphs&lt;/p&gt;
+
+&lt;p&gt;In practice, this optimization would result in a &lt;strong&gt;6.4x&lt;/strong&gt; speedup of a single attention layer in Llama3-70B, over naively using TK-GEMM in a model without CUDA graphs.&lt;/p&gt;
+
+&lt;h2 id=&quot;60-potential-future-optimization-paths&quot;&gt;6.0 Potential Future Optimization Paths&lt;/h2&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-llama3/fig11.png&quot; alt=&quot;TMA Hardware Unit&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Figure 9.&lt;/strong&gt; TMA Hardware Unit&lt;br /&gt;
+&lt;em&gt;Image Credit: &lt;a href=&quot;https://developer.nvidia.com/blog/nvidia-hopper-architecture-in-depth/&quot;&gt;Nvidia&lt;/a&gt;&lt;/em&gt;&lt;/p&gt;
+
+&lt;p&gt;The Nvidia H100 features a TMA hardware unit. The dedicated TMA unit frees up registers and threads to do other work, as address generation is completely handled by the TMA. For memory bound problem sizes, this can provide even further gain when Triton enables support for this feature.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-llama3/fig12.png&quot; alt=&quot;Tensor Core Utilization (Arrows Indicate Degrees of Freedom)&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Figure 10.&lt;/strong&gt; Tensor Core Utilization (Arrows Indicate Degrees of Freedom)&lt;/p&gt;
+
+&lt;p&gt;To identify how well we are utilizing the Tensor Core, we can analyze the roofline chart. Notice that we are in the memory-bound region as expected for small M. To improve kernel latency we can either increase the arithmetic intensity, which with a fixed problem size can only be achieved through exploiting data locality and other loop &lt;a href=&quot;https://www.codee.com/is-your-algorithm-running-at-peak-performance-the-roofline-model/&quot;&gt;optimizations&lt;/a&gt; or increasing the memory throughput. This requires either a more optimal parallel algorithm specialized for the FP8 datatype as well as the type of problem size characteristics we expect to see in FP8 inference.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-llama3/fig13.png&quot; alt=&quot;DRAM Throughput Circled, 1.65TB/s vs Peak 3.35TB/s on H100 (M=16, N=8192, K=8192)&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Figure 11.&lt;/strong&gt; DRAM Throughput Circled, 1.65TB/s vs Peak 3.35TB/s on H100 (M=16, N=8192, K=8192)&lt;/p&gt;
+
+&lt;p&gt;Lastly, we can see that we are only achieving around &lt;strong&gt;50%&lt;/strong&gt; of peak DRAM throughput on the NVIDIA H100. High performance GEMM kernels typically achieve around &lt;strong&gt;70-80%&lt;/strong&gt; of peak throughput. This means that there is still a lot of room to improve and the techniques mentioned above (loop unrolling, optimized parallelization) are needed for additional gain.&lt;/p&gt;
+
+&lt;h2 id=&quot;70-future-work&quot;&gt;7.0 Future Work&lt;/h2&gt;
+
+&lt;p&gt;For future research, we would like to explore &lt;a href=&quot;https://github.com/NVIDIA/cutlass/tree/main&quot;&gt;CUTLASS&lt;/a&gt; 3.x and &lt;a href=&quot;https://github.com/NVIDIA/cutlass/tree/main/media/docs/cute&quot;&gt;CuTe&lt;/a&gt; to leverage more direct control over Hopper features especially in terms of obtaining direct TMA control and exploring pingpong architectures, which have shown promising results for FP8 GEMM.&lt;/p&gt;</content>
+
+      
+      
+      
+      
+      
+
+      <author>
+          <name>Adnan Hoque, Less Wright, Chih Chieh Yang</name>
+        
+        
+      </author>
+
+      
+
+      
+
+      
+        <summary type="html">1.0 Summary</summary>
+      
+
+      
+      
+    </entry>
   
     <entry>
       <title type="html">ExecuTorch Alpha: Taking LLMs and AI to the Edge with Our Community and Partners</title>
@@ -1319,216 +1480,6 @@ The PyTorch Team&lt;/p&gt;</content>
 
       
         <summary type="html">We are excited to announce the release of PyTorch® 2.2 (release note)! PyTorch 2.2 offers ~2x performance improvements to scaled_dot_product_attention via FlashAttention-v2 integration, as well as AOTInductor, a new ahead-of-time compilation and deployment tool built for non-python server-side deployments.</summary>
-      
-
-      
-      
-    </entry>
-  
-    <entry>
-      <title type="html">Accelerating Generative AI with PyTorch IV: Seamless M4T, fast</title>
-      <link href="https://pytorch.org/blog/accelerating-generative-ai-4/" rel="alternate" type="text/html" title="Accelerating Generative AI with PyTorch IV: Seamless M4T, fast" />
-      <published>2024-01-23T00:00:00-08:00</published>
-      <updated>2024-01-23T00:00:00-08:00</updated>
-      <id>https://pytorch.org/blog/accelerating-generative-ai-4</id>
-      <content type="html" xml:base="https://pytorch.org/blog/accelerating-generative-ai-4/">&lt;p&gt;This post is the fourth part of a multi-series blog focused on how to accelerate generative AI models with pure, native PyTorch. To skip to the code, check out our github (&lt;a href=&quot;https://github.com/facebookresearch/seamless_communication/pull/328&quot;&gt;seamless_communication&lt;/a&gt;, &lt;a href=&quot;https://github.com/facebookresearch/fairseq2/pull/272&quot;&gt;fairseq2&lt;/a&gt;). We are excited to share a breadth of newly released PyTorch performance features alongside practical examples to see how far we can push PyTorch native performance. In part one, we showed how to accelerate &lt;a href=&quot;https://pytorch.org/blog/accelerating-generative-ai/&quot;&gt;Segment Anything over 8x&lt;/a&gt; using only pure, native PyTorch. In part two, we showed how to accelerate &lt;a href=&quot;https://pytorch.org/blog/accelerating-generative-ai-2/&quot;&gt;Llama-7B by almost 10x&lt;/a&gt; using only native PyTorch optimizations. In part three, we showed how to accelerate &lt;a href=&quot;https://pytorch.org/blog/accelerating-generative-ai-3/&quot;&gt;text-to-image diffusion models up to 3x&lt;/a&gt; using only native Pytorch optimizations.&lt;/p&gt;
-
-&lt;p&gt;In this blog, we’ll focus on speeding up FAIR’s Seamless M4T-v2 model resulting in &lt;strong&gt;2x speedup for text decoder module &lt;em&gt;and&lt;/em&gt; 30x for vocoder module, resulting in 2.7x speedup for end-to-end inference&lt;/strong&gt;, with no loss of accuracy by using CUDA Graph and native PyTorch optimization:&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;&lt;a href=&quot;https://pytorch.org/tutorials/intermediate/torch_compile_tutorial.html&quot;&gt;torch.compile&lt;/a&gt;&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-generative-ai-4/fg1.png&quot; alt=&quot;End to End Inference Speedup&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
-
-&lt;h2 id=&quot;introduction&quot;&gt;Introduction&lt;/h2&gt;
-
-&lt;p&gt;Seamless M4T is an open-source foundational speech/text translation and transcription technology developed by FAIR. Seamless M4T is a massively multilingual and multimodal machine translation model, with the &lt;a href=&quot;https://github.com/facebookresearch/seamless_communication&quot;&gt;latest version&lt;/a&gt; (Seamless M4T-v2) released on November 30th, 2023. The high-level model architecture of Seamless M4T-v2 is illustrated in Figure 1.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-generative-ai-4/fg2.png&quot; alt=&quot;Model Architecture of Seamless M4T-v2&quot; style=&quot;width:100%;max-width:600px; display:block; margin-left: auto; margin-right: auto;&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;strong&gt;Figure 1.&lt;/strong&gt; Model Architecture of Seamless M4T-v2.&lt;/p&gt;
-
-&lt;p&gt;Accelerating inference latency is crucial for translation models to improve user experience through faster communication across languages. In particular, batch_size=1 is often used for fast translation where latency matters a lot in applications such as chatbots, speech translation, and live subtitling. Therefore, we conducted the performance analysis on inference with batch_size=1, as shown in Figure 2 to understand the Amdahl’s Law bottleneck. Our results indicate that the text decoder and vocoder are the most time-consuming modules, accounting for 61% and 23% of the inference time, respectively.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-generative-ai-4/fg3.png&quot; alt=&quot;Text decoder and vocoder are the most time consuming module. Breakdown of inference time by modules for English-Spanish S2ST (Speech-to-Speech-Text) task for batch_size=1 on A100 GPU.&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;strong&gt;Figure 2.&lt;/strong&gt; &lt;span style=&quot;text-decoration:underline;&quot;&gt;Text decoder and vocoder are the most time consuming module&lt;/span&gt;. Breakdown of inference time by modules for English-Spanish S2ST (Speech-to-Speech-Text) task for batch_size=1 on A100 GPU.&lt;/p&gt;
-
-&lt;p&gt;To take a closer look at the performance bottleneck of the text decoder and vocoder, we analyzed GPU traces for the text decoder and vocoder for the 8th sample for the English-Spanish translation example of &lt;a href=&quot;https://huggingface.co/datasets/google/fleurs&quot;&gt;FLEURS&lt;/a&gt; dataset as shown in Figure 3. It revealed that the &lt;strong&gt;text decoder and vocoder are heavily CPU-bound modules.&lt;/strong&gt; We observed a significant gap incurred by CPU overhead that delayed the launch of GPU kernels, resulting in a substantial increase in the execution time for both the modules.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-generative-ai-4/fg4.jpg&quot; alt=&quot;CPU and GPU trace for Text Decoder&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;strong&gt;(a)&lt;/strong&gt; CPU and GPU trace for Text Decoder&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-generative-ai-4/fg5.jpg&quot; alt=&quot;CPU and GPU trace for Vocoder&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;strong&gt;(b)&lt;/strong&gt; CPU and GPU trace for Vocoder&lt;/p&gt;
-
-&lt;p&gt;&lt;strong&gt;Figure 3.&lt;/strong&gt; &lt;span style=&quot;text-decoration:underline;&quot;&gt;Text Decoder and Vocoder are heavily CPU-bound modules&lt;/span&gt;. CPU and GPU trace for (a) Text Decoder (b) Vocoder for the 8th sample for English-Spanish translation example of &lt;a href=&quot;https://huggingface.co/datasets/google/fleurs&quot;&gt;FLEURS&lt;/a&gt; dataset. The trace is obtained by running inference with batch_size=1 on A100 gpu.&lt;/p&gt;
-
-&lt;p&gt;Based on the real-system performance analysis results that text_decoder and vocoder are heavily CPU bound modules in Seamless M4T-v2, we enabled torch.compile + CUDA Graph to those modules. In this post, we share modifications required to enable torch.compile + CUDA Graph on each module for batch_size=1 inference scenario, discussion on CUDA Graph and next step plans.&lt;/p&gt;
-
-&lt;h2 id=&quot;torchcompile-with-cuda-graph&quot;&gt;Torch.compile with CUDA Graph&lt;/h2&gt;
-
-&lt;p&gt;&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;torch.compile&lt;/code&gt; is a PyTorch API that allows users to compile PyTorch models into a standalone executable or script which is generally used for optimizing model performance by removing unnecessary overhead.&lt;/p&gt;
-
-&lt;p&gt;CUDA Graph is a feature provided by NVIDIA that allows for the optimization of kernel launches in CUDA applications. It creates an execution graph of CUDA kernels, which can be pre-processed and optimized by the driver before being executed on the GPU. The main advantage of using CUDA Graph is that it reduces the overhead associated with launching individual kernels, as the graph can be launched as a single unit, reducing the number of API calls and data transfers between the host and device. This can lead to significant performance improvements, especially for applications that have a large number of small kernels or repeat the same set of kernels multiple times. If this is something you are interested in learning more about, check out this paper that highlights the important role of data for accelerated computing: &lt;strong&gt;&lt;a href=&quot;https://ieeexplore.ieee.org/abstract/document/5762730&quot;&gt;Where is the data? Why you cannot debate CPU vs. GPU performance without the answer&lt;/a&gt;&lt;/strong&gt; by our own Kim Hazelwood! This is when NVIDIA was heavily investing in general-purpose GPU (GPGPUs) and before deep learning revolutionized the computing industry!&lt;/p&gt;
-
-&lt;p&gt;However, because CUDA Graph operates on 1) fixed memory pointer, 2) fixed shape of tensors, that are recorded at the compile time, we introduced the following improvements for CUDA Graph to be reused across multiple sizes of inputs to &lt;em&gt;prevent CUDA Graph generation for each iteration&lt;/em&gt; and let the data inside CUDA Graph be reused across different runs &lt;em&gt;to share KV Cache for multiple decoding steps&lt;/em&gt;.&lt;/p&gt;
-
-&lt;h2 id=&quot;text-decoder&quot;&gt;Text Decoder&lt;/h2&gt;
-
-&lt;p&gt;The Text Decoder in Seamless is a decoder from NLLB [&lt;a href=&quot;https://ai.meta.com/research/no-language-left-behind/&quot;&gt;1&lt;/a&gt;] that performs T2TT (Text to Text Translation). Also, this module is a CPU-bound model where gpu execution time is not long enough to hide CPU overhead because of &lt;strong&gt;the nature of auto-regressive generation that requires sequential processing of tokens&lt;/strong&gt;, which limits the amount of parallelism that can be achieved on the GPU. Based on this observation, we enabled torch.compile + CUDA Graph for the text decoders to reduce the dominating  CPU overhead as shown in Figure 4.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-generative-ai-4/fg6.png&quot; alt=&quot;CPU and GPU trace for Text Decoder after torch.compile + CUDA Graph are enabled&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;strong&gt;Figure 4.&lt;/strong&gt; CPU and GPU trace for Text Decoder after torch.compile + CUDA Graph are enabled.&lt;/p&gt;
-
-&lt;h3 id=&quot;1--updating-and-retrieving-kv-cache&quot;&gt;1.  Updating and retrieving KV cache&lt;/h3&gt;
-
-&lt;p&gt;During inference, the text decoder has two computation phases: a prefill phase that consumes the prompt and an incremental generation phase that generates output tokens one by one. Given a high enough batch size or input length, prefill operates on a sufficiently high number of tokens in parallel — GPU performance is the bottleneck and the CPU overheads do not impact performance significantly. On the other hand, incremental token generation is always executed with sequence length 1 and it is often executed with a small batch size (even 1), e.g. for interactive use cases. Thus, incremental generation can be limited by the CPU speed and thus is a good candidate for torch.compile + CUDA Graph.&lt;/p&gt;
-
-&lt;p&gt;However, during the incremental token generation phase, the sequence_length dimension of key and value involved in the attention computation increases by one with each step while the sequence length of query always remains 1. Specifically, key/value are generated by appending the newly computed key/value of sequence length 1 to the key/value stored in the KV cache so far. But as mentioned above, CUDA Graph records all the shapes of tensors during compilation and replay with the recorded shapes. Thus, few modifications have been made to address this issue following the great work &lt;a href=&quot;https://blog.fireworks.ai/speed-python-pick-two-how-cuda-graphs-enable-fast-python-code-for-deep-learning-353bf6241248&quot;&gt;here&lt;/a&gt;.&lt;/p&gt;
-
-&lt;p&gt;a) We modify the KV-cache handling to take the indices in which to write new values in a CUDA Tensor (i.e., &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;valid_seq_pos&lt;/code&gt;) rather than a Python integer.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-generative-ai-4/fg7.png&quot; alt=&quot;Modification to KV cache append and get&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;strong&gt;Figure 5.&lt;/strong&gt; Modification to KV cache &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;append&lt;/code&gt; and &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;get&lt;/code&gt;&lt;/p&gt;
-
-&lt;p&gt;b) We also modify attention to work with the fixed shape of key and value over the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;max_seq_length&lt;/code&gt;. We only compute softmax over the sequence positions up to the current decoding step (i.e., &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;valid_seq_pos&lt;/code&gt;) . To mask out sequence positions &amp;gt; current decoding step (i.e., &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;valid_seq_pos)&lt;/code&gt;, we create a boolean mask tensor (i.e., &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;mask&lt;/code&gt;) where sequence positions &amp;gt; &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;valid_seq_pos&lt;/code&gt; are set to False.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-generative-ai-4/fg8.png&quot; alt=&quot;Helper function to generate valid_seq_pos and mask&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;strong&gt;Figure 6.&lt;/strong&gt; Helper function to generate &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;valid_seq_pos&lt;/code&gt; and &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;mask&lt;/code&gt;&lt;/p&gt;
-
-&lt;p&gt;It’s important to post that these modifications result in an increase in the amount of computation required, as we compute attention over more sequence positions than necessary (up to &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;max_seq_length&lt;/code&gt;). However, despite this drawback, our results demonstrate that torch.compile + CUDA Graph still provide significant performance benefits compared to standard PyTorch code.&lt;/p&gt;
-
-&lt;p&gt;c) As different inference samples have different sequence length, it also generates different shapes of inputs that are to be projected to key and value for the cross attention layers. Thus, we pad the input to have a static shape and generate a padding mask to mask out padded output.&lt;/p&gt;
-
-&lt;h3 id=&quot;2-memory-pointer-management&quot;&gt;2. Memory Pointer Management&lt;/h3&gt;
-
-&lt;p&gt;As CUDA Graph records memory pointers along with the shape of tensors, it is important to make different inference samples to correctly reference the recorded memory pointer (e.g., KV cache) to avoid compiling CUDA Graph for each inference sample. However, some parts of the Seamless codebase made different inference samples to refer to different memory addresses, so we made modifications to improve the memory implications.&lt;/p&gt;
-
-&lt;p&gt;e) Seamless adopts beam search as a text decoding strategy. In the beam search process, we need to perform KV cache reordering for all the attention layers for each incremental decoding step to make sure each selected beam performs with corresponding KV cache as shown in the code snippet below.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-generative-ai-4/fg8b.png&quot; alt=&quot;KV cache reordering operation for beam search decoding strategy&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;strong&gt;Figure 8.&lt;/strong&gt; KV cache reordering operation for beam search decoding strategy.&lt;/p&gt;
-
-&lt;p&gt;The above code allocates new memory space and overwrites the original memory pointer for &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;cache_k&lt;/code&gt; and &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;cache_v&lt;/code&gt;. Thus we modified KV cache reordering to keep the memory pointer of each cache as was recorded during compilation by using &lt;a href=&quot;https://pytorch.org/docs/stable/generated/torch.Tensor.copy_.html&quot;&gt;copy_&lt;/a&gt; operator.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-generative-ai-4/fg9.png&quot; alt=&quot;In-place update for KV cache using copy_ operator&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;strong&gt;Figure 9.&lt;/strong&gt; In-place update for KV cache using &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;copy_&lt;/code&gt; operator&lt;/p&gt;
-
-&lt;p&gt;f) After enabling torch.compile + CUDA Graph to text decoder by modifying the code as mentioned above, the overhead of text decoder shifts to KV cache reordering as shown in Figure 10. KV cache reordering repeatedly calls index_select 96 times (assuming 24 decoder layers where each layer consists of two types of attention layers with cache for key and value).&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-generative-ai-4/fg10.png&quot; alt=&quot;CPU and GPU trace for Text Decoder after enabling torch.compile + CUDA Graph&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;strong&gt;Figure 10.&lt;/strong&gt; CPU and GPU trace for Text Decoder after enabling torch.compile + CUDA Graph.&lt;/p&gt;
-
-&lt;p&gt;As part of accelerating text decoder, we additionally applied torch.compile to KV cache reordering to benefit from fusing kernels as shown in Figure 11. Note that we cannot use CUDA Graph here (&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;mode='max-autotune'&lt;/code&gt;) here, because &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;copy_&lt;/code&gt; operation modifies the inputs which violates the static input requirement of CUDA graph version in torch.compile.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-generative-ai-4/fg11.png&quot; alt=&quot;Applying torch.compile to KV Cache reordering&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;strong&gt;Figure 11.&lt;/strong&gt; Applying torch.compile to KV Cache reordering.&lt;/p&gt;
-
-&lt;p&gt;As a result of enabling torch.compile to KV cache reordering, the gpu kernels that were launched separately (Figure 12(a)) are now fused so there are much fewer gpu kernels to launch (Figure 12(b)).&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-generative-ai-4/fg12.png&quot; alt=&quot;CPU and GPU trace for KV cache reordering before enabling torch.compile&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;strong&gt;(a)&lt;/strong&gt; CPU and GPU trace for KV cache reordering &lt;strong&gt;before&lt;/strong&gt; enabling torch.compile&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-generative-ai-4/fg13.png&quot; alt=&quot;CPU and GPU trace for KV cache reordering after enabling torch.compile&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;strong&gt;(b)&lt;/strong&gt; CPU and GPU trace for KV cache reordering &lt;strong&gt;after&lt;/strong&gt; enabling torch.compile&lt;/p&gt;
-
-&lt;p&gt;&lt;strong&gt;Figure 12.&lt;/strong&gt; CPU and GPU trace for KV cache reordering (a) before and (b) after enabling torch.compile&lt;/p&gt;
-
-&lt;h2 id=&quot;vocoder&quot;&gt;Vocoder&lt;/h2&gt;
-
-&lt;p&gt;Vocoder in Seamless is a HiFi-GAN unit-vocoder that converts generated units to waveform output where an unit is a representation of speech that combines different aspects such as phonemes and syllables, which can be used to generate sounds that are audible to humans. Vocoder is a relatively simple module that consists of Conv1d and ConvTranspose1d layers and is a CPU bound module as shown in FIgure 3. Based on this observation, we decided to enable torch.compile + CUDA Graph for vocoder to reduce the disproportionally large CPU overhead as shown in Figure 10. But there were several fixes to be made.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-generative-ai-4/fg14.png&quot; alt=&quot;CPU and GPU trace for Vocoder after torch.compile + CUDA Graph are enabled&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;strong&gt;Figure 13.&lt;/strong&gt; CPU and GPU trace for Vocoder after torch.compile + CUDA Graph are enabled.&lt;/p&gt;
-
-&lt;p&gt;a) The input tensor shape of the vocoder is different across different inference samples. But as CUDA Graph records the shape of tensors and replays them, we had to pad the input to the fixed size with zeros. Since vocoder only consists of Conv1d layers, we do not need an additional padding mask, and padding with zeros is sufficient.&lt;/p&gt;
-
-&lt;p&gt;b) Vocoder consists of conv1d layers wrapped with &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;torch.nn.utils.weight_norm&lt;/code&gt; (see &lt;a href=&quot;https://github.com/facebookresearch/seamless_communication/blob/main/src/seamless_communication/models/vocoder/hifigan.py#L37-L112&quot;&gt;here&lt;/a&gt;). However, applying torch.compile directly to Vocoder incurs graph break as below, which leads to suboptimal performance improvement. This graph break happens inside the hook handling part in the PyTorch code of &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;weight_norm&lt;/code&gt;.&lt;/p&gt;
-
-&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;[1/0_2] torch._dynamo.symbolic_convert.__graph_breaks: [DEBUG] Graph break: setattr(UserDefinedObjectVariable) &amp;lt;function Module.__setattr__ at 0x7fac8f483c10&amp;gt; from user code at:
-[1/0_2] torch._dynamo.symbolic_convert.__graph_breaks: [DEBUG]   File &quot;/mnt/fsx-home/yejinlee/yejinlee/seamless_communication/src/seamless_communication/models/vocoder/vocoder.py&quot;, line 49, in forward
-[1/0_2] torch._dynamo.symbolic_convert.__graph_breaks: [DEBUG]     return self.code_generator(x, dur_prediction)  # type: ignore[no-any-return]1/0_2] torch._dynamo.symbolic_convert.__graph_breaks: [DEBUG]   File &quot;/data/home/yejinlee/mambaforge/envs/fairseq2_12.1/lib/python3.8/site-packages/torch/nn/modules/module.py&quot;, line 1520, in _call_impl
-[1/0_2] torch._dynamo.symbolic_convert.__graph_breaks: [DEBUG]     return forward_call(*args, **kwargs)
-[2023-12-13 04:26:16,822] [1/0_2] torch._dynamo.symbolic_convert.__graph_breaks: [DEBUG]   File &quot;/mnt/fsx-home/yejinlee/yejinlee/seamless_communication/src/seamless_communication/models/vocoder/codehifigan.py&quot;, line 101, in forward
-[1/0_2] torch._dynamo.symbolic_convert.__graph_breaks: [DEBUG]     return super().forward(x)
-[1/0_2] torch._dynamo.symbolic_convert.__graph_breaks: [DEBUG]   File &quot;/mnt/fsx-home/yejinlee/yejinlee/seamless_communication/src/seamless_communication/models/vocoder/hifigan.py&quot;, line 185, in forward
-[1/0_2] torch._dynamo.symbolic_convert.__graph_breaks: [DEBUG]     x = self.ups[i](x)
-[1/0_2] torch._dynamo.symbolic_convert.__graph_breaks: [DEBUG]   File &quot;/data/home/yejinlee/mambaforge/envs/fairseq2_12.1/lib/python3.8/site-packages/torch/nn/modules/module.py&quot;, line 1550, in _call_impl
-[1/0_2] torch._dynamo.symbolic_convert.__graph_breaks: [DEBUG]     args_result = hook(self, args)
-[1/0_2] torch._dynamo.symbolic_convert.__graph_breaks: [DEBUG]   File &quot;/data/home/yejinlee/mambaforge/envs/fairseq2_12.1/lib/python3.8/site-packages/torch/nn/utils/weight_norm.py&quot;, line 65, in __call__
-[1/0_2] torch._dynamo.symbolic_convert.__graph_breaks: [DEBUG]     setattr(module, self.name, self.compute_weight(module))
-[1/0_2] torch._dynamo.symbolic_convert.__graph_breaks: [DEBUG] 
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;Since the weights of layers do not change during the inference, we do not need weight normalization. So we simply removed weight normalization for Vocoder as shown in Figure 14, by utilizing &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;remove_weight_norm&lt;/code&gt; function which is already provided at the Seamless codebase (&lt;a href=&quot;https://github.com/facebookresearch/seamless_communication/blob/main/src/seamless_communication/models/vocoder/hifigan.py#L198-L205&quot;&gt;here&lt;/a&gt;).&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-generative-ai-4/fg15.png&quot; alt=&quot;Removing weight_norm for Vocoder&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;strong&gt;Figure 14.&lt;/strong&gt; Removing &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;weight_norm&lt;/code&gt; for Vocoder&lt;/p&gt;
-
-&lt;h2 id=&quot;performance-evaluation--impact-of-cuda-graph&quot;&gt;Performance Evaluation + Impact of CUDA Graph&lt;/h2&gt;
-
-&lt;p&gt;Figure 15 shows the speedup result when enabling torch.compile(mode=”max-autotune”) + CUDA Graph on the text decoder and vocoder. We achieve &lt;strong&gt;2x speedup for the text decoder and 30x speedup for vocoder, leading to 2.7x faster end-to-end inference time.&lt;/strong&gt;&lt;/p&gt;
-
-&lt;table&gt;
-  &lt;tr&gt;
-   &lt;td&gt;
-
-&lt;img alt=&quot;Inference time speedup of text decoder and vocoder of applying torch.compile and torch.compile + CUDA Graph&quot; src=&quot;/assets/images/accelerating-generative-ai-4/fg16.png&quot; style=&quot;width:100%;&quot; /&gt;
-   &lt;/td&gt;
-   &lt;td&gt;
-
-&lt;img alt=&quot;Inference time speedup of text decoder and vocoder of applying torch.compile and torch.compile + CUDA Graph&quot; src=&quot;/assets/images/accelerating-generative-ai-4/fg17.png&quot; style=&quot;width:100%;&quot; /&gt;
-   &lt;/td&gt;
-  &lt;/tr&gt;
-&lt;/table&gt;
-
-&lt;p&gt;&lt;strong&gt;Figure 15.&lt;/strong&gt; Inference time speedup of text decoder and vocoder of applying torch.compile and torch.compile + CUDA Graph&lt;/p&gt;
-
-&lt;p&gt;We also report the speedups for text decoder and vocoder using torch.compile without CUDA Graph, which is supported by torch.compile’s API (i.e., &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;torch.compile(mode=&quot;max-autotune-no-cudagraphs&quot;)&lt;/code&gt;), to identify the impact of CUDA Graph on the performance. Without CUDA Graph, the speedup for text decoder and vocoder reduces to 1.17x and 18.4x. While still quite significant, it indicates the important role of CUDA Graph. We conclude that Seamless M4T-v2 is exposed to a lot of time launching CUDA kernels, especially when we use small batch size (e.g., 1) where the GPU kernel execution time is not long enough to amortize the GPU kernel launch time.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-generative-ai-4/fg1.png&quot; alt=&quot;End-to-end inference speedup of applying torch.compile and CUDA graph incrementally&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;strong&gt;Figure 16.&lt;/strong&gt; End-to-end inference speedup of applying torch.compile and CUDA graph incrementally. &lt;strong&gt;a)&lt;/strong&gt; “Inc. Decoding”: Apply torch.compile only to the text decoder &lt;strong&gt;b)&lt;/strong&gt; “Inc. Decoding w/ CUDA Graph”: Apply torch.compile + CUDA Graph to the text decoder &lt;strong&gt;c)&lt;/strong&gt; “+KV Cache Reordering”: Additionally apply torch.compile to KV cache reordering operation upon b) &lt;strong&gt;d)&lt;/strong&gt; “+Vocoder”: Additionally apply torch.compile to the vocoder upon c) &lt;strong&gt;e)&lt;/strong&gt; “+Vocoder w/ CUDA Graph”: Additionally apply torch.compile + CUDA Graph to the vocoder upon d).&lt;/p&gt;
-
-&lt;p&gt;Figure 16 represents the cumulative effect of applying torch.compile with and without CUDA Graph to the modules. The results indicate a significant improvement in the end-to-end inference speedup, demonstrating the effectiveness of these techniques in optimizing the overall latency. As a result, we gain &lt;strong&gt;2.7x&lt;/strong&gt; end-to-end inference speedup for Seamless M4T-v2 with batch_size=1.&lt;/p&gt;
-
-&lt;h2 id=&quot;acknowledgements&quot;&gt;Acknowledgements&lt;/h2&gt;
-
-&lt;p&gt;We thank the PyTorch team and Seamless team for their tremendous support with this work.&lt;/p&gt;</content>
-
-      
-      
-      
-      
-      
-
-      <author>
-          <name>Yejin Lee, Carole-Jean Wu, Christian Puhrsch, Joel Schlosser, Driss Guessous, Jeffrey Wan, Joe Isaacson, Can Balioglu, Juan Pino</name>
-        
-        
-      </author>
-
-      
-
-      
-
-      
-        <summary type="html">This post is the fourth part of a multi-series blog focused on how to accelerate generative AI models with pure, native PyTorch. To skip to the code, check out our github (seamless_communication, fairseq2). We are excited to share a breadth of newly released PyTorch performance features alongside practical examples to see how far we can push PyTorch native performance. In part one, we showed how to accelerate Segment Anything over 8x using only pure, native PyTorch. In part two, we showed how to accelerate Llama-7B by almost 10x using only native PyTorch optimizations. In part three, we showed how to accelerate text-to-image diffusion models up to 3x using only native Pytorch optimizations.</summary>
       
 
       
