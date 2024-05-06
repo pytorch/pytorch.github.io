@@ -1,6 +1,0 @@
-﻿torch.arctanh
-=============
-
-.. currentmodule:: torch
-
-.. autofunction:: arctanh

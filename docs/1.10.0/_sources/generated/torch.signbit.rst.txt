@@ -1,6 +1,0 @@
-﻿torch.signbit
-=============
-
-.. currentmodule:: torch
-
-.. autofunction:: signbit

@@ -1,6 +1,0 @@
-﻿torch.outer
-===========
-
-.. currentmodule:: torch
-
-.. autofunction:: outer

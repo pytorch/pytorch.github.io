@@ -1,6 +1,0 @@
-﻿torch.sub
-=========
-
-.. currentmodule:: torch
-
-.. autofunction:: sub

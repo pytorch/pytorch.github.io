@@ -1,6 +1,0 @@
-﻿torch.atleast\_2d
-=================
-
-.. currentmodule:: torch
-
-.. autofunction:: atleast_2d

@@ -1,6 +1,0 @@
-﻿torch.amin
-==========
-
-.. currentmodule:: torch
-
-.. autofunction:: amin

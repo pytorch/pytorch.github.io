@@ -1,6 +1,0 @@
-﻿torch.nn.utils.prune.identity
-=============================
-
-.. currentmodule:: torch.nn.utils.prune
-
-.. autofunction:: identity
