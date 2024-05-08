@@ -1,6 +1,0 @@
-﻿torch.less\_equal
-=================
-
-.. currentmodule:: torch
-
-.. autofunction:: less_equal

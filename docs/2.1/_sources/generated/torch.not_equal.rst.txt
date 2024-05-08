@@ -1,6 +1,0 @@
-﻿torch.not\_equal
-================
-
-.. currentmodule:: torch
-
-.. autofunction:: not_equal
