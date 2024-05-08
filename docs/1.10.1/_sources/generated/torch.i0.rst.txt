@@ -1,6 +1,0 @@
-﻿torch.i0
-========
-
-.. currentmodule:: torch
-
-.. autofunction:: i0
