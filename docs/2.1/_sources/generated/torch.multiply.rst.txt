@@ -1,6 +1,0 @@
-﻿torch.multiply
-==============
-
-.. currentmodule:: torch
-
-.. autofunction:: multiply

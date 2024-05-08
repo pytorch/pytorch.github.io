@@ -1,6 +1,0 @@
-﻿torch.nansum
-============
-
-.. currentmodule:: torch
-
-.. autofunction:: nansum

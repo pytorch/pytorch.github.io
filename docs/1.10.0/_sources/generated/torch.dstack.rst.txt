@@ -1,6 +1,0 @@
-﻿torch.dstack
-============
-
-.. currentmodule:: torch
-
-.. autofunction:: dstack

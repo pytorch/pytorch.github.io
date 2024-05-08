@@ -1,6 +1,0 @@
-﻿torch.isposinf
-==============
-
-.. currentmodule:: torch
-
-.. autofunction:: isposinf
