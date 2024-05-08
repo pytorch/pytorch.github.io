@@ -1,6 +1,0 @@
-﻿torch.nextafter
-===============
-
-.. currentmodule:: torch
-
-.. autofunction:: nextafter

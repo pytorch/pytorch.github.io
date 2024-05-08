@@ -1,6 +1,0 @@
-﻿torch.amax
-==========
-
-.. currentmodule:: torch
-
-.. autofunction:: amax

@@ -1,6 +1,0 @@
-﻿torch.maximum
-=============
-
-.. currentmodule:: torch
-
-.. autofunction:: maximum

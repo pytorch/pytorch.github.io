@@ -1,6 +1,0 @@
-﻿torch.heaviside
-===============
-
-.. currentmodule:: torch
-
-.. autofunction:: heaviside
