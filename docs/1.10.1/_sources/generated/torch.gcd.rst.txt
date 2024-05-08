@@ -1,6 +1,0 @@
-﻿torch.gcd
-=========
-
-.. currentmodule:: torch
-
-.. autofunction:: gcd

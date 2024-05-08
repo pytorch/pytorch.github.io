@@ -1,6 +1,0 @@
-﻿torch.complex
-=============
-
-.. currentmodule:: torch
-
-.. autofunction:: complex

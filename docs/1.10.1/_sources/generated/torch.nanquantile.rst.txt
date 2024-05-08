@@ -1,6 +1,0 @@
-﻿torch.nanquantile
-=================
-
-.. currentmodule:: torch
-
-.. autofunction:: nanquantile
