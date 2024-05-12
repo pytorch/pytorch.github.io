@@ -4,7 +4,7 @@ title: "Introducing depyf: mastering torch.compile with ease"
 hidden: true
 ---
 
-![depyf logo](/assets/images/depyf.png){:style="width:100%;"}
+![depyf logo](/assets/images/depyf.png){:style="width:100%;display: block; max-width: 400px; margin-right: auto; margin-left: auto"}
 
 
 We are thrilled to introduce `depyf`, a new project to the PyTorch ecosystem designed to help users understand, learn, and adapt to `torch.compile`!
