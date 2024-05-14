@@ -4,7 +4,7 @@
   <generator uri="https://jekyllrb.com/" version="3.9.0">Jekyll</generator>
   <link href="https://pytorch.org/feed.xml" rel="self" type="application/atom+xml" />
   <link href="https://pytorch.org/" rel="alternate" type="text/html" />
-  <updated>2024-05-13T21:25:21-07:00</updated>
+  <updated>2024-05-14T10:11:46-07:00</updated>
   <id>https://pytorch.org/feed.xml</id>
 
   
@@ -29,6 +29,145 @@
 
   
   
+  
+    <entry>
+      <title type="html">Speeding up ViTs using Block Sparsity</title>
+      <link href="https://pytorch.org/blog/speeding-up-vits/" rel="alternate" type="text/html" title="Speeding up ViTs using Block Sparsity" />
+      <published>2024-05-14T00:00:00-07:00</published>
+      <updated>2024-05-14T00:00:00-07:00</updated>
+      <id>https://pytorch.org/blog/speeding-up-vits</id>
+      <content type="html" xml:base="https://pytorch.org/blog/speeding-up-vits/">&lt;p&gt;&lt;strong&gt;TLDR:&lt;/strong&gt; We show promising results of up to a &lt;strong&gt;1.46x speedup with &amp;lt;2% drop in accuracy&lt;/strong&gt; on float32 Vision Transformers on A100 GPUs by applying block sparsity on MLP module’s weights. This approach can potentially be applied to other types of transformers including large language models. Our implementation and benchmarks to reproduce our results are available at &lt;a href=&quot;https://github.com/pytorch-labs/superblock&quot;&gt;https://github.com/pytorch-labs/superblock&lt;/a&gt;.&lt;/p&gt;
+
+&lt;h2 id=&quot;introduction&quot;&gt;Introduction&lt;/h2&gt;
+
+&lt;p&gt;PyTorch has landed a lot of improvements to CUDA kernels that implement block sparse matrix multiplications. Recent updates to Pytorch can lead up to &lt;a href=&quot;https://gist.github.com/cpuhrsch/7fec60079cbe2daeff59c0577f933320&quot;&gt;4.8x speedup&lt;/a&gt; on large matrix multiplication shapes with high sparsity levels over dense baselines.&lt;/p&gt;
+
+&lt;p&gt;In this blog, we show the promising results of applying block sparsity on weights of linear layers of MLP (multi-layer perceptron) layers in vision transformers (ViTs) and show end-to-end model speedups on A100 Nvidia GPUs.&lt;/p&gt;
+
+&lt;p&gt;As a recap, block sparsity sparsifies weights in tiles of blocks of predetermined size, rather than sparsifying individual elements. This particular sparsity pattern is interesting because it is amenable to GPU acceleration via fast sparse kernels. For more information about the differences between different sparsity patterns, or about sparsity as a whole, please check out &lt;a href=&quot;https://github.com/pytorch/ao/tree/main/torchao/sparsity&quot;&gt;torchao&lt;/a&gt;.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/speeding-up-vits/fig1.png&quot; alt=&quot;Illustrations of different types of sparsity.&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;em&gt;Illustrations of different types of sparsity.&lt;/em&gt;&lt;/p&gt;
+
+&lt;h2 id=&quot;approach&quot;&gt;Approach&lt;/h2&gt;
+
+&lt;p&gt;Our approach can be broken down into two distinct steps:&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;Training the model from scratch using block sparse masks subnets.&lt;/li&gt;
+  &lt;li&gt;Folding these masks into our weights to accelerate them for inference.&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;We explain our training and inference steps below&lt;/p&gt;
+
+&lt;h3 id=&quot;training&quot;&gt;Training&lt;/h3&gt;
+
+&lt;p&gt;Starting with an uninitialized Vision Transformer, we apply random trainable masks with a specified block size and sparsity level on the weights of output projection linear layer of attention blocks, the weights of the two linear layers inside the MLP, a.k.a., FFN (feed forward networks), as well as the final linear classification layer. The forward pass during training follows the &lt;a href=&quot;https://arxiv.org/abs/2207.00670&quot;&gt;supermask approach&lt;/a&gt;, as each mask is converted to binary map using a tuned threshold based on sparsity requirements, e.g., if we want 80% sparsity, we will have the threshold automatically tuned to keep top 20% weights. The masks are of a square &amp;lt;block size&amp;gt;x&amp;lt;block size&amp;gt; elements, where &amp;lt;block size&amp;gt; is a hyperparameter. The priority of the weights is dependent on the mask value or score which is trained. We &lt;a href=&quot;https://github.com/pytorch-labs/superblock/blob/7a469210c7bcb846dd8b6bfa848d104312312126/supermask.py#L130&quot;&gt;multiply the binary masks of each layer with the weights&lt;/a&gt; to sparsify the model.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/speeding-up-vits/fig2.png&quot; alt=&quot;Illustration of the Supermask sparsification approach&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;em&gt;Illustration of the &lt;a href=&quot;https://arxiv.org/abs/2207.00670&quot;&gt;Supermask&lt;/a&gt; sparsification approach.&lt;/em&gt;&lt;/p&gt;
+
+&lt;h3 id=&quot;inference&quot;&gt;Inference&lt;/h3&gt;
+
+&lt;p&gt;After training, the &lt;a href=&quot;https://github.com/pytorch-labs/superblock/blob/7a469210c7bcb846dd8b6bfa848d104312312126/supermask.py#L122-L125&quot;&gt;dense weights can be turned to sparse weights by multiplying with the mask&lt;/a&gt; and stored for inference. At this stage, although the weights have a high percentage of zero values, they are still stored in dense format. We use PyTorch’s &lt;a href=&quot;https://pytorch.org/docs/stable/generated/torch.Tensor.to_sparse_bsr.html&quot;&gt;to_sparse_bsr()&lt;/a&gt; API to to convert the weights to &lt;a href=&quot;https://pytorch.org/docs/stable/sparse.html#sparse-bsr-docs&quot;&gt;Block Sparse Representation&lt;/a&gt; (BSR) format that stores only the non-zero values and the indices of their blocks. This step only needs to be done once and the results can be cached for runtime.&lt;/p&gt;
+
+&lt;p&gt;During runtime, no changes in code are required. We just pass any input tensor to the model, and when the forward() function of the sparsified linear layers are invoked, PyTorch takes care of invoking the optimized matrix multiplication for block sparse weights. This should work for A100 as well as H100 NVIDIA GPUs.&lt;/p&gt;
+
+&lt;h2 id=&quot;results-microbenchmarks&quot;&gt;Results: Microbenchmarks&lt;/h2&gt;
+
+&lt;p&gt;To validate the viability of block sparsity from a performance standpoint, we first ran a series of microbenchmarks using this &lt;a href=&quot;https://github.com/pytorch/ao/blob/73f8efce1e950235f58dc917ee204517ec74bba0/benchmarks/benchmark_gpu_sparsity.py&quot;&gt;simple script&lt;/a&gt;. Using the linear shapes from ViT-b, we compared the speedup of our block sparse kernels across a single linear layer as we varied the sparsity level and block size of the weight matrix.&lt;/p&gt;
+
+&lt;p&gt;We run using PyTorch 2.3.0.dev20240305+cu121 nightly on NVIDIA A100s and report the speedup of each sparsity configuration compared to dense baseline. We observed positive speedups when block size &amp;gt;=32 or sparsity level &amp;gt;= 0.8 for float32, while for bfloat16 we observe smaller speedups and usually for block size 64 and higher sparsities. Hence, for end-to-end speedups on the model, we will focus in this blog on float32 and leave bfloat16 for future work.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/speeding-up-vits/fig3.png&quot; alt=&quot;Micro benchmarking results on linear layers of ViT-b-16.&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/speeding-up-vits/fig4.png&quot; alt=&quot;Micro benchmarking results on linear layers of ViT-b-16.&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;em&gt;Micro benchmarking results on linear layers of ViT-b-16.&lt;/em&gt;&lt;/p&gt;
+
+&lt;h2 id=&quot;results-vision-transformers&quot;&gt;Results: Vision Transformers&lt;/h2&gt;
+
+&lt;p&gt;Once we confirmed that we were able to show speedups over the linear layers, we focused on showing end-to-end speedups on &lt;a href=&quot;https://pytorch.org/vision/main/models/generated/torchvision.models.vit_b_16.html&quot;&gt;ViT_B_16&lt;/a&gt;.&lt;/p&gt;
+
+&lt;p&gt;We trained this model from scratch on ImageNet dataset using the standard &lt;a href=&quot;https://github.com/pytorch/vision/tree/main/references/classification#vit_b_16&quot;&gt;ViT_B_16 recipe&lt;/a&gt;. We show speedups for sparsifying MLP modules and leave sparsifying weights of input and output projections of attention for future work.&lt;/p&gt;
+
+&lt;p&gt;We looked at wall-clock inference speedup, focusing on batch size 256. We found that:&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;For 90% sparsity we can get 1.24x, 1.37x, 1.65x speedups for block sizes 16, 32, and 64 respectively.&lt;/li&gt;
+  &lt;li&gt;To obtain speedup, the minimum sparsity for block sizes 16, 32, and 64 are 0.86, 0.82, and 0.7 respectively. Hence, as expected, the larger the block size, the smaller sparsity we need to obtain speedup.&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;We note a limitation of the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;sparse_bsr()&lt;/code&gt; API: that layers need to be multiples of the block size. Since the dimensions of the last FC classification layer in ViT was not a multiple of the block size, they were not converted to BSR representation in our experiments.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/speeding-up-vits/fig5.png&quot; alt=&quot;Speedup on ViT-b-16 with batch size 256 on MLP modules across different batch sparsities and block sizes.&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;em&gt;Speedup on ViT-b-16 with batch size 256 on MLP modules across different batch sparsities and block sizes.&lt;/em&gt;&lt;/p&gt;
+
+&lt;p&gt;We also explored the speedup for different batch sizes for 90% sparsity. We observed a speedup over the baseline for batch sizes starting from 16 and upwards. While bigger block sizes have bigger speedups at the largest batch sizes, the smallest possible batch size to obtain &amp;gt;1 speedup is smaller for smaller block sizes.&lt;/p&gt;
+
+&lt;p&gt;We believe on-device hardware can obtain speedups for batch size 1 as they - unlike server GPUs - can be fully utilized at such small batch sizes.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/speeding-up-vits/fig6.png&quot; alt=&quot;Speedup on ViT-b-16 with 90% sparsity on MLP modules across different batch sizes and block sizes.&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;em&gt;Speedup on ViT-b-16 with 90% sparsity on MLP modules across different batch sizes and block sizes.&lt;/em&gt;&lt;/p&gt;
+
+&lt;p&gt;Looking at the Top-1 accuracy on ImageNet=blurred test set of the sparsified models for different block sizes and sparsities, we see a few expected results:&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;low levels of sparsity (&amp;lt;=70%) have no meaningful regression in accuracy&lt;/li&gt;
+  &lt;li&gt;mid levels of sparsity (&amp;gt;=80% to &amp;lt;90%) have limited regression in accuracy&lt;/li&gt;
+  &lt;li&gt;high levels of sparsity (&amp;gt;=90%) removes so many weights that accuracy is significantly impacted&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;More research could be done to improve accuracies of higher sparsities and larger block sizes. We hope that the block sparsity support in PyTorch and the illustrated speedups in this blog will encourage researchers to explore more accurate sparsification approaches.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/speeding-up-vits/fig7.png&quot; alt=&quot;Accuracies on training ViT-b-16 on ImageNet-blurred using the SuperMask approach.&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;em&gt;Accuracies on training ViT-b-16 on ImageNet-blurred using the SuperMask approach.&lt;/em&gt;&lt;/p&gt;
+
+&lt;h2 id=&quot;next-steps&quot;&gt;Next Steps&lt;/h2&gt;
+
+&lt;p&gt;We have shown promising speedups for block sparsifying MLP modules ViT in float32 precision.  There is still more work to be done in order to observe speedups on bfloat16 and we hope to obtain progress on that soon. Possible next steps to further optimize block sparsity on vision transformers and transformers in general:&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;Perform block sparsity on attention input and output projections.&lt;/li&gt;
+  &lt;li&gt;Perform block sparsity during finetuning rather than training from scratch.&lt;/li&gt;
+  &lt;li&gt;Perform further optimizations on the matmul kernels for ViT’s linear operator specific shapes (especially for 80% and lower sparsity).&lt;/li&gt;
+  &lt;li&gt;Combine with other optimizations such as int8 and torch.compile()&lt;/li&gt;
+  &lt;li&gt;Explore other weight sparsification algorithms, e.g., &lt;a href=&quot;https://arxiv.org/abs/2205.14107&quot;&gt;Spartan&lt;/a&gt;, to improve accuracy&lt;/li&gt;
+  &lt;li&gt;Explore selecting weights to sparsify (e.g., specific transformer layers)&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;Please reach out to &lt;a href=&quot;mailto:melhoushi@meta.com&quot;&gt;melhoushi@meta.com&lt;/a&gt; if you have questions or are interested in contributing to block sparsification!&lt;/p&gt;
+
+&lt;p&gt;Additionally if you’re broadly interested in sparsity please feel free to reach out to &lt;a href=&quot;https://github.com/jcaip&quot;&gt;@jcaip&lt;/a&gt; / &lt;a href=&quot;mailto:jessecai@meta.com&quot;&gt;jessecai@meta.com&lt;/a&gt; and please come check out &lt;a href=&quot;https://github.com/pytorch/ao&quot;&gt;torchao&lt;/a&gt;, a community we’re building for architecture optimization techniques like quantization and sparsity.&lt;/p&gt;</content>
+
+      
+      
+      
+      
+      
+
+      <author>
+          <name>FAIR at Meta: Mostafa Elhoushi, Sensors and Systems at Meta Reality Labs Research: Syed Shakib Sarwar, Aaryan Kothapalli, Mia Kasperek, Barbara De Salvo, PyTorch at Meta: Christian Puhrsch, Jesse Cai, Joe Isaacson, Quantsight: Andrew James, Pearu Peterson, Nikita Vedeneev</name>
+        
+        
+      </author>
+
+      
+
+      
+
+      
+        <summary type="html">TLDR: We show promising results of up to a 1.46x speedup with &amp;lt;2% drop in accuracy on float32 Vision Transformers on A100 GPUs by applying block sparsity on MLP module’s weights. This approach can potentially be applied to other types of transformers including large language models. Our implementation and benchmarks to reproduce our results are available at https://github.com/pytorch-labs/superblock.</summary>
+      
+
+      
+      
+    </entry>
   
     <entry>
       <title type="html">Enhancing Deep Learning Workflows: PyTorch Ecosystem Tools</title>
@@ -1172,138 +1311,6 @@ if __name__ == &quot;__main__&quot;:
 
       
         <summary type="html">We’re pleased to announce the alpha release of torchtune, a PyTorch-native library for easily fine-tuning large language models.</summary>
-      
-
-      
-      
-    </entry>
-  
-    <entry>
-      <title type="html">Accelerating MoE model inference with Locality-Aware Kernel Design</title>
-      <link href="https://pytorch.org/blog/accelerating-moe-model/" rel="alternate" type="text/html" title="Accelerating MoE model inference with Locality-Aware Kernel Design" />
-      <published>2024-04-04T00:00:00-07:00</published>
-      <updated>2024-04-04T00:00:00-07:00</updated>
-      <id>https://pytorch.org/blog/accelerating-moe-model</id>
-      <content type="html" xml:base="https://pytorch.org/blog/accelerating-moe-model/">&lt;h2 id=&quot;10-summary&quot;&gt;1.0 Summary&lt;/h2&gt;
-
-&lt;p&gt;We show that by implementing column-major scheduling to improve data locality, we can accelerate the core Triton GEMM (General Matrix-Matrix Multiply) kernel for MoEs (Mixture of Experts) up to 4x on A100, and up to 4.4x on H100 Nvidia GPUs. This post demonstrates several different work decomposition and scheduling algorithms for MoE GEMMs and shows, at the hardware level, why column-major scheduling produces the highest speedup.&lt;/p&gt;
-
-&lt;p&gt;Repo and code available at: &lt;a href=&quot;https://github.com/pytorch-labs/applied-ai/tree/main/kernels/triton/inference/col_major_moe_gemm&quot;&gt;https://github.com/pytorch-labs/applied-ai/tree/main/kernels/triton/inference/col_major_moe_gemm&lt;/a&gt;.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-moe-model/fig-7.png&quot; alt=&quot;Figure 1A. Optimized Fused MoE GEMM Kernel TFLOPs on A100 for varying Batch Sizes M&quot; style=&quot;width:100%;display: block; max-width: 600px; margin-right: auto; margin-left: auto&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;em&gt;Figure 1A. Optimized Fused MoE GEMM Kernel TFLOPs on &lt;strong&gt;A100&lt;/strong&gt; for varying Batch Sizes M&lt;/em&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-moe-model/fig-8.png&quot; alt=&quot;Figure 1B. Optimized Fused MoE GEMM Kernel TFLOPs on H100 for varying Batch Sizes M&quot; style=&quot;width:100%;display: block; max-width: 600px; margin-right: auto; margin-left: auto; margin-top: 40px;&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;em&gt;Figure 1B. Optimized Fused MoE GEMM Kernel TFLOPs on &lt;strong&gt;H100&lt;/strong&gt; for varying Batch Sizes M&lt;/em&gt;&lt;/p&gt;
-
-&lt;h2 id=&quot;20-background&quot;&gt;2.0 Background&lt;/h2&gt;
-
-&lt;p&gt;&lt;a href=&quot;https://github.com/openai/triton&quot;&gt;OpenAI’s Triton&lt;/a&gt; is a hardware-agnostic language and compiler that as our prior &lt;a href=&quot;https://pytorch.org/blog/accelerating-triton/&quot;&gt;blog post&lt;/a&gt; has shown can be used to accelerate quantization workflows. We also showed that in terms of kernel development, much of the same learnings and performance analysis tools from CUDA can be leveraged to provide similar insights into how Triton kernels work under-the-hood and subsequent measures to speedup these kernels in latency sensitive environments. As Triton becomes increasingly adopted in production settings, it is important that developers understand the common tips and tricks to developing performant kernels as well as the generality of these methods to various different architectures and workflows. Thus, this post will explore how we optimized the Triton kernel developed by &lt;a href=&quot;https://github.com/vllm-project/vllm&quot;&gt;vLLM &lt;/a&gt;for the popular Mixture of Experts (MoE) Mixtral model using classical techniques and how these techniques can be implemented in Triton to achieve performance gain.&lt;/p&gt;
-
-&lt;p&gt;&lt;a href=&quot;https://arxiv.org/abs/2401.04088&quot;&gt;Mixtral 8x7B&lt;/a&gt; is a sparse Mixture of Experts Language Model. Unlike the classical dense transformer architecture, each transformer block houses 8 MLP layers where each MLP is an ‘expert’. As a token flows through, a router network selects which 2 of the 8 experts should process that token and the results are then combined. The selected experts for the same token vary at each layer.  As a result, while Mixtral 8x7B has a total of 47B params, during inference only 13B params are active.&lt;/p&gt;
-
-&lt;p&gt;The MoE GEMM (General Matrix-Matrix Multiply) kernel receives a stacked weight matrix containing all the experts, and must subsequently route each token to the TopK (2 for Mixtral) experts by utilizing a mapping array produced by the resultant scores of the router network. In this post, we provide methods to efficiently parallelize this computation during inference time, specifically during autoregression (or decoding stages).&lt;/p&gt;
-
-&lt;h2 id=&quot;30-work-decomposition---splitk&quot;&gt;3.0 Work Decomposition - SplitK&lt;/h2&gt;
-
-&lt;p&gt;We have previously shown that for the matrix problem sizes found in LLM inference, specifically in the context of W4A16 quantized inference, GEMM kernels can be accelerated by applying a &lt;a href=&quot;https://arxiv.org/abs/2402.00025&quot;&gt;SplitK work decomposition&lt;/a&gt;. Thus, we started our MoE acceleration research by implementing SplitK in the &lt;a href=&quot;https://github.com/vllm-project/vllm/blob/main/vllm/model_executor/layers/fused_moe/fused_moe.py&quot;&gt;vLLM MoE Kernel&lt;/a&gt;, which produced speedups of approximately 18-20% over the Data Parallel approach.&lt;/p&gt;
-
-&lt;p&gt;This result shows that the SplitK optimization can be used as a part of a more formulaic approach to improving/developing Triton kernels in inference settings. To build intuition about these different work decompositions, let’s consider a simple example for the multiplication of two 4x4 matrices and SplitK=2.&lt;/p&gt;
-
-&lt;p&gt;In the data parallel GEMM kernel shown below, the computation for a single block of the output matrix will be handled by 1 threadblock, TB0.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-moe-model/fig-1.gif&quot; alt=&quot;Figure 2. Data Parallel GEMM&quot; style=&quot;width:100%;display: block; max-width: 600px; margin-right: auto; margin-left: auto&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;em&gt;Figure 2. Data Parallel GEMM&lt;/em&gt;&lt;/p&gt;
-
-&lt;p&gt;In contrast, in the SplitK kernel, the work required to compute 1 block in the output matrix, is “split” or shared amongst 2 thread blocks TB0 and TB1. This provides better load balancing and increased parallelism.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-moe-model/fig.gif&quot; alt=&quot;Figure 3. SplitK GEMM&quot; style=&quot;width:100%;display: block; max-width: 600px; margin-right: auto; margin-left: auto&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;em&gt;Figure 3. SplitK GEMM&lt;/em&gt;&lt;/p&gt;
-
-&lt;p&gt;The key idea is that we’ve increased our parallelism from M&lt;em&gt;N to M&lt;/em&gt;N*SplitK. This approach does incur some costs such as adding inter-threadblock communication via atomic operations. However, these costs are minimal compared to the savings of other constrained GPU resources like shared memory and registers. Most importantly, the SplitK strategy provides superior load balancing characteristics for skinny matrices, (as is the case in MoE inference) and is the common matrix profile during decoding and inference.&lt;/p&gt;
-
-&lt;h2 id=&quot;40-gemm-hardware-scheduling---column-major&quot;&gt;4.0 GEMM Hardware Scheduling - Column Major&lt;/h2&gt;
-
-&lt;p&gt;To improve upon the ~20% speedup with SplitK we focused our investigation on the logic that controls the hardware scheduling of the GEMM in Triton Kernels. Our profiling of the vLLM MoE kernel showed a low L2 cache hit rate, thus we investigated three scheduling options - column-major, row-major and grouped launch.  Due to some intrinsic properties of MoE models, such as large expert matrices, and having to dynamically load TopK (2 for Mixtral) matrices during the duration of the kernel, cache reuse/hit rate becomes a bottleneck that this optimization will target.&lt;/p&gt;
-
-&lt;p&gt;For background, in our previous &lt;a href=&quot;https://pytorch.org/blog/accelerating-triton/&quot;&gt;blog&lt;/a&gt;, we touched on the concept of “tile swizzling”, a method to achieve greater L2 cache hit rate. This concept relates to how the software &lt;em&gt;schedules&lt;/em&gt; the GEMM onto the SMs of a GPU. In Triton, this schedule is determined by the pid_m and pid_n calculations. Our key insight is that for skinny matrix multiplications, a column-major ordering ensures optimal reuse of the columns of the weight matrix, B. To illustrate this, let’s take a look at a snippet of what a column major computation of pid_m, and pid_n would look like:&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-moe-model/fig-6.png&quot; alt=&quot;Figure 4. Column Major ordering in PyTorch&quot; style=&quot;width:100%;display: block; max-width: 500px; margin-right: auto; margin-left: auto&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;em&gt;Figure 4. Column Major ordering in PyTorch&lt;/em&gt;&lt;/p&gt;
-
-&lt;p&gt;From above, we note that with this mapping, we schedule the GEMM such that we calculate the output blocks of C in the following order: C(0, 0), C(1, 0), C(2, 0),… etc. To understand the implications we provide the following illustration:&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-moe-model/fig-5.png&quot; alt=&quot;Activation matrix / Weight matrix&quot; style=&quot;width:100%;display: block; max-width: 500px; margin-right: auto; margin-left: auto&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-moe-model/fig-4.png&quot; alt=&quot;L1/L2 Cache&quot; style=&quot;width:100%;display: block; max-width: 300px; margin-right: auto; margin-left: auto&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-moe-model/fig-3.png&quot; alt=&quot;C - Output Matrix&quot; style=&quot;width:100%;display: block; max-width: 300px; margin-right: auto; margin-left: auto&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;em&gt;Figure 5. Cache Reuse Pattern for a Column-Major GEMM Schedule&lt;/em&gt;&lt;/p&gt;
-
-&lt;p&gt;In the above simplified view of a column-major schedule, let’s assume for a GEMM with skinny activation matrix A, that the entire matrix can fit in the GPU cache which is a reasonable assumption to make for the type of problem sizes we encounter in MoE inference. This allows for maximal &lt;em&gt;reuse&lt;/em&gt; of the columns of the weight matrix B, due to the fact that the B column can be re-used for the corresponding output tile calculations, C(0,0), C(1, 0) and C(2, 0). Consider instead, a row-major schedule, C(0,0), C(0,1), C(0, 2) etc. We would have to evict the column of B, and issue multiple load instructions to DRAM to calculate the same amount of output blocks.&lt;/p&gt;
-
-&lt;p&gt;An important design consideration when optimizing kernels is a memory access pattern that results in the least amount of global load instructions. This optimal memory access pattern is achieved with the column-major schedule. The results below showcase the performance of the three schedules we investigated:&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-moe-model/fig-2.png&quot; alt=&quot;Figure 6. Comparison of GEMM Schedules on A100 for varying Batch Sizes M&quot; style=&quot;width:100%;display: block; max-width: 600px; margin-right: auto; margin-left: auto&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;em&gt;Figure 6. Comparison of GEMM Schedules on A100 for varying Batch Sizes M&lt;/em&gt;&lt;/p&gt;
-
-&lt;p&gt;The column-major schedule provides up to a 4x speedup over the other patterns, and as we’ll show in the next section, provides an optimal memory access pattern due to greatly improved data locality.&lt;/p&gt;
-
-&lt;h2 id=&quot;50-nsight-compute-analysis---throughput-and-memory-access-pattern&quot;&gt;5.0 Nsight Compute Analysis - Throughput and Memory Access Pattern&lt;/h2&gt;
-
-&lt;p&gt;For performance analysis, we focus on the &lt;strong&gt;M = 2&lt;/strong&gt; case for the H100.  A similar study can be done for the A100 as many of the same observations carry over.  We note the following salient results, that showcase the impact of our optimizations.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-moe-model/fig-1.png&quot; alt=&quot;Figure 7. H100 Memory Throughput Chart for M = 2.  Note the very large increase in the cache hit rates L1 cache hit rate (+2696%) and L2 cache hit rate (+254%).&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;em&gt;Figure 7. H100 Memory Throughput Chart for M = 2.  Note the very large increase in the cache hit rates L1 cache hit rate (+2696%) and L2 cache hit rate (+254%).&lt;/em&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-moe-model/fig.png&quot; alt=&quot;Figure 8. H100 Memory Instruction Statistics M = 2. Note the 49% reduction in global memory loads.&quot; style=&quot;width:100%;margin-top: 40px;&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;em&gt;Figure 8. H100 Memory Instruction Statistics M = 2. Note the 49% reduction in global memory loads.&lt;/em&gt;&lt;/p&gt;
-
-&lt;p&gt;These statistics show that our optimizations had the intended effect, which can be seen in the reduced cache misses, reduced memory accesses and the resultant 2.7x speedup. More concretely, the trace shows us a 2.54x increase in L2 hit rate (Figure 7), and a  ~50% reduction in DRAM accesses (Figure 8).&lt;/p&gt;
-
-&lt;p&gt;These improvements ultimately yield the reduced latency, with the optimized kernel being 2.7x faster for bs=2 and 4.4x for bs=512.&lt;/p&gt;
-
-&lt;h2 id=&quot;60-future-work&quot;&gt;6.0 Future Work&lt;/h2&gt;
-
-&lt;p&gt;Our kernel was tested in FP16, which showcases the numerics and performance of the column major scheduling for MoE, but most production models are using BFloat16.  We encountered a limitation in Triton such that tl.atomic_add does not support Bfloat16 and hit launch latency concerns which would require cuda graph support for column major production use. In initial testing this translated to a 70% end-to-end speedup but, we encountered some expert mapping inconsistencies in an end to end environment that are not reflected in the test environment, so further work is needed to fully realize these speedups. \&lt;/p&gt;
-
-&lt;p&gt;For future work, we intend to move this into a CUDA kernel which will ensure full BFloat16 support and reduced launch latency relative to Triton, and potentially resolve the expert routing inconsistency. We’ve also previously &lt;a href=&quot;https://arxiv.org/abs/2402.00025&quot;&gt;published work&lt;/a&gt; on enabling GPTQ W4A16 with Triton GEMM kernels, so natural follow-on work would include fusing dequantization into this kernel to allow for a GPTQ quantized inference path.&lt;/p&gt;
-
-&lt;h2 id=&quot;70-reproducibility&quot;&gt;7.0 Reproducibility&lt;/h2&gt;
-
-&lt;p&gt;We have &lt;a href=&quot;https://github.com/pytorch-labs/applied-ai/tree/main/kernels/triton/inference/col_major_moe_gemm&quot;&gt;open sourced&lt;/a&gt; the Triton kernel code along with an easy to run performance benchmark for readers interested in comparing or verifying the performance on their own GPU.&lt;/p&gt;
-
-&lt;h2 id=&quot;acknowledgements&quot;&gt;Acknowledgements&lt;/h2&gt;
-
-&lt;p&gt;We want to thank Daniel Han, Raghu Ganti, Mudhakar Srivatsa, Bert Maher, Gregory Chanan, Eli Uriegas, and Geeta Chauhan for their review of the presented material and Woosuk from the vLLM team as we built on his implementation of the Fused MoE kernel.&lt;/p&gt;</content>
-
-      
-      
-      
-      
-      
-
-      <author>
-          <name>Adnan Hoque, Less Wright, Antoni Virós Martin, Chih-Chieh Yang</name>
-        
-        
-      </author>
-
-      
-
-      
-
-      
-        <summary type="html">1.0 Summary</summary>
       
 
       
