@@ -2,6 +2,7 @@
 layout: blog_detail
 title: "Introducing depyf: mastering torch.compile with ease"
 hidden: true
+author: Kaichao You
 ---
 
 ![depyf logo](/assets/images/depyf.png){:style="width:100%;display: block; max-width: 400px; margin-right: auto; margin-left: auto"}
