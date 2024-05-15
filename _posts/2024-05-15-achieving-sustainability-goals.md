@@ -2,6 +2,7 @@
 layout: blog_detail
 title: "Achieving Sustainability Goals with PyTorch and Intel AI"
 ---
+This post was contributed by Intel AI in partnership with the PyTorch Foundation.
 
 In 2017, the UN Global Compact emphasized digital technology, particularly open source, as crucial for achieving Sustainable Development Goals (SDGs), projecting a potential $2.1 trillion boost to the tech sector by 2030. The SDGs, part of the "2030 Agenda for Sustainable Development," address global prosperity across various sectors.
 
@@ -18,7 +19,7 @@ The [Linux Foundation's Sustainability Initiative](https://www.linuxfoundation.o
 
 * Identifying crucial minerals, oil, and gas through subsurface models.
 
-Here are the key highlights from the workshops. Read below for a summary, and be sure to watch the full workshop videos and visit the GitHub repositories..
+Here are the key highlights from the workshops. Read below for a summary, and be sure to watch the full workshop videos and visit the GitHub repositories.
 
 ## Session 1:  Introduction to Dinosaur Bone Bed Maps
 
@@ -28,7 +29,7 @@ Attendees learned to set up JupyterLab, access the training section, and launch 
 
 Rahul Unnikrishnan Nair demonstrated the use of PyTorch, focusing on performance enhancements. The workshop covered modeling best practices, such as data transformations, class distribution, dropout layers, and efficient training methods. Training and scoring procedures were examined, with a focus on model accuracy and transportability to other regions. Heatmap creation involved cutting images into tiles, considering context for accurate environmental identification.  
 
-Watch the [full workshop video here ](https://www.youtube.com/watch?v=w4JmPkqnD0E)and visit the [GitHub repository ](https://github.com/intelsoftware/jurassic)to access the code sample and experiment with the code using [Intel ® Extension for PyTorch](https://pytorch.org/tutorials/recipes/recipes/intel_extension_for_pytorch.html).. Try it out with PyTorch and explore what works best for you. Happy dinosaur bone hunting! 
+Watch the [full workshop video here ](https://www.youtube.com/watch?v=w4JmPkqnD0E)and visit the [GitHub repository ](https://github.com/intelsoftware/jurassic)to access the code sample and experiment with the code using [Intel ® Extension for PyTorch](https://pytorch.org/tutorials/recipes/recipes/intel_extension_for_pytorch.html). Try it out with PyTorch and explore what works best for you. Happy dinosaur bone hunting! 
 
 ## Session 2: Seismic Data to Subsurface Models with OpenFWI: Training an AI Model with PyTorch
 
