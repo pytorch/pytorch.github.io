@@ -24,7 +24,7 @@ Anomalib is a deep learning library that aims to collect state-of-the-art anomal
 
 ### [Diffusers](https://huggingface.co/docs/diffusers)
 
-Diffusers is a library within the PyTorch ecosystem that focuses on model interpretability. It offers a suite of tools and techniques to explain the decisions made by deep learning models. With Diffusers, developers can gain insights into model behavior, understand feature importance, and detect potential biases. By making deep learning models more transparent, Diffusers promotes fairness, accountability, and robustness in AI applications.
+Diffusers is the go-to library for state-of-the-art pretrained diffusion models for generating images, audio, and even 3D structures of molecules. Whether you're looking for a simple inference solution or training your own diffusion models, Diffusers is a modular toolbox that supports both.
 
 ### [Pomegranate](https://pomegranate.readthedocs.io/en/latest/)
 
