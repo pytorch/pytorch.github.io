@@ -58,15 +58,15 @@ Finally, like our previous blog, we compute the MFU for four different model siz
 
 <table class="table table-bordered">
   <tr>
-   <td>Model size
+   <td><strong>Model size</strong>
    </td>
-   <td>Batch size
+   <td><strong>Batch size</strong>
    </td>
-   <td>MFU no-compile 
+   <td><strong>MFU no-compile</strong> 
    </td>
-   <td>MFU compile
+   <td><strong>MFU compile</strong>
    </td>
-   <td>Percentage gain (%)
+   <td><strong>Percentage gain (%)</strong>
    </td>
   </tr>
   <tr>
@@ -125,15 +125,15 @@ _Table 1: MFU results with compile and no compile for Llama2 model architectures
 
 <table class="table table-bordered mt-5">
   <tr>
-   <td>Model size
+   <td><strong>Model size</strong>
    </td>
-   <td>Batch size
+   <td><strong>Batch size</strong>
    </td>
-   <td>MFU no-compile 
+   <td><strong>MFU no-compile</strong> 
    </td>
-   <td>MFU compile 
+   <td><strong>MFU compile</strong>
    </td>
-   <td>Percentage gain
+   <td><strong>Percentage gain</strong>
    </td>
   </tr>
   <tr>
