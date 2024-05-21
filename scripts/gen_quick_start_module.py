@@ -186,7 +186,7 @@ def extract_arch_ver_map(release_matrix):
     for chan in ("nightly", "release"):
         cuda_ver_list = gen_ver_list(chan, "cuda")
         rocm_ver_list = gen_ver_list(chan, "rocm")
-        cuda_list = cuda_ver_list.values()
+        cuda_list = sorted(cuda_ver_list.values())
         acc_arch_ver_map[chan]["rocm5.x"] = ("rocm", max(rocm_ver_list.values()))
         for cuda_ver, label in zip(cuda_list, ["cuda.x", "cuda.y", "cuda.z"]):
             acc_arch_ver_map[chan][label] = ("cuda", cuda_ver)
@@ -195,7 +195,7 @@ def extract_arch_ver_map(release_matrix):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--autogenerate', dest='autogenerate', action='store_true')
-    parser.set_defaults(autogenerate=True)
+    parser.set_defaults(autogenerate=False)
 
     options = parser.parse_args()
     versions = read_published_versions()
@@ -215,9 +215,9 @@ def main():
 
     template = read_quick_start_module_template()
     versions_str = json.dumps(gen_install_matrix(versions))
-    #template = template.replace("{{ installMatrix }}", versions_str)
-    #template = template.replace("{{ VERSION }}", f"\"Stable ({versions['latest_stable']})\"")
-    #print(template.replace("{{ ACC ARCH MAP }}", json.dumps(acc_arch_ver_map)))
+    template = template.replace("{{ installMatrix }}", versions_str)
+    template = template.replace("{{ VERSION }}", f"\"Stable ({versions['latest_stable']})\"")
+    print(template.replace("{{ ACC ARCH MAP }}", json.dumps(acc_arch_ver_map)))
 
 if __name__ == "__main__":
     main()
