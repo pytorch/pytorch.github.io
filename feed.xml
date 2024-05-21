@@ -4,7 +4,7 @@
   <generator uri="https://jekyllrb.com/" version="3.9.0">Jekyll</generator>
   <link href="https://pytorch.org/feed.xml" rel="self" type="application/atom+xml" />
   <link href="https://pytorch.org/" rel="alternate" type="text/html" />
-  <updated>2024-05-20T23:46:37-07:00</updated>
+  <updated>2024-05-21T04:17:16-07:00</updated>
   <id>https://pytorch.org/feed.xml</id>
 
   
@@ -29,6 +29,236 @@
 
   
   
+  
+    <entry>
+      <title type="html">Maximizing Training Throughput Using PyTorch FSDP and Torch.compile</title>
+      <link href="https://pytorch.org/blog/maximizing-training-throughput/" rel="alternate" type="text/html" title="Maximizing Training Throughput Using PyTorch FSDP and Torch.compile" />
+      <published>2024-05-21T00:00:00-07:00</published>
+      <updated>2024-05-21T00:00:00-07:00</updated>
+      <id>https://pytorch.org/blog/maximizing-training-throughput</id>
+      <content type="html" xml:base="https://pytorch.org/blog/maximizing-training-throughput/">&lt;p&gt;&lt;a href=&quot;https://pytorch.org/blog/maximizing-training/&quot;&gt;Recently&lt;/a&gt;, we demonstrated how FSDP and selective activation checkpointing can be used to achieve &lt;strong&gt;57% MFU (Model Flops Utilization)&lt;/strong&gt; for training a 7B model on A100 GPUs. We also demonstrated how it can train a high quality model, which we open sourced as &lt;a href=&quot;https://huggingface.co/ibm/granite-7b-base&quot;&gt;Granite 7B base model&lt;/a&gt; on Hugging Face Hub under the Apache v2.0 license.&lt;/p&gt;
+
+&lt;p&gt;We continued our quest to improve  the utilization of GPUs by leveraging torch.compile. Using torch.compile and the selective activation checkpointing from our previous work, we achieve a &lt;strong&gt;MFU of 68%&lt;/strong&gt; for the 7B model on A100 GPUs! torch.compile improves training MFU between 10% and 23% for various model sizes.&lt;/p&gt;
+
+&lt;p&gt;This blog is organized into three parts: (1) Challenges addressed in order to train using torch.compile, (2) Numerical parity of compile with no-compile, and (3) MFU report.&lt;/p&gt;
+
+&lt;p&gt;We open sourced all the code and updated it in the &lt;a href=&quot;https://github.com/foundation-model-stack/fms-fsdp&quot;&gt;fms-fsdp repository.&lt;/a&gt; We are also working with Team PyTorch at Meta to contribute these to the newly released &lt;a href=&quot;https://github.com/pytorch/torchtitan&quot;&gt;torch titan&lt;/a&gt; repository for pre-training.&lt;/p&gt;
+
+&lt;h2 id=&quot;challenges-of-using-torchcompile&quot;&gt;Challenges of using torch.compile&lt;/h2&gt;
+
+&lt;p&gt;torch.compile is a graph compilation technique that improves GPU utilization. For details on how torch compile works, we refer the readers to the recent &lt;a href=&quot;https://pytorch.org/blog/pytorch-2-paper-tutorial/&quot;&gt;PyTorch paper&lt;/a&gt; and associated tutorials. A key challenge in getting torch.compile to perform well is to minimize (or eliminate) graph breaks. We initially started with the Llama implementation provided by Meta, but compiling it caused too many  graph breaks resulting in reduced  training throughput.&lt;/p&gt;
+
+&lt;p&gt;Several portions of the model architecture had to be fixed, with the most important one being the positional embedding layer (RoPE). The typical RoPE implementation uses complex numbers, which was not supported in torch.compile at the time of testing. We implemented RoPE using einops while maintaining parity with the original model architecture implementation. We had to properly cache the frequencies so that we did not run into graph breaks within the RoPE implementation.&lt;/p&gt;
+
+&lt;p&gt;Compiling an FSDP model does result in graph breaks, which the PyTorch team at Meta is working to remove. However, these graph breaks as of PyTorch 2.3 are at FSDP unit boundaries and do not affect throughput significantly.&lt;/p&gt;
+
+&lt;p&gt;When using custom kernels, we need to wrap each kernel by exposing its API to torch.compile.  This involves indicating what parameters are modified in-place, how they are modified, and what shapes and strides will their return values have based on the inputs. In our case, SDPA Flash attention is already integrated appropriately and we were able to get that kernel to work with torch.compile with no graph breaks.&lt;/p&gt;
+
+&lt;p&gt;We also noticed that when  increasing the amount of data from 2T to 6T tokens, the data loader became a bottleneck. A key reason for this is the fact that previously, we implemented document shuffling in our dataloader naively, by having each worker maintain a list of shuffled document pointers.&lt;/p&gt;
+
+&lt;p&gt;With the larger dataset, these pointer lists were growing to hundreds of thousands of entries per worker. Maintaining pointer lists at this scale became expensive enough that cpu contention throttled our training throughput. We re-implemented document shuffling without any pointer lists using a &lt;a href=&quot;https://en.wikipedia.org/wiki/Linear_congruential_generator&quot;&gt;Linear Congruential Generator&lt;/a&gt;. LCG is a pseudorandom number generator algorithm that implements a random walk over a population, providing sampling without replacement.&lt;/p&gt;
+
+&lt;p&gt;We leveraged the same idea to produce implicit bijective mappings from ordered to shuffled document indices.  This enables us to shrink those annoying lists of hundreds of thousands of pointers down to a single integer state for the LCG. This eliminated 80% of the bottleneck and provided a significant boost to our performance. We will devote a separate blog to go into all the details of our performant pre-training data loader.&lt;/p&gt;
+
+&lt;h2 id=&quot;numerical-parity-of-torchcompile-and-torchno-compile&quot;&gt;Numerical Parity of torch.compile and torch.no-compile&lt;/h2&gt;
+
+&lt;p&gt;We had previously observed parity issues when training with compile and no-compile options, with one of these being related to the use of SDPA. After a few days of intense debugging sessions between the PyTorch teams at Meta and IBM, we were able to achieve parity between PyTorch compile and no-compile modes. To document and verify this parity, we take a mini-Llama model architecture of 1.4B size and train it to 100B tokens in four variations – no-compile, compile with no activation checkpointing, compile with selective activation checkpointing, and compile with full activation checkpointing.&lt;/p&gt;
+
+&lt;p&gt;We plot the loss curves and gradient norm for these options below:&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/max-training-chart.jpg&quot; alt=&quot;Figure 1: Loss curve and gradient norm for various compile options&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;em&gt;Figure 1: Loss curve and gradient norm for various compile options&lt;/em&gt;&lt;/p&gt;
+
+&lt;p&gt;Further, we run the lm-evaluation-harness and compare the various model scores on different benchmarks and observe no major differences between compile and no-compile, which is shown below.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/max-training-table.png&quot; alt=&quot;Figure 2: lm-evaluation-harness comparison of various benchmarks between compile and no-compile&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;em&gt;Figure 2: lm-evaluation-harness comparison of various benchmarks between compile and no-compile&lt;/em&gt;&lt;/p&gt;
+
+&lt;p&gt;We observe from all these results that compile with all its variants is equal to no-compile option, thus demonstrating parity between compile and no-compile.&lt;/p&gt;
+
+&lt;h2 id=&quot;mfu-report&quot;&gt;MFU report&lt;/h2&gt;
+
+&lt;p&gt;Finally, like our previous blog, we compute the MFU for four different model sizes on two clusters.  One cluster is 128 A100 GPUs with 400 Gbps inter-node connectivity,  and the other is 464 H100 GPUs with 3.2 Tbps inter-node connectivity. We use the selective activation checkpointing that we covered &lt;a href=&quot;https://pytorch.org/blog/maximizing-training/&quot;&gt;in the prior blog&lt;/a&gt; in addition to compile. We capture the results in the table below.&lt;/p&gt;
+
+&lt;table class=&quot;table table-bordered&quot;&gt;
+  &lt;tr&gt;
+   &lt;td&gt;&lt;strong&gt;Model size&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;Batch size&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;MFU no-compile&lt;/strong&gt; 
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;MFU compile&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;Percentage gain (%)&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;7B
+   &lt;/td&gt;
+   &lt;td&gt;2
+   &lt;/td&gt;
+   &lt;td&gt;0.57
+   &lt;/td&gt;
+   &lt;td&gt;0.68
+   &lt;/td&gt;
+   &lt;td&gt;20
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;13B
+   &lt;/td&gt;
+   &lt;td&gt;2
+   &lt;/td&gt;
+   &lt;td&gt;0.51
+   &lt;/td&gt;
+   &lt;td&gt;0.60
+   &lt;/td&gt;
+   &lt;td&gt;17
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;34B
+   &lt;/td&gt;
+   &lt;td&gt;2
+   &lt;/td&gt;
+   &lt;td&gt;0.47
+   &lt;/td&gt;
+   &lt;td&gt;0.54
+   &lt;/td&gt;
+   &lt;td&gt;15
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;70B
+   &lt;/td&gt;
+   &lt;td&gt;2
+   &lt;/td&gt;
+   &lt;td&gt;0.50
+   &lt;/td&gt;
+   &lt;td&gt;0.55
+   &lt;/td&gt;
+   &lt;td&gt;10
+   &lt;/td&gt;
+  &lt;/tr&gt;
+&lt;/table&gt;
+
+&lt;p&gt;&lt;em&gt;Table 1: MFU results with compile and no compile for Llama2 model architectures on 128 A100 80GB GPUs with 400Gbps internode interconnect&lt;/em&gt;&lt;/p&gt;
+
+&lt;table class=&quot;table table-bordered mt-5&quot;&gt;
+  &lt;tr&gt;
+   &lt;td&gt;&lt;strong&gt;Model size&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;Batch size&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;MFU no-compile&lt;/strong&gt; 
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;MFU compile&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;Percentage gain&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;7B
+   &lt;/td&gt;
+   &lt;td&gt;2
+   &lt;/td&gt;
+   &lt;td&gt;0.37
+   &lt;/td&gt;
+   &lt;td&gt;0.45
+   &lt;/td&gt;
+   &lt;td&gt;21
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;13B
+   &lt;/td&gt;
+   &lt;td&gt;2
+   &lt;/td&gt;
+   &lt;td&gt;0.35
+   &lt;/td&gt;
+   &lt;td&gt;0.43
+   &lt;/td&gt;
+   &lt;td&gt;23
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;34B
+   &lt;/td&gt;
+   &lt;td&gt;2
+   &lt;/td&gt;
+   &lt;td&gt;0.32
+   &lt;/td&gt;
+   &lt;td&gt;0.38
+   &lt;/td&gt;
+   &lt;td&gt;19
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;70B
+   &lt;/td&gt;
+   &lt;td&gt;2
+   &lt;/td&gt;
+   &lt;td&gt;0.32
+   &lt;/td&gt;
+   &lt;td&gt;0.38
+   &lt;/td&gt;
+   &lt;td&gt;19
+   &lt;/td&gt;
+  &lt;/tr&gt;
+&lt;/table&gt;
+
+&lt;p&gt;&lt;em&gt;Table 2: MFU results with compile and no compile for Llama2 model architectures on 464 H100 80GB GPUs with 3.2Tbps internode interconnect&lt;/em&gt;&lt;/p&gt;
+
+&lt;p&gt;We also had an internal production run on 448 GPUs using a Llama2 7B architecture. Using compile and selective activation checkpointing, with a global batch size of 3.7M, we trained for 4T tokens in 13 days 10 hours!&lt;/p&gt;
+
+&lt;p&gt;During training, the data center cooling had to kick in with extra air conditioning and our training team was alerted to this, since we were using the GPUs quite effectively ☺&lt;/p&gt;
+
+&lt;p&gt;One key observation from the tables 1 and 2 is that the MFU numbers do not linearly scale with model size. There are two possible explanations that we are actively investigating, one is the scalability of FSDP as model size increases and when tensor parallel needs to be enabled to more effectively use the GPU and the other is batch size, which can be increased further to get better MFU. We plan to explore FSDP v2 and selective operator checkpointing along with the tensor parallel feature to study the scaling laws of FSDP with model size.&lt;/p&gt;
+
+&lt;h2 id=&quot;future-work&quot;&gt;Future Work&lt;/h2&gt;
+
+&lt;p&gt;We plan to start testing FSDP v2 which will be released as part of PyTorch 2.4.  FSDP2 provides per parameter sharding and selective operator checkpointing feature that can potentially provide even better memory-compute tradeoffs.&lt;/p&gt;
+
+&lt;p&gt;We have also been engaged with the PyTorch team at Meta to evaluate the new asynchronous checkpointing feature that can further improve the GPU utilization by reducing the time to write checkpoints.&lt;/p&gt;
+
+&lt;p&gt;We are exploring extending various Triton kernels currently used in inference to perform backward operations to gain speedups beyond inference only.&lt;/p&gt;
+
+&lt;p&gt;Finally, as recent work on use of fp8 is emerging, we plan to explore how we can even further accelerate model training using the new data type that promises a 2x acceleration.&lt;/p&gt;
+
+&lt;h2 id=&quot;acknowledgements&quot;&gt;Acknowledgements&lt;/h2&gt;
+
+&lt;p&gt;There are several teams that have been involved in reaching this proof point and we would like to thank the teams across Meta and IBM. Specifically, we extend our gratitude to the Meta PyTorch distributed and compiler teams and IBM Research.&lt;/p&gt;
+
+&lt;p&gt;Multiple people were extensively involved in the effort of achieving torch.compile numerical parity with our models, and we wish to acknowledge the key folks involved in this effort; Animesh Jain and Less Wright at Meta, and Linsong Chu, Davis Wertheimer, Brian Vaughan, Antoni i Viros Martin, Mudhakar Srivatsa,  and Raghu Ganti at IBM Research.&lt;/p&gt;
+
+&lt;p&gt;Special thanks to &lt;a href=&quot;https://www.linkedin.com/in/stasbekman/?originalSubdomain=ca&quot;&gt;Stas Bekman&lt;/a&gt;, who provided extensive feedback and helped improve this blog. Their insights have been invaluable in highlighting key aspects of optimizing the training and exploring further enhancements.&lt;/p&gt;</content>
+
+      
+      
+      
+      
+      
+
+      <author>
+          <name>Team PyTorch at IBM and Team PyTorch at Meta</name>
+        
+        
+      </author>
+
+      
+
+      
+
+      
+        <summary type="html">Recently, we demonstrated how FSDP and selective activation checkpointing can be used to achieve 57% MFU (Model Flops Utilization) for training a 7B model on A100 GPUs. We also demonstrated how it can train a high quality model, which we open sourced as Granite 7B base model on Hugging Face Hub under the Apache v2.0 license.</summary>
+      
+
+      
+      
+    </entry>
   
     <entry>
       <title type="html">Achieving Sustainability Goals with PyTorch and Intel AI</title>
@@ -1206,127 +1436,6 @@ if __name__ == &quot;__main__&quot;:
 
       
         <summary type="html">We are excited to announce the release of ExecuTorch alpha, focused on deploying large language models (LLMs) and large ML models to the edge, stabilizing the API surface, and improving our installation processes. It has been an exciting few months from our 0.1 (preview) release in collaboration with our partners at Arm, Apple, and Qualcomm Technologies, Inc.</summary>
-      
-
-      
-      
-    </entry>
-  
-    <entry>
-      <title type="html">PyTorch 2.3 Release Blog</title>
-      <link href="https://pytorch.org/blog/pytorch2-3/" rel="alternate" type="text/html" title="PyTorch 2.3 Release Blog" />
-      <published>2024-04-24T00:00:00-07:00</published>
-      <updated>2024-04-24T00:00:00-07:00</updated>
-      <id>https://pytorch.org/blog/pytorch2-3</id>
-      <content type="html" xml:base="https://pytorch.org/blog/pytorch2-3/">&lt;p&gt;We are excited to announce the release of PyTorch® 2.3 (&lt;a href=&quot;https://github.com/pytorch/pytorch/releases/tag/v2.3.0&quot;&gt;release note&lt;/a&gt;)! PyTorch 2.3 offers support for user-defined Triton kernels in torch.compile, allowing for users to migrate their own Triton kernels from eager without experiencing performance regressions or graph breaks. Tensor Parallelism improves the experience for training Large Language Models using native PyTorch functions, which has been validated on training runs for 100B parameter models. As well, semi-structured sparsity implements semi-structured sparsity as a Tensor subclass, with observed speedups of up to 1.6 over dense matrix multiplication.&lt;/p&gt;
-
-&lt;p&gt;This release is composed of 3393 commits and 426 contributors since PyTorch 2.2. We want to sincerely thank our dedicated community for your contributions. As always, we encourage you to try these out and report any issues as we improve 2.3. More information about how to get started with the PyTorch 2-series can be found at our &lt;a href=&quot;https://pytorch.org/get-started/pytorch-2.0/&quot;&gt;Getting Started&lt;/a&gt; page.&lt;/p&gt;
-
-&lt;table class=&quot;table table-bordered&quot;&gt;
-  &lt;tr&gt;
-   &lt;td&gt;&lt;strong&gt;Beta&lt;/strong&gt;
-   &lt;/td&gt;
-   &lt;td&gt;&lt;strong&gt;Prototype&lt;/strong&gt;
-   &lt;/td&gt;
-   &lt;td&gt;&lt;strong&gt;Performance Improvements&lt;/strong&gt;
-   &lt;/td&gt;
-  &lt;/tr&gt;
-  &lt;tr&gt;
-   &lt;td&gt;User-defined Triton kernels in torch.compile
-   &lt;/td&gt;
-   &lt;td&gt;torch.export adds new API to specify dynamic_shapes
-   &lt;/td&gt;
-   &lt;td&gt;Weight-Only-Quantization introduced into Inductor CPU backend
-   &lt;/td&gt;
-  &lt;/tr&gt;
-  &lt;tr&gt;
-   &lt;td&gt;Tensor parallelism within PyTorch Distributed
-   &lt;/td&gt;
-   &lt;td&gt;Asynchronous checkpoint generation
-   &lt;/td&gt;
-   &lt;td&gt;
-   &lt;/td&gt;
-  &lt;/tr&gt;
-  &lt;tr&gt;
-   &lt;td&gt;Support for semi-structured sparsity
-   &lt;/td&gt;
-   &lt;td&gt;
-   &lt;/td&gt;
-   &lt;td&gt;
-   &lt;/td&gt;
-  &lt;/tr&gt;
-&lt;/table&gt;
-
-&lt;p&gt;*To see a full list of public feature submissions click &lt;a href=&quot;https://docs.google.com/spreadsheets/d/1TzGkWuUMF1yTe88adz1dt2mzbIsZLd3PBasy588VWgk/edit?usp=sharing&quot;&gt;here&lt;/a&gt;.&lt;/p&gt;
-
-&lt;h2 id=&quot;beta-features&quot;&gt;Beta Features&lt;/h2&gt;
-
-&lt;h3 id=&quot;beta-support-for-user-defined-triton-kernels-in-torchcompile&quot;&gt;[Beta] Support for User-defined Triton kernels in &lt;em&gt;torch.compile&lt;/em&gt;&lt;/h3&gt;
-
-&lt;p&gt;Allows for PyTorch code that contains triton kernels to be executed natively using torch.compile. This enables users to migrate code containing triton kernels from eager PyTorch to &lt;em&gt;torch.compile&lt;/em&gt; without running into performance regressions or graph breaks. Native support also creates an opportunity for Torch Inductor to precompile the user-defined Triton kernel as well as better organize code around the Triton kernel allowing for further optimizations.&lt;/p&gt;
-
-&lt;p&gt;You can find more information about how to utilize user defined Triton kernels in torch.compile within &lt;a href=&quot;https://pytorch.org/tutorials/recipes/torch_compile_user_defined_triton_kernel_tutorial.html&quot;&gt;this tutorial&lt;/a&gt;.&lt;/p&gt;
-
-&lt;h3 id=&quot;beta-tensor-parallelism-introduces-more-efficient-ways-to-train-llms&quot;&gt;[Beta] Tensor Parallelism introduces more efficient ways to train LLMs&lt;/h3&gt;
-
-&lt;p&gt;The Tensor Parallel API facilitates various tensor manipulations across GPUs/hosts and integrates with FSDP for 2D Parallelism (Tensor parallelism across devices + Data Parallelism across hosts). It also offers a low-level API for constructing higher-level Tensor parallel APIs. This API has been validated to support the training of transformer models with over 100 billion parameters.&lt;/p&gt;
-
-&lt;p&gt;You can find more information on how to utilize this within your workflows within &lt;a href=&quot;https://pytorch.org/tutorials/intermediate/TP_tutorial.html&quot;&gt;this tutorial&lt;/a&gt;.&lt;/p&gt;
-
-&lt;h3 id=&quot;beta-semi-structured-sparsity-provides-users-with-a-way-to-take-advantage-of-accelerated-sparse-inference-and-memory-savings&quot;&gt;[Beta] Semi-structured sparsity provides users with a way to take advantage of accelerated sparse inference and memory savings&lt;/h3&gt;
-
-&lt;p&gt;&lt;em&gt;torch.sparse.SparseSemiStructuredTensor&lt;/em&gt; implements semi-structured sparsity as a Tensor subclass, which have observed speedups of up to 1.6 over dense matrix multiplication.&lt;/p&gt;
-
-&lt;p&gt;In particular it adds:&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;Additional support for quantization composability (mixed dtype, dequant fusion)&lt;/li&gt;
-  &lt;li&gt;Updated cuSPARSELt and CUTLASS kernels&lt;/li&gt;
-  &lt;li&gt;torch.compile support&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;You can find more information on how to take advantage of semi-structured sparsity &lt;a href=&quot;https://pytorch.org/tutorials/advanced/semi_structured_sparse.html&quot;&gt;here&lt;/a&gt;.&lt;/p&gt;
-
-&lt;h2 id=&quot;prototype-features&quot;&gt;Prototype Features&lt;/h2&gt;
-
-&lt;h3 id=&quot;prototype-torchexport-adds-new-api-to-specify-dynamic_shapes&quot;&gt;[PROTOTYPE] &lt;em&gt;torch.export&lt;/em&gt; adds new API to specify &lt;em&gt;dynamic_shapes&lt;/em&gt;&lt;/h3&gt;
-
-&lt;p&gt;You can now use &lt;em&gt;torch.export.Dim&lt;/em&gt; to better represent dynamic shapes by enabling developers to specify ranges (min and max values) that can be reused across different input dimensions that are constrained to be equal.&lt;/p&gt;
-
-&lt;p&gt;To learn more about &lt;em&gt;torch.export.Dim&lt;/em&gt; as well as how it can be used to express more interesting relationships (such as linear arithmetic expressions) check out the tutorial &lt;a href=&quot;https://pytorch.org/tutorials/intermediate/torch_export_tutorial.html#constraints-dynamic-shapes&quot;&gt;here&lt;/a&gt;.&lt;/p&gt;
-
-&lt;h3 id=&quot;prototype-asynchronous-checkpoint-generation&quot;&gt;[PROTOTYPE] Asynchronous checkpoint generation&lt;/h3&gt;
-
-&lt;p&gt;Asynchronous checkpoint generation allows users to continue their training loops while checkpoints are being generated, essentially offloading much of the checkpointing cost.&lt;/p&gt;
-
-&lt;p&gt;You can find out how to utilize this within your own workflows with this &lt;a href=&quot;https://github.com/pytorch/pytorch/blob/release/2.3/torch/distributed/checkpoint/examples/async_checkpointing_example.py&quot;&gt;example&lt;/a&gt;.&lt;/p&gt;
-
-&lt;h2 id=&quot;performance-improvements&quot;&gt;Performance Improvements&lt;/h2&gt;
-
-&lt;h3 id=&quot;prototype-weight-only-quantization-introduced-into-inductor-cpu-backend&quot;&gt;[PROTOTYPE] Weight-Only-Quantization introduced into Inductor CPU backend&lt;/h3&gt;
-
-&lt;p&gt;PyTorch 2.3 enhances LLM inference performance on torch inductor CPU backend. The project &lt;a href=&quot;https://github.com/pytorch-labs/gpt-fast&quot;&gt;gpt-fast&lt;/a&gt; offers a simple and efficient PyTorch native acceleration for transformer text generation with &lt;em&gt;torch.compile&lt;/em&gt;. Prior to 2.3 only CUDA devices were supported and this feature enables the CPU counterpart by providing highly optimized kernels for the int4 and int8 weight only quantization Linear.&lt;/p&gt;
-
-&lt;p&gt;For more information / how to utilize this feature please refer to the &lt;a href=&quot;https://github.com/pytorch-labs/gpt-fast#quantization&quot;&gt;gpt-fast README&lt;/a&gt;.&lt;/p&gt;</content>
-
-      
-      
-      
-      
-      
-
-      <author>
-          <name>Facebook</name>
-        
-        
-      </author>
-
-      
-
-      
-
-      
-        <summary type="html">We are excited to announce the release of PyTorch® 2.3 (release note)! PyTorch 2.3 offers support for user-defined Triton kernels in torch.compile, allowing for users to migrate their own Triton kernels from eager without experiencing performance regressions or graph breaks. Tensor Parallelism improves the experience for training Large Language Models using native PyTorch functions, which has been validated on training runs for 100B parameter models. As well, semi-structured sparsity implements semi-structured sparsity as a Tensor subclass, with observed speedups of up to 1.6 over dense matrix multiplication.</summary>
       
 
       
