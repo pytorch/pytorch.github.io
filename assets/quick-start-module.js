@@ -129,7 +129,10 @@ function changeVersion(ptbuild) {
   for (const [arch_key, info] of archInfoMap) {
     var elems = document.querySelectorAll('[id^="'+arch_key+'"]');
     for (var i=0; i < elems.length;i++) {
-      elems[i].children[0].textContent = info.title + " " + archMap[elems[i].id][1]
+      if(archMap[elems[i].id])
+        elems[i].children[0].textContent = info.title + " " + archMap[elems[i].id][1]
+      else
+        elems[i].style.textDecoration = "line-through";
     }
   }
   var stable_element = document.getElementById("stable");
@@ -263,4 +266,3 @@ function commandMessage(key) {
 
 // Set cuda version right away
 changeVersion("stable")
-
