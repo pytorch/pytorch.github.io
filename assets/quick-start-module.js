@@ -105,6 +105,12 @@ function getPreferredCuda(os) {
 
 // Disable compute platform not supported on OS
 function disableUnsupportedPlatforms(os) {
+
+  if(opts.ptbuild == "preview")
+    archMap = version_map.nightly
+  else
+    archMap = version_map.release
+
   for (const [arch_key, info] of archInfoMap) {
     var elems = document.querySelectorAll('[id^="'+arch_key+'"]');
     if (elems == null) {
@@ -114,6 +120,11 @@ function disableUnsupportedPlatforms(os) {
     for (var i=0; i < elems.length;i++) {
       var supported = info.platforms.has(os);
       elems[i].style.textDecoration = supported ? "" : "line-through";
+
+      // Officially supported arch but not available
+      if(!archMap[elems[i].id]) {
+        elems[i].style.textDecoration =  "line-through";
+      }
     }
   }
 }
@@ -129,10 +140,13 @@ function changeVersion(ptbuild) {
   for (const [arch_key, info] of archInfoMap) {
     var elems = document.querySelectorAll('[id^="'+arch_key+'"]');
     for (var i=0; i < elems.length;i++) {
-      if(archMap[elems[i].id])
+      if(archMap[elems[i].id]) {
+        elems[i].style.textDecoration = "";
         elems[i].children[0].textContent = info.title + " " + archMap[elems[i].id][1]
-      else
+      }
+      else {
         elems[i].style.textDecoration = "line-through";
+      }
     }
   }
   var stable_element = document.getElementById("stable");
