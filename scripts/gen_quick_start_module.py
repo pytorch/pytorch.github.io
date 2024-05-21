@@ -195,7 +195,7 @@ def extract_arch_ver_map(release_matrix):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--autogenerate', dest='autogenerate', action='store_true')
-    parser.set_defaults(autogenerate=False)
+    parser.set_defaults(autogenerate=True)
 
     options = parser.parse_args()
     versions = read_published_versions()
