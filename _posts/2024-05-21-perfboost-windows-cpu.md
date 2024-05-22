@@ -9,7 +9,8 @@ The challenge of PyTorch's lower CPU performance on Windows compared to Linux ha
 In version 2.0, PyTorch on Windows with CPU directly utilizes the default malloc mechanism of Windows, which, compared to the malloc used in PyTorch Linux version 2.0, significantly increases the time for memory allocation, resulting in decreased performance. Intel engineer Xu Han took the initiative to replace the original Windows malloc mechanism, which PyTorch automatically calls, with another well-known malloc library developed by Microsoft, known as mimalloc. This replacement of malloc has already been released with Pytorch v2.1 and can significantly improve PyTorch's performance on Windows CPUs (See the following graph).
 
 ![Windows PC Performance Improvement](../assets/images/2024-05-21-perfboost-windows-cpu/windows_compare.png)
-Image 1: Relative throughput improvement achieved by upgrading from Windows PyTorch version 2.0 to 2.1 (higher is better). The performance is measured on Intel Core 13th Gen i7-13700H with 32G Memory.
+***Image 1: Relative throughput improvement achieved by upgrading from Windows PyTorch version 2.0 to 2.1 (higher is better)***. 
+**Note**: The performance is measured on Intel Core 13th Gen i7-13700H with 32G Memory.
 
 
 From this graph, it's evident that PyTorch on Windows CPU showcases significant performance improvements. The variations in performance enhancements across different workloads mainly stem from varying proportions of different operations within distinct models, consequently affecting the frequency of memory access operations. It shows a comparatively smaller enhancement in BERT model performance, while there is a more substantial improvement in ResNet50 and MobileNetv3 Large model performances.
@@ -17,10 +18,12 @@ From this graph, it's evident that PyTorch on Windows CPU showcases significant 
 On a high-performance CPU, memory allocation becomes a performance bottleneck. This is also why addressing this issue has led to such significant performance improvements. 
 
 ![Windows vs Linux Performance on Pytorch 2.0](../assets/images/2024-05-21-perfboost-windows-cpu/pytorch_20_win_linux.png)
-Image 2.1: Relative performance of Windows vs Linux with Pytorch version 2.0 (higher is better). The performance is measured on Intel Core 13th Gen i7-13700H with 32G Memory.
+***Image 2.1: Relative performance of Windows vs Linux with Pytorch version 2.0 (higher is better)***. 
+**Note**: The performance is measured on Intel Core 13th Gen i7-13700H with 32G Memory.
 
 ![Windows vs Linux Performance on Pytorch 2.1](../assets/images/2024-05-21-perfboost-windows-cpu/pytorch_21_win_linux.png)
-Image 2.2: Relative performance of Windows vs Linux with Pytorch version 2.1 (higher is better). The performance is measured on Intel Core 13th Gen i7-13700H with 32G Memory.
+***Image 2.2: Relative performance of Windows vs Linux with Pytorch version 2.1 (higher is better)***. 
+**Note**: The performance is measured on Intel Core 13th Gen i7-13700H with 32G Memory.
 
 As shown in the graphs, it is evident that PyTorch's performance on Windows CPUs can significantly improved. However, there is still a noticeable gap when compared to its performance on Linux. This can be attributed to several factors, including the fact that malloc has not yet fully reached the performance level of Linux, among other reasons. Intel engineers will continue to delve into this issue, collaborating with Meta engineers, to reduce the performance gap of PyTorch between Windows and Linux.
 
