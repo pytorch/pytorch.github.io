@@ -143,8 +143,7 @@ function changeVersion(ptbuild) {
       if(archMap[elems[i].id]) {
         elems[i].style.textDecoration = "";
         elems[i].children[0].textContent = info.title + " " + archMap[elems[i].id][1]
-      }
-      else {
+      } else {
         elems[i].style.textDecoration = "line-through";
       }
     }
@@ -207,6 +206,8 @@ function selectedOption(option, selection, category) {
     }
   } else if (category == "ptbuild") {
     changeVersion(opts.ptbuild);
+    //make sure unsupported platforms are disabled
+    disableUnsupportedPlatforms(opts.os);
   }
   commandMessage(buildMatcher());
   if (category === "os") {

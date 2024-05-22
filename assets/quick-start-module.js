@@ -207,6 +207,8 @@ function selectedOption(option, selection, category) {
     }
   } else if (category == "ptbuild") {
     changeVersion(opts.ptbuild);
+    //make sure unsupported platforms are disabled
+    disableUnsupportedPlatforms(opts.os);
   }
   commandMessage(buildMatcher());
   if (category === "os") {
@@ -280,4 +282,3 @@ function commandMessage(key) {
 
 // Set cuda version right away
 changeVersion("stable")
-
