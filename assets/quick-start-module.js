@@ -143,8 +143,7 @@ function changeVersion(ptbuild) {
       if(archMap[elems[i].id]) {
         elems[i].style.textDecoration = "";
         elems[i].children[0].textContent = info.title + " " + archMap[elems[i].id][1]
-      }
-      else {
+      } else {
         elems[i].style.textDecoration = "line-through";
       }
     }
@@ -282,3 +281,4 @@ function commandMessage(key) {
 
 // Set cuda version right away
 changeVersion("stable")
+
