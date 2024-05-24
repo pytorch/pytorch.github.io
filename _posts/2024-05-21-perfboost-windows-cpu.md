@@ -93,7 +93,7 @@ The configurations in the table are collected with [svr-info](https://github.com
 | BIOS                        | LBCN19WW                               | LBCN19WW                               |
 | Microcode                   | 0x411c                                 | 0x411c                                 |
 | OS                          | Windows 11 Desktop                     | Ubuntu 23.10                           |
-| Kernel                      | OS Build 19045.4412                    | OS Build 19045.4412                    |
+| Kernel                      | OS Build 19045.4412                    | 6.5.0-27-generic                       |
 | TDP                         | 200 watts                              | 200 watts                              |
 | Power & Perf Policy         | Normal Powersave (7)                   | Normal Powersave (7)                   |
 | Frequency Governor          | powersave                              | powersave                              |
