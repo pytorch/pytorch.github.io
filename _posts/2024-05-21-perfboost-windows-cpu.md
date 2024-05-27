@@ -1,16 +1,16 @@
 ---
 layout: blog_detail
-title: "The Path to Achieve Pytorch Windows Performance boost on CPU"
+title: "The Path to Achieve PyTorch Windows Performance boost on CPU"
 author: Zhaoqiong Zheng, Xu Han, Haozhe Zhu, Wenzhuo Zhang
 ---
 
-The challenge of PyTorch's lower CPU performance on Windows compared to Linux has been a significant issue. There are multiple factors leading to this performance disparity. Through meticulous investigation by Intel engineer [Xu Han](https://github.com/xuhancn), we've identified one of the primary reasons for poor CPU performance on Windows, which is linked to the Windows malloc mechanism.
+The challenge of PyTorch's lower CPU performance on Windows compared to Linux has been a significant issue. There are multiple factors leading to this performance disparity. Through meticulous investigation, we've identified one of the primary reasons for poor CPU performance on Windows, which is linked to the Windows malloc memory allocator.
 
-In version 2.0, PyTorch on Windows with CPU directly utilizes the default malloc mechanism of Windows, which, compared to the malloc used in PyTorch Linux version 2.0, significantly increases the time for memory allocation, resulting in decreased performance. Intel engineer Xu Han took the initiative to replace the original Windows malloc mechanism, which PyTorch automatically calls, with another well-known malloc library developed by Microsoft, known as mimalloc. This replacement of malloc has already been released with Pytorch v2.1 and can significantly improve PyTorch's performance on Windows CPUs (See the following graph).
+In version 2.0, PyTorch on Windows with CPU directly utilizes the default malloc mechanism of Windows, which, compared to the malloc used in PyTorch Linux version 2.0, significantly increases the time for memory allocation, resulting in decreased performance. Intel engineer Xu Han took the initiative to replace the original Windows malloc mechanism, which PyTorch automatically calls, with another well-known malloc library developed by Microsoft, known as mimalloc. This replacement of malloc has already been released with PyTorch v2.1 and can significantly improve PyTorch's performance on Windows CPUs (See the following graph).
 
 ![Windows PC Performance Improvement](/assets/images/2024-05-21-perfboost-windows-cpu/windows_compare.png){:style="width:100%;"}
 
-_Figire 1: Relative throughput improvement achieved by upgrading from Windows PyTorch version 2.0 to 2.1 (higher is better)._ 
+_Figure 1: Relative throughput improvement achieved by upgrading from Windows PyTorch version 2.0 to 2.1 (higher is better)._ 
 
 **Note**: The performance is measured on Intel Core 13th Gen i7-13700H with 32G Memory.
 
@@ -19,15 +19,15 @@ From this graph, it's evident that PyTorch on Windows CPU showcases significant 
 
 On a high-performance CPU, memory allocation becomes a performance bottleneck. This is also why addressing this issue has led to such significant performance improvements. 
 
-![Windows vs Linux Performance on Pytorch 2.0](/assets/images/2024-05-21-perfboost-windows-cpu/pytorch_20_win_linux.png){:style="width:100%;"}
+![Windows vs Linux Performance on PyTorch 2.0](/assets/images/2024-05-21-perfboost-windows-cpu/pytorch_20_win_linux.png){:style="width:100%;"}
 
-_Figure 2.1: Relative performance of Windows vs Linux with Pytorch version 2.0 (higher is better)._ 
+_Figure 2.1: Relative performance of Windows vs Linux with PyTorch version 2.0 (higher is better)._ 
 
 **Note**: The performance is measured on Intel Core 13th Gen i7-13700H with 32G Memory.
 
-![Windows vs Linux Performance on Pytorch 2.1](/assets/images/2024-05-21-perfboost-windows-cpu/pytorch_21_win_linux.png){:style="width:100%;"}
+![Windows vs Linux Performance on PyTorch 2.1](/assets/images/2024-05-21-perfboost-windows-cpu/pytorch_21_win_linux.png){:style="width:100%;"}
 
-_Figure 2.2: Relative performance of Windows vs Linux with Pytorch version 2.1 (higher is better)._ 
+_Figure 2.2: Relative performance of Windows vs Linux with PyTorch version 2.1 (higher is better)._ 
 
 **Note**: The performance is measured on Intel Core 13th Gen i7-13700H with 32G Memory.
 
@@ -43,11 +43,11 @@ Install PyTorch version 2.1 or higher using the Windows CPU wheel from the offic
 
 Comparing PyTorch 2.0 and PyTorch 2.1, we can observe varying degrees of performance improvement on Windows CPU. The extent of performance improvement becomes more pronounced as the number of memory allocation operations called within an op in a workload increases. A more powerful CPU computing capability will also make this performance enhancement more pronounced, as the proportion of operations outside of computation increases.
 
-This performance enhancement to a certain extent helps to bridge the Pytorch CPU performance gap between Windows and Linux. Intel will continue to collaborate with Meta, dedicated to enhancing the performance of PyTorch on CPUs!
+This performance enhancement to a certain extent helps to bridge the PyTorch CPU performance gap between Windows and Linux. Intel will continue to collaborate with Meta, dedicated to enhancing the performance of PyTorch on CPUs!
 
 ## ACKNOWLEDGMENTS
 
-The results presented in this blog post was achieved through the collaborative effort of the Intel PyTorch team and Meta. We would like to express our sincere gratitude to [Xu Han](https://github.com/xuhancn), [Jiong Gong](https://github.com/jgong5), [Mingfei Ma](https://github.com/mingfeima), [Haozhe Zhu](https://github.com/zhuhaozhe), [Chuanqi Wang](https://github.com/chuanqi129), [Guobing Chen](https://github.com/Guobing-Chen), [Eikan Wang](https://github.com/EikanWang). Their expertise and dedication have been instrumental in achieving the optimizations and performance improvements discussed here. Thanks to [Jiachen Pu](https://github.com/peterjc123) for his participation in the issue discussion and suggesting the use of [mimalloc](https://github.com/microsoft/mimalloc), and we'd also like to express our gratitude to Microsoft for providing such easily integratable and performant mallocation library.  Finally we want to thank [Jing Xu](https://github.com/jingxu10), [Weizhuo Zhang](https://github.com/WeizhuoZhang-intel) for their contributions to this blog.
+The results presented in this blog post was achieved through the collaborative effort of the Intel PyTorch team and Meta. We would like to express our sincere gratitude to [Xu Han](https://github.com/xuhancn), [Jiong Gong](https://github.com/jgong5), [Mingfei Ma](https://github.com/mingfeima), [Haozhe Zhu](https://github.com/zhuhaozhe), [Chuanqi Wang](https://github.com/chuanqi129), [Guobing Chen](https://github.com/Guobing-Chen), [Eikan Wang](https://github.com/EikanWang). Their expertise and dedication have been instrumental in achieving the optimizations and performance improvements discussed here. Thanks to [Jiachen Pu](https://github.com/peterjc123) for his participation in the issue discussion and suggesting the use of [mimalloc](https://github.com/microsoft/mimalloc). We'd also like to express our gratitude to Microsoft for providing such an easily integrated and performant mallocation library.  Finally we want to thank [Jing Xu](https://github.com/jingxu10) and [Weizhuo Zhang](https://github.com/WeizhuoZhang-intel) for their contributions to this blog.
 
 
 ## Notices and Disclaimers
