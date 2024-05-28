@@ -1,12 +1,12 @@
 ---
 layout: blog_detail
 title: "The Path to Achieve PyTorch Windows Performance boost on CPU"
-author: Zhaoqiong Zheng, Xu Han, Haozhe Zhu, Wenzhuo Zhang
+author: Zhaoqiong Zheng, Xu Han, Haozhe Zhu, Wenzhuo Zhang from Intel
 ---
 
 The challenge of PyTorch's lower CPU performance on Windows compared to Linux has been a significant issue. There are multiple factors leading to this performance disparity. Through meticulous investigation, we've identified one of the primary reasons for poor CPU performance on Windows, which is linked to the Windows malloc memory allocator.
 
-In version 2.0, PyTorch on Windows with CPU directly utilizes the default malloc mechanism of Windows, which, compared to the malloc used in PyTorch Linux version 2.0, significantly increases the time for memory allocation, resulting in decreased performance. Intel engineer Xu Han took the initiative to replace the original Windows malloc mechanism, which PyTorch automatically calls, with another well-known malloc library developed by Microsoft, known as mimalloc. This replacement of malloc has already been released with PyTorch v2.1 and can significantly improve PyTorch's performance on Windows CPUs (See the following graph).
+In version 2.0, PyTorch on Windows with CPU directly utilizes the default malloc mechanism of Windows, which, compared to the malloc used in PyTorch Linux version 2.0, significantly increases the time for memory allocation, resulting in decreased performance. Intel engineer [Xu Han](https://github.com/xuhancn) took the initiative to replace the original Windows malloc mechanism, which PyTorch automatically calls, with another well-known malloc library developed by Microsoft, known as mimalloc. This replacement of malloc has already been released with PyTorch v2.1 and can significantly improve PyTorch's performance on Windows CPUs (See the following graph).
 
 ![Windows PC Performance Improvement](/assets/images/2024-05-21-perfboost-windows-cpu/windows_compare.png){:style="width:100%;"}
 
