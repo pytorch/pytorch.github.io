@@ -1,7 +1,7 @@
 ---
 layout: blog_detail
 title: "The Path to Achieve PyTorch Windows Performance boost on CPU"
-author: Zhaoqiong Zheng, Xu Han, Haozhe Zhu, Wenzhuo Zhang from Intel
+author: Zhaoqiong Zheng from Intel
 ---
 
 The challenge of PyTorch's lower CPU performance on Windows compared to Linux has been a significant issue. There are multiple factors leading to this performance disparity. Through meticulous investigation, we've identified one of the primary reasons for poor CPU performance on Windows, which is linked to the Windows malloc memory allocator.
