@@ -9,7 +9,7 @@ poster: assets/images/docathon-2024.png
 
 **Date**: June 4 - 20th, 2024
 
-<a href="https://hubs.la/Q02vW0f40">
+<a href="https://hubs.la/Q02xrG5Z0">
 <img style="width:100%" src="/assets/images/docathon-2024.png" alt="PyTorch Docathon banner">
 </a>
 
@@ -29,4 +29,4 @@ The Docathon is an inclusive event designed to be accessible to newcomers, requi
 
 Further details for the Docathon will be announced at the Kick-off call on June 4.
 
-[Register here](https://hubs.la/Q02vW0f40)  
+[Register here](https://hubs.la/Q02xrG5Z0)  
