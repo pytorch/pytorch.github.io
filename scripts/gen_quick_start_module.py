@@ -44,6 +44,7 @@ acc_arch_ver_default = {
         "accnone": ("cpu", ""),
         "cuda.x": ("cuda", "11.8"),
         "cuda.y": ("cuda", "12.1"),
+        "cuda.z": ("cuda", "12.4"),
         "rocm5.x": ("rocm", "6.0")
         }
     }
