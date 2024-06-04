@@ -44,7 +44,6 @@ acc_arch_ver_default = {
         "accnone": ("cpu", ""),
         "cuda.x": ("cuda", "11.8"),
         "cuda.y": ("cuda", "12.1"),
-        "cuda.z": ("cuda", "12.4"),
         "rocm5.x": ("rocm", "6.0")
         }
     }
@@ -103,12 +102,15 @@ def get_gpu_info(acc_key, instr, acc_arch_map):
 # json object.
 def update_versions(versions, release_matrix, release_version):
     version = "preview"
+    template = "preview"
     acc_arch_map = acc_arch_ver_map[release_version]
 
     if release_version != "nightly":
         version = release_matrix[OperatingSystem.LINUX.value][0]["stable_version"]
+        # temporary change until release 2.4.0 - to generate cuda.x, cuda.y, cuda.z
+        template = "2.3.0"
         if version not in versions["versions"]:
-            versions["versions"][version] = copy.deepcopy(versions["versions"]["preview"])
+            versions["versions"][version] = copy.deepcopy(versions["versions"][template])
             versions["latest_stable"] = version
 
     # Perform update of the json file from release matrix
@@ -211,7 +213,7 @@ def main():
         for val in ("nightly", "release"):
             update_versions(versions, release_matrix[val], val)
 
-        write_published_versions(versions)
+        # write_published_versions(versions)
 
     template = read_quick_start_module_template()
     versions_str = json.dumps(gen_install_matrix(versions))
