@@ -213,7 +213,7 @@ def main():
         for val in ("nightly", "release"):
             update_versions(versions, release_matrix[val], val)
 
-        # write_published_versions(versions)
+        write_published_versions(versions)
 
     template = read_quick_start_module_template()
     versions_str = json.dumps(gen_install_matrix(versions))
