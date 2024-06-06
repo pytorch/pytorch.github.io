@@ -4,7 +4,7 @@
   <generator uri="https://jekyllrb.com/" version="3.9.0">Jekyll</generator>
   <link href="https://pytorch.org/feed.xml" rel="self" type="application/atom+xml" />
   <link href="https://pytorch.org/" rel="alternate" type="text/html" />
-  <updated>2024-06-05T15:25:21-07:00</updated>
+  <updated>2024-06-06T08:57:55-07:00</updated>
   <id>https://pytorch.org/feed.xml</id>
 
   
@@ -29,6 +29,3421 @@
 
   
   
+  
+    <entry>
+      <title type="html">INT4 Decoding GQA CUDA Optimizations for LLM Inference</title>
+      <link href="https://pytorch.org/blog/int4-decoding/" rel="alternate" type="text/html" title="INT4 Decoding GQA CUDA Optimizations for LLM Inference" />
+      <published>2024-06-06T00:00:00-07:00</published>
+      <updated>2024-06-06T00:00:00-07:00</updated>
+      <id>https://pytorch.org/blog/int4-decoding</id>
+      <content type="html" xml:base="https://pytorch.org/blog/int4-decoding/">&lt;h4 id=&quot;an-efficient-decoding-grouped-query-attention-with-low-precision-kv-cache&quot;&gt;An efficient decoding Grouped-Query Attention with low-precision KV cache&lt;/h4&gt;
+
+&lt;h2 id=&quot;introduction&quot;&gt;Introduction&lt;/h2&gt;
+
+&lt;p&gt;Generative AI has taken the world by storm with its ability to generate content like humans.  Many of these generative AI tools are powered by large language models (LLMs), like Meta &lt;a href=&quot;https://llama.meta.com/llama3/&quot;&gt;Llama&lt;/a&gt; models and OpenAI’s &lt;a href=&quot;https://openai.com/gpt-4&quot;&gt;ChatGPT&lt;/a&gt;.  One of the main challenges of LLMs is supporting large “context lengths” (also known as “sequence lengths”).  The context length refers to the number of tokens that the model uses to understand the input context and generate responses.  Longer context lengths generally translate into higher precision and quality in the responses.  However, long context lengths are compute and memory intensive.  This is mainly due to the following reasons:&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;The computational complexity of attention layers increases proportionally with the context length (the growth rate depends on the attention algorithm).  As a result, when using long context lengths, the attention layers can become a bottleneck, particularly during the prefill phase where attentions are compute bound.&lt;/li&gt;
+  &lt;li&gt;The KV cache size grows linearly with the context length, thus, putting higher pressure on the memory requirement and consequently slowing down the already memory-bound attention decoding.  Moreover, since the memory capacity is limited, the batch size reduces when the KV cache gets bigger, which generally results in a drop in throughput.&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;The computational complexity growth is difficult to solve compared to the other problem mentioned above.  One way to address the KV cache size growth problem is to use low precision KV cache.  From our experiments, group-wise INT4 quantization provides comparable results in terms of accuracy compared to BF16 KV cache during the decode phase in Meta Llama 2 inference.  However, we did not observe any latency improvement, despite reading 4x lesser data in attention decoding layers.  This means that the INT4 attention is 4x less efficient at utilizing precious HBM bandwidth than BF16 attention.&lt;/p&gt;
+
+&lt;p&gt;In this note, we discuss the CUDA optimizations that we applied to INT4 GQA (grouped-query attention – the attention layer that we use in the LLM inference phase) to improve its performance by up to &lt;strong&gt;1.8x on the NVIDIA A100 GPU&lt;/strong&gt; and &lt;strong&gt;1.9x on the NVIDIA H100 GPU&lt;/strong&gt;.&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;The &lt;strong&gt;optimized CUDA INT4 GQA&lt;/strong&gt; outperformed &lt;a href=&quot;https://pytorch.org/blog/flash-decoding/&quot;&gt;INT4 Flash-Decoding GQA&lt;/a&gt; (the best performing INT4 GQA that we used in the experiment mentioned above) by &lt;strong&gt;1.4x-1.7x on A100&lt;/strong&gt; and &lt;strong&gt;1.09x-1.3x on H100.&lt;/strong&gt;&lt;/li&gt;
+  &lt;li&gt;The &lt;strong&gt;optimized CUDA INT4 GQA&lt;/strong&gt; performs better than &lt;strong&gt;BF16 Flash-Decoding GQA&lt;/strong&gt; by &lt;strong&gt;1.5x-1.7x on A100 and 1.4x-1.7x on H100.&lt;/strong&gt;&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h2 id=&quot;background&quot;&gt;Background&lt;/h2&gt;
+
+&lt;h3 id=&quot;gqa-for-llm-inference&quot;&gt;GQA for LLM Inference&lt;/h3&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://arxiv.org/abs/2305.13245&quot;&gt;Grouped-Query Attention (GQA)&lt;/a&gt; is a variant of multi-head attention (MHA) where each KV cache head is shared across a group of query heads.  Our LLM inference adopts GQA as an attention layer in both the prefill and decode phases in order to reduce the capacity requirement for the KV cache.  We use multiple GPUs in inference where the KV cache and query heads are distributed across GPUs.  Each GPU runs an attention layer with a single KV head and a group of Q heads.  Therefore, when viewed from a single GPU perspective, the GQA component can also be described as &lt;a href=&quot;https://arxiv.org/abs/1911.02150&quot;&gt;MQA (Multi-Query Attention)&lt;/a&gt;.&lt;/p&gt;
+
+&lt;p&gt;The simplified workflow of decoding GQA is illustrated in Figure 1.  GQA takes three main inputs: input query (denoted &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;Q&lt;/code&gt;), K cache (denoted &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;K&lt;/code&gt;), and V cache (denoted &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;V&lt;/code&gt;).  Our current GQA inference uses BF16 for &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;Q&lt;/code&gt;, &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;K&lt;/code&gt;, and &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;V&lt;/code&gt;.&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;Q&lt;/code&gt; is a 4D BF16 tensor of shape (&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;B&lt;/code&gt;, &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;1&lt;/code&gt;, &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;H&lt;sub&gt;Q&lt;/sub&gt;&lt;/code&gt;, &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;D&lt;/code&gt;)&lt;/li&gt;
+  &lt;li&gt;&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;K&lt;/code&gt; is a 4D BF16 tensor of shape (&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;B&lt;/code&gt;, &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;T&lt;sub&gt;max&lt;/sub&gt;&lt;/code&gt;, &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;H&lt;sub&gt;KV&lt;/sub&gt;&lt;/code&gt;, &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;D&lt;/code&gt;)&lt;/li&gt;
+  &lt;li&gt;&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;V&lt;/code&gt; is a 4D BF16 tensor of shape (&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;B&lt;/code&gt;, &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;T&lt;sub&gt;max&lt;/sub&gt;&lt;/code&gt;, &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;H&lt;sub&gt;KV&lt;/sub&gt;&lt;/code&gt;, &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;D&lt;/code&gt;)&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;&lt;em&gt;where&lt;/em&gt;&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;B&lt;/code&gt; is the batch size (the number of input prompts)&lt;/li&gt;
+  &lt;li&gt;&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;H&lt;sub&gt;Q&lt;/sub&gt;&lt;/code&gt; is the number of query heads&lt;/li&gt;
+  &lt;li&gt;&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;H&lt;sub&gt;KV&lt;/sub&gt;&lt;/code&gt; is the number of KV heads (&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;H&lt;sub&gt;Q&lt;/sub&gt;&lt;/code&gt; must be divisible by &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;H&lt;sub&gt;KV&lt;/sub&gt;&lt;/code&gt;)&lt;/li&gt;
+  &lt;li&gt;&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;T&lt;sub&gt;max&lt;/sub&gt;&lt;/code&gt; is the maximum context length&lt;/li&gt;
+  &lt;li&gt;&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;D&lt;/code&gt; is the head dimension (fixed to 128)&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;GQA is simply &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;bmm(softmax(bmm(Q, K&lt;sup&gt;T&lt;/sup&gt;) / sqrt(D)), V)&lt;/code&gt;.  This yields a single output tensor (denoted as &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;O&lt;/code&gt;) which is a 4D BF16 tensor that has the same shape as &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;Q&lt;/code&gt;.  Note that matrix multiplications are performed using BF16, however, accumulation and &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;softmax&lt;/code&gt; are carried out in FP32.  We call this “BF16 GQA” as the KV cache is BF16.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/int4-decoding/fg1.png&quot; alt=&quot;Figure 1: The simplified workflow of BF16 GQA for LLM inference&quot; style=&quot;width:100%;display:block;max-width:500px;margin-left:auto;margin-right:auto;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Figure 1&lt;/strong&gt; The simplified workflow of BF16 GQA for LLM inference&lt;/p&gt;
+
+&lt;h3 id=&quot;int4-gqa&quot;&gt;INT4 GQA&lt;/h3&gt;
+
+&lt;p&gt;To further reduce the size of the KV cache, we explore the possibility of using INT4 for KV cache instead of BF16.  We estimate the potential performance improvement by calculating the computational intensity (CI) of INT4 GQA and comparing it to that of BF16 GQA, as CI represents FLOPS per byte.  We compute the CI for &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;QK&lt;sup&gt;T&lt;/sup&gt;&lt;/code&gt; and &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;PV&lt;/code&gt; (as shown in Equation 1) as they take KV cache as an operand.  Note that we disregard the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;Q&lt;/code&gt; load as it is negligible compared to the KV cache.  We also ignore any intermediate data loads/stores that are not on global memory.  Thus, the CI only takes into account the computation FLOPS and KV cache loads.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/int4-decoding/eq.jpg&quot; alt=&quot;Equation 1&quot; style=&quot;width:100%;display:block;max-width:400px;margin-left:auto;margin-right:auto;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Equation (1)&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;Assuming that &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;H&lt;sub&gt;Q&lt;/sub&gt;&lt;/code&gt; = 8 and &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;H&lt;sub&gt;KV&lt;/sub&gt;&lt;/code&gt; = 1, CI for BF16 KV cache is 8 while CI for INT4 KV cache is 32.  The CIs indicate that both BF16 and INT4 GQAs are memory bound (the peak CIs for BF16 tensor cores for A100 and H100 are &lt;a href=&quot;https://www.nvidia.com/content/dam/en-zz/Solutions/Data-Center/a100/pdf/a100-80gb-datasheet-update-nvidia-us-1521051-r2-web.pdf&quot;&gt;312 TF / 2 TB/s = 141&lt;/a&gt; and &lt;a href=&quot;https://www.nvidia.com/en-us/data-center/h100/&quot;&gt;990 TF / 3.35 TB/s = 269&lt;/a&gt;; note that these TF numbers are without sparsity).  Moreover, with INT4 KV cache, we should expect up to 4x performance improvement compared to BF16 GQA.&lt;/p&gt;
+
+&lt;p&gt;To enable INT4 KV cache support in GQA, we can dequantize the KV cache from INT4 to BF16 before passing it to the BF16 GQA operator.  However, since KV cache is typically large, copying it from/to global memory can be costly.  Moreover, decoding GQA is a memory bound operation (the memory unit is utilized much more heavily than the compute unit).  Figure 2 shows the NCU profile of the &lt;a href=&quot;https://github.com/facebookresearch/xformers/blob/9f6abadabdec17cd4b5c301632a44bf8216a7f35/xformers/csrc/attention/cuda/fmha/autogen/impl/cutlassF_bf16_aligned.cu#L33&quot;&gt;FMHA CUTLASS BF16 GQA kernel in xFormers&lt;/a&gt;, which is one of the state of the art implementations of GQA.  From the figure, it is obvious that memory is a bottleneck.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/int4-decoding/fg2.png&quot; alt=&quot;Figure 2: The NCU profile of the FMHA CUTLASS BF16 kernel in xFormers&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Figure 2&lt;/strong&gt; The NCU profile of the &lt;a href=&quot;https://github.com/facebookresearch/xformers/blob/9f6abadabdec17cd4b5c301632a44bf8216a7f35/xformers/csrc/attention/cuda/fmha/autogen/impl/cutlassF_bf16_aligned.cu#L33&quot;&gt;FMHA CUTLASS BF16 kernel in xFormers&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;A more efficient alternative is to fuse INT4 dequantization with the GQA operation (shown in Figure 3).  In other words, having GQA read INT4 KV cache directly and perform the INT4 to BF16 conversion within the kernel.  This change can potentially reduce the amount of global memory reads required for the KV cache, which could lead to a decrease in latency.  We call this “INT4 GQA.”&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/int4-decoding/fg3.png&quot; alt=&quot;Figure 3: The workflow of fused INT4 GQA&quot; style=&quot;width:100%;display:block;max-width:500px;margin-left:auto;margin-right:auto;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Figure 3&lt;/strong&gt; The workflow of fused INT4 GQA&lt;/p&gt;
+
+&lt;p&gt;We list the state of the art implementations of GQA in the table below along with their features in Table 1.&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Table 1&lt;/strong&gt; State of the art GQA implementations&lt;/p&gt;
+
+&lt;table class=&quot;table table-bordered&quot;&gt;
+  &lt;tr&gt;
+   &lt;td&gt;&lt;strong&gt;Implementation&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;Denote&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;BF16 GQA&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;Fused INT4 GQA&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;&lt;a href=&quot;https://pytorch.org/blog/flash-decoding/&quot;&gt;Flash-Decoding&lt;/a&gt; (Triton implementation)
+   &lt;/td&gt;
+   &lt;td&gt;FD
+   &lt;/td&gt;
+   &lt;td&gt;Yes
+   &lt;/td&gt;
+   &lt;td&gt;Yes
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;&lt;a href=&quot;https://github.com/Dao-AILab/flash-attention&quot;&gt;Flash Attention (v2.3.3)&lt;/a&gt;
+   &lt;/td&gt;
+   &lt;td&gt;FA
+   &lt;/td&gt;
+   &lt;td&gt;Yes
+   &lt;/td&gt;
+   &lt;td&gt;No
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;CUDA baseline
+   &lt;/td&gt;
+   &lt;td&gt;CU
+   &lt;/td&gt;
+   &lt;td&gt;Yes
+   &lt;/td&gt;
+   &lt;td&gt;Yes
+   &lt;/td&gt;
+  &lt;/tr&gt;
+&lt;/table&gt;
+
+&lt;p&gt;All implementations, except for CU, support both split-K and non split-K.  CU only has the split-K implementation.  Only FA has a heuristic in the backend to determine whether to run the split-K or non split-K kernel.  For other implementations, users must explicitly choose which version to run.  In this note, we focus on long context lengths (in our experiments, we use a context length of 8192) and therefore opt for the split-K version wherever possible.&lt;/p&gt;
+
+&lt;p&gt;As the baseline, we measured the performance of the state of the art GQA implementations on NVIDIA A100 and H100 GPUs.  The latency (time in microseconds) and achieved bandwidth (GB/s) are reported in Table 2.  Note that we ran a range of split-Ks (from 2 to 128 splits) and reported the best performance for each implementation.  For all experiments, we use a context length of 8192.  For INT4 GQA, we used row-wise quantization (i.e., num quantized groups = 1).&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Table 2&lt;/strong&gt; Baseline GQA performance&lt;/p&gt;
+
+&lt;p&gt;On A100&lt;/p&gt;
+
+&lt;table class=&quot;table table-bordered&quot;&gt;
+  &lt;tr&gt;
+   &lt;td&gt;&lt;strong&gt;Time (us)&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;3&quot;&gt;&lt;strong&gt;BF16 GQA&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;3&quot;&gt;&lt;strong&gt;INT4 GQA&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;&lt;strong&gt;Batch size&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;FD&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;FA&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;CU&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;FD&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;FA&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;CU&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;32
+   &lt;/td&gt;
+   &lt;td&gt;139
+   &lt;/td&gt;
+   &lt;td&gt;133
+   &lt;/td&gt;
+   &lt;td&gt;183
+   &lt;/td&gt;
+   &lt;td&gt;137
+   &lt;/td&gt;
+   &lt;td&gt;-
+   &lt;/td&gt;
+   &lt;td&gt;143
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;64
+   &lt;/td&gt;
+   &lt;td&gt;245
+   &lt;/td&gt;
+   &lt;td&gt;229
+   &lt;/td&gt;
+   &lt;td&gt;335
+   &lt;/td&gt;
+   &lt;td&gt;234
+   &lt;/td&gt;
+   &lt;td&gt;-
+   &lt;/td&gt;
+   &lt;td&gt;257
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;128
+   &lt;/td&gt;
+   &lt;td&gt;433
+   &lt;/td&gt;
+   &lt;td&gt;555
+   &lt;/td&gt;
+   &lt;td&gt;596
+   &lt;/td&gt;
+   &lt;td&gt;432
+   &lt;/td&gt;
+   &lt;td&gt;-
+   &lt;/td&gt;
+   &lt;td&gt;455
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;256
+   &lt;/td&gt;
+   &lt;td&gt;826
+   &lt;/td&gt;
+   &lt;td&gt;977
+   &lt;/td&gt;
+   &lt;td&gt;1127
+   &lt;/td&gt;
+   &lt;td&gt;815
+   &lt;/td&gt;
+   &lt;td&gt;-
+   &lt;/td&gt;
+   &lt;td&gt;866
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;512
+   &lt;/td&gt;
+   &lt;td&gt;1607
+   &lt;/td&gt;
+   &lt;td&gt;1670
+   &lt;/td&gt;
+   &lt;td&gt;2194
+   &lt;/td&gt;
+   &lt;td&gt;1581
+   &lt;/td&gt;
+   &lt;td&gt;-
+   &lt;/td&gt;
+   &lt;td&gt;1659
+   &lt;/td&gt;
+  &lt;/tr&gt;
+&lt;/table&gt;
+
+&lt;table class=&quot;table table-bordered&quot;&gt;
+  &lt;tr&gt;
+   &lt;td&gt;&lt;strong&gt;Effective Bandwidth (GB/s)&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;3&quot;&gt;&lt;strong&gt;BF16 GQA&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;3&quot;&gt;&lt;strong&gt;INT4 GQA&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;&lt;strong&gt;Batch size&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;FD&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;FA&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;CU&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;FD&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;FA&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;CU&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;32
+   &lt;/td&gt;
+   &lt;td&gt;965
+   &lt;/td&gt;
+   &lt;td&gt;1012
+   &lt;/td&gt;
+   &lt;td&gt;736
+   &lt;/td&gt;
+   &lt;td&gt;262
+   &lt;/td&gt;
+   &lt;td&gt;-
+   &lt;/td&gt;
+   &lt;td&gt;250
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;64
+   &lt;/td&gt;
+   &lt;td&gt;1097
+   &lt;/td&gt;
+   &lt;td&gt;1175
+   &lt;/td&gt;
+   &lt;td&gt;802
+   &lt;/td&gt;
+   &lt;td&gt;305
+   &lt;/td&gt;
+   &lt;td&gt;-
+   &lt;/td&gt;
+   &lt;td&gt;278
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;128
+   &lt;/td&gt;
+   &lt;td&gt;1240
+   &lt;/td&gt;
+   &lt;td&gt;968
+   &lt;/td&gt;
+   &lt;td&gt;901
+   &lt;/td&gt;
+   &lt;td&gt;331
+   &lt;/td&gt;
+   &lt;td&gt;-
+   &lt;/td&gt;
+   &lt;td&gt;314
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;256
+   &lt;/td&gt;
+   &lt;td&gt;1301
+   &lt;/td&gt;
+   &lt;td&gt;1100
+   &lt;/td&gt;
+   &lt;td&gt;954
+   &lt;/td&gt;
+   &lt;td&gt;351
+   &lt;/td&gt;
+   &lt;td&gt;-
+   &lt;/td&gt;
+   &lt;td&gt;331
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;512
+   &lt;/td&gt;
+   &lt;td&gt;1338
+   &lt;/td&gt;
+   &lt;td&gt;1287
+   &lt;/td&gt;
+   &lt;td&gt;980
+   &lt;/td&gt;
+   &lt;td&gt;362
+   &lt;/td&gt;
+   &lt;td&gt;-
+   &lt;/td&gt;
+   &lt;td&gt;345
+   &lt;/td&gt;
+  &lt;/tr&gt;
+&lt;/table&gt;
+
+&lt;p&gt;On H100&lt;/p&gt;
+
+&lt;table class=&quot;table table-bordered&quot;&gt;
+  &lt;tr&gt;
+   &lt;td&gt;&lt;strong&gt;Time (us)&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;3&quot;&gt;&lt;strong&gt;BF16 GQA&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;3&quot;&gt;&lt;strong&gt;INT4 GQA&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;&lt;strong&gt;Batch size&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;FD&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;FA&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;CU&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;FD&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;FA&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;CU&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;32
+   &lt;/td&gt;
+   &lt;td&gt;91
+   &lt;/td&gt;
+   &lt;td&gt;90
+   &lt;/td&gt;
+   &lt;td&gt;114
+   &lt;/td&gt;
+   &lt;td&gt;70
+   &lt;/td&gt;
+   &lt;td&gt;-
+   &lt;/td&gt;
+   &lt;td&gt;96
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;64
+   &lt;/td&gt;
+   &lt;td&gt;148
+   &lt;/td&gt;
+   &lt;td&gt;146
+   &lt;/td&gt;
+   &lt;td&gt;200
+   &lt;/td&gt;
+   &lt;td&gt;113
+   &lt;/td&gt;
+   &lt;td&gt;-
+   &lt;/td&gt;
+   &lt;td&gt;162
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;128
+   &lt;/td&gt;
+   &lt;td&gt;271
+   &lt;/td&gt;
+   &lt;td&gt;298
+   &lt;/td&gt;
+   &lt;td&gt;361
+   &lt;/td&gt;
+   &lt;td&gt;205
+   &lt;/td&gt;
+   &lt;td&gt;-
+   &lt;/td&gt;
+   &lt;td&gt;294
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;256
+   &lt;/td&gt;
+   &lt;td&gt;515
+   &lt;/td&gt;
+   &lt;td&gt;499
+   &lt;/td&gt;
+   &lt;td&gt;658
+   &lt;/td&gt;
+   &lt;td&gt;389
+   &lt;/td&gt;
+   &lt;td&gt;-
+   &lt;/td&gt;
+   &lt;td&gt;558
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;512
+   &lt;/td&gt;
+   &lt;td&gt;1000
+   &lt;/td&gt;
+   &lt;td&gt;1011
+   &lt;/td&gt;
+   &lt;td&gt;1260
+   &lt;/td&gt;
+   &lt;td&gt;756
+   &lt;/td&gt;
+   &lt;td&gt;-
+   &lt;/td&gt;
+   &lt;td&gt;1066
+   &lt;/td&gt;
+  &lt;/tr&gt;
+&lt;/table&gt;
+
+&lt;table class=&quot;table table-bordered&quot;&gt;
+  &lt;tr&gt;
+   &lt;td&gt;&lt;strong&gt;Effective Bandwidth (GB/s)&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;3&quot;&gt;&lt;strong&gt;BF16 GQA&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;3&quot;&gt;&lt;strong&gt;INT4 GQA&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;&lt;strong&gt;Batch size&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;FD&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;FA&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;CU&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;FD&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;FA&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;CU&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;32
+   &lt;/td&gt;
+   &lt;td&gt;1481
+   &lt;/td&gt;
+   &lt;td&gt;1496
+   &lt;/td&gt;
+   &lt;td&gt;1178
+   &lt;/td&gt;
+   &lt;td&gt;511
+   &lt;/td&gt;
+   &lt;td&gt;-
+   &lt;/td&gt;
+   &lt;td&gt;371
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;64
+   &lt;/td&gt;
+   &lt;td&gt;1815
+   &lt;/td&gt;
+   &lt;td&gt;1840
+   &lt;/td&gt;
+   &lt;td&gt;1345
+   &lt;/td&gt;
+   &lt;td&gt;631
+   &lt;/td&gt;
+   &lt;td&gt;-
+   &lt;/td&gt;
+   &lt;td&gt;443
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;128
+   &lt;/td&gt;
+   &lt;td&gt;1982
+   &lt;/td&gt;
+   &lt;td&gt;1802
+   &lt;/td&gt;
+   &lt;td&gt;1487
+   &lt;/td&gt;
+   &lt;td&gt;699
+   &lt;/td&gt;
+   &lt;td&gt;-
+   &lt;/td&gt;
+   &lt;td&gt;487
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;256
+   &lt;/td&gt;
+   &lt;td&gt;2087
+   &lt;/td&gt;
+   &lt;td&gt;2156
+   &lt;/td&gt;
+   &lt;td&gt;1634
+   &lt;/td&gt;
+   &lt;td&gt;736
+   &lt;/td&gt;
+   &lt;td&gt;-
+   &lt;/td&gt;
+   &lt;td&gt;513
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;512
+   &lt;/td&gt;
+   &lt;td&gt;2150
+   &lt;/td&gt;
+   &lt;td&gt;2127
+   &lt;/td&gt;
+   &lt;td&gt;1706
+   &lt;/td&gt;
+   &lt;td&gt;757
+   &lt;/td&gt;
+   &lt;td&gt;-
+   &lt;/td&gt;
+   &lt;td&gt;537
+   &lt;/td&gt;
+  &lt;/tr&gt;
+&lt;/table&gt;
+
+&lt;p&gt;First, let’s discuss the BF16 GQA performance: CU ranks last in terms of performance among all implementations.  FD and FA have comparable performance.  When the batch size is less than or equal to 64, FA utilizes the split-K kernel and performs slightly better than FD.  However, when the batch size is greater than 64, FD performs better.&lt;/p&gt;
+
+&lt;p&gt;The same trend holds true for INT4 GQAs. However, we did not measure the performance of FA as it does not support INT4 KV cache. FD outperforms CU for all cases.&lt;/p&gt;
+
+&lt;p&gt;When comparing the latencies of FD between BF16 and INT4 GQAs, we find that they are almost identical.  This suggests that &lt;em&gt;INT4 GQA is highly inefficient&lt;/em&gt;, which can be further confirmed by the significantly lower achievable bandwidth for INT4 GQA compared to BF16 GQA.  The same trend is also true when looking at the performance of CU.&lt;/p&gt;
+
+&lt;h3 id=&quot;cuda-with-tensor-cores-int4-gqa-implementation&quot;&gt;CUDA with Tensor Cores INT4 GQA Implementation&lt;/h3&gt;
+
+&lt;p&gt;In this section, we briefly describe our baseline implementation which is CUDA with tensor cores INT4 GQA (CU).  Each thread block processes only one KV head and a group of query heads from one input prompt.  Therefore, each thread block performs &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;mm(softmax(mm(Q, K&lt;sup&gt;T&lt;/sup&gt;) / sqrt(D)), V)&lt;/code&gt;; notice that &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;mm&lt;/code&gt; is being performed not &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;bmm&lt;/code&gt;.  Moreover, since this is a split-K implementation, tokens in the KV cache are split among different thread blocks.  Note that each thread block contains 4 warps (each warp contains 32 threads for NVIDIA A100 and H100 GPUs).  Work in each thread block is split among warps.  Within each warp, we use the &lt;a href=&quot;https://bruce-lee-ly.medium.com/nvidia-tensor-core-introduction-to-wmma-api-programming-21bcfee4ec45&quot;&gt;WMMA&lt;/a&gt; API to compute matrix multiplication on tensor cores.  Figure 4 demonstrates the work partitioning in CU.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/int4-decoding/fg4.jpg&quot; alt=&quot;Figure 4: CU work partitioning&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Figure 4&lt;/strong&gt; CU work partitioning&lt;/p&gt;
+
+&lt;h2 id=&quot;optimizing-cuda-with-tensor-cores-kernel-of-int4-gqa&quot;&gt;Optimizing CUDA with Tensor Cores Kernel of INT4 GQA&lt;/h2&gt;
+
+&lt;p&gt;In this note, we discuss the optimizations that we have applied to the CUDA with tensor cores implementation of INT4 GQA (CU).  The ideal goal is to improve the INT4 GQA performance by 4 times based on the CI analysis in the previous section.  Note that the query size is negligible compared to the KV cache size when the context length is long.&lt;/p&gt;
+
+&lt;p&gt;In our analysis, we used the &lt;a href=&quot;https://docs.nvidia.com/nsight-compute/NsightComputeCli/index.html&quot;&gt;NVIDIA Nsight Compute (NCU)&lt;/a&gt; as the main profiler.  Our general bottleneck elimination approach is to minimize the stall cycles.  We applied 10 optimizations to INT4 GQA, three of which are specific for NVIDIA A100/H100 GPUs.  These optimizations are well known CUDA optimization techniques which can be generalized to many applications.&lt;/p&gt;
+
+&lt;p&gt;It is worth noting that the reason that we choose to optimize the CUDA implementation rather than the Flash-Decoding implementation (FD) (which is Triton based) is because with CUDA, we have a better control of how the low-level instructions are being generated.  Many optimization techniques that we apply such as, operating on tensor core fragments directly (Optimizations 7-9), cannot be done through Triton since it does not expose low-level details to developers.  However, these optimizations can be integrated into the compiler-based solution to make the optimizations available to broader operators, which is indeed a part of our future plan.&lt;/p&gt;
+
+&lt;h3 id=&quot;optimization-1-unroll-k-loads&quot;&gt;Optimization 1: Unroll &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;K&lt;/code&gt; Loads&lt;/h3&gt;
+
+&lt;p&gt;&lt;strong&gt;Problem Analysis:&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;The NCU profile shows that during &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;K&lt;/code&gt; loading, there are only 2 global loads followed by &lt;em&gt;memory stalls&lt;/em&gt; at &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;dequantize_permuted_int4&lt;/code&gt;.  The memory stalls are the long scoreboard stalls which indicates the waits for global memory access.  This suggests that the kernel does not issue sufficient memory loads&lt;/p&gt;
+
+&lt;p&gt;to hide the global load latency.  The kernel issues data loading, and then waits to consume the data immediately causing the global load latency to be exposed.  The stalls are shown in Figure 5.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/int4-decoding/fg5.png&quot; alt=&quot;Figure 5: K loading before unrolling&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Figure 5&lt;/strong&gt; K loading before unrolling (the numbers that the arrows point to are stall cycles caused by global memory wait)&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Solution:&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;In the baseline implementation, we use &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;uint32_t&lt;/code&gt; to load 8 INT4 &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;K&lt;/code&gt; values in a single load and we perform 2 &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;uint32_t&lt;/code&gt; loads in each iteration, which is 16 INT4 K values.  To allow for a better global load latency hiding, we issue 8 &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;uint32_t&lt;/code&gt; loads instead of two before consuming the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;K&lt;/code&gt; values in &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;dequantize_permuted_int4&lt;/code&gt;.  This allows the compiler to unroll the loads as well as reorder the instructions to hide the global load latency better.  Figure 6 shows the NCU profile of &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;K&lt;/code&gt; loading after unrolling.  Comparing Figure 5 and Figure 6, we effectively reduce the stall cycles by unrolling the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;K&lt;/code&gt; loads.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/int4-decoding/fg6.png&quot; alt=&quot;Figure 6: K loading after unrolling&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Figure 6&lt;/strong&gt; K loading after unrolling (the numbers that the arrows point to are stall cycles caused by global memory wait)&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Results:&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Table 3&lt;/strong&gt; Performance of Optimization 1 for INT4 GQA (row-wise quantization)&lt;/p&gt;
+
+&lt;table class=&quot;table table-bordered&quot;&gt;
+  &lt;tr&gt;
+   &lt;td rowspan=&quot;3&quot;&gt;&lt;strong&gt;Batch size&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;3&quot;&gt;&lt;strong&gt;Time (us)&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;3&quot;&gt;&lt;strong&gt;Bandwidth (GB/s)&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;2&quot;&gt;&lt;strong&gt;Speed up&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td rowspan=&quot;2&quot;&gt;&lt;strong&gt;FD&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;2&quot;&gt;&lt;strong&gt;CU&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td rowspan=&quot;2&quot;&gt;&lt;strong&gt;FD&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;2&quot;&gt;&lt;strong&gt;CU&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td rowspan=&quot;2&quot;&gt;&lt;strong&gt;vs FD&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td rowspan=&quot;2&quot;&gt;&lt;strong&gt;vs CU baseline&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;&lt;strong&gt;Baseline&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;Opt 1&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;Baseline&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;Opt 1&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;32
+   &lt;/td&gt;
+   &lt;td&gt;137
+   &lt;/td&gt;
+   &lt;td&gt;143
+   &lt;/td&gt;
+   &lt;td&gt;134
+   &lt;/td&gt;
+   &lt;td&gt;262
+   &lt;/td&gt;
+   &lt;td&gt;250
+   &lt;/td&gt;
+   &lt;td&gt;267
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.02&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.07&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;64
+   &lt;/td&gt;
+   &lt;td&gt;234
+   &lt;/td&gt;
+   &lt;td&gt;257
+   &lt;/td&gt;
+   &lt;td&gt;237
+   &lt;/td&gt;
+   &lt;td&gt;305
+   &lt;/td&gt;
+   &lt;td&gt;278
+   &lt;/td&gt;
+   &lt;td&gt;302
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;0.99&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.09&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;128
+   &lt;/td&gt;
+   &lt;td&gt;432
+   &lt;/td&gt;
+   &lt;td&gt;455
+   &lt;/td&gt;
+   &lt;td&gt;422
+   &lt;/td&gt;
+   &lt;td&gt;331
+   &lt;/td&gt;
+   &lt;td&gt;314
+   &lt;/td&gt;
+   &lt;td&gt;339
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.02&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.08&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;256
+   &lt;/td&gt;
+   &lt;td&gt;815
+   &lt;/td&gt;
+   &lt;td&gt;866
+   &lt;/td&gt;
+   &lt;td&gt;806
+   &lt;/td&gt;
+   &lt;td&gt;351
+   &lt;/td&gt;
+   &lt;td&gt;331
+   &lt;/td&gt;
+   &lt;td&gt;355
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.01&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.07&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;512
+   &lt;/td&gt;
+   &lt;td&gt;1581
+   &lt;/td&gt;
+   &lt;td&gt;1659
+   &lt;/td&gt;
+   &lt;td&gt;1550
+   &lt;/td&gt;
+   &lt;td&gt;362
+   &lt;/td&gt;
+   &lt;td&gt;345
+   &lt;/td&gt;
+   &lt;td&gt;369
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.02&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.07&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+&lt;/table&gt;
+
+&lt;h3 id=&quot;optimization-2-improve-p-type-casting-fp32-bf16&quot;&gt;Optimization 2: Improve &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;P&lt;/code&gt; Type Casting (FP32-&amp;gt;BF16)&lt;/h3&gt;
+
+&lt;p&gt;&lt;strong&gt;Problem Analysis:&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;Since the product of &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;softmax(bmm(Q, K&lt;sup&gt;T&lt;/sup&gt;) / sqrt(D))&lt;/code&gt; is FP32 (denoted as &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;P&lt;/code&gt; in Figure 3), the kernel has to convert &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;P&lt;/code&gt; from FP32 to BF16 before feeding it to the next &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;bmm&lt;/code&gt; computation.  The kernel performs the FP32 to BF16 conversion of &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;P&lt;/code&gt; by copying the FP32 data from one location in shared memory to another location in shared memory.  This causes stalls during the shared memory access (shown in Figure 7) which might be caused by (1) the shared memory indirection; and (2) the shared memory bank conflict since each thread accesses an 16-bit element (because of this, two threads can access the same memory bank simultaneously).&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/int4-decoding/fg7.png&quot; alt=&quot;Figure 7: P type casting before Optimization 2&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Figure 7&lt;/strong&gt; &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;P&lt;/code&gt; type casting before Optimization 2 (the number that the arrow points to is stall cycles caused by shared memory wait)&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Solution:&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;We use all threads in the thread block to do in-place type conversion.  Each thread operates on two consecutive elements in order to avoid the shared memory bank conflict when storing BF16.  All threads work on the same head (&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;h&lt;/code&gt;) at the same time to guarantee correctness of the conversion.  The in-place conversion steps are as follows:&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;Each thread loads 2 FP32 token elements from the same head from the shared memory into registers&lt;/li&gt;
+  &lt;li&gt;Call &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;__syncthreads()&lt;/code&gt; to make sure that every thread finishes reading the data&lt;/li&gt;
+  &lt;li&gt;Each thread converts its data to 2 BF16 token elements and then stores the results to the same shared memory&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;Some optimizations that we apply to the implementation:&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;Use vector types (especially &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;nv_bfloat2&lt;/code&gt;)&lt;/li&gt;
+  &lt;li&gt;Unroll data loading/storing, i.e., performing multiple loads before calling &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;__syncthreads()&lt;/code&gt; and performing multiple stores after &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;__syncthreads()&lt;/code&gt;&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;After this optimization, long stalls are not observed during &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;P&lt;/code&gt; type casting as shown in Figure 8.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/int4-decoding/fg8.png&quot; alt=&quot;Figure 8: P type casting after Optimization 2&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Figure 8&lt;/strong&gt; &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;P&lt;/code&gt; type casting after Optimization 2 (the numbers that the arrow points to are stall cycles caused by shared memory wait)&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Culprits:&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;Since we unroll data loading/storing by using registers as an intermediate storage, the number of registers per thread increases resulting in reduced occupancy.&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Results:&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Table 4&lt;/strong&gt; Performance of Optimization 2 for INT4 GQA (row-wise quantization)&lt;/p&gt;
+
+&lt;table class=&quot;table table-bordered&quot;&gt;
+  &lt;tr&gt;
+   &lt;td rowspan=&quot;3&quot;&gt;&lt;strong&gt;Batch size&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;3&quot;&gt;&lt;strong&gt;Time (us)&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;3&quot;&gt;&lt;strong&gt;Bandwidth (GB/s)&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;2&quot;&gt;&lt;strong&gt;Speed up&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td rowspan=&quot;2&quot;&gt;&lt;strong&gt;FD&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;2&quot;&gt;&lt;strong&gt;CU&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td rowspan=&quot;2&quot;&gt;&lt;strong&gt;FD&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;2&quot;&gt;&lt;strong&gt;CU&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td rowspan=&quot;2&quot;&gt;&lt;strong&gt;vs FD&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td rowspan=&quot;2&quot;&gt;&lt;strong&gt;vs CU baseline&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;&lt;strong&gt;Baseline&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;Opt 2&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;Baseline&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;Opt 2&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;32
+   &lt;/td&gt;
+   &lt;td&gt;137
+   &lt;/td&gt;
+   &lt;td&gt;143
+   &lt;/td&gt;
+   &lt;td&gt;126
+   &lt;/td&gt;
+   &lt;td&gt;262
+   &lt;/td&gt;
+   &lt;td&gt;250
+   &lt;/td&gt;
+   &lt;td&gt;285
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.09&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.14&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;64
+   &lt;/td&gt;
+   &lt;td&gt;234
+   &lt;/td&gt;
+   &lt;td&gt;257
+   &lt;/td&gt;
+   &lt;td&gt;221
+   &lt;/td&gt;
+   &lt;td&gt;305
+   &lt;/td&gt;
+   &lt;td&gt;278
+   &lt;/td&gt;
+   &lt;td&gt;324
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.06&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.16&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;128
+   &lt;/td&gt;
+   &lt;td&gt;432
+   &lt;/td&gt;
+   &lt;td&gt;455
+   &lt;/td&gt;
+   &lt;td&gt;395
+   &lt;/td&gt;
+   &lt;td&gt;331
+   &lt;/td&gt;
+   &lt;td&gt;314
+   &lt;/td&gt;
+   &lt;td&gt;362
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.09&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.15&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;256
+   &lt;/td&gt;
+   &lt;td&gt;815
+   &lt;/td&gt;
+   &lt;td&gt;866
+   &lt;/td&gt;
+   &lt;td&gt;749
+   &lt;/td&gt;
+   &lt;td&gt;351
+   &lt;/td&gt;
+   &lt;td&gt;331
+   &lt;/td&gt;
+   &lt;td&gt;382
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.09&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.16&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;512
+   &lt;/td&gt;
+   &lt;td&gt;1581
+   &lt;/td&gt;
+   &lt;td&gt;1659
+   &lt;/td&gt;
+   &lt;td&gt;1435
+   &lt;/td&gt;
+   &lt;td&gt;362
+   &lt;/td&gt;
+   &lt;td&gt;345
+   &lt;/td&gt;
+   &lt;td&gt;399
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.10&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.16&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+&lt;/table&gt;
+
+&lt;h3 id=&quot;optimization-3-remove-local-memory-usage-for-max-qkt-computation&quot;&gt;Optimization 3: Remove Local Memory Usage for max &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;QK&lt;sup&gt;T&lt;/sup&gt;&lt;/code&gt; computation&lt;/h3&gt;
+
+&lt;p&gt;&lt;strong&gt;Problem Analysis:&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;During the softmax computation, the kernel has to compute max &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;QK&lt;sup&gt;T&lt;/sup&gt;&lt;/code&gt; for each head. It uses a temporary “thread-local” storage for storing per-thread max &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;QK&lt;sup&gt;T&lt;/sup&gt;&lt;/code&gt; results (one float value for each head).  Depending on the compiler, the thread-local storage can be allocated on registers (on chip) or the local memory (off chip == global memory).  Unfortunately, in the baseline, the thread-local storage resides in the local memory which is much slower than the registers (shown in Figure 9).  We suspect that this is because the compiler cannot determine the indices of thread-local storage at compile time (since the number of heads (&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;H&lt;/code&gt;) in the kernel is a runtime variable).  Accessing local memory as if accessing registers can hurt the performance of the kernel.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/int4-decoding/fg9.png&quot; alt=&quot;Figure 9: Local memory access during max QKT computation&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Figure 9&lt;/strong&gt; Local memory access during max &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;QK&lt;sup&gt;T&lt;/sup&gt;&lt;/code&gt; computation&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Solution:&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;We realize that we do not need &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;H&lt;/code&gt; (number of heads) floats as temporary storage per thread since each thread can compute max &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;QK&lt;sup&gt;T&lt;/sup&gt;&lt;/code&gt; for only one head instead of all the heads.  Thus, we only need one float per thread, which can be easily stored in a register.  To accumulate the max results among warps, we use shared memory.  This optimization eliminates the local memory usage during max &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;QK&lt;sup&gt;T&lt;/sup&gt;&lt;/code&gt; computation.&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Results:&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Table 5&lt;/strong&gt; Performance of Optimization 3 for INT4 GQA (row-wise quantization)&lt;/p&gt;
+
+&lt;table class=&quot;table table-bordered&quot;&gt;
+  &lt;tr&gt;
+   &lt;td rowspan=&quot;3&quot;&gt;&lt;strong&gt;Batch size&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;3&quot;&gt;&lt;strong&gt;Time (us)&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;3&quot;&gt;&lt;strong&gt;Bandwidth (GB/s)&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;2&quot;&gt;&lt;strong&gt;Speed up&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td rowspan=&quot;2&quot;&gt;&lt;strong&gt;FD&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;2&quot;&gt;&lt;strong&gt;CU&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td rowspan=&quot;2&quot;&gt;&lt;strong&gt;FD&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;2&quot;&gt;&lt;strong&gt;CU&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td rowspan=&quot;2&quot;&gt;&lt;strong&gt;vs FD&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td rowspan=&quot;2&quot;&gt;&lt;strong&gt;vs CU baseline&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;&lt;strong&gt;Baseline&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;Opt 3&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;Baseline&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;Opt 3&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;32
+   &lt;/td&gt;
+   &lt;td&gt;137
+   &lt;/td&gt;
+   &lt;td&gt;143
+   &lt;/td&gt;
+   &lt;td&gt;119
+   &lt;/td&gt;
+   &lt;td&gt;262
+   &lt;/td&gt;
+   &lt;td&gt;250
+   &lt;/td&gt;
+   &lt;td&gt;300
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.14&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.20&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;64
+   &lt;/td&gt;
+   &lt;td&gt;234
+   &lt;/td&gt;
+   &lt;td&gt;257
+   &lt;/td&gt;
+   &lt;td&gt;206
+   &lt;/td&gt;
+   &lt;td&gt;305
+   &lt;/td&gt;
+   &lt;td&gt;278
+   &lt;/td&gt;
+   &lt;td&gt;348
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.14&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.25&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;128
+   &lt;/td&gt;
+   &lt;td&gt;432
+   &lt;/td&gt;
+   &lt;td&gt;455
+   &lt;/td&gt;
+   &lt;td&gt;368
+   &lt;/td&gt;
+   &lt;td&gt;331
+   &lt;/td&gt;
+   &lt;td&gt;314
+   &lt;/td&gt;
+   &lt;td&gt;389
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.17&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.24&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;256
+   &lt;/td&gt;
+   &lt;td&gt;815
+   &lt;/td&gt;
+   &lt;td&gt;866
+   &lt;/td&gt;
+   &lt;td&gt;696
+   &lt;/td&gt;
+   &lt;td&gt;351
+   &lt;/td&gt;
+   &lt;td&gt;331
+   &lt;/td&gt;
+   &lt;td&gt;411
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.17&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.24&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;512
+   &lt;/td&gt;
+   &lt;td&gt;1581
+   &lt;/td&gt;
+   &lt;td&gt;1659
+   &lt;/td&gt;
+   &lt;td&gt;1338
+   &lt;/td&gt;
+   &lt;td&gt;362
+   &lt;/td&gt;
+   &lt;td&gt;345
+   &lt;/td&gt;
+   &lt;td&gt;428
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.18&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.24&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+&lt;/table&gt;
+
+&lt;h3 id=&quot;optimization-4-remove-local-memory-usage-for-row-sum&quot;&gt;Optimization 4: Remove local memory usage for row sum&lt;/h3&gt;
+
+&lt;p&gt;&lt;strong&gt;Problem Analysis:&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;Similar to&lt;a href=&quot;https://www.internalfb.com/diff/D50183201&quot;&gt; &lt;/a&gt;Optimization 3, the local memory usage problem is also observed during the row sum computation in the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;softmax&lt;/code&gt; computation.  Since local memory is off chip, accessing it as if accessing registers can hurt the performance of the kernel.&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Solution&lt;/strong&gt;:&lt;/p&gt;
+
+&lt;p&gt;We apply the same solution as the max &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;QK&lt;sup&gt;T&lt;/sup&gt;&lt;/code&gt; computation for the row sum computation.  That is to have each thread compute a row sum of only one head, which requires only one float per thread.  This eliminates the need for local memory.&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Results:&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Table 6&lt;/strong&gt; Performance of Optimization 4 for INT4 GQA (row-wise quantization)&lt;/p&gt;
+
+&lt;table class=&quot;table table-bordered&quot;&gt;
+  &lt;tr&gt;
+   &lt;td rowspan=&quot;3&quot;&gt;&lt;strong&gt;Batch size&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;3&quot;&gt;&lt;strong&gt;Time (us)&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;3&quot;&gt;&lt;strong&gt;Bandwidth (GB/s)&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;2&quot;&gt;&lt;strong&gt;Speed up&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td rowspan=&quot;2&quot;&gt;&lt;strong&gt;FD&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;2&quot;&gt;&lt;strong&gt;CU&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td rowspan=&quot;2&quot;&gt;&lt;strong&gt;FD&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;2&quot;&gt;&lt;strong&gt;CU&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td rowspan=&quot;2&quot;&gt;&lt;strong&gt;vs FD&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td rowspan=&quot;2&quot;&gt;&lt;strong&gt;vs CU baseline&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;&lt;strong&gt;Baseline&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;Opt 4&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;Baseline&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;Opt 4&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;32
+   &lt;/td&gt;
+   &lt;td&gt;137
+   &lt;/td&gt;
+   &lt;td&gt;143
+   &lt;/td&gt;
+   &lt;td&gt;118
+   &lt;/td&gt;
+   &lt;td&gt;262
+   &lt;/td&gt;
+   &lt;td&gt;250
+   &lt;/td&gt;
+   &lt;td&gt;302
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.15&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.21&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;64
+   &lt;/td&gt;
+   &lt;td&gt;234
+   &lt;/td&gt;
+   &lt;td&gt;257
+   &lt;/td&gt;
+   &lt;td&gt;204
+   &lt;/td&gt;
+   &lt;td&gt;305
+   &lt;/td&gt;
+   &lt;td&gt;278
+   &lt;/td&gt;
+   &lt;td&gt;351
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.15&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.26&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;128
+   &lt;/td&gt;
+   &lt;td&gt;432
+   &lt;/td&gt;
+   &lt;td&gt;455
+   &lt;/td&gt;
+   &lt;td&gt;364
+   &lt;/td&gt;
+   &lt;td&gt;331
+   &lt;/td&gt;
+   &lt;td&gt;314
+   &lt;/td&gt;
+   &lt;td&gt;393
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.19&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.25&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;256
+   &lt;/td&gt;
+   &lt;td&gt;815
+   &lt;/td&gt;
+   &lt;td&gt;866
+   &lt;/td&gt;
+   &lt;td&gt;688
+   &lt;/td&gt;
+   &lt;td&gt;351
+   &lt;/td&gt;
+   &lt;td&gt;331
+   &lt;/td&gt;
+   &lt;td&gt;416
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.18&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.26&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;512
+   &lt;/td&gt;
+   &lt;td&gt;1581
+   &lt;/td&gt;
+   &lt;td&gt;1659
+   &lt;/td&gt;
+   &lt;td&gt;1328
+   &lt;/td&gt;
+   &lt;td&gt;362
+   &lt;/td&gt;
+   &lt;td&gt;345
+   &lt;/td&gt;
+   &lt;td&gt;431
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.19&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.25&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+&lt;/table&gt;
+
+&lt;h3 id=&quot;optimization-5-add-prefetch-for-v-load&quot;&gt;Optimization 5: Add prefetch for &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;V&lt;/code&gt; load&lt;/h3&gt;
+
+&lt;p&gt;&lt;strong&gt;Problem Analysis:&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;The same issue as &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;K&lt;/code&gt; loading is observed when loading &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;V&lt;/code&gt;.  That is, the kernel issues data loading, and then waits to consume the data immediately causing the global load latency to be exposed.  However, when using the unrolling technique mentioned above, the compiler allocates the temporary buffer on local memory instead of registers causing a large slow down.&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Solution:&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;We adopt the data prefetching technique for &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;V&lt;/code&gt; loading.  We load the next iteration &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;V&lt;/code&gt; values immediately after the current iteration values are consumed.  This allows the data loading to be overlapped with the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;PK&lt;/code&gt; computation resulting in better kernel performance.&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Results:&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Table 7&lt;/strong&gt; Performance of Optimization 5 for INT4 GQA (row-wise quantization)&lt;/p&gt;
+
+&lt;table class=&quot;table table-bordered&quot;&gt;
+  &lt;tr&gt;
+   &lt;td rowspan=&quot;3&quot;&gt;&lt;strong&gt;Batch size&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;3&quot;&gt;&lt;strong&gt;Time (us)&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;3&quot;&gt;&lt;strong&gt;Bandwidth (GB/s)&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;2&quot;&gt;&lt;strong&gt;Speed up&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td rowspan=&quot;2&quot;&gt;&lt;strong&gt;FD&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;2&quot;&gt;&lt;strong&gt;CU&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td rowspan=&quot;2&quot;&gt;&lt;strong&gt;FD&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;2&quot;&gt;&lt;strong&gt;CU&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td rowspan=&quot;2&quot;&gt;&lt;strong&gt;vs FD&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td rowspan=&quot;2&quot;&gt;&lt;strong&gt;vs CU baseline&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;&lt;strong&gt;Baseline&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;Opt 5&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;Baseline&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;Opt 5&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;32
+   &lt;/td&gt;
+   &lt;td&gt;137
+   &lt;/td&gt;
+   &lt;td&gt;143
+   &lt;/td&gt;
+   &lt;td&gt;109
+   &lt;/td&gt;
+   &lt;td&gt;262
+   &lt;/td&gt;
+   &lt;td&gt;250
+   &lt;/td&gt;
+   &lt;td&gt;327
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.25&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.31&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;64
+   &lt;/td&gt;
+   &lt;td&gt;234
+   &lt;/td&gt;
+   &lt;td&gt;257
+   &lt;/td&gt;
+   &lt;td&gt;194
+   &lt;/td&gt;
+   &lt;td&gt;305
+   &lt;/td&gt;
+   &lt;td&gt;278
+   &lt;/td&gt;
+   &lt;td&gt;370
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.21&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.33&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;128
+   &lt;/td&gt;
+   &lt;td&gt;432
+   &lt;/td&gt;
+   &lt;td&gt;455
+   &lt;/td&gt;
+   &lt;td&gt;345
+   &lt;/td&gt;
+   &lt;td&gt;331
+   &lt;/td&gt;
+   &lt;td&gt;314
+   &lt;/td&gt;
+   &lt;td&gt;414
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.25&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.32&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;256
+   &lt;/td&gt;
+   &lt;td&gt;815
+   &lt;/td&gt;
+   &lt;td&gt;866
+   &lt;/td&gt;
+   &lt;td&gt;649
+   &lt;/td&gt;
+   &lt;td&gt;351
+   &lt;/td&gt;
+   &lt;td&gt;331
+   &lt;/td&gt;
+   &lt;td&gt;441
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.26&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.33&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;512
+   &lt;/td&gt;
+   &lt;td&gt;1581
+   &lt;/td&gt;
+   &lt;td&gt;1659
+   &lt;/td&gt;
+   &lt;td&gt;1244
+   &lt;/td&gt;
+   &lt;td&gt;362
+   &lt;/td&gt;
+   &lt;td&gt;345
+   &lt;/td&gt;
+   &lt;td&gt;460
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.27&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.33&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+&lt;/table&gt;
+
+&lt;h3 id=&quot;optimization-6-add-group-wise-int4-groups--4-with-vector-load&quot;&gt;Optimization 6: Add Group-Wise INT4 (Groups = 4) with Vector Load&lt;/h3&gt;
+
+&lt;p&gt;&lt;strong&gt;Problem Analysis:&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;Prior to this optimization, CU only supported row-wise INT4 quantization.  That is, every column in each row shares the same scales.  The scales of each row are stored in the first 4 bytes of each row as shown in Figure 10.  In the kernel, each thread loads only one row at a time.  Since each row contains 68 bytes (4 bytes for scales and 64 bytes for data), it cannot guarantee that every row aligns with a size of any vector type.  Thus, vector loads cannot be used for loading the KV cache.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/int4-decoding/fg10.jpg&quot; alt=&quot;Figure 10: The layout of each row of INT4 KV cache with row-wise quantization&quot; style=&quot;width:100%;display:block;max-width:500px;margin-left:auto;margin-right:auto;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Figure 10&lt;/strong&gt; The layout of each row of INT4 KV cache with row-wise quantization&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Solution:&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;We have implemented support for group-wise INT4 quantization with num groups = 4.  In this case, columns in each row in the KV cache tensor are divided into 4 equal groups.  Columns within the same group share the same scales for quantization/dequantization.  The data layout for INT4 KV cache is shown in Figure 11.   The scales for all groups are serialized and stored at the beginning of each row.  The INT4 data is also serialized and laid out next to the scales.&lt;/p&gt;
+
+&lt;p&gt;Because the number of bytes in each row now becomes 80 bytes, we can use a vector type, i.e., &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;uint2&lt;/code&gt; in our case, to load data.  (We &lt;strong&gt;do not&lt;/strong&gt; use &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;uint4&lt;/code&gt; since each thread loads only 16 INT4s at a time due to the tensor core fragment size.)  Vector load is generally better than scalar load since it does not cause extra byte loads.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/int4-decoding/fg11.jpg&quot; alt=&quot;Figure 11: The layout of each row of INT4 KV cache with row-wise quantization&quot; style=&quot;width:100%;display:block;max-width:500px;margin-left:auto;margin-right:auto;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Figure 11&lt;/strong&gt; The layout of each row of INT4 KV cache with row-wise quantization&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Results:&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Table 8&lt;/strong&gt; Performance of Optimization 6 for INT4 GQA (row-wise quantization)&lt;/p&gt;
+
+&lt;table class=&quot;table table-bordered&quot;&gt;
+  &lt;tr&gt;
+   &lt;td rowspan=&quot;3&quot;&gt;&lt;strong&gt;Batch size&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;3&quot;&gt;&lt;strong&gt;Time (us)&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;3&quot;&gt;&lt;strong&gt;Bandwidth (GB/s)&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;2&quot;&gt;&lt;strong&gt;Speed up&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td rowspan=&quot;2&quot;&gt;&lt;strong&gt;FD&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;2&quot;&gt;&lt;strong&gt;CU&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td rowspan=&quot;2&quot;&gt;&lt;strong&gt;FD&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;2&quot;&gt;&lt;strong&gt;CU&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td rowspan=&quot;2&quot;&gt;&lt;strong&gt;vs FD&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td rowspan=&quot;2&quot;&gt;&lt;strong&gt;vs CU baseline&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;&lt;strong&gt;Baseline&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;Opt 6&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;Baseline&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;Opt 6&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;32
+   &lt;/td&gt;
+   &lt;td&gt;137
+   &lt;/td&gt;
+   &lt;td&gt;143
+   &lt;/td&gt;
+   &lt;td&gt;111
+   &lt;/td&gt;
+   &lt;td&gt;262
+   &lt;/td&gt;
+   &lt;td&gt;250
+   &lt;/td&gt;
+   &lt;td&gt;322
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.23&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.29&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;64
+   &lt;/td&gt;
+   &lt;td&gt;234
+   &lt;/td&gt;
+   &lt;td&gt;257
+   &lt;/td&gt;
+   &lt;td&gt;192
+   &lt;/td&gt;
+   &lt;td&gt;305
+   &lt;/td&gt;
+   &lt;td&gt;278
+   &lt;/td&gt;
+   &lt;td&gt;372
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.22&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.34&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;128
+   &lt;/td&gt;
+   &lt;td&gt;432
+   &lt;/td&gt;
+   &lt;td&gt;455
+   &lt;/td&gt;
+   &lt;td&gt;346
+   &lt;/td&gt;
+   &lt;td&gt;331
+   &lt;/td&gt;
+   &lt;td&gt;314
+   &lt;/td&gt;
+   &lt;td&gt;414
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.25&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.32&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;256
+   &lt;/td&gt;
+   &lt;td&gt;815
+   &lt;/td&gt;
+   &lt;td&gt;866
+   &lt;/td&gt;
+   &lt;td&gt;642
+   &lt;/td&gt;
+   &lt;td&gt;351
+   &lt;/td&gt;
+   &lt;td&gt;331
+   &lt;/td&gt;
+   &lt;td&gt;446
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.27&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.35&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;512
+   &lt;/td&gt;
+   &lt;td&gt;1581
+   &lt;/td&gt;
+   &lt;td&gt;1659
+   &lt;/td&gt;
+   &lt;td&gt;1244
+   &lt;/td&gt;
+   &lt;td&gt;362
+   &lt;/td&gt;
+   &lt;td&gt;345
+   &lt;/td&gt;
+   &lt;td&gt;460
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.27&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.33&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+&lt;/table&gt;
+
+&lt;p&gt;&lt;strong&gt;Table 9&lt;/strong&gt; Performance of Optimization 6 for INT4 GQA (group-wise quantization with num groups = 4)&lt;/p&gt;
+
+&lt;table class=&quot;table table-bordered&quot;&gt;
+  &lt;tr&gt;
+   &lt;td rowspan=&quot;3&quot;&gt;&lt;strong&gt;Batch size&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;2&quot;&gt;&lt;strong&gt;Time (us)&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;2&quot;&gt;&lt;strong&gt;Bandwidth (GB/s)&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;Speed up&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td rowspan=&quot;2&quot;&gt;&lt;strong&gt;FD&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;CUDA_WMMA&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td rowspan=&quot;2&quot;&gt;&lt;strong&gt;FD&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;CUDA_WMMA&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td rowspan=&quot;2&quot;&gt;&lt;strong&gt;vs FD&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;&lt;strong&gt;Opt 6&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;Opt 6&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;32
+   &lt;/td&gt;
+   &lt;td&gt;129
+   &lt;/td&gt;
+   &lt;td&gt;116
+   &lt;/td&gt;
+   &lt;td&gt;325
+   &lt;/td&gt;
+   &lt;td&gt;364
+   &lt;/td&gt;
+   &lt;td&gt;1.31
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;64
+   &lt;/td&gt;
+   &lt;td&gt;219
+   &lt;/td&gt;
+   &lt;td&gt;195
+   &lt;/td&gt;
+   &lt;td&gt;385
+   &lt;/td&gt;
+   &lt;td&gt;431
+   &lt;/td&gt;
+   &lt;td&gt;1.36
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;128
+   &lt;/td&gt;
+   &lt;td&gt;392
+   &lt;/td&gt;
+   &lt;td&gt;347
+   &lt;/td&gt;
+   &lt;td&gt;429
+   &lt;/td&gt;
+   &lt;td&gt;484
+   &lt;/td&gt;
+   &lt;td&gt;1.39
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;256
+   &lt;/td&gt;
+   &lt;td&gt;719
+   &lt;/td&gt;
+   &lt;td&gt;638
+   &lt;/td&gt;
+   &lt;td&gt;468
+   &lt;/td&gt;
+   &lt;td&gt;527
+   &lt;/td&gt;
+   &lt;td&gt;1.41
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;512
+   &lt;/td&gt;
+   &lt;td&gt;1375
+   &lt;/td&gt;
+   &lt;td&gt;1225
+   &lt;/td&gt;
+   &lt;td&gt;489
+   &lt;/td&gt;
+   &lt;td&gt;550
+   &lt;/td&gt;
+   &lt;td&gt;1.43
+   &lt;/td&gt;
+  &lt;/tr&gt;
+&lt;/table&gt;
+
+&lt;h3 id=&quot;optimization-7-compute-max-qkt-from-wmma-fragment-directly-a100h100-specific&quot;&gt;Optimization 7: Compute max &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;QK&lt;sup&gt;T&lt;/sup&gt;&lt;/code&gt; From WMMA Fragment Directly (A100/H100 specific)&lt;/h3&gt;
+
+&lt;p&gt;&lt;strong&gt;Problem Analysis:&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;We observe large stalls due to shared memory accessing during the max &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;QK&lt;sup&gt;T&lt;/sup&gt;&lt;/code&gt; computation (showing as large short scoreboard stalls) as shown in Figure 12.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/int4-decoding/fg12.png&quot; alt=&quot;Figure 12: Stalls due to shared memory access during max QKT computation&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Figure 12&lt;/strong&gt; Stalls due to shared memory access during max &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;QK&lt;sup&gt;T&lt;/sup&gt;&lt;/code&gt; computation (the number that the arrow points to is stall cycles caused by shared memory wait)&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Solution:&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;We bypass shared memory when computing max &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;QK&lt;sup&gt;T&lt;/sup&gt;&lt;/code&gt; by computing it from the WMMA fragment (i.e., the tensor core fragment) directly.  The layout of the WMMA fragment is specific to the GPU architecture.  In this optimization, we only enabled this optimization for the NVIDIA A100/H100 GPUs. Other GPUs will still use shared memory for the max &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;QK&lt;sup&gt;T&lt;/sup&gt;&lt;/code&gt; computation. By bypassing shared memory, we effectively eliminate the stalls caused by shared memory access.  The tensor core layout of the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;C&lt;/code&gt; fragment which is used for storing the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;QK&lt;sup&gt;T&lt;/sup&gt;&lt;/code&gt; results is shown in Figure 13.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/int4-decoding/fg13.jpg&quot; alt=&quot;Figure 13: C fragment (QKT storage) tensor core layout on A100/H100&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Figure 13&lt;/strong&gt; &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;C&lt;/code&gt; fragment (&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;QK&lt;sup&gt;T&lt;/sup&gt;&lt;/code&gt; storage) tensor core layout on A100/H100&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Table 10&lt;/strong&gt; Performance of Optimization 7 for INT4 GQA (row-wise quantization)&lt;/p&gt;
+
+&lt;table class=&quot;table table-bordered&quot;&gt;
+  &lt;tr&gt;
+   &lt;td rowspan=&quot;3&quot;&gt;&lt;strong&gt;Batch size&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;3&quot;&gt;&lt;strong&gt;Time (us)&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;3&quot;&gt;&lt;strong&gt;Bandwidth (GB/s)&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;2&quot;&gt;&lt;strong&gt;Speed up&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td rowspan=&quot;2&quot;&gt;&lt;strong&gt;FD&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;2&quot;&gt;&lt;strong&gt;CU&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td rowspan=&quot;2&quot;&gt;&lt;strong&gt;FD&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;2&quot;&gt;&lt;strong&gt;CU&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td rowspan=&quot;2&quot;&gt;&lt;strong&gt;vs FD&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td rowspan=&quot;2&quot;&gt;&lt;strong&gt;vs CU baseline&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;&lt;strong&gt;Baseline&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;Opt 7&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;Baseline&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;Opt 7&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;32
+   &lt;/td&gt;
+   &lt;td&gt;137
+   &lt;/td&gt;
+   &lt;td&gt;143
+   &lt;/td&gt;
+   &lt;td&gt;107
+   &lt;/td&gt;
+   &lt;td&gt;262
+   &lt;/td&gt;
+   &lt;td&gt;250
+   &lt;/td&gt;
+   &lt;td&gt;333
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.27&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.33&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;64
+   &lt;/td&gt;
+   &lt;td&gt;234
+   &lt;/td&gt;
+   &lt;td&gt;257
+   &lt;/td&gt;
+   &lt;td&gt;183
+   &lt;/td&gt;
+   &lt;td&gt;305
+   &lt;/td&gt;
+   &lt;td&gt;278
+   &lt;/td&gt;
+   &lt;td&gt;391
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.28&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.40&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;128
+   &lt;/td&gt;
+   &lt;td&gt;432
+   &lt;/td&gt;
+   &lt;td&gt;455
+   &lt;/td&gt;
+   &lt;td&gt;333
+   &lt;/td&gt;
+   &lt;td&gt;331
+   &lt;/td&gt;
+   &lt;td&gt;314
+   &lt;/td&gt;
+   &lt;td&gt;430
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.30&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.37&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;256
+   &lt;/td&gt;
+   &lt;td&gt;815
+   &lt;/td&gt;
+   &lt;td&gt;866
+   &lt;/td&gt;
+   &lt;td&gt;620
+   &lt;/td&gt;
+   &lt;td&gt;351
+   &lt;/td&gt;
+   &lt;td&gt;331
+   &lt;/td&gt;
+   &lt;td&gt;461
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.31&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.40&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;512
+   &lt;/td&gt;
+   &lt;td&gt;1581
+   &lt;/td&gt;
+   &lt;td&gt;1659
+   &lt;/td&gt;
+   &lt;td&gt;1206
+   &lt;/td&gt;
+   &lt;td&gt;362
+   &lt;/td&gt;
+   &lt;td&gt;345
+   &lt;/td&gt;
+   &lt;td&gt;475
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.31&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.38&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+&lt;/table&gt;
+
+&lt;p&gt;&lt;strong&gt;Table 11&lt;/strong&gt; Performance of Optimization 7 for INT4 GQA (group-wise quantization with num groups = 4)&lt;/p&gt;
+
+&lt;table class=&quot;table table-bordered&quot;&gt;
+  &lt;tr&gt;
+   &lt;td rowspan=&quot;3&quot;&gt;&lt;strong&gt;Batch size&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;3&quot;&gt;&lt;strong&gt;Time (us)&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;3&quot;&gt;&lt;strong&gt;Bandwidth (GB/s)&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;2&quot;&gt;&lt;strong&gt;Speed up&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td rowspan=&quot;2&quot;&gt;&lt;strong&gt;FD&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;2&quot;&gt;&lt;strong&gt;CUDA_WMMA&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td rowspan=&quot;2&quot;&gt;&lt;strong&gt;FD&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;2&quot;&gt;&lt;strong&gt;CUDA_WMMA&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td rowspan=&quot;2&quot;&gt;&lt;strong&gt;vs FD&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td rowspan=&quot;2&quot;&gt;&lt;strong&gt;vs CUDA_WMMA Opt 6&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;&lt;strong&gt;Opt 6&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;Opt 7&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;Opt 6&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;Opt 7&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;32
+   &lt;/td&gt;
+   &lt;td&gt;129
+   &lt;/td&gt;
+   &lt;td&gt;116
+   &lt;/td&gt;
+   &lt;td&gt;111
+   &lt;/td&gt;
+   &lt;td&gt;325
+   &lt;/td&gt;
+   &lt;td&gt;364
+   &lt;/td&gt;
+   &lt;td&gt;380
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.17&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.04&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;64
+   &lt;/td&gt;
+   &lt;td&gt;219
+   &lt;/td&gt;
+   &lt;td&gt;195
+   &lt;/td&gt;
+   &lt;td&gt;187
+   &lt;/td&gt;
+   &lt;td&gt;385
+   &lt;/td&gt;
+   &lt;td&gt;431
+   &lt;/td&gt;
+   &lt;td&gt;449
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.17&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.04&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;128
+   &lt;/td&gt;
+   &lt;td&gt;392
+   &lt;/td&gt;
+   &lt;td&gt;347
+   &lt;/td&gt;
+   &lt;td&gt;333
+   &lt;/td&gt;
+   &lt;td&gt;429
+   &lt;/td&gt;
+   &lt;td&gt;484
+   &lt;/td&gt;
+   &lt;td&gt;506
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.18&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.04&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;256
+   &lt;/td&gt;
+   &lt;td&gt;719
+   &lt;/td&gt;
+   &lt;td&gt;638
+   &lt;/td&gt;
+   &lt;td&gt;615
+   &lt;/td&gt;
+   &lt;td&gt;468
+   &lt;/td&gt;
+   &lt;td&gt;527
+   &lt;/td&gt;
+   &lt;td&gt;547
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.17&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.04&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;512
+   &lt;/td&gt;
+   &lt;td&gt;1375
+   &lt;/td&gt;
+   &lt;td&gt;1225
+   &lt;/td&gt;
+   &lt;td&gt;1184
+   &lt;/td&gt;
+   &lt;td&gt;489
+   &lt;/td&gt;
+   &lt;td&gt;550
+   &lt;/td&gt;
+   &lt;td&gt;569
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.16&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.03&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+&lt;/table&gt;
+
+&lt;h3 id=&quot;optimization-8-write-fp32-bf16-results-to-p-fragment-directly-a100h100-specific&quot;&gt;Optimization 8: Write FP32-&amp;gt;BF16 Results to &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;P&lt;/code&gt; Fragment Directly (A100/H100 specific)&lt;/h3&gt;
+
+&lt;p&gt;&lt;strong&gt;Problem Analysis:&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;During the FP32-BF16 conversion for the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;P&lt;/code&gt; fragment, the kernel loads the FP32 data from shared memory, does the conversion and then stores the BF16 data back to shared memory.  Moreover, the conversion requires many thread block synchronizations (&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;__syncthreads()&lt;/code&gt;).&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Solution:&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;Due to the data partitioning design of the kernel, each warp performs only one pass through the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;P&lt;/code&gt; fragment.  Thus, we do not have to write the conversion results back to the shared memory for future usage.  To avoid writing the BF16 data to the shared memory and thread block synchronizations, we have each warp load the FP32 data of the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;P&lt;/code&gt; WMMA fragment from the shared memory, do the conversion and then write the BF16 data directly to the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;P&lt;/code&gt; fragment.&lt;/p&gt;
+
+&lt;p&gt;Note that this optimization is applied to only the NVIDIA A100 and H100 GPUs because the WMMA fragment layout is architecture dependent.  For non-A100/H100 GPUs, the kernel will fallback to the original path.&lt;/p&gt;
+
+&lt;p&gt;The &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;P&lt;/code&gt; fragment tensor core layout is shown in Figure 14.  Note that this layout is specific to the NVIDIA A100/H100 GPU.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/int4-decoding/fg14.jpg&quot; alt=&quot;Figure 14: P fragment tensor core layout on A100/H100&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Figure 14&lt;/strong&gt; &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;P&lt;/code&gt; fragment tensor core layout on A100/H100&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Table 12&lt;/strong&gt; Performance of Optimization 8 for INT4 GQA (row-wise quantization)&lt;/p&gt;
+
+&lt;table class=&quot;table table-bordered&quot;&gt;
+  &lt;tr&gt;
+   &lt;td rowspan=&quot;3&quot;&gt;&lt;strong&gt;Batch size&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;3&quot;&gt;&lt;strong&gt;Time (us)&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;3&quot;&gt;&lt;strong&gt;Bandwidth (GB/s)&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;2&quot;&gt;&lt;strong&gt;Speed up&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td rowspan=&quot;2&quot;&gt;&lt;strong&gt;FD&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;2&quot;&gt;&lt;strong&gt;CU&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td rowspan=&quot;2&quot;&gt;&lt;strong&gt;FD&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;2&quot;&gt;&lt;strong&gt;CU&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td rowspan=&quot;2&quot;&gt;&lt;strong&gt;vs FD&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td rowspan=&quot;2&quot;&gt;&lt;strong&gt;vs CU baseline&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;&lt;strong&gt;Baseline&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;Opt 8&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;Baseline&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;Opt 8&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;32
+   &lt;/td&gt;
+   &lt;td&gt;137
+   &lt;/td&gt;
+   &lt;td&gt;143
+   &lt;/td&gt;
+   &lt;td&gt;101
+   &lt;/td&gt;
+   &lt;td&gt;262
+   &lt;/td&gt;
+   &lt;td&gt;250
+   &lt;/td&gt;
+   &lt;td&gt;353
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.35&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.41&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;64
+   &lt;/td&gt;
+   &lt;td&gt;234
+   &lt;/td&gt;
+   &lt;td&gt;257
+   &lt;/td&gt;
+   &lt;td&gt;174
+   &lt;/td&gt;
+   &lt;td&gt;305
+   &lt;/td&gt;
+   &lt;td&gt;278
+   &lt;/td&gt;
+   &lt;td&gt;410
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.34&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.47&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;128
+   &lt;/td&gt;
+   &lt;td&gt;432
+   &lt;/td&gt;
+   &lt;td&gt;455
+   &lt;/td&gt;
+   &lt;td&gt;317
+   &lt;/td&gt;
+   &lt;td&gt;331
+   &lt;/td&gt;
+   &lt;td&gt;314
+   &lt;/td&gt;
+   &lt;td&gt;451
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.36&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.43&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;256
+   &lt;/td&gt;
+   &lt;td&gt;815
+   &lt;/td&gt;
+   &lt;td&gt;866
+   &lt;/td&gt;
+   &lt;td&gt;590
+   &lt;/td&gt;
+   &lt;td&gt;351
+   &lt;/td&gt;
+   &lt;td&gt;331
+   &lt;/td&gt;
+   &lt;td&gt;485
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.38&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.47&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;512
+   &lt;/td&gt;
+   &lt;td&gt;1581
+   &lt;/td&gt;
+   &lt;td&gt;1659
+   &lt;/td&gt;
+   &lt;td&gt;1143
+   &lt;/td&gt;
+   &lt;td&gt;362
+   &lt;/td&gt;
+   &lt;td&gt;345
+   &lt;/td&gt;
+   &lt;td&gt;501
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.38&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.45&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+&lt;/table&gt;
+
+&lt;p&gt;&lt;strong&gt;Table 13&lt;/strong&gt; Performance of Optimization 8 for INT4 GQA (group-wise quantization with num groups = 4)&lt;/p&gt;
+
+&lt;table class=&quot;table table-bordered&quot;&gt;
+  &lt;tr&gt;
+   &lt;td rowspan=&quot;3&quot;&gt;&lt;strong&gt;Batch size&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;3&quot;&gt;&lt;strong&gt;Time (us)&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;3&quot;&gt;&lt;strong&gt;Bandwidth (GB/s)&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;2&quot;&gt;&lt;strong&gt;Speed up&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td rowspan=&quot;2&quot;&gt;&lt;strong&gt;FD&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;2&quot;&gt;&lt;strong&gt;CUDA_WMMA&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td rowspan=&quot;2&quot;&gt;&lt;strong&gt;FD&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;2&quot;&gt;&lt;strong&gt;CUDA_WMMA&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td rowspan=&quot;2&quot;&gt;&lt;strong&gt;vs FD&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td rowspan=&quot;2&quot;&gt;&lt;strong&gt;vs CUDA_WMMA Opt 6&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;&lt;strong&gt;Opt 6&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;Opt 8&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;Opt 6&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;Opt 8&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;32
+   &lt;/td&gt;
+   &lt;td&gt;129
+   &lt;/td&gt;
+   &lt;td&gt;116
+   &lt;/td&gt;
+   &lt;td&gt;106
+   &lt;/td&gt;
+   &lt;td&gt;325
+   &lt;/td&gt;
+   &lt;td&gt;364
+   &lt;/td&gt;
+   &lt;td&gt;396
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.22&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.09&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;64
+   &lt;/td&gt;
+   &lt;td&gt;219
+   &lt;/td&gt;
+   &lt;td&gt;195
+   &lt;/td&gt;
+   &lt;td&gt;180
+   &lt;/td&gt;
+   &lt;td&gt;385
+   &lt;/td&gt;
+   &lt;td&gt;431
+   &lt;/td&gt;
+   &lt;td&gt;467
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.21&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.08&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;128
+   &lt;/td&gt;
+   &lt;td&gt;392
+   &lt;/td&gt;
+   &lt;td&gt;347
+   &lt;/td&gt;
+   &lt;td&gt;319
+   &lt;/td&gt;
+   &lt;td&gt;429
+   &lt;/td&gt;
+   &lt;td&gt;484
+   &lt;/td&gt;
+   &lt;td&gt;528
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.23&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.09&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;256
+   &lt;/td&gt;
+   &lt;td&gt;719
+   &lt;/td&gt;
+   &lt;td&gt;638
+   &lt;/td&gt;
+   &lt;td&gt;596
+   &lt;/td&gt;
+   &lt;td&gt;468
+   &lt;/td&gt;
+   &lt;td&gt;527
+   &lt;/td&gt;
+   &lt;td&gt;565
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.21&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.07&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;512
+   &lt;/td&gt;
+   &lt;td&gt;1375
+   &lt;/td&gt;
+   &lt;td&gt;1225
+   &lt;/td&gt;
+   &lt;td&gt;1138
+   &lt;/td&gt;
+   &lt;td&gt;489
+   &lt;/td&gt;
+   &lt;td&gt;550
+   &lt;/td&gt;
+   &lt;td&gt;591
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.21&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.08&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+&lt;/table&gt;
+
+&lt;h3 id=&quot;optimization-9-swizzle-p-shared-memory-layouts-a100h100-specific&quot;&gt;Optimization 9: Swizzle P Shared Memory Layouts (A100/H100 specific)&lt;/h3&gt;
+
+&lt;p&gt;&lt;strong&gt;Problem Analysis:&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;We observe large shared memory bank conflicts during &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;P&lt;/code&gt; loading.  The amount of bank conflict depends on the memory access stride.  For instance, for split-Ks = 32 and max seq length = 8192, we observed that only 4 out of 32 banks are being accessed in parallel (memory access stride = 256).  From Figure 14, when all threads access element 0, threads that have the same &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;threadIdx.x % 4&lt;/code&gt; access the same bank.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/int4-decoding/fg15.jpg&quot; alt=&quot;Figure 15: P fragment in shared memory before swizzling&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Figure 15&lt;/strong&gt; P fragment in shared memory before swizzling&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Solution:&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;We shuffle the layout of &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;P&lt;/code&gt; load/store in the shared memory in such a way that avoids bank conflicts.  In other words, we store the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;QK&lt;sup&gt;T&lt;/sup&gt;&lt;/code&gt; results (&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;C&lt;/code&gt; fragment) and load them (&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;P&lt;/code&gt; fragment) using the swizzled layout.  Moreover, instead of using the original memory access stride which is dependent on the number of tokens per thread block, we use the fragment’s column size as the stride which is constant.  Thus, the load and store of the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;P&lt;/code&gt; fragment is always contiguous.&lt;/p&gt;
+
+&lt;p&gt;The new layouts for the C and P fragments are shown in Figure 16.  With the new layout, it is guaranteed that 16 banks are being accessed in parallel as shown in Figure 17.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/int4-decoding/fg16.jpg&quot; alt=&quot;Figure 16: The swizzled layouts of C and P fragments&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Figure 16&lt;/strong&gt; The swizzled layouts of C and P fragments&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/int4-decoding/fg17.jpg&quot; alt=&quot;Figure 17: P fragment in shared memory after swizzling&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Figure 17&lt;/strong&gt; P fragment in shared memory after swizzling&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Table 14&lt;/strong&gt; Performance of Optimization 9 for INT4 GQA (row-wise quantization)&lt;/p&gt;
+
+&lt;table class=&quot;table table-bordered&quot;&gt;
+  &lt;tr&gt;
+   &lt;td rowspan=&quot;3&quot;&gt;&lt;strong&gt;Batch size&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;3&quot;&gt;&lt;strong&gt;Time (us)&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;3&quot;&gt;&lt;strong&gt;Bandwidth (GB/s)&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;2&quot;&gt;&lt;strong&gt;Speed up&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td rowspan=&quot;2&quot;&gt;&lt;strong&gt;FD&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;2&quot;&gt;&lt;strong&gt;CU&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td rowspan=&quot;2&quot;&gt;&lt;strong&gt;FD&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;2&quot;&gt;&lt;strong&gt;CU&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td rowspan=&quot;2&quot;&gt;&lt;strong&gt;vs FD&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td rowspan=&quot;2&quot;&gt;&lt;strong&gt;vs CU baseline&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;&lt;strong&gt;Baseline&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;Opt 9&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;Baseline&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;Opt 9&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;32
+   &lt;/td&gt;
+   &lt;td&gt;137
+   &lt;/td&gt;
+   &lt;td&gt;143
+   &lt;/td&gt;
+   &lt;td&gt;98
+   &lt;/td&gt;
+   &lt;td&gt;262
+   &lt;/td&gt;
+   &lt;td&gt;250
+   &lt;/td&gt;
+   &lt;td&gt;365
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.39&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.46&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;64
+   &lt;/td&gt;
+   &lt;td&gt;234
+   &lt;/td&gt;
+   &lt;td&gt;257
+   &lt;/td&gt;
+   &lt;td&gt;167
+   &lt;/td&gt;
+   &lt;td&gt;305
+   &lt;/td&gt;
+   &lt;td&gt;278
+   &lt;/td&gt;
+   &lt;td&gt;429
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.41&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.54&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;128
+   &lt;/td&gt;
+   &lt;td&gt;432
+   &lt;/td&gt;
+   &lt;td&gt;455
+   &lt;/td&gt;
+   &lt;td&gt;299
+   &lt;/td&gt;
+   &lt;td&gt;331
+   &lt;/td&gt;
+   &lt;td&gt;314
+   &lt;/td&gt;
+   &lt;td&gt;479
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.45&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.52&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;256
+   &lt;/td&gt;
+   &lt;td&gt;815
+   &lt;/td&gt;
+   &lt;td&gt;866
+   &lt;/td&gt;
+   &lt;td&gt;549
+   &lt;/td&gt;
+   &lt;td&gt;351
+   &lt;/td&gt;
+   &lt;td&gt;331
+   &lt;/td&gt;
+   &lt;td&gt;521
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.48&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.58&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;512
+   &lt;/td&gt;
+   &lt;td&gt;1581
+   &lt;/td&gt;
+   &lt;td&gt;1659
+   &lt;/td&gt;
+   &lt;td&gt;1060
+   &lt;/td&gt;
+   &lt;td&gt;362
+   &lt;/td&gt;
+   &lt;td&gt;345
+   &lt;/td&gt;
+   &lt;td&gt;540
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.49&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.56&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+&lt;/table&gt;
+
+&lt;p&gt;&lt;strong&gt;Table 15&lt;/strong&gt; Performance of Optimization 9 for INT4 GQA (group-wise quantization with num groups = 4)&lt;/p&gt;
+
+&lt;table class=&quot;table table-bordered&quot;&gt;
+  &lt;tr&gt;
+   &lt;td rowspan=&quot;3&quot;&gt;&lt;strong&gt;Batch size&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;3&quot;&gt;&lt;strong&gt;Time (us)&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;3&quot;&gt;&lt;strong&gt;Bandwidth (GB/s)&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;2&quot;&gt;&lt;strong&gt;Speed up&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td rowspan=&quot;2&quot;&gt;&lt;strong&gt;FD&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;2&quot;&gt;&lt;strong&gt;CUDA_WMMA&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td rowspan=&quot;2&quot;&gt;&lt;strong&gt;FD&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;2&quot;&gt;&lt;strong&gt;CUDA_WMMA&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td rowspan=&quot;2&quot;&gt;&lt;strong&gt;vs FD&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td rowspan=&quot;2&quot;&gt;&lt;strong&gt;vs CUDA_WMMA Opt 6&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;&lt;strong&gt;Opt 6&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;Opt 9&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;Opt 6&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;Opt 9&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;32
+   &lt;/td&gt;
+   &lt;td&gt;129
+   &lt;/td&gt;
+   &lt;td&gt;116
+   &lt;/td&gt;
+   &lt;td&gt;105
+   &lt;/td&gt;
+   &lt;td&gt;325
+   &lt;/td&gt;
+   &lt;td&gt;364
+   &lt;/td&gt;
+   &lt;td&gt;400
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.23&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.10&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;64
+   &lt;/td&gt;
+   &lt;td&gt;219
+   &lt;/td&gt;
+   &lt;td&gt;195
+   &lt;/td&gt;
+   &lt;td&gt;174
+   &lt;/td&gt;
+   &lt;td&gt;385
+   &lt;/td&gt;
+   &lt;td&gt;431
+   &lt;/td&gt;
+   &lt;td&gt;484
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.26&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.12&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;128
+   &lt;/td&gt;
+   &lt;td&gt;392
+   &lt;/td&gt;
+   &lt;td&gt;347
+   &lt;/td&gt;
+   &lt;td&gt;302
+   &lt;/td&gt;
+   &lt;td&gt;429
+   &lt;/td&gt;
+   &lt;td&gt;484
+   &lt;/td&gt;
+   &lt;td&gt;558
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.30&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.15&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;256
+   &lt;/td&gt;
+   &lt;td&gt;719
+   &lt;/td&gt;
+   &lt;td&gt;638
+   &lt;/td&gt;
+   &lt;td&gt;560
+   &lt;/td&gt;
+   &lt;td&gt;468
+   &lt;/td&gt;
+   &lt;td&gt;527
+   &lt;/td&gt;
+   &lt;td&gt;601
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.28&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.14&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;512
+   &lt;/td&gt;
+   &lt;td&gt;1375
+   &lt;/td&gt;
+   &lt;td&gt;1225
+   &lt;/td&gt;
+   &lt;td&gt;1065
+   &lt;/td&gt;
+   &lt;td&gt;489
+   &lt;/td&gt;
+   &lt;td&gt;550
+   &lt;/td&gt;
+   &lt;td&gt;632
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.29&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.15&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+&lt;/table&gt;
+
+&lt;h3 id=&quot;optimization-10-pad-shared-memory-for-int4-dequantization&quot;&gt;Optimization 10: Pad Shared Memory for INT4 Dequantization&lt;/h3&gt;
+
+&lt;p&gt;&lt;strong&gt;Problem Analysis:&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;Once the kernel reads the INT4 &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;K&lt;/code&gt; or &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;V&lt;/code&gt; cache from global memory, it performs dequantization and stores the results (BF16) in the shared memory.  Then, the BF16 data is loaded to the WMMA fragment from shared memory (via the WMMA interface).  We observed a large number of bank conflicts for both &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;K&lt;/code&gt; and &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;V&lt;/code&gt; accesses.  For instance, for &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;K&lt;/code&gt; stores, only 4 out of 32 banks are being accessed in parallel.  For &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;K&lt;/code&gt; loads, 16 banks are being accessed in parallel.  The same also occurs for &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;V&lt;/code&gt; stores and loads.  See the figures in the solution section.&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Solution:&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;We pad the shared memory to reduce the bank conflict.  Specifically, we pad each row by 2.  That is, the row stride of &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;K&lt;/code&gt; becomes &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;F_K&lt;/code&gt; + 2 and the row stride of V becomes &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;F_N&lt;/code&gt; + 2 (&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;F_K&lt;/code&gt; and &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;F_N&lt;/code&gt; are the fixed widths of the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;K&lt;/code&gt; and &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;V&lt;/code&gt; WMMA fragments, respectively).  With this optimization, we are able to reduce the bank conflict by 1.8x as shown in Figure 18.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/int4-decoding/fg18.png&quot; alt=&quot;Figure 18: Bank conflicts before and after Optimization 10&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Figure 18&lt;/strong&gt; Bank conflicts before and after Optimization 10&lt;/p&gt;
+
+&lt;p&gt;After Optimization 10, for &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;K&lt;/code&gt; stores, 32 banks are being accessed in parallel (shown in Figure 19), while for &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;K&lt;/code&gt; loads, 29 banks are accessed in parallel (shown in Figure 20).&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/int4-decoding/fg19.jpg&quot; alt=&quot;Figure 19: K fragment store shared memory layout without and with padding&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Figure 19&lt;/strong&gt; K fragment store shared memory layout without and with padding&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/int4-decoding/fg20.jpg&quot; alt=&quot;Figure 20: K fragment load shared memory layout without and with padding&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Figure 20&lt;/strong&gt; K fragment load shared memory layout without and with padding&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Table 16&lt;/strong&gt; Performance of Optimization 10 for INT4 GQA (row-wise quantization)&lt;/p&gt;
+
+&lt;table class=&quot;table table-bordered&quot;&gt;
+  &lt;tr&gt;
+   &lt;td rowspan=&quot;3&quot;&gt;&lt;strong&gt;Batch size&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;3&quot;&gt;&lt;strong&gt;Time (us)&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;3&quot;&gt;&lt;strong&gt;Bandwidth (GB/s)&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;2&quot;&gt;&lt;strong&gt;Speed up&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td rowspan=&quot;2&quot;&gt;&lt;strong&gt;FD&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;2&quot;&gt;&lt;strong&gt;CU&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td rowspan=&quot;2&quot;&gt;&lt;strong&gt;FD&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;2&quot;&gt;&lt;strong&gt;CU&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td rowspan=&quot;2&quot;&gt;&lt;strong&gt;vs FD&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td rowspan=&quot;2&quot;&gt;&lt;strong&gt;vs CU baseline&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;&lt;strong&gt;Baseline&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;Opt 10&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;Baseline&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;Opt 10&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;32
+   &lt;/td&gt;
+   &lt;td&gt;137
+   &lt;/td&gt;
+   &lt;td&gt;143
+   &lt;/td&gt;
+   &lt;td&gt;94
+   &lt;/td&gt;
+   &lt;td&gt;262
+   &lt;/td&gt;
+   &lt;td&gt;250
+   &lt;/td&gt;
+   &lt;td&gt;380
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.45&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.52&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;64
+   &lt;/td&gt;
+   &lt;td&gt;234
+   &lt;/td&gt;
+   &lt;td&gt;257
+   &lt;/td&gt;
+   &lt;td&gt;151
+   &lt;/td&gt;
+   &lt;td&gt;305
+   &lt;/td&gt;
+   &lt;td&gt;278
+   &lt;/td&gt;
+   &lt;td&gt;475
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.55&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.71&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;128
+   &lt;/td&gt;
+   &lt;td&gt;432
+   &lt;/td&gt;
+   &lt;td&gt;455
+   &lt;/td&gt;
+   &lt;td&gt;266
+   &lt;/td&gt;
+   &lt;td&gt;331
+   &lt;/td&gt;
+   &lt;td&gt;314
+   &lt;/td&gt;
+   &lt;td&gt;538
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.63&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.71&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;256
+   &lt;/td&gt;
+   &lt;td&gt;815
+   &lt;/td&gt;
+   &lt;td&gt;866
+   &lt;/td&gt;
+   &lt;td&gt;489
+   &lt;/td&gt;
+   &lt;td&gt;351
+   &lt;/td&gt;
+   &lt;td&gt;331
+   &lt;/td&gt;
+   &lt;td&gt;586
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.67&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.77&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;512
+   &lt;/td&gt;
+   &lt;td&gt;1581
+   &lt;/td&gt;
+   &lt;td&gt;1659
+   &lt;/td&gt;
+   &lt;td&gt;930
+   &lt;/td&gt;
+   &lt;td&gt;362
+   &lt;/td&gt;
+   &lt;td&gt;345
+   &lt;/td&gt;
+   &lt;td&gt;616
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.70&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.79&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+&lt;/table&gt;
+
+&lt;p&gt;&lt;strong&gt;Table 17&lt;/strong&gt; Performance of Optimization 10 for INT4 GQA (group-wise quantization with num groups = 4)&lt;/p&gt;
+
+&lt;table class=&quot;table table-bordered&quot;&gt;
+  &lt;tr&gt;
+   &lt;td rowspan=&quot;3&quot;&gt;&lt;strong&gt;Batch size&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;3&quot;&gt;&lt;strong&gt;Time (us)&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;3&quot;&gt;&lt;strong&gt;Bandwidth (GB/s)&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;2&quot;&gt;&lt;strong&gt;Speed up&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td rowspan=&quot;2&quot;&gt;&lt;strong&gt;FD&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;2&quot;&gt;&lt;strong&gt;CUDA_WMMA&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td rowspan=&quot;2&quot;&gt;&lt;strong&gt;FD&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;2&quot;&gt;&lt;strong&gt;CUDA_WMMA&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td rowspan=&quot;2&quot;&gt;&lt;strong&gt;vs FD&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td rowspan=&quot;2&quot;&gt;&lt;strong&gt;vs CUDA_WMMA Opt 6&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;&lt;strong&gt;Opt 6&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;Opt 10&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;Opt 6&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;Opt 10&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;32
+   &lt;/td&gt;
+   &lt;td&gt;129
+   &lt;/td&gt;
+   &lt;td&gt;116
+   &lt;/td&gt;
+   &lt;td&gt;99
+   &lt;/td&gt;
+   &lt;td&gt;325
+   &lt;/td&gt;
+   &lt;td&gt;364
+   &lt;/td&gt;
+   &lt;td&gt;425
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.31&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.17&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;64
+   &lt;/td&gt;
+   &lt;td&gt;219
+   &lt;/td&gt;
+   &lt;td&gt;195
+   &lt;/td&gt;
+   &lt;td&gt;161
+   &lt;/td&gt;
+   &lt;td&gt;385
+   &lt;/td&gt;
+   &lt;td&gt;431
+   &lt;/td&gt;
+   &lt;td&gt;523
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.36&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.21&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;128
+   &lt;/td&gt;
+   &lt;td&gt;392
+   &lt;/td&gt;
+   &lt;td&gt;347
+   &lt;/td&gt;
+   &lt;td&gt;282
+   &lt;/td&gt;
+   &lt;td&gt;429
+   &lt;/td&gt;
+   &lt;td&gt;484
+   &lt;/td&gt;
+   &lt;td&gt;598
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.39&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.23&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;256
+   &lt;/td&gt;
+   &lt;td&gt;719
+   &lt;/td&gt;
+   &lt;td&gt;638
+   &lt;/td&gt;
+   &lt;td&gt;509
+   &lt;/td&gt;
+   &lt;td&gt;468
+   &lt;/td&gt;
+   &lt;td&gt;527
+   &lt;/td&gt;
+   &lt;td&gt;662
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.41&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.25&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;512
+   &lt;/td&gt;
+   &lt;td&gt;1375
+   &lt;/td&gt;
+   &lt;td&gt;1225
+   &lt;/td&gt;
+   &lt;td&gt;965
+   &lt;/td&gt;
+   &lt;td&gt;489
+   &lt;/td&gt;
+   &lt;td&gt;550
+   &lt;/td&gt;
+   &lt;td&gt;698
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.43&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;1.27&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+&lt;/table&gt;
+
+&lt;h2 id=&quot;performance-evaluation&quot;&gt;Performance Evaluation&lt;/h2&gt;
+
+&lt;h3 id=&quot;microbenchmark-results&quot;&gt;Microbenchmark results&lt;/h3&gt;
+
+&lt;p&gt;We also evaluated BF16 GQA performance using our optimized kernel (as shown in Table 19).  CU still performs generally worse than FD and FA for BF16.  This is expected since our optimizations are INT4 focused.&lt;/p&gt;
+
+&lt;p&gt;While INT4 GQA is still not as efficient as BF16 GQA (see the achieved bandwidths), it is important to note that when comparing FD BF16 GQA performance against CU INT4 GQA performance, &lt;strong&gt;we can see that the latency of INT4 is smaller than that of BF16&lt;/strong&gt;.&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Table 19&lt;/strong&gt; Performance of BF16 GQA and INT GQA after CU optimizations&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;On A100&lt;/strong&gt;&lt;/p&gt;
+
+&lt;table class=&quot;table table-bordered&quot;&gt;
+  &lt;tr&gt;
+   &lt;td&gt;&lt;strong&gt;Time (us)&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;4&quot;&gt;&lt;strong&gt;BF16 GQA&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;4&quot;&gt;&lt;strong&gt;INT4 GQA&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;&lt;strong&gt;Batch size&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;FD&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;FA&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;CU before&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;CU after&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;FD&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;FA&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;CU before&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;CU after&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;32
+   &lt;/td&gt;
+   &lt;td&gt;139
+   &lt;/td&gt;
+   &lt;td&gt;133
+   &lt;/td&gt;
+   &lt;td&gt;183
+   &lt;/td&gt;
+   &lt;td&gt;163
+   &lt;/td&gt;
+   &lt;td&gt;137
+   &lt;/td&gt;
+   &lt;td&gt;-
+   &lt;/td&gt;
+   &lt;td&gt;143
+   &lt;/td&gt;
+   &lt;td&gt;94
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;64
+   &lt;/td&gt;
+   &lt;td&gt;245
+   &lt;/td&gt;
+   &lt;td&gt;229
+   &lt;/td&gt;
+   &lt;td&gt;335
+   &lt;/td&gt;
+   &lt;td&gt;276
+   &lt;/td&gt;
+   &lt;td&gt;234
+   &lt;/td&gt;
+   &lt;td&gt;-
+   &lt;/td&gt;
+   &lt;td&gt;257
+   &lt;/td&gt;
+   &lt;td&gt;151
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;128
+   &lt;/td&gt;
+   &lt;td&gt;433
+   &lt;/td&gt;
+   &lt;td&gt;555
+   &lt;/td&gt;
+   &lt;td&gt;596
+   &lt;/td&gt;
+   &lt;td&gt;517
+   &lt;/td&gt;
+   &lt;td&gt;432
+   &lt;/td&gt;
+   &lt;td&gt;-
+   &lt;/td&gt;
+   &lt;td&gt;455
+   &lt;/td&gt;
+   &lt;td&gt;266
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;256
+   &lt;/td&gt;
+   &lt;td&gt;826
+   &lt;/td&gt;
+   &lt;td&gt;977
+   &lt;/td&gt;
+   &lt;td&gt;1127
+   &lt;/td&gt;
+   &lt;td&gt;999
+   &lt;/td&gt;
+   &lt;td&gt;815
+   &lt;/td&gt;
+   &lt;td&gt;-
+   &lt;/td&gt;
+   &lt;td&gt;866
+   &lt;/td&gt;
+   &lt;td&gt;489
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;512
+   &lt;/td&gt;
+   &lt;td&gt;1607
+   &lt;/td&gt;
+   &lt;td&gt;1670
+   &lt;/td&gt;
+   &lt;td&gt;2194
+   &lt;/td&gt;
+   &lt;td&gt;1879
+   &lt;/td&gt;
+   &lt;td&gt;1581
+   &lt;/td&gt;
+   &lt;td&gt;-
+   &lt;/td&gt;
+   &lt;td&gt;1659
+   &lt;/td&gt;
+   &lt;td&gt;930
+   &lt;/td&gt;
+  &lt;/tr&gt;
+&lt;/table&gt;
+
+&lt;table class=&quot;table table-bordered&quot;&gt;
+  &lt;tr&gt;
+   &lt;td&gt;&lt;strong&gt;Effective Bandwidth (GB/s)&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;4&quot;&gt;&lt;strong&gt;BF16 GQA&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;4&quot;&gt;&lt;strong&gt;INT4 GQA&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;&lt;strong&gt;Batch size&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;FD&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;FA&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;CU before&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;CU after&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;FD&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;FA&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;CU before&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;CU after&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;32
+   &lt;/td&gt;
+   &lt;td&gt;965
+   &lt;/td&gt;
+   &lt;td&gt;1012
+   &lt;/td&gt;
+   &lt;td&gt;736
+   &lt;/td&gt;
+   &lt;td&gt;824
+   &lt;/td&gt;
+   &lt;td&gt;262
+   &lt;/td&gt;
+   &lt;td&gt;-
+   &lt;/td&gt;
+   &lt;td&gt;250
+   &lt;/td&gt;
+   &lt;td&gt;380
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;64
+   &lt;/td&gt;
+   &lt;td&gt;1097
+   &lt;/td&gt;
+   &lt;td&gt;1175
+   &lt;/td&gt;
+   &lt;td&gt;802
+   &lt;/td&gt;
+   &lt;td&gt;972
+   &lt;/td&gt;
+   &lt;td&gt;305
+   &lt;/td&gt;
+   &lt;td&gt;-
+   &lt;/td&gt;
+   &lt;td&gt;278
+   &lt;/td&gt;
+   &lt;td&gt;475
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;128
+   &lt;/td&gt;
+   &lt;td&gt;1240
+   &lt;/td&gt;
+   &lt;td&gt;968
+   &lt;/td&gt;
+   &lt;td&gt;901
+   &lt;/td&gt;
+   &lt;td&gt;1039
+   &lt;/td&gt;
+   &lt;td&gt;331
+   &lt;/td&gt;
+   &lt;td&gt;-
+   &lt;/td&gt;
+   &lt;td&gt;314
+   &lt;/td&gt;
+   &lt;td&gt;538
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;256
+   &lt;/td&gt;
+   &lt;td&gt;1301
+   &lt;/td&gt;
+   &lt;td&gt;1100
+   &lt;/td&gt;
+   &lt;td&gt;954
+   &lt;/td&gt;
+   &lt;td&gt;1075
+   &lt;/td&gt;
+   &lt;td&gt;351
+   &lt;/td&gt;
+   &lt;td&gt;-
+   &lt;/td&gt;
+   &lt;td&gt;331
+   &lt;/td&gt;
+   &lt;td&gt;586
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;512
+   &lt;/td&gt;
+   &lt;td&gt;1338
+   &lt;/td&gt;
+   &lt;td&gt;1287
+   &lt;/td&gt;
+   &lt;td&gt;980
+   &lt;/td&gt;
+   &lt;td&gt;1144
+   &lt;/td&gt;
+   &lt;td&gt;362
+   &lt;/td&gt;
+   &lt;td&gt;-
+   &lt;/td&gt;
+   &lt;td&gt;345
+   &lt;/td&gt;
+   &lt;td&gt;616
+   &lt;/td&gt;
+  &lt;/tr&gt;
+&lt;/table&gt;
+
+&lt;p&gt;&lt;strong&gt;On H100&lt;/strong&gt;&lt;/p&gt;
+
+&lt;table class=&quot;table table-bordered&quot;&gt;
+  &lt;tr&gt;
+   &lt;td&gt;&lt;strong&gt;Time (us)&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;4&quot;&gt;&lt;strong&gt;BF16 GQA&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;4&quot;&gt;&lt;strong&gt;INT4 GQA&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;&lt;strong&gt;Batch size&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;FD&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;FA&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;CU before&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;CU after&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;FD&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;FA&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;CU before&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;CU after&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;32
+   &lt;/td&gt;
+   &lt;td&gt;91
+   &lt;/td&gt;
+   &lt;td&gt;90
+   &lt;/td&gt;
+   &lt;td&gt;114
+   &lt;/td&gt;
+   &lt;td&gt;100
+   &lt;/td&gt;
+   &lt;td&gt;70
+   &lt;/td&gt;
+   &lt;td&gt;-
+   &lt;/td&gt;
+   &lt;td&gt;96
+   &lt;/td&gt;
+   &lt;td&gt;64
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;64
+   &lt;/td&gt;
+   &lt;td&gt;148
+   &lt;/td&gt;
+   &lt;td&gt;146
+   &lt;/td&gt;
+   &lt;td&gt;200
+   &lt;/td&gt;
+   &lt;td&gt;183
+   &lt;/td&gt;
+   &lt;td&gt;113
+   &lt;/td&gt;
+   &lt;td&gt;-
+   &lt;/td&gt;
+   &lt;td&gt;162
+   &lt;/td&gt;
+   &lt;td&gt;101
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;128
+   &lt;/td&gt;
+   &lt;td&gt;271
+   &lt;/td&gt;
+   &lt;td&gt;298
+   &lt;/td&gt;
+   &lt;td&gt;361
+   &lt;/td&gt;
+   &lt;td&gt;308
+   &lt;/td&gt;
+   &lt;td&gt;205
+   &lt;/td&gt;
+   &lt;td&gt;-
+   &lt;/td&gt;
+   &lt;td&gt;294
+   &lt;/td&gt;
+   &lt;td&gt;170
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;256
+   &lt;/td&gt;
+   &lt;td&gt;515
+   &lt;/td&gt;
+   &lt;td&gt;499
+   &lt;/td&gt;
+   &lt;td&gt;658
+   &lt;/td&gt;
+   &lt;td&gt;556
+   &lt;/td&gt;
+   &lt;td&gt;389
+   &lt;/td&gt;
+   &lt;td&gt;-
+   &lt;/td&gt;
+   &lt;td&gt;558
+   &lt;/td&gt;
+   &lt;td&gt;306
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;512
+   &lt;/td&gt;
+   &lt;td&gt;1000
+   &lt;/td&gt;
+   &lt;td&gt;1011
+   &lt;/td&gt;
+   &lt;td&gt;1260
+   &lt;/td&gt;
+   &lt;td&gt;1066
+   &lt;/td&gt;
+   &lt;td&gt;756
+   &lt;/td&gt;
+   &lt;td&gt;-
+   &lt;/td&gt;
+   &lt;td&gt;1066
+   &lt;/td&gt;
+   &lt;td&gt;575
+   &lt;/td&gt;
+  &lt;/tr&gt;
+&lt;/table&gt;
+
+&lt;table class=&quot;table table-bordered&quot;&gt;
+  &lt;tr&gt;
+   &lt;td&gt;&lt;strong&gt;Effective Bandwidth (GB/s)&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;4&quot;&gt;&lt;strong&gt;BF16 GQA&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;4&quot;&gt;&lt;strong&gt;INT4 GQA&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;&lt;strong&gt;Batch size&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;FD&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;FA&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;CU before&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;CU after&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;FD&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;FA&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;CU before&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;CU after&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;32
+   &lt;/td&gt;
+   &lt;td&gt;1481
+   &lt;/td&gt;
+   &lt;td&gt;1496
+   &lt;/td&gt;
+   &lt;td&gt;1178
+   &lt;/td&gt;
+   &lt;td&gt;1341
+   &lt;/td&gt;
+   &lt;td&gt;511
+   &lt;/td&gt;
+   &lt;td&gt;-
+   &lt;/td&gt;
+   &lt;td&gt;371
+   &lt;/td&gt;
+   &lt;td&gt;560
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;64
+   &lt;/td&gt;
+   &lt;td&gt;1815
+   &lt;/td&gt;
+   &lt;td&gt;1840
+   &lt;/td&gt;
+   &lt;td&gt;1345
+   &lt;/td&gt;
+   &lt;td&gt;1470
+   &lt;/td&gt;
+   &lt;td&gt;631
+   &lt;/td&gt;
+   &lt;td&gt;-
+   &lt;/td&gt;
+   &lt;td&gt;443
+   &lt;/td&gt;
+   &lt;td&gt;710
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;128
+   &lt;/td&gt;
+   &lt;td&gt;1982
+   &lt;/td&gt;
+   &lt;td&gt;1802
+   &lt;/td&gt;
+   &lt;td&gt;1487
+   &lt;/td&gt;
+   &lt;td&gt;1743
+   &lt;/td&gt;
+   &lt;td&gt;699
+   &lt;/td&gt;
+   &lt;td&gt;-
+   &lt;/td&gt;
+   &lt;td&gt;487
+   &lt;/td&gt;
+   &lt;td&gt;844
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;256
+   &lt;/td&gt;
+   &lt;td&gt;2087
+   &lt;/td&gt;
+   &lt;td&gt;2156
+   &lt;/td&gt;
+   &lt;td&gt;1634
+   &lt;/td&gt;
+   &lt;td&gt;1934
+   &lt;/td&gt;
+   &lt;td&gt;736
+   &lt;/td&gt;
+   &lt;td&gt;-
+   &lt;/td&gt;
+   &lt;td&gt;513
+   &lt;/td&gt;
+   &lt;td&gt;935
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;512
+   &lt;/td&gt;
+   &lt;td&gt;2150
+   &lt;/td&gt;
+   &lt;td&gt;2127
+   &lt;/td&gt;
+   &lt;td&gt;1706
+   &lt;/td&gt;
+   &lt;td&gt;2015
+   &lt;/td&gt;
+   &lt;td&gt;757
+   &lt;/td&gt;
+   &lt;td&gt;-
+   &lt;/td&gt;
+   &lt;td&gt;537
+   &lt;/td&gt;
+   &lt;td&gt;996
+   &lt;/td&gt;
+  &lt;/tr&gt;
+&lt;/table&gt;
+
+&lt;h3 id=&quot;e2e-results&quot;&gt;E2E results&lt;/h3&gt;
+
+&lt;p&gt;We evaluated our optimized INT4 GQA kernel in Llama 2 70B on 8 H100 GPUs. We ran the model end-to-end, but only reported the decode latency.  We use FP8 FFN (feed forward network) to emphasize the attention performance in the decoding phase.  We vary the batch size from 1 to 256 and the context length from 2,048 (2K) to 16,384 (16K).  The E2E performance results are shown in the figure below.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/int4-decoding/fg21.png&quot; alt=&quot;Figure 21: Meta Llama 2 decode latency (ms) comparison&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Figure 21&lt;/strong&gt; Meta Llama 2 decode latency (ms) comparison (BF16 GQA runs out of memory in large batch size configurations)&lt;/p&gt;
+
+&lt;h2 id=&quot;code&quot;&gt;Code&lt;/h2&gt;
+
+&lt;p&gt;If you are interested, please checkout our code &lt;a href=&quot;https://github.com/pytorch/FBGEMM/tree/main/fbgemm_gpu/experimental/gen_ai&quot;&gt;here&lt;/a&gt;.  If you have any questions, please feel free to open an issue on GitHub, and we will be happy to help.  Your contributions are welcome!&lt;/p&gt;</content>
+
+      
+      
+      
+      
+      
+
+      <author>
+          <name>Sarunya Pumma, Jongsoo Park, Jianyu Huang, Amy Yang, Jaewon Lee, Daniel Haziza, Grigory Sizov, Jeremy Reizenstein, Jeff Johnson, Ying Zhang</name>
+        
+        
+      </author>
+
+      
+
+      
+
+      
+        <summary type="html">An efficient decoding Grouped-Query Attention with low-precision KV cache</summary>
+      
+
+      
+      
+    </entry>
   
     <entry>
       <title type="html">Ready, Set, Contribute: PyTorch Docathon Kickoff H1 2024</title>
@@ -1286,167 +4701,6 @@ if __name__ == &quot;__main__&quot;:
 
       
         <summary type="html">Speculative decoding is an optimization technique for inference that makes educated guesses about future tokens while generating the current token, all within a single forward pass. It incorporates a verification mechanism to ensure the correctness of these speculated tokens, thereby guaranteeing that the overall output of speculative decoding is identical to that of vanilla decoding. Optimizing the cost of inference of large language models (LLMs) is arguably one of the most critical factors in reducing the cost of generative AI and increasing its adoption. Towards this goal, various inference optimization techniques are available, including custom kernels, dynamic batching of input requests, and quantization of large models.</summary>
-      
-
-      
-      
-    </entry>
-  
-    <entry>
-      <title type="html">Accelerating Llama3 FP8 Inference with Triton Kernels</title>
-      <link href="https://pytorch.org/blog/accelerating-llama3/" rel="alternate" type="text/html" title="Accelerating Llama3 FP8 Inference with Triton Kernels" />
-      <published>2024-05-01T00:00:00-07:00</published>
-      <updated>2024-05-01T00:00:00-07:00</updated>
-      <id>https://pytorch.org/blog/accelerating-llama3</id>
-      <content type="html" xml:base="https://pytorch.org/blog/accelerating-llama3/">&lt;h2 id=&quot;10-summary&quot;&gt;1.0 Summary&lt;/h2&gt;
-
-&lt;p&gt;We present an optimized Triton FP8 GEMM (General Matrix-Matrix Multiply) kernel TK-GEMM, which leverages SplitK parallelization. For small batch size inference, TK-GEMM delivers up to &lt;strong&gt;1.94x&lt;/strong&gt; over the base Triton matmul implementation, &lt;strong&gt;1.87x&lt;/strong&gt; speedup over cuBLAS FP8 and &lt;strong&gt;1.71x&lt;/strong&gt; over cuBLAS FP16 for Llama3-70B inference problem sizes on NVIDIA H100 GPUs.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-llama3/fig1.png&quot; alt=&quot;TK-GEMM Speedup over PyTorch (calling cuBLAS) for Llama3-70B Attention Layer Matrix Shapes (N=K=8192)&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;strong&gt;Figure 1.&lt;/strong&gt; TK-GEMM Speedup over PyTorch (calling cuBLAS) for Llama3-70B Attention Layer Matrix Shapes (N=K=8192)&lt;/p&gt;
-
-&lt;p&gt;In this blog, we will cover how we designed an optimized kernel using &lt;a href=&quot;https://github.com/openai/triton&quot;&gt;Triton&lt;/a&gt; for FP8 inference and tuned it for Lama3-70B inference. We will cover FP8 (8-bit floating point), a new datatype supported by Hopper generation GPUs (SM90), the key SM90 features that Triton supports, and how we modified the parallelization to be able to maximize memory throughput for memory-bound (inference) problem sizes.&lt;/p&gt;
-
-&lt;p&gt;We also dedicate a section on CUDA graphs, an important technology that will help materialize kernel level speedups and enable developers who want to use Triton kernels in production settings to get additional performance gain.&lt;/p&gt;
-
-&lt;p&gt;Repo and code available at: &lt;a href=&quot;https://github.com/pytorch-labs/applied-ai&quot;&gt;https://github.com/pytorch-labs/applied-ai&lt;/a&gt;&lt;/p&gt;
-
-&lt;h2 id=&quot;20-fp8-datatype&quot;&gt;2.0 FP8 Datatype&lt;/h2&gt;
-
-&lt;p&gt;The FP8 datatype was &lt;a href=&quot;https://arxiv.org/pdf/2209.05433.pdf&quot;&gt;introduced&lt;/a&gt; jointly by Nvidia, Arm and Intel and serves as a successor to 16-bit floating point types.  With half the bit count, it has the potential to provide significant throughput improvements over its predecessors for Transformer networks. The FP8 datatype consists of 2 formats:&lt;/p&gt;
-
-&lt;p&gt;&lt;strong&gt;E4M3&lt;/strong&gt; (4-bit exponent and 3-bit mantissa).  Able to store +/ 448 and nan.&lt;br /&gt;
-&lt;strong&gt;E5M2&lt;/strong&gt; (5-bit exponent and 2-bit mantissa).  Able to store +/- 57,334, nan and inf.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-llama3/fig2.png&quot; alt=&quot;BF16, FP16, FP8 E4M3 and FP8 E5M2&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;strong&gt;Above:&lt;/strong&gt; &lt;em&gt;BF16, FP16, FP8 E4M3 and FP8 E5M2.&lt;/em&gt;&lt;br /&gt;
-&lt;em&gt;To show precision differences, the closest representation to 0.3952 is shown in each format.&lt;/em&gt;&lt;br /&gt;
-&lt;em&gt;Image Credit: &lt;a href=&quot;https://docs.nvidia.com/deeplearning/transformer-engine/user-guide/examples/fp8_primer.html&quot;&gt;Nvidia&lt;/a&gt;&lt;/em&gt;&lt;/p&gt;
-
-&lt;p&gt;We use E4M3 in inference and forward pass training due its higher precision and E5M2 in training backward pass due to its higher dynamic range. Nvidia has designed their H100 FP8 Tensor Core to provide a peak of 3958 TFLOPS, &lt;strong&gt;2x&lt;/strong&gt; the FLOPS of the FP16 Tensor Core.&lt;/p&gt;
-
-&lt;p&gt;We designed our Triton kernel with these hardware innovations in mind and in the rest of the blog we will discuss methods to leverage and verify that these features are indeed being utilized by the Triton compiler.&lt;/p&gt;
-
-&lt;h2 id=&quot;30-triton-hopper-support-and-fp8-tensor-core-instruction&quot;&gt;3.0 Triton Hopper Support and FP8 Tensor Core Instruction&lt;/h2&gt;
-
-&lt;p&gt;The Hopper GPU architecture has added the following &lt;a href=&quot;https://arxiv.org/abs/2402.13499&quot;&gt;new features&lt;/a&gt; that we can expect will accelerate FP8 GEMM.&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;TMA (Tensor Memory Accelerator) Hardware Unit&lt;/li&gt;
-  &lt;li&gt;WGMMA (Warp Group Matrix Multiply-Accumulate Instruction)&lt;/li&gt;
-  &lt;li&gt;Threadblock Clusters&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;Triton currently takes advantage of one of these features, the &lt;em&gt;wgmma&lt;/em&gt; instruction, whereas PyTorch (calling cuBLAS) leverages all 3 which makes these speedups even more impressive. To fully take advantage of the Hopper FP8 Tensor Core, the wgmma is necessary even though the older mma.sync instruction is still supported.&lt;/p&gt;
-
-&lt;p&gt;The key difference between the mma and wgmma instructions is that instead of 1 CUDA warp being responsible for an output shard, an entire warp group, 4 CUDA warps, &lt;em&gt;asynchronously&lt;/em&gt; contributes to an output shard.&lt;/p&gt;
-
-&lt;p&gt;To see what this instruction looks like in practice, and to verify that our Triton Kernel is indeed utilizing this feature we analyzed the PTX and SASS assembly using &lt;a href=&quot;https://developer.nvidia.com/nsight-compute&quot;&gt;nsight compute&lt;/a&gt;.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-llama3/fig3.png&quot; alt=&quot;PTX Assembly&quot; style=&quot;width:100%;display:block;max-width:600px;margin-left:auto;margin-right:auto;&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;strong&gt;Figure 2.&lt;/strong&gt; PTX Assembly&lt;/p&gt;
-
-&lt;p&gt;This instruction is further lowered into a QGMMA instruction in SASS.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-llama3/fig4.png&quot; alt=&quot;SASS Assembly&quot; style=&quot;width:100%;display:block;max-width:600px;margin-left:auto;margin-right:auto;&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;strong&gt;Figure 3.&lt;/strong&gt; SASS Assembly&lt;/p&gt;
-
-&lt;p&gt;Both instructions tell us that we are multiplying two FP8 E4M3 input tensors and accumulating in F32, which confirms that the TK-GEMM Kernel is utilizing the FP8 Tensor Core and the lowering is being done correctly.&lt;/p&gt;
-
-&lt;h2 id=&quot;40-splitk-work-decomposition&quot;&gt;4.0 SplitK Work Decomposition&lt;/h2&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-llama3/fig5.png&quot; alt=&quot;TK-GEMM vs Base Triton GEMM TFLOPS for M = 1-64&quot; style=&quot;width:100%;display:block;max-width:600px;margin-left:auto;margin-right:auto;&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;strong&gt;Figure 4.&lt;/strong&gt; TK-GEMM vs Base Triton GEMM TFLOPS for M = 1-64&lt;/p&gt;
-
-&lt;p&gt;The base Triton FP8 GEMM implementation does &lt;a href=&quot;https://github.com/openai/triton/issues/3104&quot;&gt;not perform&lt;/a&gt; well for the small M regime, where for a matrix multiplication of A (&lt;em&gt;MxN&lt;/em&gt;) x B (&lt;em&gt;NxK&lt;/em&gt;), &lt;em&gt;M&lt;/em&gt; &amp;lt; &lt;em&gt;N&lt;/em&gt;, &lt;em&gt;K&lt;/em&gt;. To optimize for this type matrix profile we applied a SplitK work decomposition instead of the Data Parallel decomposition found in the base Triton kernel. This greatly improved latencies for the small M regime.&lt;/p&gt;
-
-&lt;p&gt;For background, SplitK launches additional thread blocks along the k dimension to calculate partial output sums. The partial results from each thread block are then summed using an atomic reduction.  This allows for finer grained work decomposition with resultant performance improvements.  More details on SplitK are available in our &lt;a href=&quot;https://arxiv.org/abs/2402.00025&quot;&gt;arxiv paper&lt;/a&gt;.&lt;/p&gt;
-
-&lt;p&gt;After carefully tuning the other relevant hyperparameters for our kernel such as tile sizes, number of warps and the number of pipeline stages to Llama3-70B problem sizes we were able to produce up to &lt;strong&gt;1.94x&lt;/strong&gt; speedup over the Triton &lt;a href=&quot;https://triton-lang.org/main/getting-started/tutorials/03-matrix-multiplication.html&quot;&gt;base implementation&lt;/a&gt;. For a more comprehensive introduction to hyperparameter tuning, see our &lt;a href=&quot;https://pytorch.org/blog/accelerating-moe-model/#30-work-decomposition---splitk&quot;&gt;blog&lt;/a&gt;.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-llama3/fig6.png&quot; alt=&quot;NCU profiler times for TK-GEMM under varying batch sizes, and compared with PyTorch (calling cuBLAS) FP8 and FP16.&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;strong&gt;Above&lt;/strong&gt;: &lt;em&gt;NCU profiler times for TK-GEMM under varying batch sizes, and compared with PyTorch (calling cuBLAS) FP8 and FP16.&lt;/em&gt;&lt;/p&gt;
-
-&lt;p&gt;Note that starting at M=32, the cuBLAS FP8 kernel starts to outperform TK-GEMM. For M &amp;gt;= 32, we suspect that hyperparameters we found are not optimal, and thus another set of experiments is required to determine the optimal parameters for the mid-sized M regime.&lt;/p&gt;
-
-&lt;h2 id=&quot;50-cuda-graphs-to-enable-end-to-end-speedup&quot;&gt;5.0 CUDA Graphs to Enable End-to-End Speedup&lt;/h2&gt;
-
-&lt;p&gt;To be able to realize these speedups in an end-to-end setting, we must take into account both the kernel execution time (GPU duration) as well as the wall time (CPU+GPU) duration. Triton kernels, which are handwritten (as opposed to torch compile generated) are known to suffer from high-kernel launch latencies. If we use &lt;a href=&quot;https://pytorch.org/docs/stable/profiler.html&quot;&gt;torch profiler&lt;/a&gt; to trace the TK-GEMM kernel we can see the call stack on the CPU side to pinpoint exactly what is causing the slowdown.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-llama3/fig7.png&quot; alt=&quot;CPU Launch Overhead: 2.413ms&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;strong&gt;Figure 5.&lt;/strong&gt; CPU Launch Overhead: 2.413ms&lt;/p&gt;
-
-&lt;p&gt;From above, we see that the majority of the wall time of our optimized kernel is dominated by JIT (Just-in-Time) compilation overhead. To combat this we can use CUDA graphs.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-llama3/fig8.png&quot; alt=&quot;CUDA Graphs Visualization&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;strong&gt;Figure 6.&lt;/strong&gt; CUDA Graphs Visualization&lt;br /&gt;
-&lt;em&gt;Image Credit: &lt;a href=&quot;https://pytorch.org/blog/accelerating-pytorch-with-cuda-graphs/&quot;&gt;PyTorch&lt;/a&gt;&lt;/em&gt;&lt;/p&gt;
-
-&lt;p&gt;The key idea is instead of multiple kernel launches, we instead can create and instantiate a graph (1 time cost) and then submit that instance of the graph for execution. To illustrate this point we simulate a Llama3-70B Attention layer, As shown in the below figure generated using &lt;a href=&quot;https://developer.nvidia.com/nsight-systems&quot;&gt;nsight systems&lt;/a&gt;, the time between each GEMM is &lt;strong&gt;&lt;em&gt;165us&lt;/em&gt;&lt;/strong&gt; compared to the &lt;strong&gt;&lt;em&gt;12us&lt;/em&gt;&lt;/strong&gt; spent on the actual matmul due the CPU kernel launch overhead. This means that &lt;strong&gt;&lt;em&gt;92%&lt;/em&gt;&lt;/strong&gt; of the time of the time in an Attention layer the GPU is idle and not doing any work.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-llama3/fig9.png&quot; alt=&quot;Simulated Llama3-70B Attention Layer with TK-GEMM&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;strong&gt;Figure 7.&lt;/strong&gt; Simulated Llama3-70B Attention Layer with TK-GEMM&lt;/p&gt;
-
-&lt;p&gt;To show the impact of CUDA graphs, we then created a graph of the TK-GEMM kernel in the toy Attention layer and replayed the graph. Below, we can see that the gaps between kernel executions are reduced to 6.65us.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-llama3/fig10.png&quot; alt=&quot;Simulated Llama3-70B Attention Layer with TK-GEMM and CUDA Graphs&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;strong&gt;Figure 8.&lt;/strong&gt; Simulated Llama3-70B Attention Layer with TK-GEMM and CUDA Graphs&lt;/p&gt;
-
-&lt;p&gt;In practice, this optimization would result in a &lt;strong&gt;6.4x&lt;/strong&gt; speedup of a single attention layer in Llama3-70B, over naively using TK-GEMM in a model without CUDA graphs.&lt;/p&gt;
-
-&lt;h2 id=&quot;60-potential-future-optimization-paths&quot;&gt;6.0 Potential Future Optimization Paths&lt;/h2&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-llama3/fig11.png&quot; alt=&quot;TMA Hardware Unit&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;strong&gt;Figure 9.&lt;/strong&gt; TMA Hardware Unit&lt;br /&gt;
-&lt;em&gt;Image Credit: &lt;a href=&quot;https://developer.nvidia.com/blog/nvidia-hopper-architecture-in-depth/&quot;&gt;Nvidia&lt;/a&gt;&lt;/em&gt;&lt;/p&gt;
-
-&lt;p&gt;The Nvidia H100 features a TMA hardware unit. The dedicated TMA unit frees up registers and threads to do other work, as address generation is completely handled by the TMA. For memory bound problem sizes, this can provide even further gain when Triton enables support for this feature.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-llama3/fig12.png&quot; alt=&quot;Tensor Core Utilization (Arrows Indicate Degrees of Freedom)&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;strong&gt;Figure 10.&lt;/strong&gt; Tensor Core Utilization (Arrows Indicate Degrees of Freedom)&lt;/p&gt;
-
-&lt;p&gt;To identify how well we are utilizing the Tensor Core, we can analyze the roofline chart. Notice that we are in the memory-bound region as expected for small M. To improve kernel latency we can either increase the arithmetic intensity, which with a fixed problem size can only be achieved through exploiting data locality and other loop &lt;a href=&quot;https://www.codee.com/is-your-algorithm-running-at-peak-performance-the-roofline-model/&quot;&gt;optimizations&lt;/a&gt; or increasing the memory throughput. This requires either a more optimal parallel algorithm specialized for the FP8 datatype as well as the type of problem size characteristics we expect to see in FP8 inference.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-llama3/fig13.png&quot; alt=&quot;DRAM Throughput Circled, 1.65TB/s vs Peak 3.35TB/s on H100 (M=16, N=8192, K=8192)&quot; style=&quot;width:100%;&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;strong&gt;Figure 11.&lt;/strong&gt; DRAM Throughput Circled, 1.65TB/s vs Peak 3.35TB/s on H100 (M=16, N=8192, K=8192)&lt;/p&gt;
-
-&lt;p&gt;Lastly, we can see that we are only achieving around &lt;strong&gt;50%&lt;/strong&gt; of peak DRAM throughput on the NVIDIA H100. High performance GEMM kernels typically achieve around &lt;strong&gt;70-80%&lt;/strong&gt; of peak throughput. This means that there is still a lot of room to improve and the techniques mentioned above (loop unrolling, optimized parallelization) are needed for additional gain.&lt;/p&gt;
-
-&lt;h2 id=&quot;70-future-work&quot;&gt;7.0 Future Work&lt;/h2&gt;
-
-&lt;p&gt;For future research, we would like to explore &lt;a href=&quot;https://github.com/NVIDIA/cutlass/tree/main&quot;&gt;CUTLASS&lt;/a&gt; 3.x and &lt;a href=&quot;https://github.com/NVIDIA/cutlass/tree/main/media/docs/cute&quot;&gt;CuTe&lt;/a&gt; to leverage more direct control over Hopper features especially in terms of obtaining direct TMA control and exploring pingpong architectures, which have shown promising results for FP8 GEMM.&lt;/p&gt;</content>
-
-      
-      
-      
-      
-      
-
-      <author>
-          <name>Adnan Hoque, Less Wright, Chih Chieh Yang</name>
-        
-        
-      </author>
-
-      
-
-      
-
-      
-        <summary type="html">1.0 Summary</summary>
       
 
       
