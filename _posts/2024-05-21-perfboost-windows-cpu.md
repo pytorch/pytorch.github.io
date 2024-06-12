@@ -29,7 +29,7 @@ As shown in the graphs, we see that PyTorch's performance on Windows CPUs can si
 
 ## HOW TO TAKE ADVANTAGE OF THE OPTIMIZATIONS
 
-Install PyTorch version 2.1 or higher using the Windows CPU wheel from the official repository, and you may automatically experience a performance boost.
+Install PyTorch version 2.1 or higher on Windows CPU from the [official repository](https://pytorch.org/get-started/locally/), and you may automatically experience a performance boost.
 
 
 ## CONCLUSION
@@ -90,6 +90,4 @@ The configurations in the table are collected with [svr-info](https://github.com
 
 Performance varies by use, configuration and other factors. Learn more on the [Performance Index site](https://edc.intel.com/content/www/us/en/products/performance/benchmarks/overview/). 
 
-Performance results are based on testing as of dates shown in [configurations](#product-and-performance-information) and may not reflect all publicly available updates.  See backup for configuration details.  No product or component can be absolutely secure. 
-
-Your costs and results may vary. 
+Performance results are based on testing as of dates shown in [configurations](#product-and-performance-information) and may not reflect all publicly available updates.  See backup for configuration details.  No product or component can be absolutely secure. Your costs and results may vary. Intel technologies may require enabled hardware, software or service activation.
