@@ -4,7 +4,7 @@
   <generator uri="https://jekyllrb.com/" version="3.9.0">Jekyll</generator>
   <link href="https://pytorch.org/feed.xml" rel="self" type="application/atom+xml" />
   <link href="https://pytorch.org/" rel="alternate" type="text/html" />
-  <updated>2024-06-11T09:21:23-07:00</updated>
+  <updated>2024-06-12T07:56:22-07:00</updated>
   <id>https://pytorch.org/feed.xml</id>
 
   
@@ -29,6 +29,101 @@
 
   
   
+  
+    <entry>
+      <title type="html">Reducing Model Checkpointing Times by Over 10x with PyTorch Distributed Asynchronous Checkpointing</title>
+      <link href="https://pytorch.org/blog/reducing-checkpointing-times/" rel="alternate" type="text/html" title="Reducing Model Checkpointing Times by Over 10x with PyTorch Distributed Asynchronous Checkpointing" />
+      <published>2024-06-12T00:00:00-07:00</published>
+      <updated>2024-06-12T00:00:00-07:00</updated>
+      <id>https://pytorch.org/blog/reducing-checkpointing-times</id>
+      <content type="html" xml:base="https://pytorch.org/blog/reducing-checkpointing-times/">&lt;p&gt;&lt;strong&gt;Summary:&lt;/strong&gt;   With PyTorch distributed’s new asynchronous checkpointing feature, developed with feedback from IBM, we show how IBM Research Team is able to implement and reduce effective checkpointing time by a factor of 10-20x.  Example: 7B model ‘down time’ for a checkpoint goes from an average of 148.8 seconds to 6.3 seconds, or 23.62x faster.&lt;/p&gt;
+
+&lt;p&gt;This directly translates into either more net training progress for every given 24 hour period while continuing to robustly checkpoint or more frequent checkpoints to shorten recovery window/time.&lt;/p&gt;
+
+&lt;p&gt;In this note, we showcase the usage code and architecture that makes asynchronous checkpointing possible, along with timing results verified by IBM’s Research team.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/reducing-checkpointing-times/fg1.png&quot; alt=&quot;Async Checkpointing vs Standard Checkpointing&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Model checkpointing is a vital part of large model training, but checkpointing is an expensive process as each checkpoint process involves blocking training progress in order to save out the latest model weights.  However, not checkpointing or reducing checkpointing frequency can result in a significant loss in training progress. For example, failures such as a deadlock, straggler, and gpu errors require the training process to be restarted.  In order to restart from a failure, all (training) workers must stop their training process and be restarted from the last saved checkpoint.&lt;/p&gt;
+
+&lt;p&gt;Thus, the inherent tension between robustness to failures vs training progress plays out as a tradeoff, but now with asynchronous checkpointing, PyTorch Distributed is able to significantly reduce this tension and enable frequent checkpoint with minimal impact to the overall training time.&lt;/p&gt;
+
+&lt;p&gt;For background, it was almost exactly &lt;a href=&quot;https://fb.workplace.com/notes/1332777457600375&quot;&gt;a year ago&lt;/a&gt; that we showcased how distributed checkpointing had massively sped up checkpointing times from the original torch.save() functionality.  As IBM Research had noted, torch.save could take up to 30 minutes to checkpoint a single 11B model (PyTorch 1.13).&lt;/p&gt;
+
+&lt;p&gt;With advancements in distributed checkpointing, checkpoints could be done in under 4 minutes for up to 30B model sizes.&lt;/p&gt;
+
+&lt;p&gt;With asynchronous checkpointing, the training time lost due to checkpointing now moves to under 30 seconds, and often as short as 6 seconds.&lt;/p&gt;
+
+&lt;p&gt;To be clear, asynchronous checkpointing does not compress the actual serialization checkpointing time as the previous update showcased.  Rather it moves the final checkpointing process off the critical path (to cpu threads) to allow GPU training to continue while finalizing the checkpoint under separate threads.&lt;/p&gt;
+
+&lt;p&gt;However, to the user, the effect is nearly the same in that down time for training due to checkpointing is substantially reduced, in many cases by 10x or even 20x.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/reducing-checkpointing-times/fg2.png&quot; alt=&quot;Async Dist Checkpointing&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;As the above speedup chart shows, asynchronous checkpointing produces a 10x to 23x further improvement over the previous large improvements from a year ago.&lt;/p&gt;
+
+&lt;h2 id=&quot;how-does-asynchronous-checkpointing-work&quot;&gt;How does Asynchronous Checkpointing work?&lt;/h2&gt;
+
+&lt;p&gt;Asynchronous checkpointing modularizes the checkpointing process into two parts rather than one monolithic process.  The first phase copies the data from each gpu/rank from GPU to CPU.  This is the visible downtime to the user and can take from 6 - 14 seconds for 7B-13B model sizes. The second phase asynchronously copies the data from CPU memory to disk to persist the checkpoint.&lt;/p&gt;
+
+&lt;p&gt;Once data is copied to CPU in the first phase, the GPU is free to immediately resume training.  Hence with asynchronous checkpointing the downtime for checkpointing is simply the time needed to copy over the latest model states to CPU.&lt;/p&gt;
+
+&lt;p&gt;At the same time that training resumes, non-blocking CPU threads work with the freshly arrived data in memory to complete the full checkpointing/serialization process to disk (i.e. persistent save).&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/reducing-checkpointing-times/fg3.png&quot; alt=&quot;flow diagram&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Note that PyTorch’s Distributed Checkpointer relies on collective communication calls to per-rank metadata necessary to optimize saves, as well as a final synchronization which marks checkpointing as complete and makes the action atomic. This can interfere with distributed training (as distributed training also relies upon similar calls to synchronize training across multiple GPUs) if the Checkpointing thread utilizes the same process group used for training.&lt;/p&gt;
+
+&lt;p&gt;Specifically, a race condition between the calls could potentially cause training and asynch checkpointing save threads to wait on collective calls at the same time, resulting in a true collective hang.&lt;/p&gt;
+
+&lt;p&gt;We avoided this scenario by initializing a separate process group for async checkpointing.  This separates the checkpointing collectives into their own logical process group, which thus ensures it will not interfere with collective calls in the main training threads.&lt;/p&gt;
+
+&lt;h2 id=&quot;how-do-i-use-asynchronous-checkpointing-in-my-training&quot;&gt;How do I use Asynchronous Checkpointing in my training?&lt;/h2&gt;
+
+&lt;p&gt;Usage of Asynchronous checkpointing is relatively straightforward.  Using the latest nightly version of PyTorch, you will want to initialize your process group with both nccl and gloo.  Gloo is required for the cpu threads portion.&lt;/p&gt;
+
+&lt;p&gt;From there, create a duplicate process group which the asynchronous checkpointing will utilize.
+Then train as usual but at the point when you want to checkpoint, use the asynchronous save api, passing in the states to save, the checkpoint id and the checkpoint process group.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/reducing-checkpointing-times/fg4.png&quot; alt=&quot;Code snippet&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Asynchronous checkpointing is also fully implemented in &lt;a href=&quot;https://github.com/pytorch/torchtitan&quot;&gt;torchtitan&lt;/a&gt;.  Here, it is implemented for use with pre-training your own Llama2 or Lllama3 model.  Using it is as simple as updating the toml config file:&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/reducing-checkpointing-times/fg5.png&quot; alt=&quot;Code snippet&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
+
+&lt;h2 id=&quot;future-work&quot;&gt;Future work&lt;/h2&gt;
+
+&lt;p&gt;Checkpointing has made huge strides over the past year.  Moving from almost half an hour checkpoints to under 5 minutes with distributed checkpointing and now to under 30 seconds with asynchronous checkpointing.&lt;/p&gt;
+
+&lt;p&gt;The last frontier - zero overhead checkpointing where even the &amp;lt; 30 seconds is eliminated by streaming the updated weights during the backward pass such that checkpoint data is already on cpu at the point asynchronous checkpointing would kick in.&lt;/p&gt;
+
+&lt;p&gt;This would effectively move large model training to where checkpointing has no disruption or downtime enabling both more robustness (as checkpoints could be taken more frequently) and faster training progress due to no downtime for checkpointing.&lt;/p&gt;
+
+&lt;p&gt;Source code link: &lt;a href=&quot;https://github.com/pytorch/pytorch/blob/main/torch/distributed/checkpoint/state_dict_saver.py&quot;&gt;https://github.com/pytorch/pytorch/blob/main/torch/distributed/checkpoint/state_dict_saver.py&lt;/a&gt;&lt;/p&gt;</content>
+
+      
+      
+      
+      
+      
+
+      <author>
+          <name>Meta: Lucas Pasqualin, Less Wright, Iris Zhang (PyTorch), Chien-Chin Huang; IBM Research: Swaminathan Sundararaman, Saransh Gupta, Raghu Ganti</name>
+        
+        
+      </author>
+
+      
+
+      
+
+      
+        <summary type="html">Summary: With PyTorch distributed’s new asynchronous checkpointing feature, developed with feedback from IBM, we show how IBM Research Team is able to implement and reduce effective checkpointing time by a factor of 10-20x. Example: 7B model ‘down time’ for a checkpoint goes from an average of 148.8 seconds to 6.3 seconds, or 23.62x faster.</summary>
+      
+
+      
+      
+    </entry>
   
     <entry>
       <title type="html">PyTorch Foundation Welcomes New Executive Director</title>
@@ -4581,53 +4676,6 @@ if __name__ == &quot;__main__&quot;:
 
       
         <summary type="html"></summary>
-      
-
-      
-      
-    </entry>
-  
-    <entry>
-      <title type="html">Announcing PyTorch Docathon June, 2024</title>
-      <link href="https://pytorch.org/blog/docathon-june-2024/" rel="alternate" type="text/html" title="Announcing PyTorch Docathon June, 2024" />
-      <published>2024-05-02T00:00:00-07:00</published>
-      <updated>2024-05-02T00:00:00-07:00</updated>
-      <id>https://pytorch.org/blog/docathon-june-2024</id>
-      <content type="html" xml:base="https://pytorch.org/blog/docathon-june-2024/">&lt;p&gt;We are thrilled to announce the upcoming PyTorch Docathon in June! The Docathon, akin to a hackathon, is an event dedicated to enhancing the quality of the PyTorch documentation with the invaluable assistance of our community. Documentation is a vital component of any technology. By refining it, we can simplify the process for new users to get started with PyTorch, guide them in effectively utilizing its features, and ultimately expedite the transition from research to production in machine learning. See our previous events &lt;a href=&quot;https://pytorch.org/blog/announcing-docathon/&quot;&gt;here&lt;/a&gt; and &lt;a href=&quot;https://pytorch.org/blog/announcing-docathon-h2-2023/&quot;&gt;here&lt;/a&gt;.&lt;/p&gt;
-
-&lt;h2 id=&quot;why-participate&quot;&gt;Why Participate&lt;/h2&gt;
-
-&lt;p&gt;The Docathon is an inclusive event designed to be accessible to newcomers, requiring only a basic understanding of Python, PyTorch, and Machine Learning, with some tasks not even requiring these skills. It offers a rewarding experience as participants can see the direct impact of their contributions on the project’s usability and accessibility. The Docathon promotes a collaborative environment, allowing participants to work with other contributors and PyTorch maintainers, fostering the exchange of ideas and networking. It also provides a rich learning experience, offering the opportunity to explore PyTorch modules, update docstrings, and test tutorials.&lt;/p&gt;
-
-&lt;h2 id=&quot;event-details&quot;&gt;Event Details&lt;/h2&gt;
-
-&lt;p&gt;&lt;strong&gt;June 4&lt;/strong&gt;: Kick-off&lt;br /&gt;
-&lt;strong&gt;June 4 - 16&lt;/strong&gt;: Submissions and Feedback&lt;br /&gt;
-&lt;strong&gt;June 17 - 18&lt;/strong&gt;: Final Reviews&lt;br /&gt;
-&lt;strong&gt;June 20&lt;/strong&gt;: Winner Announcements&lt;/p&gt;
-
-&lt;p&gt;Further details for the Docathon will be announced at the Kick-off call on June 4.&lt;/p&gt;
-
-&lt;p&gt;&lt;a href=&quot;https://community.linuxfoundation.org/events/details/lfhq-pytorch-foundation-presents-pytorch-docathon-june-4-20th-2024/&quot;&gt;Please register to join this year’s event&lt;/a&gt;.&lt;/p&gt;</content>
-
-      
-      
-      
-      
-      
-
-      <author>
-          <name>Facebook</name>
-        
-        
-      </author>
-
-      
-
-      
-
-      
-        <summary type="html">We are thrilled to announce the upcoming PyTorch Docathon in June! The Docathon, akin to a hackathon, is an event dedicated to enhancing the quality of the PyTorch documentation with the invaluable assistance of our community. Documentation is a vital component of any technology. By refining it, we can simplify the process for new users to get started with PyTorch, guide them in effectively utilizing its features, and ultimately expedite the transition from research to production in machine learning. See our previous events here and here.</summary>
       
 
       
