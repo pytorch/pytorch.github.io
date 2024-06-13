@@ -6,7 +6,7 @@ author: Intel Corporation
 
 The challenge of PyTorch's lower CPU performance on Windows compared to Linux has been a significant issue. There are multiple factors leading to this performance disparity. Through our investigation, we've identified one of the primary reasons for poor CPU performance on Windows, which is linked to the Windows default malloc memory allocator.
 
-In version 2.0, PyTorch on Windows with CPU directly utilizes the default malloc mechanism of Windows, when compared to the malloc used in PyTorch Linux version 2.0, significantly increases the time for memory allocation, resulting in decreased performance. We replaced the original Windows malloc mechanism, which PyTorch automatically calls, with another well-known malloc library developed by Microsoft, known as mimalloc. This replacement of malloc has already been released with PyTorch v2.1 and can significantly improve PyTorch's performance on Windows CPUs as shown below in Figure 1.
+In version 2.0, PyTorch on Windows with CPU directly utilizes the default malloc mechanism of Windows, when it is compared to the malloc used in PyTorch Linux version 2.0, it significantly increases the time for memory allocation, which results in decreased performance. We replaced the original Windows malloc mechanism, which PyTorch automatically calls, with another well-known malloc library developed by Microsoft, known as mimalloc. This replacement of malloc has already been released with PyTorch v2.1 and can significantly improve PyTorch's performance on Windows CPUs as shown below in Figure 1.
 
 ![Windows PC Performance Improvement](/assets/images/2024-05-21-perfboost-windows-cpu/windows_compare.png){:style="width:100%;"}
 
@@ -16,6 +16,9 @@ From this graph, we see that PyTorch 2.1 on Windows CPU shows significant perfor
 
 On a high-performance CPU, memory allocation becomes a performance bottleneck. This is also why addressing this issue has led to such significant performance improvements. 
 
+As shown in the graphs below, we see that PyTorch's performance on Windows CPUs can significantly be improved. However, there is still a noticeable gap when compared to its performance on Linux. This can be attributed to several factors, including the fact that malloc has not yet fully reached the performance level of Linux, among other reasons. Intel engineers will continue to collaborate with Meta engineers, to reduce the performance gap of PyTorch between Windows and Linux.
+
+
 ![Windows vs Linux Performance on PyTorch 2.0](/assets/images/2024-05-21-perfboost-windows-cpu/pytorch_20_win_linux.png){:style="width:100%;"}
 
 _Figure 2.1: Relative performance of Windows vs Linux with PyTorch version 2.0 (higher is better)._ 
@@ -23,8 +26,6 @@ _Figure 2.1: Relative performance of Windows vs Linux with PyTorch version 2.0 (
 ![Windows vs Linux Performance on PyTorch 2.1](/assets/images/2024-05-21-perfboost-windows-cpu/pytorch_21_win_linux.png){:style="width:100%;"}
 
 _Figure 2.2: Relative performance of Windows vs Linux with PyTorch version 2.1 (higher is better)._ 
-
-As shown in the graphs, we see that PyTorch's performance on Windows CPUs can significantly be improved. However, there is still a noticeable gap when compared to its performance on Linux. This can be attributed to several factors, including the fact that malloc has not yet fully reached the performance level of Linux, among other reasons. Intel engineers will continue to collaborate with Meta engineers, to reduce the performance gap of PyTorch between Windows and Linux.
 
 
 ## HOW TO TAKE ADVANTAGE OF THE OPTIMIZATIONS
@@ -34,18 +35,27 @@ Install PyTorch version 2.1 or higher on Windows CPU from the [official reposito
 
 ## CONCLUSION
 
-When comparing PyTorch 2.0 and PyTorch 2.1, we observed varying degrees of performance improvement on Windows CPU. The extent of performance improvement becomes more pronounced as the number of memory allocation operations called in a workload increases. A more powerful CPU computing capability will also make this performance enhancement more pronounced, as the proportion of operations outside of computation increases.
+When comparing PyTorch 2.0 and PyTorch 2.1, we observed varying degrees of performance improvement on Windows CPU. The extent of performance improvement becomes more pronounced as the number of memory allocation operations called within a workload increases. A more powerful CPU computing capability will also make this performance enhancement more pronounced, as the proportion of operations outside of computation increases.
 
 To a certain extent, this performance enhancement helps to bridge the PyTorch CPU performance gap between Windows and Linux. Intel will continue to collaborate with Meta, enhance the performance of PyTorch on CPUs.
 
 ## ACKNOWLEDGMENTS
 
-The results presented in this blog post was achieved through the collaborative effort of the Intel PyTorch team and Meta. We would like to express our sincere gratitude to [Xu Han](https://github.com/xuhancn), [Jiong Gong](https://github.com/jgong5), [Mingfei Ma](https://github.com/mingfeima), [Haozhe Zhu](https://github.com/zhuhaozhe), [Chuanqi Wang](https://github.com/chuanqi129), [Guobing Chen](https://github.com/Guobing-Chen) and [Eikan Wang](https://github.com/EikanWang). Their expertise and dedication have been instrumental in achieving the optimizations and performance improvements discussed here. Thanks to [Jiachen Pu](https://github.com/peterjc123) for his participation in the issue discussion and suggesting the use of [mimalloc](https://github.com/microsoft/mimalloc). We'd also like to express our gratitude to Microsoft for providing such an easily integrated and performant mallocation library.  Finally we want to thank [Jing Xu](https://github.com/jingxu10), [Weizhuo Zhang](https://github.com/WeizhuoZhang-intel) and [Zhaoqiong Zheng](https://github.com/ZhaoqiongZ) for their contributions to this blog.
+The results presented in this blog post was achieved through the collaborative effort of the Intel PyTorch team and Meta. We would like to express our sincere gratitude to [Xu Han](https://github.com/xuhancn), [Jiong Gong](https://github.com/jgong5), [Mingfei Ma](https://github.com/mingfeima), [Haozhe Zhu](https://github.com/zhuhaozhe), [Chuanqi Wang](https://github.com/chuanqi129), [Guobing Chen](https://github.com/Guobing-Chen) and [Eikan Wang](https://github.com/EikanWang). Their expertise and dedication have been instrumental in achieving the optimizations and performance improvements discussed here. Thanks to [Jiachen Pu](https://github.com/peterjc123) from community for his participation in the issue discussion and suggesting the use of [mimalloc](https://github.com/microsoft/mimalloc). We'd also like to express our gratitude to Microsoft for providing such an easily integrated and performant mallocation library.  Finally we want to thank [Jing Xu](https://github.com/jingxu10), [Weizhuo Zhang](https://github.com/WeizhuoZhang-intel) and [Zhaoqiong Zheng](https://github.com/ZhaoqiongZ) for their contributions to this blog.
+
+
+## Notices and Disclaimers
+
+Performance varies by use, configuration and other factors. Learn more on the [Performance Index site](https://edc.intel.com/content/www/us/en/products/performance/benchmarks/overview/). 
+
+Performance results are based on testing as of dates shown in [configurations](#product-and-performance-information) and may not reflect all publicly available updates.  See backup for configuration details. No product or component can be absolutely secure. Your costs and results may vary. Intel technologies may require enabled hardware, software or service activation. 
+
+Intel Corporation. Intel, the Intel logo, and other Intel marks are trademarks of Intel Corporation or its subsidiaries. Other names and brands may be claimed as the property of others.
 
 
 ### Product and Performance Information
 
-The configurations in the table are collected with [svr-info](https://github.com/intel/svr-info)
+The configurations in the table are collected with [svr-info](https://github.com/intel/svr-info). Test by Intel on April 15, 2024.
 
 
 | Specification               | Configuration1                          | Configuration2                         |
@@ -86,8 +96,6 @@ The configurations in the table are collected with [svr-info](https://github.com
 | Max C-State                 | 9                                      | 9                                      |
 
 
-## Notices and Disclaimers
 
-Performance varies by use, configuration and other factors. Learn more on the [Performance Index site](https://edc.intel.com/content/www/us/en/products/performance/benchmarks/overview/). 
 
-Performance results are based on testing as of dates shown in [configurations](#product-and-performance-information) and may not reflect all publicly available updates.  See backup for configuration details.  No product or component can be absolutely secure. Your costs and results may vary. Intel technologies may require enabled hardware, software or service activation.
+
