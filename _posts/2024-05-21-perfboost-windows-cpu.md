@@ -44,15 +44,6 @@ To a certain extent, this performance enhancement helps to bridge the PyTorch CP
 The results presented in this blog post was achieved through the collaborative effort of the Intel PyTorch team and Meta. We would like to express our sincere gratitude to [Xu Han](https://github.com/xuhancn), [Jiong Gong](https://github.com/jgong5), [Mingfei Ma](https://github.com/mingfeima), [Haozhe Zhu](https://github.com/zhuhaozhe), [Chuanqi Wang](https://github.com/chuanqi129), [Guobing Chen](https://github.com/Guobing-Chen) and [Eikan Wang](https://github.com/EikanWang). Their expertise and dedication have been instrumental in achieving the optimizations and performance improvements discussed here. Thanks to [Jiachen Pu](https://github.com/peterjc123) from community for his participation in the issue discussion and suggesting the use of [mimalloc](https://github.com/microsoft/mimalloc). We'd also like to express our gratitude to Microsoft for providing such an easily integrated and performant mallocation library.  Finally we want to thank [Jing Xu](https://github.com/jingxu10), [Weizhuo Zhang](https://github.com/WeizhuoZhang-intel) and [Zhaoqiong Zheng](https://github.com/ZhaoqiongZ) for their contributions to this blog.
 
 
-## Notices and Disclaimers
-
-Performance varies by use, configuration and other factors. Learn more on the [Performance Index site](https://edc.intel.com/content/www/us/en/products/performance/benchmarks/overview/). 
-
-Performance results are based on testing as of dates shown in [configurations](#product-and-performance-information) and may not reflect all publicly available updates.  See backup for configuration details. No product or component can be absolutely secure. Your costs and results may vary. Intel technologies may require enabled hardware, software or service activation. 
-
-Intel Corporation. Intel, the Intel logo, and other Intel marks are trademarks of Intel Corporation or its subsidiaries. Other names and brands may be claimed as the property of others.
-
-
 ### Product and Performance Information
 
 The configurations in the table are collected with [svr-info](https://github.com/intel/svr-info). Test by Intel on April 15, 2024.
@@ -97,5 +88,11 @@ The configurations in the table are collected with [svr-info](https://github.com
 
 
 
+## Notices and Disclaimers
 
+Performance varies by use, configuration and other factors. Learn more on the [Performance Index site](https://edc.intel.com/content/www/us/en/products/performance/benchmarks/overview/). 
+
+Performance results are based on testing as of dates shown in [configurations](#product-and-performance-information) and may not reflect all publicly available updates.  See backup for configuration details. No product or component can be absolutely secure. Your costs and results may vary. Intel technologies may require enabled hardware, software or service activation. 
+
+Intel Corporation. Intel, the Intel logo, and other Intel marks are trademarks of Intel Corporation or its subsidiaries. Other names and brands may be claimed as the property of others.
 
