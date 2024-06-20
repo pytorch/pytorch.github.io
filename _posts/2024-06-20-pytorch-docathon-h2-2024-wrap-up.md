@@ -13,7 +13,7 @@ We want to give a special shout-out to our top contributors, who went above and 
 
 * First place: [ahoblitz](https://github.com/ahoblitz), [afrittoli](https://github.com/afrittoli), [kiszk](https://github.com/kiszk)
 * Second place: [loganthomas](https://github.com/loganthomas), [ignaciobartol](https://github.com/ignaciobartol), [arunppsg](https://github.com/arunppsg), [alperenunlu](https://github.com/alperenunlu)
-* Third place: [anandptl84](https://github.com/anandptl84), [GdoongMathew](https://github.com/GdoongMathew), [ZhaoqiongZ](https://github.com/ZhaoqiongZ), [jingxu10](https://github.com/jingxu10), [sitamgithub-MSIT](https://github.com/sitamgithub-MSIT)
+* Third place: [anandptl84](https://github.com/anandptl84), [GdoongMathew](https://github.com/GdoongMathew), [ZailiWang](https://github.com/ZailiWang), [ZhaoqiongZ](https://github.com/ZhaoqiongZ), [jingxu10](https://github.com/jingxu10), [sitamgithub-MSIT](https://github.com/sitamgithub-MSIT)
 * Honorable mentions for contributing to PyTorch XLA and torchfix libraries: [arunppsg](https://github.com/arunppsg) and [sitamgithub-MSIT](https://github.com/sitamgithub-MSIT)
 
 For the full list of participants, see [here](https://github.com/pytorch/tutorials/blob/main/docathon-leaderboard.md).
