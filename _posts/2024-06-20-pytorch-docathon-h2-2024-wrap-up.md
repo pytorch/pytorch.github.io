@@ -1,6 +1,6 @@
 ---
 layout: blog_detail
-title: "🎉 PyTorch Docathon H2 2024 Wrap-up 🎉"
+title: "🎉 PyTorch Docathon H1 2024 Wrap-up 🎉"
 ---
 
 We are thrilled to announce the successful completion of the H1 2024 PyTorch Docathon! The event was a resounding success, and we want to extend our heartfelt gratitude to all the participants who made it possible. Dedication, expertise, and tireless efforts of our open-source contributors have once again helped us to improve PyTorch documentation.
