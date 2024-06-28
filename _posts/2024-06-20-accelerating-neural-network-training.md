@@ -187,7 +187,7 @@ For our experiments, the ViT-L model is trained on ImageNet for 125k steps using
    </td>
   </tr>
   <tr>
-   <td>40% sparse (40k sparse -> 85k dense steps)
+   <td>40% sparse (50k sparse -> 75k dense steps)
    </td>
    <td><strong>82.9</strong>
    </td>
@@ -242,7 +242,7 @@ There are several areas of expansion for this work:
 * **Expansion to new sparsity patterns:** Researchers have created new sparsity patterns like [V:N:M](https://arxiv.org/pdf/2310.02065) sparsity that use the underlying semi-structured sparse kernels to allow for more flexibility. This is especially interesting for applying sparsity to LLMs, as 2:4 sparsity degrades accuracy too much, but we have seen some positive [results](https://arxiv.org/pdf/2310.06927) for more general N:M pattern. 
 * **Performance optimizations for sparse fine-tuning:** This post covers sparse training from scratch, but oftentimes we want to fine-tune a foundational model. In this case, a static mask may be sufficient to preserve accuracy which would enable us to make additional performance optimizations. 
 * **More experiments on pruning strategy:** We calculate the mask at each step of the network, but calculating the mask every n steps may yield better training accuracy. Overall, figuring out the best strategy to use semi-structured sparsity during training is an open area of research. 
-* **Compatibility with fp8:** The hardware also supports fp8 semi-structured sparsity (in the 4:8 format instead of 2:4), and this approach should work similarly with fp8 in principle. In practice, we would need to write similar sparsification kernels, and could possibly fuse them with the scaling of the tensors.
+* **Compatibility with fp8:** The hardware also supports fp8 semi-structured sparsity, and this approach should work similarly with fp8 in principle. In practice, we would need to write similar sparsification kernels, and could possibly fuse them with the scaling of the tensors.
 * **Activation Sparsity:** Efficient sparsification kernels also enable to sparsify the activations during training. Because the sparsification overhead grows linearly with the sparsified matrix size, setups with large activation tensors compared to the weight tensors could benefit more from activation sparsity than weight sparsity. Furthermore, activations are naturally sparse because of the usage of ReLU or GELU activation functions, reducing accuracy degradation.
 
 If you are interested in these problems, please feel free to open an issue / PR in [torchao](https://github.com/pytorch/ao), a community we’re building for architecture optimization techniques like quantization and sparsity.  Additionally, if you have general interest in sparsity please reach out in [CUDA-MODE](discord.gg/cudamode) (#sparsity)
