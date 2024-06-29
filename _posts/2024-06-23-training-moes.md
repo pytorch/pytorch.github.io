@@ -4,7 +4,7 @@ title: "Training MoEs at Scale with PyTorch"
 author: Brian Chu, Mihir Patel, Less Wright, Vitaliy Chiley, Evan Racah, Wanchao Liang, Iris Zhang, Andrew Gu
 ---
 
-Over the past year, Mixture of Experts (MoE) models have surged in popularity, fueled by powerful open-source models like [DBRX](https://www.databricks.com/blog/introducing-dbrx-new-state-art-open-llm), [Mixtral](https://mistral.ai/news/mixtral-of-experts/), [DeepSeek](https://github.com/deepseek-ai/DeepSeek-V2), and many more. In this blog post, we’ll talk about how we scale to over three thousand GPUs using [PyTorch Distributed](https://pytorch.org/tutorials/beginner/dist_overview.html) and [MegaBlocks](https://github.com/databricks/megablocks), an efficient open-source MoE implementation in PyTorch.
+Over the past year, Mixture of Experts (MoE) models have surged in popularity, fueled by powerful open-source models like [DBRX](https://www.databricks.com/blog/introducing-dbrx-new-state-art-open-llm), [Mixtral](https://mistral.ai/news/mixtral-of-experts/), [DeepSeek](https://github.com/deepseek-ai/DeepSeek-V2), and many more. At Databricks, we've worked closely with the PyTorch team to scale training of MoE models. In this blog post, we’ll talk about how we scale to over three thousand GPUs using [PyTorch Distributed](https://pytorch.org/tutorials/beginner/dist_overview.html) and [MegaBlocks](https://github.com/databricks/megablocks), an efficient open-source MoE implementation in PyTorch.
 
 
 ## What is a MoE?
