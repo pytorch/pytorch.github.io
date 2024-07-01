@@ -63,7 +63,7 @@ conda install pytorch torchvision -c pytorch
 ```
 
 ### pip
-{: #mac-anaconda}
+{: #mac-pip}
 
 To install PyTorch via pip, use one of the following two commands, depending on your Python version:
 
