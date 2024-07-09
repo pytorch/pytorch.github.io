@@ -238,11 +238,11 @@ Self CPU time total: 14.379ms
 
 ## Technical deep dive: What are the challenges and optimization details
 
-Underpinning torch.compile are new technologies – TorchDynamo, AOTAutograd, PrimTorch and TorchInductor.
+Underpinning torch.compile are new technologies – TorchDynamo, AOTDispatcher, and TorchInductor.
 
 **TorchDynamo** captures PyTorch programs safely using Python Frame Evaluation Hooks
 
-**AOTAutograd** overloads PyTorch’s autograd engine as a tracing autodiff for generating ahead-of-time backward traces. **PrimTorch** canonicalizes ~2000+ PyTorch operators down to a closed set of ~250 primitive operators that developers can target to build a complete PyTorch backend.
+**AOTDispatcher** overloads PyTorch’s autograd engine as a tracing autodiff for generating ahead-of-time backward traces. 
 
 **TorchInductor** is a deep learning compiler that generates fast code for multiple accelerators and backends.
 
