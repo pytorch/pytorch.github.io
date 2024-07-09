@@ -329,15 +329,15 @@ ACL_CHECK_SUPPORT(
 We defined mixed precision primitive definitions and updated the existing oneDNN ACL fp32 primitives to handle bfloat16 tensors.
 
 ```
- /* With graph compilation, we are able to reorder and pre-pack the weights during the model load
+{% raw %} /* With graph compilation, we are able to reorder and pre-pack the weights during the model load
   * and compilation phase itself so that redundant and on-the-fly reorders can be avoided.
   * This primitive definition is to support gemm fastmath mode for the compile scenario where src is
   * in fp32 and weights are in bf16
   */
- { {forward, f32, bf16, f32}, {
+ {{forward, f32, bf16, f32}, {
     CPU_INSTANCE_AARCH64_ACL(acl_inner_product_fwd_t)
     nullptr,
- }},
+ }},{% endraw %}
 ```
 
 ### Optimization 3: Disabled operator fusion pass in torch inductor
