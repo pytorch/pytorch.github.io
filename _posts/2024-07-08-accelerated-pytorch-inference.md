@@ -240,15 +240,13 @@ Self CPU time total: 14.379ms
 
 Underpinning torch.compile are new technologies – TorchDynamo, AOTDispatcher, and TorchInductor.
 
-**TorchDynamo** captures PyTorch programs safely using Python Frame Evaluation Hooks
-
-**AOTDispatcher** overloads PyTorch’s autograd engine as a tracing autodiff for generating ahead-of-time backward traces. 
-
+**TorchDynamo** captures PyTorch programs safely using Python Frame Evaluation Hooks  
+**AOTDispatcher** overloads PyTorch’s autograd engine as a tracing autodiff for generating ahead-of-time backward traces.  
 **TorchInductor** is a deep learning compiler that generates fast code for multiple accelerators and backends.
 
 ![The PyTorch compilation process source](/assets/images/accelerated-pytorch-inference/fg3.png){:style="width:100%"}
 
-_**Image 3**: The PyTorch compilation process; source: [https://pytorch.org/get-started/pytorch-2.0/](https://pytorch.org/get-started/pytorch-2.0/)_
+_**Image 3**: The PyTorch compilation process_
 
 When torch.compile is invoked, torch dynamo rewrites Python bytecode to extract sequences of PyTorch operations into an [FX](https://pytorch.org/docs/stable/fx.html) [Graph](https://pytorch.org/docs/stable/fx.html), which is then compiled with inductor backend. For a typical inference scenario where the graph is frozen and gradient calculations are disabled, the inductor invokes platform specific optimizations like graph rewrite into more performant operators, operator fusion, and weights pre-packing.
 
