@@ -130,14 +130,13 @@ On successful completion of the inference runs, the script stores the results in
 
 Google T5 Small Text Translation model is one of the around 30 Hugging Face models we benchmarked. We’re using it as a sample model to demonstrate how to run inference in eager and compile modes. The additional configurations and APIs required to run it in compile mode are highlighted in **BOLD**. Save the following script as `google_t5_small_text_translation.py`.
 
-```
-import argparse
+<pre><code>import argparse
 from transformers import T5Tokenizer, T5Model
 import torch
 from torch.profiler import profile, record_function, ProfilerActivity
-import torch._inductor.config as config
+<b>import torch._inductor.config as config
 config.cpp.weight_prepack=True
-config.freezing=True
+config.freezing=True</b>
 
 def test_inference(mode, num_iter):
     tokenizer = T5Tokenizer.from_pretrained("t5-small")
@@ -148,8 +147,8 @@ def test_inference(mode, num_iter):
     ).input_ids  # Batch size 1
     decoder_input_ids = tokenizer("Studies show that", return_tensors="pt").input_ids  # Batch size 1
 
-    if (mode == 'compile'):
-        model = torch.compile(model)
+    <b>if (mode == 'compile'):
+        model = torch.compile(model)</b>
 
     with torch.no_grad():
         for _ in range(50):
@@ -184,7 +183,7 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-```
+</code></pre>
 
 Run the script with the following steps:
 
@@ -285,15 +284,15 @@ This completes the torch inductor changes required to compile the graph into opt
 
 There were mainly three areas where oneDNN ACL primitives lack support for torch.compile mode. The following section talks about them in detail.
 
-**1 ACL primitives didn’t have support for weights in blocked layout**
+**1. ACL primitives didn’t have support for weights in blocked layout**
 
 ACL primitives originally designed for eager mode supported weights only in the standard channels last ([NHWC](https://oneapi-src.github.io/oneDNN/dev_guide_understanding_memory_formats.html#nhwc)) format, without any pre-packing. Whereas weights pre-packing into blocked layout is one of the main optimizations in the inductor compilation passes where the weights are reordered into blocks specific to the runtime platform. This avoids the redundant and on-the-fly reorders when running the General Matrix Multiplication (GEMM), which otherwise would be the bottleneck for inference performance. But the ACL primitives didn’t have support for blocked layout and hence the operators were run with oneDNN C++ reference kernels instead.
 
-**2 Mixed precision primitives weren’t supported in oneDNN**
+**2. Mixed precision primitives weren’t supported in oneDNN**
 
 AWS Graviton3 processors support [bfloat16 MMLA instructions](https://developer.arm.com/documentation/ddi0596/2020-12/SVE-Instructions/BFMMLA--BFloat16-floating-point-matrix-multiply-accumulate-) which can be used to accelerate fp32 inference with bfloat16 GEMM as a mixed precision compute. ACL supports bfloat16 mixed precision GEMM kernels, and are integrated into oneDNN as a fast math compute option for the existing fp32 operators. However, the fast math approach didn’t work for compile mode because of weights pre-packing optimization. The compile mode requires explicit mixed precision primitive implementation in oneDNN in order to use bfloat16 acceleration.
 
-**3 ACL primitives didn’t support fused kernels for some of the activation functions**
+**3. ACL primitives didn’t support fused kernels for some of the activation functions**
 
 In eager mode, operators are dispatched individually because the model is run independently as soon as it’s reached. Whereas in compile mode, operator fusion is another important optimization where the operators are fused for runtime efficiency. For example, Gaussian Error Linear Unit ([GELU](https://arxiv.org/pdf/1606.08415.pdf#%3A~%3Atext%3DWe%20propose%20the%20Gaussian%20Error%2Cstandard%20Gaussian%20cumulative%20distribution%20function)) is one of the most widely used activation functions in transformers-based neural network architectures. So, it’s typical to have a linear layer (with matrix multiplications) followed by GELU activation. As part of compiling the model into efficient operators, the torch inductor fuses matmul and GELU into a single linearpointwise+gelu operator. However, oneDNN ACL primitives didn’t have the support for fused kernels with GELU.
 
@@ -430,6 +429,8 @@ In this tutorial, we covered how we optimized torch.compile performance on AWS G
 ## Acknowledgements
 
 We would like to thank the PyTorch community for the baseline torch.compile framework and their continued efforts to optimize it further.
+
+References:  [https://pytorch.org/assets/pytorch2-2.pdf](https://pytorch.org/assets/pytorch2-2.pdf) 
 
 
 ## Author
