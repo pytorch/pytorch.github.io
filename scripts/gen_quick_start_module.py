@@ -37,6 +37,7 @@ acc_arch_ver_default = {
         "accnone": ("cpu", ""),
         "cuda.x": ("cuda", "11.8"),
         "cuda.y": ("cuda", "12.1"),
+        "cuda.z": ("cuda", "12.4"),
         "rocm5.x": ("rocm", "6.0")
         },
     "release": {
@@ -101,12 +102,15 @@ def get_gpu_info(acc_key, instr, acc_arch_map):
 # json object.
 def update_versions(versions, release_matrix, release_version):
     version = "preview"
+    template = "preview"
     acc_arch_map = acc_arch_ver_map[release_version]
 
     if release_version != "nightly":
         version = release_matrix[OperatingSystem.LINUX.value][0]["stable_version"]
+        # temporary change until release 2.4.0 - to generate cuda.x, cuda.y, cuda.z
+        template = "2.3.0"
         if version not in versions["versions"]:
-            versions["versions"][version] = copy.deepcopy(versions["versions"]["preview"])
+            versions["versions"][version] = copy.deepcopy(versions["versions"][template])
             versions["latest_stable"] = version
 
     # Perform update of the json file from release matrix
@@ -184,16 +188,16 @@ def extract_arch_ver_map(release_matrix):
     for chan in ("nightly", "release"):
         cuda_ver_list = gen_ver_list(chan, "cuda")
         rocm_ver_list = gen_ver_list(chan, "rocm")
-        cuda_list = sorted(cuda_ver_list.values())[-2:]
+        cuda_list = sorted(cuda_ver_list.values())
         acc_arch_ver_map[chan]["rocm5.x"] = ("rocm", max(rocm_ver_list.values()))
-        for cuda_ver, label in zip(cuda_list, ["cuda.x", "cuda.y"]):
+        for cuda_ver, label in zip(cuda_list, ["cuda.x", "cuda.y", "cuda.z"]):
             acc_arch_ver_map[chan][label] = ("cuda", cuda_ver)
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--autogenerate', dest='autogenerate', action='store_true')
-    parser.set_defaults(autogenerate=False)
+    parser.set_defaults(autogenerate=True)
 
     options = parser.parse_args()
     versions = read_published_versions()
