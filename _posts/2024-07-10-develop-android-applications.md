@@ -2,6 +2,8 @@
 layout: blog_detail
 title: "Learn how to develop Android applications with ExecuTorch and Llama models"
 ---
+_This blog is courtesy of the PyTorch team at Arm. More details can be found [here]([url](https://learn.arm.com/learning-paths/smartphones-and-mobile/build-llama3-chat-android-app-using-executorch-and-xnnpack/?utm_source=twitter&utm_medium=social-organic&utm_content=landingpage&utm_campaign=mk24_developer_na))._
+
 Arm’s compute platform is delivering GenAI applications on phones, laptops, and servers. Cost, privacy, performance, security, and energy efficiency are just some of the reasons developers are investigating on-device AI. 
 
 A new Learning Path explaining how to leverage the capabilities of large language models (LLMs) on Android using ExecuTorch and XNNPACK is now available.
@@ -35,4 +37,4 @@ Here's a summary of what you'll learn:
 
 Explore this Learning Path if you want to learn how to leverage the power of LLMs on your Android phone, and gain expertise in tools for on-device machine learning. 
 
-Dig into the excitement of building Android chat apps and understand more about how they work. 
+Dig into the excitement of building Android chat apps and understand more about how they work on the [Arm Developer Hub]([url](https://learn.arm.com/learning-paths/smartphones-and-mobile/build-llama3-chat-android-app-using-executorch-and-xnnpack/?utm_source=twitter&utm_medium=social-organic&utm_content=landingpage&utm_campaign=mk24_developer_na)).
