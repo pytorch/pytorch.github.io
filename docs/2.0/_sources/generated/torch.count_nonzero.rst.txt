@@ -1,6 +1,0 @@
-﻿torch.count\_nonzero
-====================
-
-.. currentmodule:: torch
-
-.. autofunction:: count_nonzero

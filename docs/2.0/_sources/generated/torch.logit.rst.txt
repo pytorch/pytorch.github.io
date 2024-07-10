@@ -1,6 +1,0 @@
-﻿torch.logit
-===========
-
-.. currentmodule:: torch
-
-.. autofunction:: logit

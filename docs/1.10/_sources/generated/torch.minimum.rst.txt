@@ -1,6 +1,0 @@
-﻿torch.minimum
-=============
-
-.. currentmodule:: torch
-
-.. autofunction:: minimum
