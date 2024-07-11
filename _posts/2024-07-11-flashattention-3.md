@@ -27,17 +27,17 @@ While FlashAttention-2 can achieve up to 70% theoretical max FLOPS on Ampere (A1
 
 
 
-1. WGMMA (Warpgroup Matrix Multiply-Accumulate). This new feature makes use of the new Tensor Cores on Hopper, with much higher throughput[^1] than the older mma.sync instruction in Ampere (image from the [H100 white paper)](https://resources.nvidia.com/en-us-tensor-core/gtc22-whitepaper-hopper?ncid=no-ncid). 
+1\. WGMMA (Warpgroup Matrix Multiply-Accumulate). This new feature makes use of the new Tensor Cores on Hopper, with much higher throughput[^1] than the older mma.sync instruction in Ampere (image from the [H100 white paper)](https://resources.nvidia.com/en-us-tensor-core/gtc22-whitepaper-hopper?ncid=no-ncid). 
 
 ![image from the H100 white paper](/assets/images/flashattention-3/fg2.png){:style="width:100%"}
 
 
-2. TMA (Tensor Memory Accelerator). This is a special hardware unit that accelerates the transfer of data between global memory and shared memory, taking care of all index calculation and out-of-bound predication. This frees up registers, which is a valuable resource to increase tile size and efficiency.
+2\. TMA (Tensor Memory Accelerator). This is a special hardware unit that accelerates the transfer of data between global memory and shared memory, taking care of all index calculation and out-of-bound predication. This frees up registers, which is a valuable resource to increase tile size and efficiency.
 
 ![block diagram](/assets/images/flashattention-3/fg3.png){:style="width:100%"}
 
 
-3. Low-precision with FP8. This doubles the Tensor Core throughput (e.g. 989 TFLOPS with FP16 and 1978 TFLOPS with FP8), but trades off accuracy by using fewer bits to represent floating point numbers.
+3\. Low-precision with FP8. This doubles the Tensor Core throughput (e.g. 989 TFLOPS with FP16 and 1978 TFLOPS with FP8), but trades off accuracy by using fewer bits to represent floating point numbers.
 
 
 ![6x throughput](/assets/images/flashattention-3/fg4.png){:style="width:100%"}
