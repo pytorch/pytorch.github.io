@@ -1,6 +1,7 @@
 ---
 layout: blog_detail
 title: "Learn how to develop Android applications with ExecuTorch and Llama models"
+author: Arm
 ---
 _This blog is courtesy of the PyTorch team at Arm. More details can be found [here](https://learn.arm.com/learning-paths/smartphones-and-mobile/build-llama3-chat-android-app-using-executorch-and-xnnpack/?utm_source=twitter&utm_medium=social-organic&utm_content=landingpage&utm_campaign=mk24_developer_na)._
 
