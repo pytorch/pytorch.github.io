@@ -1,7 +1,7 @@
 ---
 layout: blog_detail
 title: "FlashAttention-3: Fast and Accurate Attention with Asynchrony and Low-precision"
-author: Jay Shah, Ganesh Bikshandi, Ying Zhang, Vijay Thakkar, Pradeep Ramani, Tri Dao
+author: Jay Shah and Ganesh Bikshandi, Colfax Research, Ying Zhang, Meta, Vijay Thakkar and Pradeep Ramani, NVIDIA, Tri Dao, TogetherAI and Princeton University
 ---
 
 Attention, as a core layer of the ubiquitous Transformer architecture, is a bottleneck for large language models and long-context applications. FlashAttention (and FlashAttention-2) pioneered an approach to speed up attention on GPUs by minimizing memory reads/writes, and is now used by most [libraries](https://pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html) to accelerate Transformer training and inference. This has contributed to a massive increase in LLM context length in the last two years, from 2-4K (GPT-3, OPT) to 128K (GPT-4), or even 1M ([Llama 3](https://huggingface.co/gradientai/Llama-3-8B-Instruct-Gradient-1048k)). However, despite its success, FlashAttention has yet to take advantage of new capabilities in modern hardware, with FlashAttention-2 achieving only 35% utilization of theoretical max FLOPs on the H100 GPU. In this blogpost, we describe three main techniques to speed up attention on Hopper GPUs: exploiting asynchrony of the Tensor Cores and TMA to (1) overlap overall computation and data movement via warp-specialization and (2) interleave block-wise matmul and softmax operations, and (3) incoherent processing that leverages hardware support for FP8 low-precision.
