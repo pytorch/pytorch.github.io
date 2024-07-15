@@ -1,6 +1,0 @@
-﻿torch.vstack
-============
-
-.. currentmodule:: torch
-
-.. autofunction:: vstack

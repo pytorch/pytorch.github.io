@@ -1,21 +1,21 @@
 ---
 layout: get_started
-title: Mobile
-permalink: /get-started/mobile/
+title: ExecuTorch
+permalink: /get-started/executorch/
 background-class: get-started-background
 body-class: get-started
 order: 5
 published: true
 ---
 
-## Get Started with PyTorch Mobile
+## Get Started with PyTorch ExecuTorch
 
-As of PyTorch 1.3, PyTorch supports an end-to-end workflow from Python to deployment on iOS and Android. 
-This is an early, experimental release that we will be building on in several areas over the coming months.
+<p>
+    <a href="https://pytorch.org/executorch/stable/index.html" class="btn btn-lg with-right-arrow">
+    ExecuTorch Documentation
+    </a>
+</p>
 
-Get started on [Android]({{ site.baseurl }}/mobile/android)
-
-Get started on [iOS]({{ site.baseurl }}/mobile/ios)
 
 <script page-id="mobile" src="{{ site.baseurl }}/assets/menu-tab-selection.js"></script>
 <script src="{{ site.baseurl }}/assets/get-started-sidebar.js"></script>

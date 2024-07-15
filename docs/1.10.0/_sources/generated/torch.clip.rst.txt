@@ -1,6 +1,0 @@
-﻿torch.clip
-==========
-
-.. currentmodule:: torch
-
-.. autofunction:: clip

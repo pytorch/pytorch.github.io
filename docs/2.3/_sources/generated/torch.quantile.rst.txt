@@ -1,6 +1,0 @@
-﻿torch.quantile
-==============
-
-.. currentmodule:: torch
-
-.. autofunction:: quantile

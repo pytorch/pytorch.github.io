@@ -1,6 +1,0 @@
-﻿torch.movedim
-=============
-
-.. currentmodule:: torch
-
-.. autofunction:: movedim
