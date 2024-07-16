@@ -2,7 +2,7 @@
 layout: blog_detail
 title: "Introducing the PlayTorch app: Rapidly Create Mobile AI Experiences"
 author: PlayTorch Team
-featured-img: ""
+featured-img: "/assets/videos/PlayTorch-video.mp4"
 ---
 
 <p align="center">
