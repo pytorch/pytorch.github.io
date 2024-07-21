@@ -4,7 +4,7 @@ title: "Powering the AI Revolution: The PyTorch Documentary"
 author: The PyTorch Foundation
 ---
 
-Now live: The official [PyTorch Documentary](https://www.youtube.com/live/EjgTv6aSeqk)! This film unveils the authentic narrative of PyTorch’s inception, attributing its existence to a dedicated group of unsung heroes driving technological innovation. 
+Now live: The official [PyTorch Documentary](https://documentary.pytorch.org/)! This film unveils the authentic narrative of PyTorch’s inception, attributing its existence to a dedicated group of unsung heroes driving technological innovation. 
 
 The documentary shares the strength of the PyTorch community, resonating with our communities across the globe. We hope this story of PyTorch inspires greater contributions, attracts more contributors to the project, and fosters widespread recognition of PyTorch’s significance in the open source community.
 
