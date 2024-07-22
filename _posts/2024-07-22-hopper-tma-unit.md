@@ -176,8 +176,8 @@ elect.sync _|%p7, 0xffffffff;
 add.s32 	%r24, %r65, %r67;
 shl.b32 	%r25, %r66, 7;
 
-
-{% raw %}@%p8 cp.async.bulk.tensor.2d.shared::cluster.global.mbarrier::complete_tx::bytes [%r24], [%rd26, {%r25,%r152}], [%r19];{% endraw %}
+@%p8
+{% raw %}cp.async.bulk.tensor.2d.shared::cluster.global.mbarrier::complete_tx::bytes [%r24], [%rd26, {%r25,%r152}], [%r19];{% endraw %}
 ```
 
 
