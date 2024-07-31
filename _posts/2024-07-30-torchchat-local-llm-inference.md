@@ -1,7 +1,6 @@
 ---
 layout: blog_detail
 title: "Introducing torchchat: Accelerating Local LLM Inference on Laptop, Desktop and Mobile"
-author: Ali Khosh, Jesse White, Orion Reblitz-Richardson
 ---
 
 Today, we’re releasing [torchchat](https://github.com/pytorch/torchchat), a library showcasing how to seamlessly and performantly run Llama 3, 3.1, and other large language models across laptop, desktop, and mobile.
