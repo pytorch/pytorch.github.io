@@ -150,7 +150,7 @@ def soft_cap(score, b, h, q_idx, kv_idx):
     return score
 ```
 
-Note that we also automatically generate the backwards pass from the forwards pass here. Also, although this implementation is semantically correct, we likely want to use a tanh approximation in this case for performance reasons. See [attention-gym](https://github.com/pytorch-labs/attention-gym/blob/738268eae279c48dc8c4d1c6f40b3cfaec648831/attn\_gym/mods/softcapping.py\#L1) for more details.
+Note that we also automatically generate the backwards pass from the forwards pass here. Also, although this implementation is semantically correct, we likely want to use a tanh approximation in this case for performance reasons. See [attention-gym](https://github.com/pytorch-labs/attention-gym/blob/main/attn_gym/mods/softcapping.py) for more details.
 
 ### Causal Mask
 
