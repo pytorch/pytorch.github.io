@@ -139,7 +139,7 @@ This demonstrates one interesting piece of flexibility `torch.compile` provides 
 
 ### Soft-capping
 
-Soft-capping is a technique used in [Gemma2](https://huggingface.co/blog/gemma2\#soft-capping-and-attention-implementations) and Grok-1 that prevents logits from growing excessively large. In FlexAttention, it looks like:
+Soft-capping is a technique used in [Gemma2](https://huggingface.co/blog/gemma2#soft-capping-and-attention-implementations) and Grok-1 that prevents logits from growing excessively large. In FlexAttention, it looks like:
 
 ```py
 softcap = 20
@@ -167,7 +167,7 @@ However, masking is special compared to other modifications \- if something is m
 
 ## Mask Mods
 
-To take advantage of sparsity from masking, we need to do some more work. Specifically, by passing a `mask_mod` to [`create_block_mask`](https://github.com/pytorch/pytorch/blob/e49c0acc396e89baf8c6450e1fa0571d4ce2d4ed/torch/nn/attention/flex_attention.py\#L594), we can create a `BlockMask`. FlexAttention can then use `BlockMask` to take advantage of the sparsity\!
+To take advantage of sparsity from masking, we need to do some more work. Specifically, by passing a `mask_mod` to [`create_block_mask`](https://github.com/pytorch/pytorch/blob/e49c0acc396e89baf8c6450e1fa0571d4ce2d4ed/torch/nn/attention/flex_attention.py#L594), we can create a `BlockMask`. FlexAttention can then use `BlockMask` to take advantage of the sparsity\!
 
 The signature of `mask_mod` is very similar to `score_mod` \- just without the `score`. In particular
 
@@ -429,7 +429,7 @@ Although the results are not bitwise identical, we are confident that FlexAttent
 
 ### Performance
 
-Generally speaking, FlexAttention is nearly as performant as a handwritten Triton kernel, which is unsurprising, as we heavily leverage a handwritten Triton kernel. However, due to its generality, we do incur a small performance penalty. For example, we must incur some additional latency to determine which block to compute next. In some cases, we provide some kernel options that can affect the performance of the kernel while changing its behavior. They can be found here: [performance knobs](https://github.com/pytorch/pytorch/blob/ee09d066d35d7e17cf7e9479c0b8bfc70cffc264/torch/_inductor/kernel/flex_attention.py\#L146-L155)
+Generally speaking, FlexAttention is nearly as performant as a handwritten Triton kernel, which is unsurprising, as we heavily leverage a handwritten Triton kernel. However, due to its generality, we do incur a small performance penalty. For example, we must incur some additional latency to determine which block to compute next. In some cases, we provide some kernel options that can affect the performance of the kernel while changing its behavior. They can be found here: [performance knobs](https://github.com/pytorch/pytorch/blob/ee09d066d35d7e17cf7e9479c0b8bfc70cffc264/torch/_inductor/kernel/flex_attention.py#L146-L155)
 
 As a case study, let's explore how the knobs affect the performance of causal attention. We will compare performance of the triton kernel versus FlashAttentionv2 on A100. The script can be found [here](https://github.com/pytorch/pytorch/blob/main/benchmarks/transformer/score_mod.py).
 
