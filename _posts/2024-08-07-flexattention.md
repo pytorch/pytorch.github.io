@@ -120,6 +120,7 @@ Note that unlike typical implementations, this does *not* need to materialize a 
 ### ALiBi Bias
 
 ![alibi bias](/assets/images/flexattention/fg6.png){:style="max-width:600px; display:block; margin-left: auto; margin-right: auto; width:100%"}
+<p style="text-align: center;"><em>Source: <a href="https://arxiv.org/abs/2108.12409">Train Short, Test Long: Attention with Linear Biases Enables Input Length Extrapolation</a></em></p>
 
 ALiBi was introduced in [Train Short, Test Long: Attention with Linear Biases Enables Input Length Extrapolation](https://arxiv.org/abs/2108.12409), and claims to have beneficial properties for length extrapolation at inference. Notably, MosaicML has pointed to [“lack of kernel support”](https://twitter.com/jefrankle/status/1804567458092605736) as the main reason why they eventually switched from ALiBi to rotary embeddings.
 
