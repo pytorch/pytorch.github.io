@@ -202,6 +202,7 @@ While the TFlops are roughly the same, the execution time is 2x faster for the m
 ### Sliding Window \+ Causal
 
 ![Sliding Window Causal diagrams](/assets/images/flexattention/fg8.png){:style="width:100%"}
+<p style="text-align: center;"><em>Source: <a href="https://arxiv.org/abs/2310.06825">Mistral 7B</a></em></p>
 
 
 Popularized by [Mistral](https://arxiv.org/abs/2310.06825), sliding window attention (also known as local attention) takes advantage of the intuition that the most recent tokens are the most useful. In particular, it allows the query token to only attend to, say, the 1024 most recent tokens. This is often used together with causal attention.
@@ -230,7 +231,7 @@ We benchmark it against `F.scaled_dot_product_attention` with a sliding window m
 ### PrefixLM
 
 ![PrefixLM diagram](/assets/images/flexattention/fg10.png){:style="max-width:600px; display:block; margin-left: auto; margin-right: auto; width:100%"}
-*Source: PaliGemma: [A versatile 3B VLM for transfer](https://arxiv.org/abs/2407.07726)*
+<p style="text-align: center;"><em>Source: <a href="https://arxiv.org/abs/2407.07726">PaliGemma: A versatile 3B VLM for transfer</a></em></p>
 
 The T5 architecture, proposed in [Exploring the Limits of Transfer Learning with a Unified Text-to-Text Transformer](https://arxiv.org/abs/1910.10683), describes an attention variant that performs full bidirectional attention on a “prefix”, and causal attention on the rest. We again compose two mask functions to accomplish this, one for causal masking and one that is based off of the prefix length.
 
