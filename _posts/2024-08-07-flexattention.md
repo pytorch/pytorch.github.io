@@ -164,7 +164,7 @@ However, masking is special compared to other modifications \- if something is m
 
 ## Mask Mods
 
-To take advantage of sparsity from masking, we need to do some more work. Specifically, by passing a `mask_mod` to `create_block_mask`, we can create a `BlockMask`. FlexAttention can then use `BlockMask` to take advantage of the sparsity\!
+To take advantage of sparsity from masking, we need to do some more work. Specifically, by passing a `mask_mod` to [`create_block_mask`](https://github.com/pytorch/pytorch/blob/e49c0acc396e89baf8c6450e1fa0571d4ce2d4ed/torch/nn/attention/flex_attention.py\#L594), we can create a `BlockMask`. FlexAttention can then use `BlockMask` to take advantage of the sparsity\!
 
 The signature of `mask_mod` is very similar to `score_mod` \- just without the `score`. In particular
 
@@ -364,7 +364,7 @@ This is the hardest setting, since we’re unable to amortize the block mask com
 
 1. If your mask is the same across batch size or heads, make sure that you’re broadcasting over those (i.e. set them to `None` in `create_block_mask`).  
 2. Compile `create_block_mask`. Unfortunately, today, `torch.compile` does not work directly on `create_block_mask` due to some unfortunate limitations. However, you can set `_compile=True`, which will significantly reduce the peak memory and runtime (often an order of magnitude in our testing).  
-3. Write a custom constructor for BlockMask. The metadata for BlockMask is quite simple. It’s essentially two tensors.  
+3. Write a custom constructor for BlockMask. The metadata for BlockMask is quite simple (see the [documentation](https://pytorch.org/docs/main/nn.attention.flex_attention.html#blockmask)). It’s essentially two tensors.
    a. `num_blocks`: The number of KV blocks computed for each query block.  
    b. `indices`: The positions of the KV blocks computed for each query block.
 
@@ -424,7 +424,8 @@ Although the results are not bitwise identical, we are confident that FlexAttent
 
 ### Performance
 
-Generally speaking, FlexAttention is nearly as performant as a handwritten Triton kernel, which is unsurprising, as we heavily leverage a handwritten Triton kernel. However, due to its generality, we do incur a small performance penalty. For example, we must incur some additional latency to determine which block to compute next. In some cases, we provide some kernel options that can affect the performance of the kernel while changing its behavior.
+Generally speaking, FlexAttention is nearly as performant as a handwritten Triton kernel, which is unsurprising, as we heavily leverage a handwritten Triton kernel. However, due to its generality, we do incur a small performance penalty. For example, we must incur some additional latency to determine which block to compute next. In some cases, we provide some kernel options that can affect the performance of the kernel while changing its behavior. They can be found here: [performance knobs](https://github.com/pytorch/pytorch/blob/ee09d066d35d7e17cf7e9479c0b8bfc70cffc264/torch/_inductor/kernel/flex_attention.py\#L146-L155)
+
 As a case study, let's explore how the knobs affect the performance of causal attention. We will compare performance of the triton kernel versus FlashAttentionv2 on A100. The script can be found [here](https://github.com/pytorch/pytorch/blob/main/benchmarks/transformer/score_mod.py).
 
 FlexAttention achieves 90% of FlashAttention2's performance in the forward pass and 85% in the backward pass. FlexAttention is currently utilizing a deterministic algorithm that recomputes more intermediates than FAv2, but we have plans to improve FlexAttention’s backward algorithm and hope to close this gap\! 
