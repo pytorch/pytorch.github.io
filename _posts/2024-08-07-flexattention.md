@@ -141,7 +141,8 @@ Soft-capping is a technique used in [Gemma2](https://huggingface.co/blog/gemma2\
 
 ```py
 softcap = 20
-def soft_cap(score, b, h, q_idx, kv_idx):    score = score / softcap
+def soft_cap(score, b, h, q_idx, kv_idx):
+    score = score / softcap
     score = torch.tanh(score)
     score = score * softcap
     return score
@@ -229,6 +230,7 @@ We benchmark it against `F.scaled_dot_product_attention` with a sliding window m
 ### PrefixLM
 
 ![PrefixLM diagram](/assets/images/flexattention/fg10.png){:style="max-width:600px; display:block; margin-left: auto; margin-right: auto; width:100%"}
+*Source: PaliGemma: [A versatile 3B VLM for transfer](https://arxiv.org/abs/2407.07726)*
 
 The T5 architecture, proposed in [Exploring the Limits of Transfer Learning with a Unified Text-to-Text Transformer](https://arxiv.org/abs/1910.10683), describes an attention variant that performs full bidirectional attention on a “prefix”, and causal attention on the rest. We again compose two mask functions to accomplish this, one for causal masking and one that is based off of the prefix length.
 
@@ -262,7 +264,7 @@ Through `BlockMask`, we can support this efficiently in FlexAttention as well\!
 document_id: [SEQ_LEN]
 
 def document_masking(b, h, q_idx, kv_idx):
-    return document_id[q_idx] == document_id[kv_idx]
+    return document_id[q_idx] == document_id[kv_idx]
 ```
 
 And that’s it\! In this case, we see that we end up with a blockdiagonal mask.  
@@ -458,6 +460,7 @@ We look forward to leveraging the approach we used here to more applications in 
 
 ### Limitations and Future Work
 
+- FlexAttention is currently available in PyTorch nightly releases, we plan to release it as a prototype feature in 2.5.0
 - We did not cover how to use FlexAttention for inference here (or how to implement PagedAttention) \- we will cover those in a later post.  
 - We are working to improve the performance of FlexAttention to match FlashAttention3 on H100 GPUs.   
 - FlexAttention requires that all sequence lengths be a multiple of 128 \- this will be addressed soon.  
