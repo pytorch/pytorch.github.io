@@ -468,3 +468,15 @@ We look forward to leveraging the approach we used here to more applications in 
 - We are working to improve the performance of FlexAttention to match FlashAttention3 on H100 GPUs.   
 - FlexAttention requires that all sequence lengths be a multiple of 128 \- this will be addressed soon.  
 - We plan on adding GQA support soon \- for now, you can just replicate the kv heads.
+
+
+### Acknowledgements
+
+We want to highlight some prior work (and people) that have inspired FlexAttention.
+
+- Tri Dao's work on FlashAttention
+- Francisco Massa and the Xformers team for BlockSparseAttention in Triton
+- The Jax team's work on SplashAttention
+- Philippe Tillet and Keren Zhou for helping us with Triton 
+- Ali Hassani for discussions on neighborhood attention
+- Everybody who's complained about attention kernels not supporting their favorite attention variant :)
