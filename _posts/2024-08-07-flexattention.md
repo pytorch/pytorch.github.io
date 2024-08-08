@@ -1,7 +1,7 @@
 ---
 layout: blog_detail
 title: "FlexAttention: The Flexibility of PyTorch with the Performance of FlashAttention"
-author: "Team PyTorch: Horace He, Driss Guessous, Yanbo Liang, Joy Dong"
+author: "Team PyTorch: Driss Guessous, Yanbo Liang, Joy Dong, Horace He"
 ---
 
 ![a cartoon chart flexing his muscles](/assets/images/flexattention/fg1.jpg){:style="width:100%"}
