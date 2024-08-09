@@ -439,6 +439,16 @@ FlexAttention achieves 90% of FlashAttention2's performance in the forward pass 
 
 ![flexattention speed chart](/assets/images/flexattention/fg16.png){:style="width:100%"}
 
+FlexAttention shines on H100 GPUs, where it's not just natively supported - it actually outperforms FlashAttention2! While it doesn't quite reach the heights of FlashAttention3, FlexAttention still packs a punch:
+
+- Forward pass: 85% of FlashAttention3's performance
+- Backward pass: 76% of FlashAttention3's performance
+
+![flexattention speed chart](/assets/images/flexattention/fg17.png){:style="width:100%"}
+![flexattention speed chart](/assets/images/flexattention/fg18.png){:style="width:100%"}
+
+
+
 ## Conclusion
 
 We hope you have as much fun using FlexAttention as we did developing it\! While working on this, we ended up finding way more applications of this API than we could have expected. We’ve already seen it accelerate torchtune’s [sample packing throughput by 71%](https://github.com/pytorch/torchtune/pull/1193), replace the need for a researcher to spend over a week writing their own custom Triton kernel, and deliver competitive performance with custom handwritten attention variants.
