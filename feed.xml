@@ -4,7 +4,7 @@
   <generator uri="https://jekyllrb.com/" version="3.9.0">Jekyll</generator>
   <link href="https://pytorch.org/feed.xml" rel="self" type="application/atom+xml" />
   <link href="https://pytorch.org/" rel="alternate" type="text/html" />
-  <updated>2024-08-19T23:27:34-07:00</updated>
+  <updated>2024-08-20T09:51:24-07:00</updated>
   <id>https://pytorch.org/feed.xml</id>
 
   
@@ -29,6 +29,404 @@
 
   
   
+  
+    <entry>
+      <title type="html">Enabling Fast Gradient Clipping and Ghost Clipping in Opacus</title>
+      <link href="https://pytorch.org/blog/clipping-in-opacus/" rel="alternate" type="text/html" title="Enabling Fast Gradient Clipping and Ghost Clipping in Opacus" />
+      <published>2024-08-20T00:00:00-07:00</published>
+      <updated>2024-08-20T00:00:00-07:00</updated>
+      <id>https://pytorch.org/blog/clipping-in-opacus</id>
+      <content type="html" xml:base="https://pytorch.org/blog/clipping-in-opacus/">&lt;h2 id=&quot;introduction-and-context&quot;&gt;Introduction and Context&lt;/h2&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://arxiv.org/abs/1607.00133&quot;&gt;Differentially Private Stochastic Gradient Descent (DP-SGD)&lt;/a&gt; is the canonical method for training machine learning models with differential privacy. It involves the following two modifications to its non-private counterpart, Stochastic Gradient Descent.&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;
+    &lt;p&gt;&lt;strong&gt;Per-sample gradient clipping&lt;/strong&gt;: Clip gradients with respect to every sample in the mini-batch, ensuring that its norm is at most a pre-specified value, “Clipping Norm”, C, in every iteration.&lt;/p&gt;
+  &lt;/li&gt;
+  &lt;li&gt;
+    &lt;p&gt;&lt;strong&gt;Noise addition&lt;/strong&gt;: Add Gaussian noise of pre-specified variance, depending on the clipping norm and privacy parameters, to the average clipped gradient, in every iteration.&lt;/p&gt;
+  &lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;The first change, &lt;strong&gt;per-sample gradient clipping&lt;/strong&gt;, introduces additional complexities since, in general, it requires instantiating &lt;strong&gt;per-sample&lt;/strong&gt; &lt;strong&gt;gradients&lt;/strong&gt;.&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;http://opacus.ai&quot;&gt;Opacus&lt;/a&gt; is a PyTorch implementation of DP-SGD. Opacus addresses the above task by employing &lt;a href=&quot;https://medium.com/pytorch/differential-privacy-series-part-2-efficient-per-sample-gradient-computation-in-opacus-5bf4031d9e22&quot;&gt;hook functions&lt;/a&gt;, which allows intervening on specific events, such as forward and backward passes. For more details about Opacus, we encourage readers to review the previous blog posts: &lt;a href=&quot;https://bit.ly/dp-sgd-algorithm-explained&quot;&gt;DP-SGD Algorithm Explained&lt;/a&gt;, &lt;a href=&quot;https://medium.com/pytorch/differential-privacy-series-part-2-efficient-per-sample-gradient-computation-in-opacus-5bf4031d9e22&quot;&gt;Efficient Per-Sample Gradient Computation in Opacus&lt;/a&gt; and &lt;a href=&quot;https://pytorch.medium.com/differential-privacy-series-part-3-efficient-per-sample-gradient-computation-for-more-layers-in-39bd25df237&quot;&gt;Efficient Per-Sample Gradient Computation for More Layers in Opacus&lt;/a&gt;.&lt;/p&gt;
+
+&lt;p&gt;While Opacus provides substantial efficiency gains compared to the naive approaches, the memory cost of instantiating per-sample gradients is significant. In particular, memory usage is proportional to the batch size times the number of trainable parameters. Consequently, memory limits Opacus to small batch sizes and/or small models, significantly restricting its range of applications.&lt;/p&gt;
+
+&lt;p&gt;We introduce &lt;a href=&quot;https://arxiv.org/abs/2009.03106&quot;&gt;Fast Gradient Clipping&lt;/a&gt; and &lt;a href=&quot;https://arxiv.org/abs/2110.05679&quot;&gt;Ghost Clipping&lt;/a&gt; to Opacus, which enable developers and researchers to perform gradient clipping without instantiating the per-sample gradients. As an example, this allows for fine-tuning 7M parameters of BERT, on a single 16GB GPU, with a batch size of 1024, with memory comparable to using PyTorch (without applying DP-SGD). In contrast, the previous version of Opacus, supported a maximum batch size of roughly 256 for the same setting. We provide a &lt;a href=&quot;https://github.com/pytorch/opacus/blob/main/tutorials/building\_text\_classifier.ipynb&quot;&gt;tutorial&lt;/a&gt; on how to use Fast Gradient Clipping in Opacus with the aforementioned task as an example.&lt;/p&gt;
+
+&lt;h2 id=&quot;fast-gradient-clipping-and-ghost-clipping&quot;&gt;Fast Gradient Clipping and Ghost Clipping&lt;/h2&gt;
+
+&lt;p&gt;The key idea behind these techniques is based on the following observation: suppose per-sample gradient norms are known, then gradient clipping can be achieved by backpropagation on a re-weighted loss function $ \bar{L} $. This loss function is defined as  $ \bar{L} = \sum_{i} R_{i} L_{i} $, where $ R_i = \min\left(\frac{C}{C_i}, 1\right) $ are the clipping coefficients computed from the per-sample gradient norms $ {C_i} $ and $ {L_i} $ are per-sample losses.&lt;/p&gt;
+
+&lt;p&gt;The above idea may seem circular at first glance, as it appears to require instantiating per-sample gradients in order to calculate per-sample gradient norms. However, for certain widely-used components of neural network architectures, such as fully connected/linear layers, it is indeed possible to obtain per-sample gradient norms in a single backpropagation pass without the need for per-sample gradients. This suggests a workflow that involves two backpropagation passes: the first to compute per-sample gradient norms, and the second to compute the aggregated (not per-sample) clipped gradient. The second backpropagation is simply the standard batched backpropagation.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/clipping-in-opacus/fg1.jpg&quot; alt=&quot;backpropagation diagram&quot; style=&quot;max-width:800px; display:block; margin-left: auto; margin-right: auto; width:100%&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/clipping-in-opacus/fg2.png&quot; alt=&quot;backpropagation diagram&quot; style=&quot;max-width:400px; display:block; margin-left: auto; margin-right: auto; width:100%&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;em&gt;Figure 1: Comparison between vanilla &lt;strong&gt;Opacus&lt;/strong&gt; (top left), &lt;strong&gt;Fast Gradient Clipping&lt;/strong&gt; (top right), and &lt;strong&gt;Ghost clipping&lt;/strong&gt; (bottom). We marked in red gradient instantiations that become memory bottlenecks. For vanilla Opacus, it has to instantiate the &lt;strong&gt;per-sample gradients&lt;/strong&gt;. &lt;strong&gt;Fast Gradient Clipping&lt;/strong&gt; instantiates per-sample gradients for each layer to compute its norm, which is immediately released once the backward pass moves on to the next layer. Ghost Clipping works directly from &lt;strong&gt;per-sample activation gradients&lt;/strong&gt; and &lt;strong&gt;per-sample activations&lt;/strong&gt;, and avoids the need for gradient instantiation.&lt;/em&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://arxiv.org/abs/2009.03106&quot;&gt;&lt;strong&gt;Fast Gradient Clipping&lt;/strong&gt;&lt;/a&gt;&lt;br /&gt;
+In Fast Gradient Clipping, the per-sample gradient norm is calculated in three steps:&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;For each layer, the per-sample gradient is instantiated and its norm is calculated.&lt;/li&gt;
+  &lt;li&gt;The per-sample gradient is then immediately discarded.&lt;/li&gt;
+  &lt;li&gt;The (squared) per-sample gradient norms of each layer are summed up to obtain the overall (squared) per-sample gradient norm.&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://arxiv.org/abs/2110.05679&quot;&gt;&lt;strong&gt;Ghost Clipping&lt;/strong&gt;&lt;/a&gt; &lt;br /&gt;
+Extending the approach of Fast Gradient Clipping, Ghost Clipping uses the &lt;a href=&quot;https://arxiv.org/abs/1510.01799&quot;&gt;fact&lt;/a&gt; that for &lt;strong&gt;linear layers&lt;sup id=&quot;fnref:1&quot; role=&quot;doc-noteref&quot;&gt;&lt;a href=&quot;#fn:1&quot; class=&quot;footnote&quot; rel=&quot;footnote&quot;&gt;1&lt;/a&gt;&lt;/sup&gt;,&lt;/strong&gt; per-sample gradient norms can be calculated just from &lt;strong&gt;activation gradients&lt;/strong&gt; and  &lt;strong&gt;activations&lt;/strong&gt;. In particular, let &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;backprops&lt;/code&gt; and &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;activations&lt;/code&gt; be per-sample activation gradients and activations, of dimensions &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;batch_size ✕ output_width&lt;/code&gt; and &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;batch_size ✕ input_width&lt;/code&gt;, respectively. The per-sample gradient is the outer product of the two, which takes &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;O(batch_size ✕ input_width ✕ output_width)&lt;/code&gt; time and space.&lt;/p&gt;
+
+&lt;p&gt;The &lt;a href=&quot;https://arxiv.org/abs/1510.01799&quot;&gt;ghost clipping trick&lt;/a&gt; instead calculates the (squared) norm of &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;backprops&lt;/code&gt; and &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;activations&lt;/code&gt;, sample-wise, and takes their product, which gives the (squared) norm of the gradient. This takes &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;O(batch-size ✕ (input_width + output_width))&lt;/code&gt; time and takes &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;O(batch-size)&lt;/code&gt; space to store. Since &lt;strong&gt;per-sample activation&lt;/strong&gt; and &lt;strong&gt;per-sample activation gradients&lt;/strong&gt; are already stored, additional memory is needed only for storing the norms.&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Relationship between Fast Gradient Clipping and Ghost Clipping&lt;/strong&gt;&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;Fast Gradient Clipping and Ghost Clipping are complementary techniques. Fast Gradient Clipping can be applied to any type of layer, while Ghost Clipping is a strictly better technique for supported layers.&lt;/li&gt;
+  &lt;li&gt;Our implementation automatically switches to Fast Gradient Clipping when the layer is not supported by Ghost Clipping.&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;h3 id=&quot;how-to-use-fast-gradient-clipping-in-opacus&quot;&gt;How to use Fast Gradient Clipping in Opacus&lt;/h3&gt;
+
+&lt;p&gt;The training loop is identical to that of the standard PyTorch loop. As in Opacus before, we use the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;PrivacyEngine()&lt;/code&gt;, which “sanitizes” the model and optimizer. To enable Ghost Clipping, the argument &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;grad_sample_mode=&quot;ghost&quot;&lt;/code&gt; is used. Additionally, &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;make_private()&lt;/code&gt; takes the loss criterion as an extra input and sanitizes it. This allows us to hide the two backward passes and the loss rescaling in between in &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;loss.backward()&lt;/code&gt;.&lt;/p&gt;
+
+&lt;div class=&quot;language-py highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;kn&quot;&gt;from&lt;/span&gt; &lt;span class=&quot;nn&quot;&gt;opacus&lt;/span&gt; &lt;span class=&quot;kn&quot;&gt;import&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;PrivacyEngine&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;criterion&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;nn&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;CrossEntropyLoss&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;# example loss function
+&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;privacy_engine&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;PrivacyEngine&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;model_gc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;optimizer_gc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;criterion_gc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;train_loader&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;privacy_engine&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;make_private&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;module&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;model&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;optimizer&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;optimizer&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;data_loader&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;train_loader&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;noise_multiplier&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;noise_multiplier&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;max_grad_norm&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;max_grad_norm&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
+	 &lt;span class=&quot;n&quot;&gt;criterion&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;criterion&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;grad_sample_mode&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;ghost&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+
+&lt;span class=&quot;c1&quot;&gt;# The training loop below is identical to that of PyTorch
+&lt;/span&gt;
+&lt;span class=&quot;k&quot;&gt;for&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;input_data&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;target_data&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;in&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;train_loader&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;output_gc&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;model_gc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;input_data&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;# Forward pass
+&lt;/span&gt;    &lt;span class=&quot;n&quot;&gt;optimizer_gc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;zero_grad&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;loss&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;criterion_gc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;output_gc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;target_data&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;loss&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;backward&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;optimizer_gc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;step&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt;  &lt;span class=&quot;c1&quot;&gt;# Add noise and update the model
+&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Internally, before the first pass, we enable the &lt;em&gt;hooks&lt;/em&gt;, which allows us to capture layer-wise values corresponding to forward and backward calls. They are used to compute the per-sample gradient norms. We then compute the clipping coefficients, rescale the loss function and disable hooks, which lets us use the standard PyTorch backward pass.&lt;/p&gt;
+
+&lt;h3 id=&quot;memory-complexity-analysis&quot;&gt;Memory Complexity Analysis&lt;/h3&gt;
+
+&lt;p&gt;Consider a multi-layer neural network with the following properties:&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;L&lt;/strong&gt;: Number of layers&lt;br /&gt;
+&lt;strong&gt;d&lt;/strong&gt;: Maximum layer width&lt;br /&gt;
+&lt;strong&gt;B&lt;/strong&gt;: Batch size&lt;br /&gt;
+&lt;strong&gt;K&lt;/strong&gt;: Number of non-supported/non-linear layers&lt;/p&gt;
+
+&lt;p&gt;The memory overhead of DP-SGD with Ghost Clipping compared to plain (PyTorch) SGD is an additive O(BL), required to store the per-sample gradient norms for all layers. Further, if there is a non-supported layer (if K≥1), then there is an additional O(Bd&lt;sup&gt;2&lt;/sup&gt;) memory to instantiate the gradient of that layer.&lt;/p&gt;
+
+&lt;h3 id=&quot;memory-benchmarking&quot;&gt;Memory Benchmarking&lt;/h3&gt;
+
+&lt;p&gt;We provide results on the memory usage for a variety of settings.&lt;/p&gt;
+
+&lt;h4 id=&quot;fine-tuning-bert&quot;&gt;Fine-Tuning BERT&lt;/h4&gt;
+
+&lt;p&gt;We consider the problem of &lt;a href=&quot;https://github.com/pytorch/opacus/blob/main/tutorials/building\_text\_classifier.ipynb&quot;&gt;privately fine-tuning&lt;/a&gt; the last three layers of BERT for a text classification task. The base model has over 100M parameters, of which we fine-tune the last three layers, &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;BertEncoder,&lt;/code&gt; &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;BertPooler,&lt;/code&gt; and &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;Classifier&lt;/code&gt;, comprising roughly 7.6M parameters. The experiments are run on a P100 GPU with 16 GB of memory.&lt;/p&gt;
+
+&lt;p&gt;The following table reports the maximum memory and time taken per iteration for the various methods:&lt;/p&gt;
+
+&lt;table class=&quot;table table-bordered&quot;&gt;
+  &lt;tr&gt;
+   &lt;td rowspan=&quot;3&quot;&gt; 
+   &lt;/td&gt;
+   &lt;td colspan=&quot;9&quot; style=&quot;text-align:center&quot;&gt;&lt;strong&gt;Batch size&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td colspan=&quot;2&quot; style=&quot;text-align:center&quot;&gt;&lt;strong&gt;B = 32&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;2&quot; style=&quot;text-align:center&quot;&gt;&lt;strong&gt;B = 128&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;2&quot; style=&quot;text-align:center&quot;&gt;&lt;strong&gt;B = 512&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;2&quot; style=&quot;text-align:center&quot;&gt;&lt;strong&gt;B = 1024&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;B = 2048&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;&lt;strong&gt;Mem&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;Time&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;Mem&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;Time&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;Mem&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;Time&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;Mem&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;Time&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;&lt;strong&gt;PyTorch SGD&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;236 MB
+   &lt;/td&gt;
+   &lt;td&gt;0.15 s
+   &lt;/td&gt;
+   &lt;td&gt;1.04 GB
+   &lt;/td&gt;
+   &lt;td&gt;0.55 s
+   &lt;/td&gt;
+   &lt;td&gt;5.27 GB
+   &lt;/td&gt;
+   &lt;td&gt;2.1 s
+   &lt;/td&gt;
+   &lt;td&gt;12.7 GB
+   &lt;/td&gt;
+   &lt;td&gt;4.2 s
+   &lt;/td&gt;
+   &lt;td&gt;OOM
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;&lt;strong&gt;DP-SGD&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;1,142 MB
+   &lt;/td&gt;
+   &lt;td&gt;0.21 s
+   &lt;/td&gt;
+   &lt;td&gt;4.55 GB
+   &lt;/td&gt;
+   &lt;td&gt;0.68 s
+   &lt;/td&gt;
+   &lt;td colspan=&quot;2&quot; style=&quot;text-align:center&quot;&gt;OOM
+   &lt;/td&gt;
+   &lt;td colspan=&quot;2&quot; style=&quot;text-align:center&quot;&gt;OOM
+   &lt;/td&gt;
+   &lt;td&gt;OOM
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;&lt;strong&gt;FGC DP-SGD&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;908 MB
+   &lt;/td&gt;
+   &lt;td&gt;0.21 s
+   &lt;/td&gt;
+   &lt;td&gt;3.6 GB
+   &lt;/td&gt;
+   &lt;td&gt;0.75 s
+   &lt;/td&gt;
+   &lt;td colspan=&quot;2&quot; style=&quot;text-align:center&quot;&gt;OOM
+   &lt;/td&gt;
+   &lt;td colspan=&quot;2&quot; style=&quot;text-align:center&quot;&gt;OOM
+   &lt;/td&gt;
+   &lt;td&gt;OOM
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;&lt;strong&gt;GC DP-SGD&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;362 MB
+   &lt;/td&gt;
+   &lt;td&gt;0.21 s
+   &lt;/td&gt;
+   &lt;td&gt;1.32 GB
+   &lt;/td&gt;
+   &lt;td&gt;0.67 s
+   &lt;/td&gt;
+   &lt;td&gt;5.27 GB
+   &lt;/td&gt;
+   &lt;td&gt;2.5 s
+   &lt;/td&gt;
+   &lt;td&gt;12.7 GB
+   &lt;/td&gt;
+   &lt;td&gt;5 s
+   &lt;/td&gt;
+   &lt;td&gt;OOM
+   &lt;/td&gt;
+  &lt;/tr&gt;
+&lt;/table&gt;
+
+&lt;p&gt;In terms of peak memory footprint, DP-SGD &amp;gt; FGC DP-SGD ≫ GC DP-SGD ≈ PyTorch SGD. Further, the runtimes are similar because most of the parameters are frozen and the forward pass takes up most of the time.&lt;/p&gt;
+
+&lt;h4 id=&quot;synthetic-setup-memory-profiling&quot;&gt;Synthetic Setup: Memory Profiling&lt;/h4&gt;
+
+&lt;p&gt;We consider the following setup to profile the memory used by PyTorch SGD, Vanilla DP-SGD and Ghost Clipping, GC DP-SGD.&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;2-layer fully connected neural network
+    &lt;ul&gt;
+      &lt;li&gt;Input: 5120&lt;/li&gt;
+      &lt;li&gt;Hidden: 2560&lt;/li&gt;
+      &lt;li&gt;Output: 1280&lt;/li&gt;
+      &lt;li&gt;Total number of model parameters = 15.6M&lt;/li&gt;
+      &lt;li&gt;Model size = 62.5 MB&lt;/li&gt;
+    &lt;/ul&gt;
+  &lt;/li&gt;
+  &lt;li&gt;Batch size, different values, as seen in the table below.&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;The table below summarizes the max memory increase (in MB) broken down by stages of the training loop for each of the methods.&lt;/p&gt;
+
+&lt;table class=&quot;table table-bordered&quot;&gt;
+  &lt;tr&gt;
+   &lt;td&gt;&lt;strong&gt;Batch Size&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;Method&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;Model to GPU&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;Forward&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;First Backward&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;Second Backward&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;Optimizer Step&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td rowspan=&quot;3&quot;&gt;32
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;PyTorch SGD&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;62.5
+   &lt;/td&gt;
+   &lt;td&gt;0.5
+   &lt;/td&gt;
+   &lt;td&gt;62.5
+   &lt;/td&gt;
+   &lt;td&gt;N/A
+   &lt;/td&gt;
+   &lt;td&gt;0
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;&lt;strong&gt;Vanilla DP-SGD&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;62.5
+   &lt;/td&gt;
+   &lt;td&gt;0.47
+   &lt;/td&gt;
+   &lt;td&gt;3,663
+   &lt;/td&gt;
+   &lt;td&gt;N/A
+   &lt;/td&gt;
+   &lt;td&gt;162.5
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;&lt;strong&gt;GC DP-SGD&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;62.5
+   &lt;/td&gt;
+   &lt;td&gt;0.47
+   &lt;/td&gt;
+   &lt;td&gt;63.13
+   &lt;/td&gt;
+   &lt;td&gt;50
+   &lt;/td&gt;
+   &lt;td&gt;125
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td rowspan=&quot;3&quot;&gt;2&lt;sup&gt;17&lt;/sup&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;PyTorch SGD&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;62.5
+   &lt;/td&gt;
+   &lt;td&gt;1920
+   &lt;/td&gt;
+   &lt;td&gt;1932.5
+   &lt;/td&gt;
+   &lt;td&gt;N/A
+   &lt;/td&gt;
+   &lt;td&gt;0
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;&lt;strong&gt;Vanilla DP-SGD&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td colspan=&quot;5&quot; style=&quot;text-align:center&quot;&gt;OOM
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;&lt;strong&gt;GC DP-SGD&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;62.5
+   &lt;/td&gt;
+   &lt;td&gt;1920
+   &lt;/td&gt;
+   &lt;td&gt;2625
+   &lt;/td&gt;
+   &lt;td&gt;1932.5
+   &lt;/td&gt;
+   &lt;td&gt;125
+   &lt;/td&gt;
+  &lt;/tr&gt;
+&lt;/table&gt;
+
+&lt;h4 id=&quot;industry-use-case&quot;&gt;Industry use case&lt;/h4&gt;
+
+&lt;p&gt;We tested Ghost Clipping DP-SGD on an internal Meta use case, consisting of a model of size roughly 100B with 40M trainable parameters. Our initial results show that Ghost Clipping SGD reduces 95% memory of vanilla DP-SGD, and achieves comparable memory usage to PyTorch SGD.&lt;/p&gt;
+
+&lt;h2 id=&quot;conclusion&quot;&gt;Conclusion&lt;/h2&gt;
+
+&lt;p&gt;In this post, we describe implementations of Fast Gradient Clipping and Ghost Clipping in Opacus that enable memory-efficient training of machine learning models with differential privacy. Currently, the Ghost Clipping implementation only applies to linear layers, but, as outlined in &lt;a href=&quot;https://pytorch.medium.com/differential-privacy-series-part-3-efficient-per-sample-gradient-computation-for-more-layers-in-39bd25df237&quot;&gt;part 3 of the series&lt;/a&gt;, it can be extended to “generalized” linear layers such as convolutions and multi-head attention. The current techniques require two explicit backpropagation steps, which increases runtime. We will explore developments on top of Ghost Clipping such as the &lt;a href=&quot;https://arxiv.org/abs/2210.00038&quot;&gt;Book-Keeping algorithm&lt;/a&gt; for mitigation.&lt;/p&gt;
+
+&lt;p&gt;To learn more about Opacus, visit &lt;a href=&quot;https://opacus.ai/&quot;&gt;opacus.ai&lt;/a&gt; and &lt;a href=&quot;https://github.com/pytorch/opacus&quot;&gt;github.com/pytorch/opacus&lt;/a&gt;.&lt;/p&gt;
+
+&lt;h2 id=&quot;acknowledgements&quot;&gt;Acknowledgements&lt;/h2&gt;
+
+&lt;p&gt;We thank Iden Kalemaj, Darren Liu, Karthik Prasad, Hao Shi, Igor Shilov, Davide Testuggine, Eli Uriegas, Haicheng Wang, and Richard Zou for valuable feedback and suggestions.&lt;/p&gt;
+
+&lt;div class=&quot;footnotes&quot; role=&quot;doc-endnotes&quot;&gt;
+  &lt;ol&gt;
+    &lt;li id=&quot;fn:1&quot; role=&quot;doc-endnote&quot;&gt;
+      &lt;p&gt;There are &lt;a href=&quot;https://proceedings.neurips.cc/paper\_files/paper/2023/file/a45d344b28179c8da7646bc38ff50ad8-Paper-Conference.pdf&quot;&gt;ways&lt;/a&gt; to extend Ghost Clipping to non-linear layers. &lt;a href=&quot;#fnref:1&quot; class=&quot;reversefootnote&quot; role=&quot;doc-backlink&quot;&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+    &lt;/li&gt;
+  &lt;/ol&gt;
+&lt;/div&gt;</content>
+
+      
+      
+      
+      
+      
+
+      <author>
+          <name>Enayat Ullah, Huanyu Zhang, Will Bullock, Ilya Mironov</name>
+        
+        
+      </author>
+
+      
+
+      
+
+      
+        <summary type="html">Introduction and Context</summary>
+      
+
+      
+      
+    </entry>
   
     <entry>
       <title type="html">FlexAttention: The Flexibility of PyTorch with the Performance of FlashAttention</title>
@@ -2280,82 +2678,6 @@ if args.freeze_prepack_weights:
 
       
         <summary type="html">The PyTorch team in partnership with Meta Hacker Cup, and Microsoft Research, are excited to announce the Hacker Cup AI Track at NeurIPS 2024. This will be the first AI track for the popular Meta Hacker Cup programming competition designed to assess the capabilities of Generative AI in performing autonomous code generation tasks. We aim to test the limits of AI in complex coding challenges and measure the performance gap between AI systems and human programmers. We will provide access to all Hacker Cup problems since 2011 alongside their respective solutions in a multimodal (image and text) format, and utilize the existing Hacker Cup infrastructure for competitor evaluation. Featuring both open evaluation, open model and open evaluation, closed model tracks, this competition invites diverse participation from research institutions of varied interests and resource constraints, including academic labs, AI startups, large technology companies, and AI enthusiasts. Our goal is to develop and democratize meaningful advancements in code automation with the very first open evaluation process for competitive AI programmers. Registration will begin in Early August, with our first qualification round on September 20th.</summary>
-      
-
-      
-      
-    </entry>
-  
-    <entry>
-      <title type="html">Powering the AI Revolution: The PyTorch Documentary</title>
-      <link href="https://pytorch.org/blog/pytorch-documentary/" rel="alternate" type="text/html" title="Powering the AI Revolution: The PyTorch Documentary" />
-      <published>2024-06-25T00:00:00-07:00</published>
-      <updated>2024-06-25T00:00:00-07:00</updated>
-      <id>https://pytorch.org/blog/pytorch-documentary</id>
-      <content type="html" xml:base="https://pytorch.org/blog/pytorch-documentary/">&lt;p&gt;Now live: The official &lt;a href=&quot;https://documentary.pytorch.org/&quot;&gt;PyTorch Documentary&lt;/a&gt;! This film unveils the authentic narrative of PyTorch’s inception, attributing its existence to a dedicated group of unsung heroes driving technological innovation.&lt;/p&gt;
-
-&lt;p&gt;The documentary shares the strength of the PyTorch community, resonating with our communities across the globe. We hope this story of PyTorch inspires greater contributions, attracts more contributors to the project, and fosters widespread recognition of PyTorch’s significance in the open source community.&lt;/p&gt;
-
-&lt;iframe width=&quot;560&quot; height=&quot;315&quot; src=&quot;https://www.youtube.com/embed/EjgTv6aSeqk?si=GKGvwuY7VA9iPGKm&quot; title=&quot;YouTube video player&quot; frameborder=&quot;0&quot; allow=&quot;accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share&quot; referrerpolicy=&quot;strict-origin-when-cross-origin&quot; allowfullscreen=&quot;&quot; class=&quot;mb-5 mt-3&quot;&gt;&lt;/iframe&gt;
-
-&lt;p&gt;We couldn’t have produced this without the support of our PyTorch Foundation members and sponsors:&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/doc-logos.jpg&quot; alt=&quot;company logos&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
-
-&lt;h3 id=&quot;amd&quot;&gt;AMD&lt;/h3&gt;
-
-&lt;p&gt;“PyTorch’s growth and adoption in the AI community is a testament to open collaboration. The collective efforts of all the contributors have helped propel PyTorch as one of the most widely adopted AI frameworks in the industry. AMD is proud to be a part of this movement - making sure that the future of AI is open - and we are excited to continue contributing to this vibrant ecosystem.”&lt;/p&gt;
-
-&lt;p&gt;&lt;strong&gt;– Niles Burbank, AMD&lt;/strong&gt;&lt;/p&gt;
-
-&lt;h3 id=&quot;aws&quot;&gt;AWS&lt;/h3&gt;
-
-&lt;p&gt;“The release of the PyTorch Documentary showcases the innovation and real-world impact of one of the most widely adopted open source machine learning frameworks. By supporting and contributing to the PyTorch community, AWS helps enable cutting-edge machine learning research that drives advancements in AI capabilities. We are excited about the documentary as it highlights the power of collaboration in propelling PyTorch to the forefront of machine learning and empowering developers and data scientists to create groundbreaking models. At AWS, we celebrate frameworks like PyTorch that foster environments where open source machine learning technologies can grow and benefit the community at-large, as well as our customers.”&lt;/p&gt;
-
-&lt;p&gt;&lt;strong&gt;– Brian Granger, AWS&lt;/strong&gt;&lt;/p&gt;
-
-&lt;h3 id=&quot;google-cloud&quot;&gt;Google Cloud&lt;/h3&gt;
-
-&lt;p&gt;“Google recognizes the impact of PyTorch on the AI community, providing researchers and developers with powerful, flexible tools for innovation. This documentary not only celebrates the remarkable achievements of the PyTorch community but also highlights the collaborative spirit driving advancements in AI. We look forward to continuing our support for PyTorch and fostering an open ecosystem that accelerates machine learning research and application.”&lt;/p&gt;
-
-&lt;p&gt;&lt;strong&gt;– Dwarak Rajagopal, Google&lt;/strong&gt;&lt;/p&gt;
-
-&lt;h3 id=&quot;meta&quot;&gt;Meta&lt;/h3&gt;
-
-&lt;p&gt;“We have been so impressed with the growth and collaboration that PyTorch has created over the years. From very humble beginnings at Meta to a cornerstone in AI research and development, the documentary showcases the dedication of our contributors since the start. It’s an honor to be a part of something so impactful, and now it’s been documented for our community to take part in.”&lt;/p&gt;
-
-&lt;p&gt;&lt;strong&gt;– Soumith Chintala, Meta&lt;/strong&gt;&lt;/p&gt;
-
-&lt;h3 id=&quot;microsoft-azure&quot;&gt;Microsoft Azure&lt;/h3&gt;
-
-&lt;p&gt;“We’re truly excited about the premiere of the PyTorch Documentary. At Microsoft, PyTorch has been our default deep learning framework for building AI solutions including Microsoft Copilot. Additionally, we have made significant investments to create an optimized environment for our customers to develop, train, fine-tune and deploy their PyTorch workloads on Azure and Windows, furthering our commitment to democratize AI.”&lt;/p&gt;
-
-&lt;p&gt;&lt;strong&gt;– Eric Boyd, Microsoft&lt;/strong&gt;&lt;/p&gt;
-
-&lt;h3 id=&quot;pytorch-foundation&quot;&gt;PyTorch Foundation&lt;/h3&gt;
-
-&lt;p&gt;“The release of the PyTorch documentary marks a significant milestone for our community, showcasing the incredible journey and rapid evolution of PyTorch. We are excited to share these stories and achievements with the world, and we look forward to continuing to foster innovation and growth of the PyTorch community and PyTorch’s evolving ecosystem.”&lt;/p&gt;
-
-&lt;p&gt;&lt;strong&gt;– Matt White, PyTorch Foundation&lt;/strong&gt;&lt;/p&gt;</content>
-
-      
-      
-      
-      
-      
-
-      <author>
-          <name>The PyTorch Foundation</name>
-        
-        
-      </author>
-
-      
-
-      
-
-      
-        <summary type="html">Now live: The official PyTorch Documentary! This film unveils the authentic narrative of PyTorch’s inception, attributing its existence to a dedicated group of unsung heroes driving technological innovation.</summary>
       
 
       
