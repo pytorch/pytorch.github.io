@@ -8,6 +8,11 @@ order: 3
 published: true
 ---
 
+<div class="note-card">
+<h4>Note</h4>
+<p>PyTorch Mobile is no longer actively supported. Please check out <a href="/executorch-overview">ExecuTorch</a>, PyTorch’s all-new on-device inference library. </p>
+</div>
+
 # Android
 
 ## Quickstart with a HelloWorld Example
