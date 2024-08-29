@@ -29,11 +29,11 @@ Being a part of the PyTorch Foundation grants opportunities to help build the fu
 
 ## How to join
 
-Premier members [must submit an application ](https://docs.google.com/forms/d/1JVzFIaFu-El5Ug0IlzpHKwPbZLe9MvaAUXl0FZgnNQw/edit)to be considered for board level membership. General and associate members are welcome to [join automatically](https://enrollment.lfx.linuxfoundation.org/?project=pytorch). See below for specific tiering and details on each type of membership.
+Commercial organizations are invited to apply for General membership, while non-profits and academic institutions are encouraged to apply for Associate membership.
 
 ### Premier Members
 
-Premier members are the highest tier. They will appoint one voting representative in any subcommittees or activities of the PTF Governing Board, and receive prominent placement in displays of membership including website, landscape and marketing materials, exclusive live webinars with PyTorch online programs and everything included within a “general” membership. The annual fee is $150,000 + an LF Silver Membership.
+Organizations are welcome to submit an application to be considered as a Premier member. Premier members are the highest tier. They will appoint one voting representative in any subcommittees or activities of the PTF Governing Board, and receive prominent placement in displays of membership including website, landscape and marketing materials, exclusive live webinars with PyTorch online programs and everything included within a “general” membership. The annual fee is $150,000 + an LF Silver Membership.
 
 ### General Members
 

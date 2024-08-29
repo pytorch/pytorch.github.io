@@ -8,6 +8,11 @@ order: 3
 published: true
 ---
 
+<div class="note-card">
+<h4>Note</h4>
+<p>PyTorch Mobile is no longer actively supported. Please check out <a href="/executorch-overview">ExecuTorch</a>, PyTorch’s all-new on-device inference library. You can also review <a href="https://pytorch.org/executorch/stable/demo-apps-android.html">this page</a> to learn more about how to use ExecuTorch to build an Android app.</p>
+</div>
+
 # Android
 
 ## Quickstart with a HelloWorld Example
