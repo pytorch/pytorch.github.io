@@ -1,6 +1,6 @@
 ---
 layout: blog_detail
-title: "CUDA-Free Inference for LLMs (IBM)"
+title: "CUDA-Free Inference for LLMs"
 author: Adnan Hoque, Less Wright, Raghu Ganti and Mudhakar Srivatsa
 ---
 
