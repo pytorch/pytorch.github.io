@@ -43,7 +43,7 @@ Typical model architecture code is shared with a python model.py file that is la
 
 Torch.compile generates Triton kernels automatically for RMSNorm, RoPE, SiLU and Element Wise Multiplication. Using tools like [Nsight Systems](https://developer.nvidia.com/nsight-systems) we can observe these generated kernels; they appear as tiny dark green kernels in-between the matrix multiplications and attention. 
 
-![](/assets/images/nsyc_trace_cuda.png){:style="width:100%"}
+![](/assets/images/nsys_trace_cuda.png){:style="width:100%"}
 **Figure 3\.** Trace of Llama3-8B with torch.compile, showing CUDA kernels being used for matrix multiplications and flash attention
 
 For the above trace, we note that the two major ops that make up **80%** of the E2E latency in a Llama3-8B style model are matrix multiplication and attention kernels and both remain CUDA kernels. Thus to close the remaining gap, we replace both matmul and attention kernels with handwritten Triton kernels. 
@@ -101,7 +101,7 @@ To satisfy torch.compile compatibility with the AMD flash attention kernel, we h
 
 2. Add a FakeTensor Kernel to the operator, which given the shapes of the input tensors of flash (q, k and v) provides a way to compute the output shape of the flash kernel
 
-![](/assets/images/torch_op_warpping_1.png){:style="width:100%"}
+![](/assets/images/torch_op_wrapping_1.png){:style="width:100%"}
 
 After defining the Triton flash kernel as a custom op, we were able to successfully compile it for our E2E runs.
 
