@@ -39,7 +39,7 @@ Each of these operations is computed on the GPU through the execution of one (or
 
 **3.0 Model Inference**
 
-Typical model architecture code is shared with a python model.py file that is launched by PyTorch. In the default PyTorch [eager execution](https://pytorch.org/blog/optimizing-production-pytorch-performance-with-graph-transformations/) mode, these kernels are all executed with CUDA. To achieve 100% Triton for end-to-end Llama3-8B and Granite-8B inference we need to write and integrate handwritten Triton kernels as well as leverage [torch.compile](http://torch.compile) (to generate Triton ops). First, we replace smaller ops with compiler generated Triton kernels, and second, we replace more expensive and complex computations (e.g. matrix multiplication and flash attention) with handwritten Triton kernels.
+Typical model architecture code is shared with a python model.py file that is launched by PyTorch. In the default PyTorch [eager execution](https://pytorch.org/blog/optimizing-production-pytorch-performance-with-graph-transformations/) mode, these kernels are all executed with CUDA. To achieve 100% Triton for end-to-end Llama3-8B and Granite-8B inference we need to write and integrate handwritten Triton kernels as well as leverage torch.compile (to generate Triton ops). First, we replace smaller ops with compiler generated Triton kernels, and second, we replace more expensive and complex computations (e.g. matrix multiplication and flash attention) with handwritten Triton kernels.
 
 Torch.compile generates Triton kernels automatically for RMSNorm, RoPE, SiLU and Element Wise Multiplication. Using tools like [Nsight Systems](https://developer.nvidia.com/nsight-systems) we can observe these generated kernels; they appear as tiny dark green kernels in-between the matrix multiplications and attention. 
 
@@ -73,9 +73,9 @@ We evaluated a suite of existing Triton flash attention kernels with different c
 
 1. [AMD Flash](https://github.com/ROCm/triton/blob/triton-mlir/python/perf-kernels/flash-attention.py)  
 2. [OpenAI Flash](https://github.com/triton-lang/triton/blob/main/python/tutorials/06-fused-attention.py)  
-3. [Dao AI Lab Flash](https://github.com/Dao-AILab/flash-attention/blob/3669b25206d5938e3cc74a5f7860e31c38af8204/flash\_attn/flash\_attn\_triton.py\#L812)  
-4. [XFormers Flash](https://github.com/facebookresearch/xformers/blob/fae0ceb195a41f2ab762d89449c6012fbcf2ffda/xformers/ops/fmha/triton\_splitk.py\#L96)  
-5. [PyTorch FlexAttention](https://github.com/pytorch/pytorch/blob/e7b870c88bc3b854a95399a96a274d2f1f908172/torch/nn/attention/flex\_attention.py\#L800)
+3. [Dao AI Lab Flash](https://github.com/Dao-AILab/flash-attention/blob/3669b25206d5938e3cc74a5f7860e31c38af8204/flash_attn/flash_attn_triton.py#L812)  
+4. [XFormers Flash](https://github.com/facebookresearch/xformers/blob/fae0ceb195a41f2ab762d89449c6012fbcf2ffda/xformers/ops/fmha/triton_splitk.py#L96)  
+5. [PyTorch FlexAttention](https://github.com/pytorch/pytorch/blob/e7b870c88bc3b854a95399a96a274d2f1f908172/torch/nn/attention/flex_attention.py#L800)
 
 We evaluated the text generation quality of each of these kernels, first, in eager mode and then (if we were able to torch.compile the kernel with standard methods) compile mode. For kernels 2-5, we noted the following:
 
