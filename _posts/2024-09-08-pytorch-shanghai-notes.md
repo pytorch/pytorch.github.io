@@ -1,6 +1,7 @@
 ---
 layout: blog_detail
 title: "PyTorch Shanghai Meetup Notes"
+hidden: true
 ---
 
 ## Summary
