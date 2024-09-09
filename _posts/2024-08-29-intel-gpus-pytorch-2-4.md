@@ -4,7 +4,7 @@ title: "Accelerate Your AI: PyTorch 2.4 Now Supports Intel GPUs for Faster Workl
 author: the PyTorch Team at Intel
 ---
 
-We have exciting news\! PyTorch 2.4 now supports Intel® Data Center GPU Max Series and the SYCL software stack, making it easier to speed up your AI workflows for both training and inference. This update allows for you to have a consistent programming experience with minimal coding effort and extends PyTorch’s device and runtime capabilities, including device, stream, event, generator, allocator, and guard, to seamlessly support streaming devices. This enhancement simplifies deploying PyTorch on ubiquitous hardware, making it easier for you to integrate different hardware back ends. 
+We have exciting news! PyTorch 2.4 now supports Intel® Data Center GPU Max Series and the SYCL software stack, making it easier to speed up your AI workflows for both training and inference. This update allows for you to have a consistent programming experience with minimal coding effort and extends PyTorch’s device and runtime capabilities, including device, stream, event, generator, allocator, and guard, to seamlessly support streaming devices. This enhancement simplifies deploying PyTorch on ubiquitous hardware, making it easier for you to integrate different hardware back ends. 
 
 Intel GPU support upstreamed into PyTorch provides support for both eager and graph modes, fully running Dynamo Hugging Face benchmarks. Eager mode now includes common Aten operators implemented with SYCL. The most performance-critical graphs and operators are highly optimized by using oneAPI Deep Neural Network Library (oneDNN) and oneAPI Math Kernel Library (oneMKL). Graph mode (torch.compile) now has an enabled Intel GPU back end to implement the optimization for Intel GPUs and to integrate Triton. Furthermore, data types such as FP32, BF16, FP16, and automatic mixed precision (AMP) are supported. The PyTorch Profiler, based on Kineto and oneMKL, is being developed for the upcoming PyTorch 2.5 release. 
 
@@ -24,9 +24,9 @@ tensor = torch.tensor([1.0, 2.0]).to("xpu")
 
 ## Get Started
 
-Try PyTorch 2.4 on the Intel Data Center GPU Max Series through the [Intel® Tiber™ Developer Cloud](https://cloud.intel.com/). Get a tour of the [environment setup, source build, and examples](https://pytorch.org/docs/main/notes/get\_start\_xpu.html\#examples). To learn how to create a free Standard account, see [Get Started](https://console.cloud.intel.com/docs/guides/get\_started.html), then do the following:
+Try PyTorch 2.4 on the Intel Data Center GPU Max Series through the [Intel® Tiber™ Developer Cloud](https://cloud.intel.com/). Get a tour of the [environment setup, source build, and examples](https://pytorch.org/docs/main/notes/get_start_xpu.html#examples). To learn how to create a free Standard account, see [Get Started](https://console.cloud.intel.com/docs/guides/get_started.html), then do the following:
 
-1. Sign in to the [cloud console](https://console.cloud.intel.com/docs/guides/get\_started.html).
+1. Sign in to the [cloud console](https://console.cloud.intel.com/docs/guides/get_started.html).
 
 2. From the [Training](https://console.cloud.intel.com/training) section, open the **PyTorch 2.4 on Intel GPUs** notebook.
 
@@ -46,11 +46,11 @@ PyTorch 2.4 introduces initial support for Intel Data Center GPU Max Series to a
 
 * Windows and Intel Client GPU Series support.
 
-We welcome the community to evaluate these new contributions to [Intel GPU support on PyTorch](https://github.com/pytorch/pytorch?tab=readme-ov-file\#intel-gpu-support).  
+We welcome the community to evaluate these new contributions to [Intel GPU support on PyTorch](https://github.com/pytorch/pytorch?tab=readme-ov-file#intel-gpu-support).  
 
 ## Resources
 
-* [PyTorch 2.4: Get Started on an Intel GPU](https://pytorch.org/docs/main/notes/get\_start\_xpu.html) 
+* [PyTorch 2.4: Get Started on an Intel GPU](https://pytorch.org/docs/main/notes/get_start_xpu.html) 
 
 * [PyTorch Release Notes](https://github.com/pytorch/pytorch/releases)  
 
