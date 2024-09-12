@@ -44,6 +44,7 @@ acc_arch_ver_default = {
         "accnone": ("cpu", ""),
         "cuda.x": ("cuda", "11.8"),
         "cuda.y": ("cuda", "12.1"),
+        "cuda.z": ("cuda", "12.4"),
         "rocm5.x": ("rocm", "6.0")
         }
     }
@@ -107,8 +108,6 @@ def update_versions(versions, release_matrix, release_version):
 
     if release_version != "nightly":
         version = release_matrix[OperatingSystem.LINUX.value][0]["stable_version"]
-        # temporary change until release 2.4.0 - to generate cuda.x, cuda.y, cuda.z
-        template = "2.3.0"
         if version not in versions["versions"]:
             versions["versions"][version] = copy.deepcopy(versions["versions"][template])
             versions["latest_stable"] = version
