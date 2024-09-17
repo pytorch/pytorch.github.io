@@ -1,7 +1,7 @@
 ---
 layout: blog_detail
 title: "Challenges and Efforts in PyTorch Multi-Device Integration: Compatibility, Portability, and Integration Efficiencies"
-author: "Zesheng Zong(Huawei), Jiawei Li(Huawei) | Co-author: Jiong Gong(Intel), Eikan Wang(Intel) | Affiliation: Huawei, Intel"
+author: "Zesheng Zong (Huawei), Jiawei Li (Huawei) | Co-author: Jiong Gong (Intel), Eikan Wang (Intel)"
 ---
 
 ## Introduction
