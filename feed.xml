@@ -4,7 +4,7 @@
   <generator uri="https://jekyllrb.com/" version="3.9.0">Jekyll</generator>
   <link href="https://pytorch.org/feed.xml" rel="self" type="application/atom+xml" />
   <link href="https://pytorch.org/" rel="alternate" type="text/html" />
-  <updated>2024-09-12T07:34:09-07:00</updated>
+  <updated>2024-09-18T06:31:39-07:00</updated>
   <id>https://pytorch.org/feed.xml</id>
 
   
@@ -29,6 +29,166 @@
 
   
   
+  
+    <entry>
+      <title type="html">Challenges and Efforts in PyTorch Multi-Device Integration: Compatibility, Portability, and Integration Efficiencies</title>
+      <link href="https://pytorch.org/blog/pt-multidevice-integration/" rel="alternate" type="text/html" title="Challenges and Efforts in PyTorch Multi-Device Integration: Compatibility, Portability, and Integration Efficiencies" />
+      <published>2024-09-16T00:00:00-07:00</published>
+      <updated>2024-09-16T00:00:00-07:00</updated>
+      <id>https://pytorch.org/blog/pt-multidevice-integration</id>
+      <content type="html" xml:base="https://pytorch.org/blog/pt-multidevice-integration/">&lt;h2 id=&quot;introduction&quot;&gt;Introduction&lt;/h2&gt;
+
+&lt;p&gt;As the demand for diverse hardware accelerators grows, the need for a robust and adaptable deep learning framework becomes increasingly critical. While working through this integration, several challenges have surfaced in the PyTorch ecosystem, potentially affecting various hardware vendors. This blog aims to highlight these issues and propose solutions to enhance PyTorch’s adaptability, portability, and resilience across different hardware platforms.&lt;/p&gt;
+
+&lt;h2 id=&quot;improve-users-code-portability-via-accelerator-autoloading&quot;&gt;Improve Users’ Code Portability via Accelerator Autoloading&lt;/h2&gt;
+
+&lt;p&gt;Currently, users face additional work when running their code on different accelerators. One such task is manually importing modules for out-of-tree devices. This requires users to not only understand the different usage patterns between accelerators but also make their code aware of these differences. If you have projects originally running on GPU/CPU and want to migrate to other accelerators, this can lead to significant work and potential frustration.&lt;/p&gt;
+
+&lt;p&gt;Examples of extra import:&lt;/p&gt;
+
+&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;# Case 1: Use HPU
+import torch
+import torchvision.models as models
+import habana_frameworks.torch # &amp;lt;-- extra import
+model = models.resnet50().eval().to(&quot;hpu&quot;)
+input = torch.rand(128, 3, 224, 224).to(&quot;hpu&quot;)
+output = model(input)
+
+# Case 2: Use torch_npu
+import torch
+import torch_npu # &amp;lt;-- extra import
+print(torch.ones(1, 2, device='npu'))
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;As a high-level machine learning framework, PyTorch’s ability to shield users from device differences is a competitive feature. &lt;strong&gt;Accelerator Autoloading&lt;/strong&gt; allows users to continue using the familiar PyTorch device programming model without explicitly loading or importing device-specific extensions.&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;How does it works?&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;Utilize Python’s plugin architecture to enable automatic loading of device extensions via entry points in the PyTorch package.&lt;/p&gt;
+
+&lt;p&gt;Python entry points provide a standardized way for Python packages to expose and discover components or plugins within an application. Via definition in accelerator’s package &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;setup.py&lt;/code&gt; , PyTorch can automatically initialize accelerator modules when calling &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;import torch&lt;/code&gt; , which gives users consistent experience between different backend devices.&lt;/p&gt;
+
+&lt;p&gt;From device perspective, only need to claim following setup in &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;setup.py&lt;/code&gt; (as example of &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;torch_npu&lt;/code&gt; )&lt;/p&gt;
+
+&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;// setup.py 
+entry_points={
+ 'torch.backends': ['torch_npu = torch_npu:_autoload', ],
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;When &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;import torch&lt;/code&gt; is invoked, the accelerator module will be loaded automatically. This provides users with a consistent programming experience across out-of-tree devices, eliminating the need to be aware of differences between CUDA, HPU, and NPU.&lt;/p&gt;
+
+&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;# Case 1: Use HPU 
+import torch 
+import torchvision.models as models 
+model = models.resnet50().eval().to(&quot;hpu&quot;) 
+input = torch.rand(128, 3, 224, 224).to(&quot;hpu&quot;) 
+output = model(input) 
+
+# Case 2: Use torch_npu 
+import torch 
+print(torch.ones(1, 2, device='npu'))
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;h2 id=&quot;device-integration-optimization&quot;&gt;Device Integration Optimization&lt;/h2&gt;
+
+&lt;p&gt;&lt;strong&gt;What is PrivateUse1?&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;In PyTorch, the dispatcher is a crucial component of the framework’s backend that manages how operations are routed to the appropriate device-specific implementation. Dispatch keys are an integral part of this system, serving as identifiers that represent various execution contexts—such as the device (CPU, CUDA, XPU), layout (dense, sparse), and autograd functionality. These keys ensure that operations are directed to the correct implementation.&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;PrivateUse1&lt;/strong&gt; is a customizable device dispatch key, similar to CUDA/CPU/XPU, etc.), reserved for out-of-tree devices. It provides developers with a way to extend PyTorch’s functionality without modifying the core framework, allowing for the integration of new devices, hardware accelerators, or other specialized computing environments.&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Why do we need PrivateUse1?&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;Internally, dispatch keys are represented as bit masks, each bit represents whether a certain key is active. This bit mask representation is efficient for quick lookup and combination of keys, but it inherently limits the number of distinct keys (typically to 64 or fewer).&lt;/p&gt;
+
+&lt;p&gt;The current implementation of BackendComponent dispatch keys in PyTorch has encountered a critical bottleneck, which restricts the addition of new backends and, as a result, limits the expansion of the PyTorch ecosystem.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/multidevice-integration/fg1.png&quot; alt=&quot;bit diagram&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;In response to this challenge, a series of optimizations have been applied to the PrivateUse1 mechanism to enhance its capacity.&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;
+    &lt;p&gt;&lt;strong&gt;PrivateUse1 integration mechanism&lt;/strong&gt;&lt;/p&gt;
+
+    &lt;p&gt;Initially reserved as fallback options, &lt;strong&gt;PrivateUse1&lt;/strong&gt;, along with &lt;strong&gt;PrivateUse2&lt;/strong&gt; and &lt;strong&gt;PrivateUse3&lt;/strong&gt;, were designed to be activated only when existing key resources became scarce.&lt;/p&gt;
+
+    &lt;p&gt;&lt;strong&gt;PrivateUse1&lt;/strong&gt; is now being developed to match the robustness and versatility of established keys like CUDA and CPU. Achieving this required a deep integration across critical PyTorch modules. This integration wasn’t just a simple switch—it involved significant updates to core components such as &lt;strong&gt;AMP (Automatic Mixed Precision)&lt;/strong&gt;, &lt;strong&gt;Autograd&lt;/strong&gt;, &lt;strong&gt;Distributed Training&lt;/strong&gt;, &lt;strong&gt;Checkpointing&lt;/strong&gt;, &lt;strong&gt;DataLoader&lt;/strong&gt;, &lt;strong&gt;Optimization&lt;/strong&gt;, and &lt;strong&gt;Quantization,&lt;/strong&gt; etc.&lt;/p&gt;
+  &lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/multidevice-integration/fg2.png&quot; alt=&quot;flow diagram&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;The activation of &lt;strong&gt;PrivateUse1&lt;/strong&gt; was a massive collaborative effort, culminating in over 100 pull requests aimed at making it from a placeholder to a fully operational dispatch key.&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;
+    &lt;p&gt;&lt;strong&gt;PrivateUse1 UT/CI Quality Assurance&lt;/strong&gt;&lt;/p&gt;
+
+    &lt;p&gt;While unit tests are essential for ensuring quality during the development of the &lt;strong&gt;PrivateUse1&lt;/strong&gt; mechanism, they are not sufficient on their own to prevent new pull requests from inadvertently affecting existing functionality or compatibility of out-of-tree devices.&lt;/p&gt;
+
+    &lt;p&gt;To mitigate this risk, the community has added the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;pytorch_openreg&lt;/code&gt; module to the test suite. This module leverages a CPU backend to simulate interactions with accelerators, creating a controlled environment for rigorous testing. After implemented, this will enable automatic execution of device-generic test cases whenever relevant code is updated, allowing us to quickly detect and address any potential issues affecting the PrivateUse1 integration mechanism.&lt;/p&gt;
+  &lt;/li&gt;
+  &lt;li&gt;
+    &lt;p&gt;&lt;strong&gt;Comprehensive Documentation&lt;/strong&gt;&lt;/p&gt;
+
+    &lt;p&gt;By providing comprehensive and easy-to-understand documentation, we aim to lower the barrier to entry for developers and encourage wider adoption of the PrivateUse1 mechanism in the PyTorch ecosystem. This documentation includes:&lt;/p&gt;
+    &lt;ul&gt;
+      &lt;li&gt;Step-by-step guides for integrating new backends using PrivateUse1&lt;/li&gt;
+      &lt;li&gt;Clear explanations of PrivateUse1’s functionality and benefits&lt;/li&gt;
+      &lt;li&gt;Code examples and best practices for efficient implementation&lt;/li&gt;
+    &lt;/ul&gt;
+  &lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;These enhancements aim to improve the robustness and reliability of the PrivateUse1 mechanism, facilitating better integration of new backends and expanding the capabilities of PyTorch.&lt;/p&gt;
+
+&lt;h2 id=&quot;compatibility-between-upstream-and-downstream&quot;&gt;Compatibility Between Upstream and Downstream&lt;/h2&gt;
+
+&lt;h3 id=&quot;device-generic-unit-tests&quot;&gt;Device-Generic Unit Tests&lt;/h3&gt;
+
+&lt;p&gt;Most unit tests in PyTorch focus on CPU and CUDA devices, which limits participation from users with other hardware. To address this, a plan to modify PyTorch’s unit testing framework, enabling better support for non-CUDA devices. This plan includes removing existing device restrictions, implementing dynamic data type loading, and generalizing decorators to accommodate a broader range of devices. Additionally, we aim to enforce the use of universal device code and expand distributed testing to support non-NCCL backends.&lt;/p&gt;
+
+&lt;p&gt;Through these improvements, we hope to significantly increase test coverage and pass rates for non-CUDA devices, integrating them into PyTorch’s continuous integration process. Initial changes have already been implemented, paving the way for new hardware support and creating a reference template for other devices.&lt;/p&gt;
+
+&lt;h3 id=&quot;ensuring-robust-device-integration-through-automated-testing&quot;&gt;Ensuring Robust Device Integration through Automated Testing&lt;/h3&gt;
+
+&lt;p&gt;To uphold the high standards of quality assurance in PyTorch, an independent build repository and daily continuous integration (CI) workflows have been established, focusing on smoke and integration testing.&lt;/p&gt;
+
+&lt;p&gt;The &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;pytorch-integration-tests&lt;/code&gt; repository automates the testing of PyTorch’s device-specific functionalities, ensuring that they operate correctly and efficiently across a variety of hardware platforms(NPUs and other specialized devices). In repository we are trying to make a fully automated system that continuously validates PyTorch’s compatibility with different hardware backends.&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;strong&gt;Automated Integration Tests&lt;/strong&gt;: Run automated tests across different devices using GitHub Actions. This automation ensures that every change in the codebase is thoroughly tested against multiple hardware platforms, catching potential issues early in the development process.&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;Reusable Workflows&lt;/strong&gt;: Workflows in this repository are modular and reusable, which streamlines the testing process. Developers can easily adapt these workflows to new devices or testing scenarios, making the system both flexible and scalable as PyTorch evolves.&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;Awareness of Out-of-Tree Devices&lt;/strong&gt;: The repository displays the existence and behavior of all out-of-tree devices, keeping the community informed. This approach minimizes the risk of accidentally breaking downstream functionalities and provides fast feedback on changes.&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;Efforts to enhance multi-device integration are pivotal for its adaptability in the evolving deep learning landscape. These initiatives not only benefit current users but also lower entry barriers for new hardware vendors and developers, fostering innovation in AI and machine learning. As PyTorch continues to evolve, its commitment to flexibility, robustness, and inclusivity positions it as a leading framework capable of meeting the diverse needs of the deep learning community.&lt;/p&gt;</content>
+
+      
+      
+      
+      
+      
+
+      <author>
+          <name>Zesheng Zong (Huawei), Jiawei Li (Huawei) | Co-author: Jiong Gong (Intel), Eikan Wang (Intel)</name>
+        
+        
+      </author>
+
+      
+
+      
+
+      
+        <summary type="html">Introduction</summary>
+      
+
+      
+      
+    </entry>
   
     <entry>
       <title type="html">Arm Joins the PyTorch Foundation as a Premier Member</title>
@@ -2154,442 +2314,6 @@ python run_experiments.py 16 vit_b &amp;lt;pytorch_github&amp;gt; &amp;lt;segmen
 
       
         <summary type="html">We are excited to announce the release of PyTorch® 2.4 (release note)! PyTorch 2.4 adds support for the latest version of Python (3.12) for torch.compile. AOTInductor freezing gives developers running AOTInductor more performance-based optimizations by allowing the serialization of MKLDNN weights. As well, a new default TCPStore server backend utilizing libuv has been introduced which should significantly reduce initialization times for users running large-scale jobs. Finally, a new Python Custom Operator API makes it easier than before to integrate custom kernels into PyTorch, especially for torch.compile.</summary>
-      
-
-      
-      
-    </entry>
-  
-    <entry>
-      <title type="html">Deep Dive on the Hopper TMA Unit for FP8 GEMMs</title>
-      <link href="https://pytorch.org/blog/hopper-tma-unit/" rel="alternate" type="text/html" title="Deep Dive on the Hopper TMA Unit for FP8 GEMMs" />
-      <published>2024-07-22T00:00:00-07:00</published>
-      <updated>2024-07-22T00:00:00-07:00</updated>
-      <id>https://pytorch.org/blog/hopper-tma-unit</id>
-      <content type="html" xml:base="https://pytorch.org/blog/hopper-tma-unit/">&lt;h2 id=&quot;abstract&quot;&gt;Abstract&lt;/h2&gt;
-
-&lt;p&gt;The Hopper (H100) GPU architecture, billed as the “first truly asynchronous GPU”, includes a new, fully asynchronous hardware copy engine for bulk data movement between global and shared memory called Tensor Memory Accelerator (TMA).  While CUTLASS has &lt;a href=&quot;https://github.com/NVIDIA/cutlass/blob/56b46e2d13875b46b8f6a03f9f5ac91e2bfdc01a/include/cute/arch/copy_sm90_tma.hpp&quot;&gt;built-in&lt;/a&gt; support for TMA via its asynchronous pipeline paradigm, Triton exposes TMA support via an &lt;a href=&quot;https://github.com/triton-lang/triton/blob/538556a66ee49630e1cb0b239f93e63b968b2478/python/triton/tools/experimental_descriptor.py#L25&quot;&gt;experimental API&lt;/a&gt;.&lt;/p&gt;
-
-&lt;p&gt;In this post, we provide a deeper dive into the details of how TMA works, for developers to understand the new async copy engine.  We also show the importance of leveraging TMA for H100 kernels by building a TMA enabled FP8 GEMM kernel in Triton, which delivers from 1.4-2.2x performance gains over cuBLAS FP16 for small-to-medium problem sizes.  Finally, we showcase key implementation differences between Triton and CUTLASS that may account for reports of performance regressions with TMA in Triton.  We open source our implementation for reproducibility and review at &lt;a href=&quot;https://github.com/pytorch-labs/applied-ai/tree/main/kernels&quot;&gt;https://github.com/pytorch-labs/applied-ai/tree/main/kernels&lt;/a&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/hopper-tma-unit/fg1.png&quot; alt=&quot;The throughput in TFLOPs of various Triton and cuBLAS FP8 and FP16 kernels, for M=M, N=4096, K=4096. The red line is the Triton TMA, which showcases the advantages of leveraging TMA.&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;em&gt;&lt;strong&gt;Figure 1.&lt;/strong&gt; The throughput in TFLOPs of various Triton and cuBLAS FP8 and FP16 kernels, for M=M, N=4096, K=4096. The red line is the Triton TMA, which showcases the advantages of leveraging TMA.&lt;/em&gt;&lt;/p&gt;
-
-&lt;h2 id=&quot;tma-background&quot;&gt;TMA Background&lt;/h2&gt;
-
-&lt;p&gt;TMA is an H100 hardware addition that allows applications to asynchronously and bi-directionally transfer 1D-5D tensors between GPU global and shared memory.  In addition, TMA can also transfer the same data to not just the calling SM’s shared memory, but to other SM’s shared memory if they are part of the same Thread Block Cluster.  This is termed ‘multicast’.&lt;/p&gt;
-
-&lt;p&gt;TMA is very lightweight as only a single thread is needed to kick off a TMA transfer.  By moving data directly from GMEM (global) to SMEM (shared), this avoids earlier GPU requirements of using registers for moving data between different memory spaces.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/hopper-tma-unit/fg2.png&quot; alt=&quot;A100-style data movement vs H100 with TMA.  TMA hardware eliminates the need for a large amount of threads and registers participating in bulk data transfers.&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;em&gt;&lt;strong&gt;Figure 2.&lt;/strong&gt; A100-style data movement vs H100 with TMA.  TMA hardware eliminates the need for a large amount of threads and registers participating in bulk data transfers.  (Image credit Nvidia)&lt;/em&gt;&lt;/p&gt;
-
-&lt;p&gt;A single thread can issue large data movement instructions, allowing the majority of a given thread block to continue working on other instructions while data is in-flight. Combined with asynchronous pipelining, this allows memory transfers to be easily hidden and ensure the majority of any given thread block cluster can focus on computational task.&lt;/p&gt;
-
-&lt;p&gt;This lightweight invocation for data movement enables the creation of warp-group specialized kernels, where warp-groups take on different roles, namely producers and consumers. Producers elect a leader thread that fires off TMA requests, which are then asynchronously coordinated with the consumer (MMA) warp-groups via an arrival barrier.  Consumers then process the data using warp-group MMA, and signal back to the producers when they have finished reading from the SMEM buffer and the cycle repeats.&lt;/p&gt;
-
-&lt;p&gt;Further, within threadblock clusters, producers can lower their max register requirements since they are only issuing TMA calls, and effectively transfer additional registers to MMA consumers, which helps to alleviate register pressure for consumers.&lt;/p&gt;
-
-&lt;p&gt;In addition, TMA handles the address computation for the shared memory destination where the data requested should be placed. This is why calling threads (producers) can be so lightweight.&lt;/p&gt;
-
-&lt;p&gt;To ensure maximum read access speed, TMA can lay out the arriving data based on swizzling instructions, to ensure the arriving data can be read as fast as possible by consumers, as the swizzling pattern helps avoid shared memory bank conflicts.&lt;/p&gt;
-
-&lt;p&gt;Finally for TMA instructions that are outgoing, or moving data from SMEM to GMEM, TMA can also include reduction operations (add/min/max) and bitwise (and/or) operations.&lt;/p&gt;
-
-&lt;h2 id=&quot;tma-usage-in-triton&quot;&gt;TMA usage in Triton&lt;/h2&gt;
-
-&lt;p&gt;&lt;strong&gt;Pre-Hopper Load:&lt;/strong&gt;&lt;/p&gt;
-
-&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;offs_m = pid_m*block_m + tl.arange(0, block_m)
-offs_n = pid_n*block_n + tl.arange(0, block_n)
-offs_k = tl.arange(0, block_k)
-
-a_ptrs = a_ptr + (offs_am[:, None]*stride_am + offs_k[None, :]*stride_ak)
-b_ptrs = b_ptr + (offs_k[:, None]*stride_bk + offs_bn[None, :]*stride_bn)
-
-a = tl.load(a_ptrs)
-b = tl.load(b_ptrs)
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;&lt;em&gt;&lt;strong&gt;Figure 3.&lt;/strong&gt; Traditional style bulk load from global to shared memory in Triton&lt;/em&gt;&lt;/p&gt;
-
-&lt;p&gt;In the above Triton example showing a pre-Hopper load, we see how the data for tensors a and b are loaded by each thread block computing  global offsets (a_ptrs, b_ptrs) from their relevant program_id (pid_m, pid_n, k) and then making a request to move blocks of memory into shared memory for a and b.&lt;/p&gt;
-
-&lt;p&gt;Now let’s examine how to perform a load using TMA in Triton.&lt;/p&gt;
-
-&lt;p&gt;The TMA instruction requires a special data structure called a tensor map, in contrast to the above where we directly pass pointers to global memory. To build the tensor map, we first create a TMA descriptor on the CPU. The descriptor handles the creation of the tensor map by using the &lt;a href=&quot;https://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__TENSOR__MEMORY.html#group__CUDA__TENSOR__MEMORY&quot;&gt;cuTensorMapEncode API&lt;/a&gt;. The tensor map holds metadata such as the global and shared memory layout of the tensor and serves as a compressed representation of the structure of the multi-dimensional tensor stored in global memory.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/hopper-tma-unit/fg3.png&quot; alt=&quot;TMA address generation via a copy descriptor&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;em&gt;&lt;strong&gt;Figure 4.&lt;/strong&gt; TMA address generation via a copy descriptor (Image credit: Nvidia)&lt;/em&gt;&lt;/p&gt;
-
-&lt;p&gt;The TMA descriptor holds the tensor’s key properties:&lt;/p&gt;
-
-&lt;ol&gt;
-  &lt;li&gt;Base Pointer&lt;/li&gt;
-  &lt;li&gt;Shape and Block Size&lt;/li&gt;
-  &lt;li&gt;Datatype&lt;/li&gt;
-&lt;/ol&gt;
-
-&lt;p&gt;The TMA descriptor is created on the host before the kernel, and then moved to device by passing the descriptor to a torch tensor. Thus, in Triton, the GEMM kernel receives a global pointer to the tensor map.&lt;/p&gt;
-
-&lt;h2 id=&quot;triton-host-code&quot;&gt;Triton Host Code&lt;/h2&gt;
-
-&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;   desc_a = np.empty(TMA_SIZE, dtype=np.int8)
-   desc_b = np.empty(TMA_SIZE, dtype=np.int8)
-   desc_c = np.empty(TMA_SIZE, dtype=np.int8)
-
-   triton.runtime.driver.active.utils.fill_2d_tma_descriptor(a.data_ptr(), m, k, block_m, block_k, a.element_size(), desc_a)
-
-   triton.runtime.driver.active.utils.fill_2d_tma_descriptor(b.data_ptr(), n, k, block_n, block_k, b.element_size(), desc_b)
-
-   triton.runtime.driver.active.utils.fill_2d_tma_descriptor(c.data_ptr(), m, n, block_m, block_n, c.element_size(), desc_c)
-  
-   desc_a = torch.tensor(desc_a, device='cuda')
-   desc_b = torch.tensor(desc_b, device='cuda')
-   desc_c = torch.tensor(desc_c, device='cuda')
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;This is the code that is used to set up the descriptors in the kernel invoke function.&lt;/p&gt;
-
-&lt;h2 id=&quot;triton-device-code&quot;&gt;Triton Device Code&lt;/h2&gt;
-
-&lt;p&gt;&lt;strong&gt;Offsets/Pointer Arithmetic:&lt;/strong&gt;&lt;/p&gt;
-
-&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;   offs_am = pid_m * block_m
-   offs_bn = pid_n * block_n
-   offs_k = 0
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;&lt;strong&gt;Load:&lt;/strong&gt;&lt;/p&gt;
-
-&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;  a = tl._experimental_descriptor_load(a_desc_ptr, [offs_am, offs_k], [block_m, block_k], tl.float8e4nv)
-  b = tl._experimental_descriptor_load(b_desc_ptr, [offs_bn, offs_k], [block_n, block_k], tl.float8e4nv)
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;&lt;strong&gt;Store:&lt;/strong&gt;&lt;/p&gt;
-
-&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt; tl._experimental_descriptor_store(c_desc_ptr, accumulator, [offs_am, offs_bn])
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;We no longer need to calculate a pointer array for both load and store functions in the kernel. Instead, we pass a single descriptor pointer, the offsets, block size and the input datatype. This simplifies address calculation and reduces register pressure, as we no longer have to do complex pointer arithmetic in software and dedicate CUDA cores for address computation.&lt;/p&gt;
-
-&lt;h2 id=&quot;tma-performance-analysis&quot;&gt;TMA Performance Analysis&lt;/h2&gt;
-
-&lt;p&gt;Below, we discuss the PTX instructions for different load mechanisms on Hopper.&lt;/p&gt;
-
-&lt;p&gt;&lt;strong&gt;PTX for Loading Tile (cp.async) - H100 no TMA&lt;/strong&gt;&lt;/p&gt;
-
-&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;add.s32 	%r27, %r100, %r8;
-add.s32 	%r29, %r100, %r9;
-selp.b32 	%r30, %r102, 0, %p18;
-
-
-@%p1 cp.async.cg.shared.global [ %r27 + 0 ], [ %rd20 + 0 ], 0x10, %r30;
-@%p1 cp.async.cg.shared.global [ %r29 + 0 ], [ %rd21 + 0 ], 0x10, %r30;
-
-
-cp.async.commit_group ;
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;Here, we observe the older cp.async instruction responsible for global memory copies. From the traces below we can see that both loads bypass the L1 cache. A major difference in the newer TMA load is that before tiles from A and B were ready to be consumed by the Tensor Core we would need to execute an ldmatrix instruction that operated on data contained in register files. On Hopper, the data can now be directly reused from shared memory.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/hopper-tma-unit/fg4.png&quot; alt=&quot;H100 Memory Chart showing GMEM Throughput = 910.22 GB/s&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;em&gt;&lt;strong&gt;Figure 5.&lt;/strong&gt; H100 Memory Chart showing GMEM Throughput = 910.22 GB/s (Triton GEMM &lt;strong&gt;without&lt;/strong&gt; TMA) for M=128, N=4096, K=4096&lt;/em&gt;&lt;/p&gt;
-
-&lt;p&gt;By leveraging TMA through the Triton API changes we mentioned above, we can investigate the PTX that Triton generates for a single 2D tile load with TMA.&lt;/p&gt;
-
-&lt;p&gt;&lt;strong&gt;PTX for Loading Tile (cp.async.bulk.tensor) - H100 using TMA&lt;/strong&gt;&lt;/p&gt;
-
-&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;bar.sync 	0;
-shr.u32 	%r5, %r4, 5;
-shfl.sync.idx.b32	%r66, %r5, 0, 31, -1;
-
-elect.sync _|%p7, 0xffffffff;
-
-
-add.s32 	%r24, %r65, %r67;
-shl.b32 	%r25, %r66, 7;
-
-@%p8
-cp.async.bulk.tensor.2d.shared::cluster.global.mbarrier::complete_tx::bytes [%r24], [%rd26, {%r25,%r152}], [%r19];
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;The cp.async.bulk.tensor.2d.shared TMA instruction is passed the destination address in shared memory, a pointer to the tensor map, the tensor map coordinates and a pointer to the mbarrier object, respectively.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/hopper-tma-unit/fg5.png&quot; alt=&quot;H100 Memory Chart GMEM Throughput =1.45 TB/s&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;em&gt;&lt;strong&gt;Figure 6.&lt;/strong&gt; H100 Memory Chart GMEM Throughput =1.45 TB/s (Triton GEMM &lt;strong&gt;with&lt;/strong&gt; TMA) for M=128, N=4096, K=4096&lt;/em&gt;&lt;/p&gt;
-
-&lt;p&gt;For optimal performance we tuned the TMA GEMM kernel extensively. Amongst other parameters such as tile sizes, number of warps and number of pipeline stages, the biggest increase in memory throughput  was observed when we increased the TMA_SIZE (descriptor size) from 128 to 512. From the above NCU profiles, we can see that the final tuned kernel has increased global memory transfer throughput from 910 GB/s to 1.45 TB/s, a &lt;strong&gt;59%&lt;/strong&gt; increase in GMEM throughput, over the non-TMA Triton GEMM kernel.&lt;/p&gt;
-
-&lt;p&gt;&lt;strong&gt;Comparison of CUTLASS and Triton FP8 GEMM and TMA Implementation - Kernel Architecture&lt;/strong&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/hopper-tma-unit/fg6.png&quot; alt=&quot;Triton vs CUTLASS Ping-Pong FP8 GEMM TFLOPs, M=M, N=4096, K=4096&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;em&gt;&lt;strong&gt;Figure 7.&lt;/strong&gt; Triton vs CUTLASS Ping-Pong FP8 GEMM TFLOPs, M=M, N=4096, K=4096&lt;/em&gt;&lt;/p&gt;
-
-&lt;p&gt;The above chart shows the performance of a CUTLASS &lt;a href=&quot;https://github.com/NVIDIA/cutlass/blob/637b15906358191cb4238af419d408a65819d7ec/include/cutlass/gemm/kernel/sm90_gemm_tma_warpspecialized_pingpong.hpp&quot;&gt;Ping-Pong GEMM kernel&lt;/a&gt; against Triton. The Ping-Pong kernel leverages TMA differently than Triton. It makes use of all of its HW and SW software capabilities, while Triton currently does not. Specifically, CUTLASS supports the below TMA features that help explain the performance gaps in pure GEMM performance:.&lt;/p&gt;
-
-&lt;ol&gt;
-  &lt;li&gt;
-    &lt;p&gt;TMA Multicast&lt;/p&gt;
-
-    &lt;ul&gt;
-      &lt;li&gt;Enables copy of data from GMEM to multiple SMs&lt;/li&gt;
-    &lt;/ul&gt;
-  &lt;/li&gt;
-  &lt;li&gt;
-    &lt;p&gt;Warp Specialization&lt;/p&gt;
-
-    &lt;ul&gt;
-      &lt;li&gt;Enables warp groups within a threadblock to take on different roles&lt;/li&gt;
-    &lt;/ul&gt;
-  &lt;/li&gt;
-  &lt;li&gt;
-    &lt;p&gt;Tensor Map (TMA Descriptor) Prefetch&lt;/p&gt;
-
-    &lt;ul&gt;
-      &lt;li&gt;Enables prefetching the Tensor Map object from GMEM, which allows pipelining of TMA loads&lt;/li&gt;
-    &lt;/ul&gt;
-  &lt;/li&gt;
-&lt;/ol&gt;
-
-&lt;p&gt;To put the performance numbers in perspective, below we show a ‘speed-up’ chart highlighting the latency differences on a percentage basis:&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/hopper-tma-unit/fg7.png&quot; alt=&quot;% Speedup of CUTLASS Ping-Pong vs Triton FP8 with TMA.&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;em&gt;&lt;strong&gt;Figure 8:&lt;/strong&gt; % Speedup of CUTLASS Ping-Pong vs Triton FP8 with TMA.&lt;/em&gt;&lt;/p&gt;
-
-&lt;p&gt;This speedup is purely kernel throughput, not including E2E launch overhead which we will discuss below.&lt;/p&gt;
-
-&lt;p&gt;&lt;strong&gt;TMA Descriptor movement - a key difference between Triton and CUTLASS with E2E performance implications&lt;/strong&gt;&lt;/p&gt;
-
-&lt;p&gt;As noted previously, creation of a 2D+ dimensional TMA descriptor takes place on the host and is then transferred to the device.  However, this transfer process takes place very differently depending on the implementation.&lt;/p&gt;
-
-&lt;p&gt;Here we showcase the differences between how Triton transfers TMA descriptors compared with CUTLASS.&lt;/p&gt;
-
-&lt;p&gt;Recall, TMA transfers require a special data structure, a tensor map to be created on CPU through the cuTensorMap API, which for an FP8 GEMM Kernel means creating three descriptors, one for each A, B and C. We see below that for both the Triton and CUTLASS Kernels the same CPU procedures are invoked.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/hopper-tma-unit/fg8.png&quot; alt=&quot;Calls to cuTensorMapEncodeTiled (Both Triton and CUTLASS use this path)&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;em&gt;&lt;strong&gt;Figure 7.&lt;/strong&gt; Calls to cuTensorMapEncodeTiled (Both Triton and CUTLASS use this path)&lt;/em&gt;&lt;/p&gt;
-
-&lt;p&gt;However, for Triton, each descriptor is transferred in its own distinct copy kernel, which adds a significant amount of overhead and serves as a barrier to use this kernel in an end-to-end use inference scenario.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/hopper-tma-unit/fg9.png&quot; alt=&quot;Three H2D Copy Kernels are launched before the kernel execution, for A, B and C&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;em&gt;&lt;strong&gt;Figure 8.&lt;/strong&gt; Three H2D Copy Kernels are launched before the kernel execution, for A, B and C&lt;/em&gt;&lt;/p&gt;
-
-&lt;p&gt;These copies are not observed in the CUTLASS implementation, due to the way that TMA descriptors are passed to the kernel. We can see from the PTX below that with Cutlass, tensor maps are passed-by-value to the kernel.&lt;/p&gt;
-
-&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;.entry _ZN7cutlass13device_kernelIN49_GLOBAL__N__8bf0e19b_16_scaled_mm_c3x_cu_2bec3df915cutlass_3x_gemmIaNS_6half_tENS1_14ScaledEpilogueEN4cute5tupleIJNS5_1CILi64EEENS7_ILi128EEES9_EEENS6_IJNS7_ILi2EEENS7_ILi1EEESC_EEENS_4gemm32KernelTmaWarpSpecializedPingpongENS_8epilogue18TmaWarpSpecializedEE10GemmKernelEEEvNT_6ParamsE(
-
-.param .align 64 .b8 _ZN7cutlass13device_kernelIN49_GLOBAL__N__8bf0e19b_16_scaled_mm_c3x_cu_2bec3df915cutlass_3x_gemmIaNS_6half_tENS1_14ScaledEpilogueEN4cute5tupleIJNS5_1CILi64EEENS7_ILi128EEES9_EEENS6_IJNS7_ILi2EEENS7_ILi1EEESC_EEENS_4gemm32KernelTmaWarpSpecializedPingpongENS_8epilogue18TmaWarpSpecializedEE10GemmKernelEEEvNT_6ParamsE_param_0[1024]
-
-
-mov.b64 	%rd110, _ZN7cutlass13device_kernelIN49_GLOBAL__N__8bf0e19b_16_scaled_mm_c3x_cu_2bec3df915cutlass_3x_gemmIaNS_10bfloat16_tENS1_14ScaledEpilogueEN4cute5tupleIJNS5_1CILi64EEES8_NS7_ILi256EEEEEENS6_IJNS7_ILi1EEESB_SB_EEENS_4gemm24KernelTmaWarpSpecializedENS_8epilogue18TmaWarpSpecializedEE10GemmKernelEEEvNT_6ParamsE_param_0;
-
-add.s64 	%rd70, %rd110, 704;
-cvta.param.u64 	%rd69, %rd70;
-
-cp.async.bulk.tensor.2d.global.shared::cta.bulk_group [%rd69, {%r284, %r283}], [%r1880];
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;&lt;em&gt;&lt;strong&gt;Figure 9.&lt;/strong&gt; CUTLASS kernel PTX showing pass-by-value&lt;/em&gt;&lt;/p&gt;
-
-&lt;p&gt;By directly passing the TMA Descriptor as opposed to passing a global memory pointer, the CUTLASS kernel avoids the three extra H2D copy kernels and instead these copies are included in the single device kernel launch for the GEMM.&lt;/p&gt;
-
-&lt;p&gt;Because of the difference in how descriptors are moved to the device, the kernel latencies including the time to prepare the tensors to be consumed by the TMA is drastically different.  For M=1-128, N=4096, K=4096 the CUTLASS pingpong kernel has an average latency of 10us Triton TMA kernels complete in an average of 4ms.  This is a factor of ~3330x slower and appears to be directly linked to the 3 independent kernel launches for TMA descriptor transfer by Triton.&lt;/p&gt;
-
-&lt;p&gt;Cuda graphs may be one way to reduce this, but given the overhead created by the H2D copies the current Triton implementation when measured end to end is not competitive.  A rework of how the Triton compiler manages TMA descriptors would likely resolve this gap.  We thus focused on comparing the actual compute kernel throughput and not E2E in our data above.&lt;/p&gt;
-
-&lt;h2 id=&quot;results-summary&quot;&gt;Results Summary&lt;/h2&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/hopper-tma-unit/fg10.png&quot; alt=&quot;Triton FP8 TMA GEMM TFLOPs Comparison&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;em&gt;&lt;strong&gt;Figure 10.&lt;/strong&gt; Triton FP8 TMA GEMM TFLOPs Comparison&lt;/em&gt;&lt;/p&gt;
-
-&lt;table class=&quot;mt-5 table table-bordered&quot;&gt;
-  &lt;tr&gt;
-   &lt;td&gt;M
-   &lt;/td&gt;
-   &lt;td&gt;Triton TMA
-   &lt;/td&gt;
-   &lt;td&gt;Triton Tutorial
-   &lt;/td&gt;
-   &lt;td&gt;Triton SplitK 
-   &lt;/td&gt;
-   &lt;td&gt;cuBLAS FP8 
-   &lt;/td&gt;
-   &lt;td&gt;cuBLAS FP16 
-   &lt;/td&gt;
-   &lt;td&gt;CUTLASS Ping-Pong FP8
-   &lt;/td&gt;
-  &lt;/tr&gt;
-  &lt;tr&gt;
-   &lt;td&gt;1
-   &lt;/td&gt;
-   &lt;td&gt;2.5
-   &lt;/td&gt;
-   &lt;td&gt;1
-   &lt;/td&gt;
-   &lt;td&gt;2.4
-   &lt;/td&gt;
-   &lt;td&gt;1.5
-   &lt;/td&gt;
-   &lt;td&gt;1.8
-   &lt;/td&gt;
-   &lt;td&gt;3.57
-   &lt;/td&gt;
-  &lt;/tr&gt;
-  &lt;tr&gt;
-   &lt;td&gt;2
-   &lt;/td&gt;
-   &lt;td&gt;5.1
-   &lt;/td&gt;
-   &lt;td&gt;2.5
-   &lt;/td&gt;
-   &lt;td&gt;4.8
-   &lt;/td&gt;
-   &lt;td&gt;3.1
-   &lt;/td&gt;
-   &lt;td&gt;3.6
-   &lt;/td&gt;
-   &lt;td&gt;5.9
-   &lt;/td&gt;
-  &lt;/tr&gt;
-  &lt;tr&gt;
-   &lt;td&gt;4
-   &lt;/td&gt;
-   &lt;td&gt;10.3
-   &lt;/td&gt;
-   &lt;td&gt;7.21
-   &lt;/td&gt;
-   &lt;td&gt;9.6
-   &lt;/td&gt;
-   &lt;td&gt;6.1
-   &lt;/td&gt;
-   &lt;td&gt;7.2
-   &lt;/td&gt;
-   &lt;td&gt;14.3
-   &lt;/td&gt;
-  &lt;/tr&gt;
-  &lt;tr&gt;
-   &lt;td&gt;8
-   &lt;/td&gt;
-   &lt;td&gt;21.0
-   &lt;/td&gt;
-   &lt;td&gt;16.5
-   &lt;/td&gt;
-   &lt;td&gt;19.2
-   &lt;/td&gt;
-   &lt;td&gt;12.3
-   &lt;/td&gt;
-   &lt;td&gt;14.4
-   &lt;/td&gt;
-   &lt;td&gt;28.6
-   &lt;/td&gt;
-  &lt;/tr&gt;
-  &lt;tr&gt;
-   &lt;td&gt;16
-   &lt;/td&gt;
-   &lt;td&gt;44.5
-   &lt;/td&gt;
-   &lt;td&gt;41.0
-   &lt;/td&gt;
-   &lt;td&gt;37.2
-   &lt;/td&gt;
-   &lt;td&gt;24.5
-   &lt;/td&gt;
-   &lt;td&gt;27.7
-   &lt;/td&gt;
-   &lt;td&gt;55.1
-   &lt;/td&gt;
-  &lt;/tr&gt;
-  &lt;tr&gt;
-   &lt;td&gt;32
-   &lt;/td&gt;
-   &lt;td&gt;89.7
-   &lt;/td&gt;
-   &lt;td&gt;81.2
-   &lt;/td&gt;
-   &lt;td&gt;72.2
-   &lt;/td&gt;
-   &lt;td&gt;71.6
-   &lt;/td&gt;
-   &lt;td&gt;56.8
-   &lt;/td&gt;
-   &lt;td&gt;114.4
-   &lt;/td&gt;
-  &lt;/tr&gt;
-  &lt;tr&gt;
-   &lt;td&gt;64
-   &lt;/td&gt;
-   &lt;td&gt;178.5
-   &lt;/td&gt;
-   &lt;td&gt;163.7
-   &lt;/td&gt;
-   &lt;td&gt;130.8
-   &lt;/td&gt;
-   &lt;td&gt;144.6
-   &lt;/td&gt;
-   &lt;td&gt;105.3
-   &lt;/td&gt;
-   &lt;td&gt;228.7
-   &lt;/td&gt;
-  &lt;/tr&gt;
-  &lt;tr&gt;
-   &lt;td&gt;128
-   &lt;/td&gt;
-   &lt;td&gt;359.7
-   &lt;/td&gt;
-   &lt;td&gt;225.9
-   &lt;/td&gt;
-   &lt;td&gt;160.1
-   &lt;/td&gt;
-   &lt;td&gt;244.0
-   &lt;/td&gt;
-   &lt;td&gt;189.2
-   &lt;/td&gt;
-   &lt;td&gt;377.7
-   &lt;/td&gt;
-  &lt;/tr&gt;
-&lt;/table&gt;
-
-&lt;p&gt;&lt;em&gt;&lt;strong&gt;Figure 11.&lt;/strong&gt; Triton FP8 TMA GEMM TFLOPs Comparison Table&lt;/em&gt;&lt;/p&gt;
-
-&lt;p&gt;The above chart and table summarize the gain we’ve been able to achieve on a single NVIDIA H100 for FP8 GEMM, by leveraging the TMA Hardware Unit, over non-TMA Triton kernels and high performance CUDA (cuBLAS) kernels. The key point to note is this kernel’s superior scaling (with the batch size) properties over the competition. The problem sizes we benchmarked on are representative of the matrix shapes found in small-to-medium batch size LLM inference. Thus, TMA GEMM kernel performance in the mid-M regime (M=32 to M=128) will be critical for those interested in leveraging this kernel for FP8 LLM deployment use cases, as the FP8 compressed data type can allow larger matrices to fit in GPUs memory.&lt;/p&gt;
-
-&lt;p&gt;To summarize our analysis, the TMA implementation in Triton and CUTLASS differ in terms of full featureset support (multicast, prefetch etc.) and how the TMA Descriptor is passed to the GPU kernel. If this descriptor is passed in a manner that more closely matches the CUTLASS kernel (pass-by-value), the extraneous H2D copies could be avoided and thus the E2E performance would be greatly improved.&lt;/p&gt;
-
-&lt;h2 id=&quot;future-work&quot;&gt;Future Work&lt;/h2&gt;
-
-&lt;p&gt;For future research, we plan to improve upon these results, by working with the community to incorporate the CUTLASS architecture of TMA loads into Triton as well as investigating the Cooperative Kernel for FP8 GEMM, a modified strategy to the Ping-Pong Kernel.&lt;/p&gt;
-
-&lt;p&gt;In addition, once features like thread block clusters and TMA atomic operations are enabled in Triton, we may be able to get further speedups by leveraging the SplitK strategy in the TMA GEMM Kernel, as atomic operations on Hopper can be performed in Distributed Shared Memory (DSMEM) as opposed to L2 Cache.  We also note the similarities of NVIDIA Hopper GPUs with other AI hardware accelerators like Google’s &lt;a href=&quot;https://people.csail.mit.edu/suvinay/pubs/2023.tpu.isca.pdf&quot;&gt;TPU&lt;/a&gt; and IBM’s &lt;a href=&quot;https://ieeexplore.ieee.org/document/9499865&quot;&gt;AIU&lt;/a&gt; which are dataflow architectures. On Hopper, data can now “flow” from GMEM to a network of connected SMs due to the additions of TMA, which we discussed extensively in this blog, and DSMEM, which we plan to cover in a future post.&lt;/p&gt;</content>
-
-      
-      
-      
-      
-      
-
-      <author>
-          <name>Adnan Hoque, Less Wright, Chih-Chieh Yang</name>
-        
-        
-      </author>
-
-      
-
-      
-
-      
-        <summary type="html">Abstract</summary>
       
 
       
