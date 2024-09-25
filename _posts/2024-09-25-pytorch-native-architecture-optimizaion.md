@@ -61,20 +61,20 @@ from torchao.quantization import (
     float8\_dynamic\_activation\_float8\_weight,  
 )
 
-![](/assets/images/hopper-tma-unit/Figure_1.png){:style="width:100%"}
+![](/assets/images/Figure_1.png){:style="width:100%"}
 
 We also have extensive benchmarks on diffusion models in collaboration with the HuggingFace diffusers team in [diffusers-torchao](https://github.com/sayakpaul/diffusers-torchao.) where we demonstrated 53.88% speedup on Flux.1-Dev and 27.33% speedup on CogVideoX-5b 
 
 Our APIs are composable so we’ve for example composed sparsity and quantization to bring 5% [speedup for ViT-H inference](https://github.com/pytorch/ao/tree/main/torchao/sparsity)
 
 But also can do things like quantize weights to int4 and the kv cache to int8 to support [Llama 3.1 8B at the full 128K context length running in under 18.9GB of VRAM](https://github.com/pytorch/ao/pull/738).   
-![](/assets/images/hopper-tma-unit/Figure_2.png){:style="width:100%"}
+![](/assets/images/Figure_2.png){:style="width:100%"}
 
 ## QAT
 
 Post training quantization, especially at less than 4 bit can suffer from serious accuracy degradations. Using [Quantization Aware Training](https://pytorch.org/blog/quantization-aware-training/) (QAT) we’ve managed to recover up to 96% of the accuracy degradation on hellaswag. We’ve integrated this as an end to end recipe in torchtune with a minimal [tutorial](https://github.com/pytorch/ao/tree/main/torchao/quantization/prototype/qat)
 
-![](/assets/images/hopper-tma-unit/Figure_3.png){:style="width:100%"}
+![](/assets/assets/Figure_3.png){:style="width:100%"}
 
 # Training
 
@@ -89,7 +89,7 @@ For an e2e example of how to speed up LLaMa 3 70B pretraining by up to **1.5x** 
 
 ### Performance and accuracy of float8 pretraining of LLaMa 3 70B, vs bfloat16
 
-![](/assets/images/hopper-tma-unit/Figure_4.png){:style="width:100%"}
+![](/assets/images/Figure_4.png){:style="width:100%"}
 (source: [https://dev-discuss.pytorch.org/t/enabling-float8-all-gather-in-fsdp2/2359](https://dev-discuss.pytorch.org/t/enabling-float8-all-gather-in-fsdp2/2359)) 
 
 We are expanding our training workflows to more dtypes and layouts
@@ -104,7 +104,7 @@ Inspired by Bits and Bytes we’ve also added prototype support for 8 and 4 bit 
 
 from torchao.prototype.low\_bit\_optim import AdamW8bit, AdamW4bit  
 optim \= AdamW8bit(model.parameters())  
-![](/assets/images/hopper-tma-unit/Figure_5.png){:style="width:100%"}
+![](/assets/images/Figure_5.png){:style="width:100%"}
 
 # Integrations
 
