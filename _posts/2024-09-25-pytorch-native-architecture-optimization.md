@@ -4,7 +4,7 @@ title: "CUDA-Free Inference for LLMs"
 author: Team PyTorch
 ---
 
-# PyTorch Native Architecture Optimization: torchao
+# PyTorch Native Architecture Optimization: torchao  
 
 By Team PyTorch
 
@@ -63,7 +63,7 @@ from torchao.quantization import (
 
 ![](/assets/images/Figure_1.png){:style="width:100%"}
 
-We also have extensive benchmarks on diffusion models in collaboration with the HuggingFace diffusers team in [diffusers-torchao](https://github.com/sayakpaul/diffusers-torchao.) where we demonstrated 53.88% speedup on Flux.1-Dev and 27.33% speedup on CogVideoX-5b 
+We also have extensive benchmarks on diffusion models in collaboration with the HuggingFace diffusers team in [diffusers-torchao](https://github.com/sayakpaul/diffusers-torchao) where we demonstrated 53.88% speedup on Flux.1-Dev and 27.33% speedup on CogVideoX-5b 
 
 Our APIs are composable so we’ve for example composed sparsity and quantization to bring 5% [speedup for ViT-H inference](https://github.com/pytorch/ao/tree/main/torchao/sparsity)
 
@@ -119,7 +119,7 @@ We’ve been actively working on making sure torchao works well in some of the m
 
 # 
 
-# Conclusion
+## Conclusion
 
 If you’re interested in making your models faster and smaller for training or inference, we hope you’ll find torchao useful and easy to integrate. 
 
