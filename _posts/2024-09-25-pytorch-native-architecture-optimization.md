@@ -60,7 +60,7 @@ from torchao.quantization import (
     float8\_weight\_only,  
     float8\_dynamic\_activation\_float8\_weight,  
 )
-
+ 
 ![](/assets/images/Figure_1.png){:style="width:100%"}
 
 We also have extensive benchmarks on diffusion models in collaboration with the HuggingFace diffusers team in [diffusers-torchao](https://github.com/sayakpaul/diffusers-torchao) where we demonstrated 53.88% speedup on Flux.1-Dev and 27.33% speedup on CogVideoX-5b 
