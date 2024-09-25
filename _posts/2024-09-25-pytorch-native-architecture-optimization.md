@@ -1,6 +1,6 @@
 ---
 layout: blog_detail
-title: "CUDA-Free Inference for LLMs"
+title: "PyTorch Native Architecture Optimization: torchao"
 author: Team PyTorch
 ---
 
