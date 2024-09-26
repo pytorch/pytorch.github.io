@@ -61,15 +61,11 @@ from torchao.quantization import (
     float8\_dynamic\_activation\_float8\_weight,  
 )
  
+
+We also have extensive benchmarks on diffusion models in collaboration with the HuggingFace diffusers team in [diffusers-torchao](https://github.com/sayakpaul/diffusers-torchao) where we demonstrated 53.88% speedup on Flux.1-Dev and 27.33% speedup on CogVideoX-5b
+
 ![](/assets/images/Figure_1.png){:style="width:100%"}
 
-<<<<<<< HEAD:_posts/2024-09-25-pytorch-native-architecture-optimization.md
-We also have extensive benchmarks on diffusion models in collaboration with the HuggingFace diffusers team in [diffusers-torchao](https://github.com/sayakpaul/diffusers-torchao) where we demonstrated 53.88% speedup on Flux.1-Dev and 27.33% speedup on CogVideoX-5b 
-=======
-![](/assets/images/Figure_1.png){:style="width:100%"}
-
-We also have extensive benchmarks on diffusion models in collaboration with the HuggingFace diffusers team in [diffusers-torchao](https://github.com/sayakpaul/diffusers-torchao) where we demonstrated 53.88% speedup on Flux.1-Dev and 27.33% speedup on CogVideoX-5b 
->>>>>>> 97898699f7101b847da377106274783ced03bb3d:_posts/2024-09-25-pytorch-native-architecture-optimizaion.md
 
 Our APIs are composable so we’ve for example composed sparsity and quantization to bring 5% [speedup for ViT-H inference](https://github.com/pytorch/ao/tree/main/torchao/sparsity)
 
