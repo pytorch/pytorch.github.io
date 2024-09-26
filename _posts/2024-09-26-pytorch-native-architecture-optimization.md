@@ -72,7 +72,7 @@ But also can do things like quantize weights to int4 and the kv cache to int8 to
 
 Post training quantization, especially at less than 4 bit can suffer from serious accuracy degradations. Using [Quantization Aware Training](https://pytorch.org/blog/quantization-aware-training/) (QAT) we’ve managed to recover up to 96% of the accuracy degradation on hellaswag. We’ve integrated this as an end to end recipe in torchtune with a minimal [tutorial](https://github.com/pytorch/ao/tree/main/torchao/quantization/prototype/qat)
 
-![](/assets/assets/Figure_3.png){:style="width:100%"}
+![](/assets/images/Figure_3.png){:style="width:100%"}
 
 # Training
 
