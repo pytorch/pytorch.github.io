@@ -137,4 +137,4 @@ We are fortunate to stand on the shoulders of giants and collaborate with some o
 4. HuggingFace transformers for their help in battle testing and integrating our work  
 5. HuggingFace diffusers for our collaboration on extensive benchmarks and best practices  
 6. torch.compile so we could write our algorithms in pure PyTorch  
-7. CUDA MODE for most of our early contributors
+7. CUDA MODE for most of our early contributors 
