@@ -4,9 +4,6 @@ title: "PyTorch Native Architecture Optimization: torchao"
 author: Team PyTorch
 ---
 
-# PyTorch Native Architecture Optimization: torchao  
-
-By Team PyTorch
 
 We’re happy to officially launch torchao, a PyTorch native library that makes models faster and smaller by leveraging low bit dtypes, quantization and sparsity. [torchao](https://github.com/pytorch/ao) is an accessible toolkit of techniques written (mostly) in easy to read PyTorch code spanning both inference and training. This blog will help you pick which techniques matter for your workloads.
 
