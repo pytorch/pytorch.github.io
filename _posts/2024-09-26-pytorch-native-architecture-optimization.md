@@ -10,19 +10,12 @@ We’re happy to officially launch torchao, a PyTorch native library that makes 
 We benchmarked our techniques on popular GenAI models like LLama 3 and Diffusion models and saw minimal drops in accuracy. Unless otherwise noted the baselines are bf16 run on A100 80GB GPU.
 
 Our topline metrics for llama 3 are
-
-For inference
-
-* 97% speedup for Llama 3 8B using autoquant with int4 weight only quantization and hqq  
-* 73% peak VRAM reduction for Llama 3.1 8B at 128K context length with a quantized KV cache
-
-For training
-
+* 97% speedup for Llama 3 8B inference using autoquant with int4 weight only quantization and hqq  
+* 73% peak VRAM reduction for Llama 3.1 8B inference at 128K context length with a quantized KV cache
 * 50% speedup for Llama 3 70B pretraining using float8 training on H100  
 * 30% peak VRAM reduction for Llama 3 8B using 4 bit quantized optimizers.
 
 Our topline metrics for diffusion model inference 
-
 * 53% speedup using float8 dynamic quantization inference with float8 row-wise scaling on flux1.dev onH100  
 * 50% reduction in model VRAM for CogVideoX using int8 dynamic quantization
 
