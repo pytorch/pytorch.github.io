@@ -32,15 +32,19 @@ Below we'll walk through some of the techniques available in torchao you can app
 
 [Our inference quantization algorithms](https://github.com/pytorch/ao/tree/main/torchao/quantization) work over arbitrary PyTorch models that contain nn.Linear layers. Weight only and dynamic activation quantization for various dtypes and sparse layouts can be chosen using our top level quantize\_ api
 
+```py
 from torchao.quantization import (  
     quantize\_,  
     int4\_weight\_only,  
 )  
 quantize\_(model, int4\_weight\_only())
+```
 
 Sometimes quantizing a layer can make it slower because of overhead so if you’d rather we just pick how to quantize each layer in a model for you then you can instead run
 
+```py
 model \= torchao.autoquant(torch.compile(model, mode='max-autotune'))
+```
 
 quantize\_ API has a few different options depending on whether your model is compute bound or memory bound.
 
