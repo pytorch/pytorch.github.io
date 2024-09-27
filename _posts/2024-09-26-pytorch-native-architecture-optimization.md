@@ -50,15 +50,15 @@ quantize\_ API has a few different options depending on whether your model is co
 
 ```py
 from torchao.quantization import (  
-    \# Memory bound models  
+    # Memory bound models  
     int4\_weight\_only,  
     int8\_weight\_only,
 
-    \# Compute bound models  
+    # Compute bound models  
     int8\_dynamic\_activation\_int8\_semi\_sparse\_weight,  
     int8\_dynamic\_activation\_int8\_weight,  
       
-    \# Device capability 8.9+  
+    # Device capability 8.9+  
     float8\_weight\_only,  
     float8\_dynamic\_activation\_float8\_weight,  
 )
