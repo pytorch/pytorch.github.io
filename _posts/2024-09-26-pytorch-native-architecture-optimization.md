@@ -44,6 +44,7 @@ model \= torchao.autoquant(torch.compile(model, mode='max-autotune'))
 
 quantize\_ API has a few different options depending on whether your model is compute bound or memory bound.
 
+```py
 from torchao.quantization import (  
     \# Memory bound models  
     int4\_weight\_only,  
@@ -57,7 +58,7 @@ from torchao.quantization import (
     float8\_weight\_only,  
     float8\_dynamic\_activation\_float8\_weight,  
 )
- 
+```
 
 We also have extensive benchmarks on diffusion models in collaboration with the HuggingFace diffusers team in [diffusers-torchao](https://github.com/sayakpaul/diffusers-torchao) where we demonstrated 53.88% speedup on Flux.1-Dev and 27.33% speedup on CogVideoX-5b
 
@@ -73,7 +74,7 @@ But also can do things like quantize weights to int4 and the kv cache to int8 to
 
 Post training quantization, especially at less than 4 bit can suffer from serious accuracy degradations. Using [Quantization Aware Training](https://pytorch.org/blog/quantization-aware-training/) (QAT) we’ve managed to recover up to 96% of the accuracy degradation on hellaswag. We’ve integrated this as an end to end recipe in torchtune with a minimal [tutorial](https://github.com/pytorch/ao/tree/main/torchao/quantization/prototype/qat)
 
-![](/assets/images/Figure_3.png){:style="width:100%"}
+![](/assets/images/Figure_3.jpg){:style="width:100%"}
 
 # Training
 
@@ -115,8 +116,6 @@ We’ve been actively working on making sure torchao works well in some of the m
 4. In [torchtune](https://github.com/pytorch/torchtune) for PyTorch native QLoRA and QAT recipes   
 5. In [torchchat](https://github.com/pytorch/torchchat) for post training quantization   
 6. In SGLang for for [int4 and int8 post training quantization](https://github.com/sgl-project/sglang/pull/1341) 
-
-# 
 
 ## Conclusion
 
