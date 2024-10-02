@@ -9,8 +9,6 @@ author: Team PyTorch
 
 The 2024 PyTorch Conference in San Francisco gathered nearly 1,500 AI researchers, developers, and enthusiasts. Over two days, the event featured engaging discussions, insightful keynotes, and hands-on sessions focused on artificial intelligence (AI) and advancements in PyTorch, the leading open-source machine learning framework. Attendees delved into the future of generative AI, Large Language Models (LLMs), and the crucial role open-source technology plays in driving AI innovation. Here’s a recap of the key themes, highlights, and major takeaways from this year’s conference.
 
-![panel of people on a conference stage](/assets/images/pytorch-conference-2024-recap/54017358432_8d9b53a2c8_k.jpg){:style="width:100%"}
-
 
  
 
@@ -24,14 +22,37 @@ Three core themes emerged throughout the conference:
 2. **Democratizing AI Through Open Source**: One of the recurring themes was the importance of open source tools and communities in shaping the future of AI. PyTorch is committed to inclusivity, ease of use, and accessibility to developers of all levels, with a focus on bringing AI to an even larger global audience.
 3. **Distributed and Edge Computing**: Distributed computing and edge deployment appeared in many discussions, highlighting how PyTorch is being used to drive AI to the edge. The focus on edge accelerators, scalable training, and inference showcased how PyTorch enables the deployment of powerful models across diverse environments, from the cloud to on-device applications.
 
+![panel of people on a conference stage](/assets/images/pytorch-conference-2024-recap/54017358432_8d9b53a2c8_k.jpg){:style="width:100%"}
+
+
  
 
 ## Watch the Sessions from PyTorch Conference
 
-The PyTorch Conference featured keynote sessions from top AI leaders and interesting lightning talks. You can view all of the conference sessions on our YouTube channel.
+The PyTorch Conference featured keynote sessions from top AI leaders and interesting lightning talks. You can <a href="https://youtube.com/playlist?list=PL_lsbAsL_o2B_znuvm-pDtV_cRhpqZb8l&feature=shared">view all of the conference sessions</a> on our YouTube channel.
 
-<iframe width="560" height="315" src="https://www.youtube.com/embed/videoseries?si=qoVqnWpWR_LQOSt6&amp;list=PL_lsbAsL_o2B_znuvm-pDtV_cRhpqZb8l" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+
+<div class="video-container">
+    <iframe src="https://www.youtube.com/embed/videoseries?si=qoVqnWpWR_LQOSt6&amp;list=PL_lsbAsL_o2B_znuvm-pDtV_cRhpqZb8l" frameborder="0" allowfullscreen></iframe>
+</div>
  
+<style>
+.video-container {
+    position: relative;
+    width: 100%;
+    padding-bottom: 56.25%; /* This maintains a 16:9 aspect ratio */
+    height: 0;
+    overflow: hidden;
+}
+
+.video-container iframe {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+}
+</style>
 
 ## PyTorch Conference Startup Showcase
 
@@ -52,11 +73,14 @@ Congratulations to the PyTorch Conference Startup Showcase winner, CTGT!  Deep l
 
 The **DL Compiler Mini-Summit** offered attendees a deep dive into the advances in deep learning (DL) compilers that are transforming AI workloads. 
 
-[View the DL Compiler Mini-Summit](https://youtu.be/YWDzHGx8PrY?feature=shared)
+[View the DL Compiler Mini-Summit](https://youtube.com/playlist?list=PL_lsbAsL_o2DyFOVyBzDS5scLfUotrG52&feature=shared)
+
+![People watching an event](/assets/images/pytorch-conference-2024-recap/54036162068_0afdec2ca6_k.jpg){:style="width:100%"}
+
 
 The **Fine-Tuning Mini-Summit** brought together a thriving community of researchers, developers, practitioners and hobbyists which focuses on topics ranging from memory efficiency, parameter-efficient fine-tuning and quantization to performance at scale and reproducible evaluations.
 
-[View the Fine-Tuning Mini-Summit](https://youtube.com/playlist?list=PL_lsbAsL_o2D6l1brEg0DuDShep5p33nu&feature=shared)
+[View the Fine-Tuning Mini-Summit](https://youtube.com/playlist?list=PL_lsbAsL_o2D6l1brEg0DuDShep5p33nu&feature=shared )
 
 ## Major Takeaways from the PyTorch Conference 2024
 
@@ -135,4 +159,4 @@ Thank you for your continued support in advancing the PyTorch ecosystem and help
 
 ## Save the Date
 
-See you next year for the PyTorch Conference in San Francisco at the Palace of Fine Arts from October 22-23, 2025. 
+See you next year for the <a href="https://events.linuxfoundation.org/pytorch-conference-2025/">PyTorch Conference in San Francisco at the Palace of Fine Arts</a> from October 22-23, 2025. 
