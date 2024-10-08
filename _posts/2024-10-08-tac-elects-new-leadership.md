@@ -7,9 +7,6 @@ author: Team PyTorch
 We are pleased to announce the first-ever Chair and Vice Chair of the PyTorch Foundation’s Technical Advisory Council (TAC): **Luca Antiga** as the Chair and **Jiong Gong** as Vice Chair. Both leaders bring extensive experience and deep commitment to the PyTorch community, and they are set to guide the TAC in its mission to foster an open, diverse, and innovative PyTorch technical community.
 
 
-![banner showing new leaders](/assets/images/tac-elects-new-leadership/fg1.png){:style="width:100%"}
- 
-
 ## Meet the New Leadership
 
  
