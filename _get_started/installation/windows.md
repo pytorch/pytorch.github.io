@@ -59,7 +59,7 @@ To install PyTorch with Anaconda, you will need to open an Anaconda prompt via `
 
 #### No CUDA
 
-To install PyTorch via Anaconda, and do not have a [CUDA-capable](https://developer.nvidia.com/cuda-zone) system or do not require CUDA, in the above selector, choose OS: Windows, Package: Conda and CUDA: None.
+To install PyTorch via Anaconda, and do not have a [CUDA-capable](https://developer.nvidia.com/cuda-zone) system or do not require CUDA, in the above selector, choose OS: Windows, Package: Conda and CUDA: CPU.
 Then, run the command that is presented to you.
 
 #### With CUDA
@@ -73,7 +73,7 @@ Then, run the command that is presented to you.
 
 #### No CUDA
 
-To install PyTorch via pip, and do not have a [CUDA-capable](https://developer.nvidia.com/cuda-zone) system or do not require CUDA, in the above selector, choose OS: Windows, Package: Pip and CUDA: None.
+To install PyTorch via pip, and do not have a [CUDA-capable](https://developer.nvidia.com/cuda-zone) system or do not require CUDA, in the above selector, choose OS: Windows, Package: Pip and CUDA: CPU.
 Then, run the command that is presented to you.
 
 #### With CUDA
