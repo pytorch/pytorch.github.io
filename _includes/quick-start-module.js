@@ -220,14 +220,17 @@ function getInstallCommand(optionID) {
 
 function getTorchCompileUsage(optionId) {
     backend = getIDFromBackend(optionId);
-    importCmd = "<br>" + getImportCmd(optionId) + "<br>";
+    importCmd = getImportCmd(optionId) + "<br>";
     finalCmd = "";
-    tcUsage = "# Torch Compile usage: ";
+    tcUsage = "# Torch Compile usage: " + "<br>";
     backendCmd = `torch.compile(model, backend="${backend}")`;
     libtorchCmd = `# Torch compile ${backend} not supported with Libtorch`;
 
     if (opts.pm == "libtorch") {
         return libtorchCmd;
+    }
+    if (backend == "inductor" || backend == "cudagraphs") {
+        return tcUsage + backendCmd;
     }
     if (backend == "openvino") {
         if (opts.pm == "source") {
@@ -268,18 +271,25 @@ function addTorchCompileCommandNote(selectedOptionId) {
     if (!selectedOptionId) {
         return;
     }
-
-    $("#command").append(
-        `<pre> ${getInstallCommand(selectedOptionId)} </pre>`
-    );
-    $("#command").append(
-        `<pre> ${getTorchCompileUsage(selectedOptionId)} </pre>`
-    );
+    if (selectedOptionId == "inductor" || selectedOptionId == "cgraphs") {
+        $("#command").append(
+            `<pre> ${getTorchCompileUsage(selectedOptionId)} </pre>`
+        );
+    }
+    else {
+        $("#command").append(
+            `<pre> ${getInstallCommand(selectedOptionId)} </pre>`
+        );
+        $("#command").append(
+            `<pre> ${getTorchCompileUsage(selectedOptionId)} </pre>`
+        );
+    }
 }
 
 function selectedOption(option, selection, category) {
   $(option).removeClass("selected");
   $(selection).addClass("selected");
+  const previousSelection = opts[category];
   opts[category] = selection.id;
   if (category === "pm") {
     var elements = document.getElementsByClassName("language")[0].children;
