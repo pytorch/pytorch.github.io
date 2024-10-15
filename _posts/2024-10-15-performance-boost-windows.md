@@ -83,7 +83,7 @@ The graph shows that with PyTorch 2.4.1, CPU performance on Windows has nearly c
 
 ## HOW TO TAKE ADVANTAGE OF THE OPTIMIZATIONS
 
-Install PyTorch CPU 2.4.1 on Windows from the [official repository](https://pytorch.org/get-started/locally/), and you may automatically experience a performance boost with memory allocation and vectorizations.
+Install PyTorch CPU 2.4.1 or later on Windows from the [official repository](https://pytorch.org/get-started/locally/), and you may automatically experience a performance boost with memory allocation and vectorizations.
 
 
 ## ACKNOWLEDGMENTS
