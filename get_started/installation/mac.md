@@ -13,7 +13,7 @@ PyTorch is supported on macOS 10.15 (Catalina) or above.
 ### Python
 {: #mac-python}
 
-It is recommended that you use Python 3.9 - 3.11.
+It is recommended that you use Python 3.9 - 3.12.
 You can install Python either through the Anaconda
 package manager (see [below](#anaconda)), [Homebrew](https://brew.sh/), or
 the [Python website](https://www.python.org/downloads/mac-osx/).
