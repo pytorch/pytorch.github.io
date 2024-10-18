@@ -57,7 +57,7 @@ To run the website locally for development:
 make serve
 ```
 
-Then navigate to [localhost:4000](localhost:4000).
+Then navigate to [localhost:4000](http://localhost:4000).
 
 Note the `serve` task is contained in a `Makefile` in the root directory. We are using `make` as an alternative to the standard `jekyll serve` as we want to run `yarn`, which is not included in Jekyll by default.
 
