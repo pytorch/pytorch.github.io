@@ -385,6 +385,6 @@ The configurations in the table are collected with [svr-info](https://github.com
 
 Performance varies by use, configuration and other factors. Learn more on the [Performance Index site](https://edc.intel.com/content/www/us/en/products/performance/benchmarks/overview/).
 
-Performance results are based on testing as of dates shown in [configurations](#bookmark=id.3dy6vkm) and may not reflect all publicly available updates. See backup for configuration details. No product or component can be absolutely secure. Your costs and results may vary. Intel technologies may require enabled hardware, software or service activation.
+Performance results are based on testing as of dates shown in [configurations](#product-and-performance-information) and may not reflect all publicly available updates. See backup for configuration details. No product or component can be absolutely secure. Your costs and results may vary. Intel technologies may require enabled hardware, software or service activation.
 
 Intel Corporation. Intel, the Intel logo, and other Intel marks are trademarks of Intel Corporation or its subsidiaries. Other names and brands may be claimed as the property of others.
