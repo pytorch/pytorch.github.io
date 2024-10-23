@@ -30,13 +30,13 @@ FBGEMM has been empowering TorchRec through its backend high-performance kernel 
 
 [DLRM (Deep Learning Recommendation Model)](https://ai.meta.com/blog/dlrm-an-advanced-open-source-deep-learning-recommendation-model/) is the standard neural network architecture for powering recommendations at Meta, with categorical features being processed through embeddings, while continuous (dense) features are processed with a bottom multilayer perceptron. The following diagram depicts the basic architecture of DLRM, with a second order interaction layer between the dense and sparse features and a top MLP for generating the prediction. 
 
-![flow diagram](/assets/images/torchrec-fbgemm-1/fg1.jpg){:style="width:100%"}
+![flow diagram](/assets/images/torchrec-1.png){:style="width:100%"}
 
 
 
 TorchRec provides standardized modules with significant optimizations in fusing embedding lookups. EBC is a traditional PyTorch embedding module implementation, containing a collection of `torch.nn.EmbeddingBags.` FusedEBC, powered by FBGEMM for high performance operations on embedding tables with a fused optimizer and UVM caching/management for alleviating memory constraints, is the optimized version present in sharded TorchRec modules for distributed training and inference. The below benchmark demonstrates the vast performance improvements of FusedEBC in comparison to a traditional PyTorch embedding module implementation (EBC) and the ability for FusedEBC to handle much larger embeddings than what is available on GPU memory with UVM caching.
 
-![performance chart](/assets/images/torchrec-fbgemm-1/fg2.png){:style="width:100%"}
+![performance chart](/assets/images/torchrec-2.png){:style="width:100%"}
 
 
 
