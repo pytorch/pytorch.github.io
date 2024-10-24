@@ -1,155 +1,142 @@
 ---
 layout: blog_detail
-title: "PyTorch 2.5 Release Blog"
+title: "TorchRec and FBGEMM 1.0 Stable Release"
+author:  Paul Zhang, Zain Huda, Sarunya Pumma, Shintaro Iwasaki, Supadchaya Puangpontip, Benson Ma
 ---
 
-We are excited to announce the release of PyTorch® 2.5 ([release note](https://github.com/pytorch/pytorch/releases/tag/v2.5.0))! This release features a new CuDNN backend for SDPA, enabling speedups by default for users of SDPA on H100s or newer GPUs. As well, regional compilation of torch.compile offers a way to reduce the cold start up time for torch.compile by allowing users to compile a repeated nn.Module (e.g. a transformer layer in LLM) without recompilations. Finally, TorchInductor CPP backend offers solid performance speedup with numerous enhancements like FP16 support, CPP wrapper, AOT-Inductor mode, and max-autotune mode.
-
-This release is composed of 4095 commits from 504 contributors since PyTorch 2.4. We want to sincerely thank our dedicated community for your contributions. As always, we encourage you to try these out and report any issues as we improve 2.5. More information about how to get started with the PyTorch 2-series can be found at our [Getting Started](https://pytorch.org/get-started/pytorch-2.0/) page.
-
-As well, please check out our new ecosystem projects releases with [TorchRec](https://github.com/pytorch/torchrec) and [TorchFix](https://github.com/pytorch-labs/torchfix/releases/tag/v0.6.0).
+We are happy to announce the stable release, 1.0, for [TorchRec](https://github.com/pytorch/torchrec) and [FBGEMM](https://github.com/pytorch/FBGEMM). TorchRec is the PyTorch native recommendation systems library, powered by FBGEMM’s (Facebook GEneral Matrix Multiplication) efficient, low-level kernels. 
 
 
-<table class="table table-bordered">
-  <tr>
-   <td>Beta
-   </td>
-   <td>Prototype
-   </td>
-  </tr>
-  <tr>
-   <td>CuDNN backend for SDPA
-   </td>
-   <td>FlexAttention
-   </td>
-  </tr>
-  <tr>
-   <td>torch.compile regional compilation without recompilations
-   </td>
-   <td>Compiled Autograd
-   </td>
-  </tr>
-  <tr>
-   <td>TorchDynamo added support for exception handling & MutableMapping types
-   </td>
-   <td>Flight Recorder
-   </td>
-  </tr>
-  <tr>
-   <td>TorchInductor CPU backend optimization
-   </td>
-   <td>Max-autotune Support on CPU with GEMM Template
-   </td>
-  </tr>
-  <tr>
-   <td>
-   </td>
-   <td>TorchInductor on Windows
-   </td>
-  </tr>
-  <tr>
-   <td>
-   </td>
-   <td>FP16 support on CPU path for both eager mode and TorchInductor CPP backend
-   </td>
-  </tr>
-  <tr>
-   <td>
-   </td>
-   <td>Autoload Device Extension
-   </td>
-  </tr>
-  <tr>
-   <td>
-   </td>
-   <td>Enhanced Intel GPU support
-   </td>
-  </tr>
-</table>
+## TorchRec
+
+[Initially open sourced in 2022](https://pytorch.org/blog/introducing-torchrec/), [TorchRec](https://github.com/pytorch/torchrec) provides common primitives for creating state-of-the-art personalization models: 
+
+* Simple, optimized APIs for distributed training across hundreds of GPUs
+* Advanced sharding techniques for embeddings
+* Modules common in authoring recommendation systems
+* Frictionless path to distributed inference with APIs for quantization and sharding of TorchRec models
+
+Since then, TorchRec has matured significantly, with wide internal adoption across many Meta production recommendation models for training and inference, alongside new features such as: [variable batched embeddings, embedding offloading, zero collision hashing, etc.](https://github.com/pytorch/torchrec/releases?page=1) Furthermore, TorchRec has a presence outside of Meta, such as [in recommendation models at Databricks](https://docs.databricks.com/en/machine-learning/train-recommender-models.html) and in the [Twitter algorithm](https://github.com/twitter/the-algorithm-ml). As a result, standard TorchRec features have been marked as **stable**, with PyTorch style BC guarantees, and can be seen on the [revamped TorchRec documentation](https://pytorch.org/torchrec/).
 
 
-*To see a full list of public feature submissions click [here](https://docs.google.com/spreadsheets/d/1TzGkWuUMF1yTe88adz1dt2mzbIsZLd3PBasy588VWgk/edit?usp=sharing).
+## FBGEMM
+
+[FBGEMM is a library that provides high-performance kernels for CPUs and GPUs](https://pytorch.org/FBGEMM/). Since 2018, FBGEMM has supported the efficient execution of Meta-internal and external AI/ML workloads by expanding its scope from [performance-critical kernels for inference on CPUs](https://arxiv.org/abs/2101.05615) to more complex sparse operators for both training and inference – and recently for Generative AI – on CPUs and GPUs.
+
+FBGEMM has been empowering TorchRec through its backend high-performance kernel implementations for recommendation workloads, ranging from embedding bag kernels to jagged tensor operations. Together with TorchRec, we released FBGEMM 1.0, which guarantees the functionality and backward-compatibility of several stable APIs serving its core features with [enhanced documentation](https://pytorch.org/FBGEMM/).
 
 
-## BETA FEATURES
+## Performance
 
+[DLRM (Deep Learning Recommendation Model)](https://ai.meta.com/blog/dlrm-an-advanced-open-source-deep-learning-recommendation-model/) is the standard neural network architecture for powering recommendations at Meta, with categorical features being processed through embeddings, while continuous (dense) features are processed with a bottom multilayer perceptron. The following diagram depicts the basic architecture of DLRM, with a second order interaction layer between the dense and sparse features and a top MLP for generating the prediction. 
 
-### [Beta] CuDNN backend for SDPA
-
-The cuDNN "Fused Flash Attention" backend  was landed for *torch.nn.functional.scaled_dot_product_attention*. On NVIDIA H100 GPUs this can provide up to 75% speed-up over FlashAttentionV2. This speedup is enabled by default for all users of SDPA on H100 or newer GPUs.
-
-
-### [Beta] *torch.compile* regional compilation without recompilations
-
-Regional compilation without recompilations, via *torch._dynamo.config.inline_inbuilt_nn_modules* which default to True in 2.5+. This option allows users to compile a repeated *nn.Module* (e.g. a transformer layer in LLM) without recompilations. Compared to compiling the full model, this option can result in smaller compilation latencies with 1%-5% performance degradation compared to full model compilation.
-
-See the [tutorial](https://pytorch.org/tutorials/recipes/regional_compilation.html) for more information.
-
-
-### [Beta] TorchInductor CPU backend optimization
-
-This feature advances Inductor’s CPU backend optimization, including CPP backend code generation and FX fusions with customized CPU kernels. The Inductor CPU backend supports vectorization of common data types and all Inductor IR operations, along with the static and symbolic shapes. It is compatible with both Linux and Windows OS and supports the default Python wrapper, the CPP wrapper, and AOT-Inductor mode. 
-
-Additionally, it extends the max-autotune mode of the GEMM template (prototyped in 2.5), offering further performance gains. The backend supports various FX fusions, lowering to customized kernels such as oneDNN for Linear/Conv operations and SDPA. The Inductor CPU backend consistently achieves performance speedups across three benchmark suites—TorchBench, Hugging Face, and timms—outperforming eager mode in 97.5% of the 193 models tested.
-
-
-## PROTOTYPE FEATURES
-
-
-### [Prototype] FlexAttention
-
-We've introduced a flexible API that enables implementing various attention mechanisms such as Sliding Window, Causal Mask, and PrefixLM with just a few lines of idiomatic PyTorch code. This API leverages torch.compile to generate a fused FlashAttention kernel, which eliminates extra memory allocation and achieves performance comparable to handwritten implementations. Additionally, we automatically generate the backwards pass using PyTorch's autograd machinery. Furthermore, our API can take advantage of sparsity in the attention mask, resulting in significant improvements over standard attention implementations.
-
-For more information and examples, please refer to the [official blog post](https://pytorch.org/blog/flexattention/) and [Attention Gym](https://github.com/pytorch-labs/attention-gym).
-
-
-### [Prototype] Compiled Autograd
-
-Compiled Autograd is an extension to the PT2 stack allowing the capture of the entire backward pass. Unlike the backward graph traced by AOT dispatcher, Compiled Autograd tracing is deferred until backward execution time, which makes it impervious to forward pass graph breaks, and allows it to record backward hooks into the graph.
-
-Please refer to the [tutorial](https://pytorch.org/tutorials/intermediate/compiled_autograd_tutorial.html) for more information.
-
-
-### [Prototype] Flight Recorder
-
-Flight recorder is a new debugging tool that helps debug stuck jobs. The tool works by continuously capturing information about collectives as they run. Upon detecting a stuck job, the information can be used to quickly identify misbehaving ranks/machines along with code stack traces.
-
-For more information please refer to the following [tutorial](https://pytorch.org/tutorials/prototype/flight_recorder_tutorial.html).
-
-
-### [Prototype] Max-autotune Support on CPU with GEMM Template
-
-Max-autotune mode for the Inductor CPU backend in torch.compile profiles multiple implementations of operations at compile time and selects the best-performing one. This is particularly beneficial for GEMM-related operations, using a C++ template-based GEMM implementation as an alternative to the ATen-based approach with oneDNN and MKL libraries. We support FP32, BF16, FP16, and INT8 with epilogue fusions for x86 CPUs. We’ve seen up to 7% geomean speedup on the dynamo benchmark suites and up to 20% boost in next-token latency for LLM inference.
-
-For more information please refer to the [tutorial](https://pytorch.org/tutorials/prototype/max_autotune_on_CPU_tutorial.html).
-
-
-### [Prototype] TorchInductor CPU on Windows
-
-Inductor CPU backend in torch.compile now works on Windows. We support MSVC (cl), clang (clang-cl) and Intel compiler (icx-cl) for Windows inductor currently.
-
-See the [tutorial](https://pytorch.org/tutorials/prototype/inductor_windows_cpu.html) for more details.
-
-
-### [Prototype] FP16 support on CPU path for both eager mode and TorchInductor CPP backend
-
-Float16 is a commonly used reduced floating point type for performance improvement in neural network inference/training. Since this release, float16 for both eager and TorchInductor is supported on the CPU path.
-
-
-### [Prototype] Autoload Device Extension
-
-PyTorch now supports autoloading for out-of-tree device extensions, streamlining integration by eliminating the need for manual imports. This feature, enabled through the torch.backends entrypoint, simplifies usage by ensuring seamless extension loading, while allowing users to disable it via an environment variable if needed.
-
-See the [tutorial](https://pytorch.org/tutorials/prototype/python_extension_autoload.html) for more information.
-
-### [Prototype] Enhanced Intel GPU support
-
-Intel GPUs support enhancement is now available for both Intel® Data Center GPU Max Series and Intel® Client GPUs (Intel® Core™ Ultra processors with built-in Intel® Arc™ graphics and Intel® Arc™ Graphics for dGPU parts), which is to make it easier to accelerate your Machine Learning workflows on Intel GPUs in PyTorch 2.5 release. We also enabled the initial support of PyTorch on Windows for Intel® Client GPUs in this release.
+![flow diagram](/assets/images/torchrec-1.png){:style="width:100%"}
 
 
 
-* Expanded PyTorch hardware backend support matrix to include both Intel Data Center and Client GPUs.   
-* The implementation of SYCL* kernels to enhance coverage and execution of Aten operators on Intel GPUs to boost performance in PyTorch eager mode. 
-* Enhanced Intel GPU backend of torch.compile to improve inference and training performance for a wide range of deep learning workloads.  
+TorchRec provides standardized modules with significant optimizations in fusing embedding lookups. EBC is a traditional PyTorch embedding module implementation, containing a collection of `torch.nn.EmbeddingBags.` FusedEBC, powered by FBGEMM for high performance operations on embedding tables with a fused optimizer and UVM caching/management for alleviating memory constraints, is the optimized version present in sharded TorchRec modules for distributed training and inference. The below benchmark demonstrates the vast performance improvements of FusedEBC in comparison to a traditional PyTorch embedding module implementation (EBC) and the ability for FusedEBC to handle much larger embeddings than what is available on GPU memory with UVM caching.
 
-These features are available through PyTorch preview and nightly binary PIP wheels. For more information regarding Intel GPU support, please refer to [documentation](https://pytorch.org/docs/main/notes/get_start_xpu.html).
+![performance chart](/assets/images/torchrec-2.png){:style="width:100%"}
+
+
+
+## TorchRec Data Types
+
+TorchRec provides standard [data types](https://pytorch.org/torchrec/datatypes-api-reference.html) and [modules](https://pytorch.org/torchrec/modules-api-reference.html) for easy handling of distributed embeddings. Here is a simple example setting up a collection of embedding tables through TorchRec:
+
+
+```
+from torchrec import EmbeddingBagCollection
+from torchrec import KeyedJaggedTensor
+from torchrec import JaggedTensor
+
+ebc = torchrec.EmbeddingBagCollection(
+    device="cpu",
+    tables=[
+        torchrec.EmbeddingBagConfig(
+            name="product_table",
+            embedding_dim=64,
+            num_embeddings=4096,
+            feature_names=["product"],
+            pooling=torchrec.PoolingType.SUM,
+        ),
+        torchrec.EmbeddingBagConfig(
+            name="user_table",
+            embedding_dim=64,
+            num_embeddings=4096,
+            feature_names=["user"],
+            pooling=torchrec.PoolingType.SUM,
+        )
+    ]
+)
+
+product_jt = JaggedTensor(
+    values=torch.tensor([1, 2, 1, 5]), lengths=torch.tensor([3, 1])
+)
+user_jt = JaggedTensor(values=torch.tensor([2, 3, 4, 1]), lengths=torch.tensor([2, 2]))
+
+kjt = KeyedJaggedTensor.from_jt_dict({"product": product_jt, "user": user_jt})
+
+print("Call EmbeddingBagCollection Forward: ", ebc(kjt))
+```
+
+
+
+## Sharding
+
+TorchRec provides a planner class that automatically generates an optimized sharding plan across many GPUs. Here we demonstrate generating a sharding plan across two GPUs:
+
+
+```
+from torchrec.distributed.planner import EmbeddingShardingPlanner, Topology
+
+planner = EmbeddingShardingPlanner(
+    topology=Topology(
+        world_size=2,
+        compute_device="cuda",
+    )
+)
+
+plan = planner.collective_plan(ebc, [sharder], pg)
+
+print(f"Sharding Plan generated: {plan}")
+```
+
+
+
+## Model Parallel
+
+TorchRec’s main distributed training API is [DistributedModelParallel](https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module), which calls the planner to generate a sharding plan (demonstrated above) and shards TorchRec modules according to that plan. We demonstrate using [DistributedModelParallel](https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module) to our EmbeddingBagCollection for sharding embeddings distributed training:
+
+
+```
+model = torchrec.distributed.DistributedModelParallel(ebc, device=torch.device("cuda"))
+```
+
+
+
+## Inference
+
+TorchRec provides simple APIs for quantizing and sharding embeddings for a model for distributed inference. The usage is demonstrated below:
+
+
+```
+from torchrec.inference.modules import (
+    quantize_inference_model,
+    shard_quant_model,
+)
+quant_model = quantize_inference_model(ebc)
+sharded_model, _ = shard_quant_model(
+    quant_model, compute_device=device, sharding_device=device
+)
+```
+
+
+
+## Conclusion
+
+TorchRec and FBGEMM are now stable, with optimized features for large scale recommendation systems. 
+
+For setting up TorchRec and FBGEMM, check out the [getting started guide](https://pytorch.org/torchrec/setup-torchrec.html). \
+ \
+We also recommend the comprehensive, end-to-end [tutorial for introducing the features in TorchRec and FBGEMM](https://pytorch.org/tutorials/intermediate/torchrec_intro_tutorial.html#).
