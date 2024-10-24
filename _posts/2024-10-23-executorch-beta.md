@@ -1,7 +1,7 @@
 ---
 layout: blog_detail
 title: "ExecuTorch Beta: On-Device AI and LLMs, Stability, and Acceleration with Partners"
-author: By Team PyTorch
+author: By Team PyTorch 
 ---
 
 **TLDR**
