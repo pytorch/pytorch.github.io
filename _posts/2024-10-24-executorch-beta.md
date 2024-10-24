@@ -4,8 +4,6 @@ title: "ExecuTorch Beta: On-Device AI and LLMs, Stability, and Acceleration with
 author: Team PyTorch
 ---
 
-**TLDR**
-
 * ExecuTorch has achieved Beta status with the release of v0.4, providing stable APIs and runtime, as well as extensive kernel coverage.  
 * ExecuTorch is the recommended on-device inference engine for Llama 3.2 1B/3B models, offering enhanced performance and memory efficiency for both original and quantized models.  
 * There has been a significant increase in adoption and ecosystem growth for ExecuTorch, and the focus is now on improving reliability, performance, and coverage for non-CPU backends as the next steps.
