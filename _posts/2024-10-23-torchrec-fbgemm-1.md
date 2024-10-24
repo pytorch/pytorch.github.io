@@ -1,7 +1,7 @@
 ---
 layout: blog_detail
 title: "TorchRec and FBGEMM 1.0 Stable Release"
-author:  Paul Zhang, Zain Huda, Sarunya Pumma, Shintaro Iwasaki, Supadchaya Puangpontip, Benson Ma
+author: Paul Zhang, Zain Huda, Sarunya Pumma, Shintaro Iwasaki, Supadchaya Puangpontip, Benson Ma
 ---
 
 We are happy to announce the stable release, 1.0, for [TorchRec](https://github.com/pytorch/torchrec) and [FBGEMM](https://github.com/pytorch/FBGEMM). TorchRec is the PyTorch native recommendation systems library, powered by FBGEMM’s (Facebook GEneral Matrix Multiplication) efficient, low-level kernels. 
