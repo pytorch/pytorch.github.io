@@ -56,11 +56,11 @@ The performance of Intel GPU on PyTorch was continuously optimized to achieve de
 
 The latest performance data measured on top of PyTorch Dynamo Benchmarking Suite using Intel® Data Center GPU Max Series 1100 single card showcase the FP16/BF16 significant speedup ratio over FP32 on eager mode in Figure 1, and Torch.compile mode speedup ratio over eager mode in Figure 2\. Both inference and training reached the similar significant improvements. 
 
-![Figure 2: FP16/BF16 Performance Gains Over FP32 Eager](/assets/images/performance-gains-over-fp32-eager.png){:style="width:100%"}
+![Figure 2: FP16/BF16 Performance Gains Over FP32 Eager](/assets/images/performance-gains-over-fp32-eager-2.png){:style="width:100%"}
 
 Figure 2: FP16/BF16 Performance Gains Over FP32 Eager
 
-![Figure 3: Torch.compile Performance Gains Over Eager Mode](/assets/images/performance-gains-over-fp32-eager-2.png){:style="width:100%"}
+![Figure 3: Torch.compile Performance Gains Over Eager Mode](/assets/images/performance-gains-over-fp32-eager.png){:style="width:100%"}
 
 Figure 3: Torch.compile Performance Gains Over Eager Mode
 
