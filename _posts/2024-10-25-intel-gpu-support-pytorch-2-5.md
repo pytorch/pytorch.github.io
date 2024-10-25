@@ -1,7 +1,7 @@
 ---
 layout: blog_detail
 title: "Intel GPU Support Now Available in PyTorch 2.5"
-author: PyTorch Team at Intel
+author: PyTorch Team at Intel 
 ---
 
 Support for Intel GPUs is now available in PyTorch® 2.5, providing improved functionality and performance for Intel GPUs which including [Intel® Arc™ discrete graphics](https://www.intel.com/content/www/us/en/products/details/discrete-gpus/arc.html), [Intel® Core™ Ultra processors](https://www.intel.com/content/www/us/en/products/details/processors/core-ultra.html) with built-in Intel® Arc™ graphics and [Intel® Data Center GPU Max Series](https://www.intel.com/content/www/us/en/products/details/discrete-gpus/data-center-gpu/max-series.html). This integration brings Intel GPUs and the SYCL\* software stack into the official PyTorch stack, ensuring a consistent user experience and enabling more extensive AI application scenarios, particularly in the AI PC domain.
