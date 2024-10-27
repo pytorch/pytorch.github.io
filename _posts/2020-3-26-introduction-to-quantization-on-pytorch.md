@@ -41,7 +41,7 @@ We developed three techniques for quantizing neural networks in PyTorch as part 
    import torch.quantization
    quantized_model = torch.quantization.quantize_dynamic(model, {torch.nn.Linear}, dtype=torch.qint8)
    ```
-     * See the documentation for the function [here](https://pytorch.org/docs/stable/quantization.html#torch.quantization.quantize_dynamic) an end-to-end example in our tutorials [here](https://pytorch.org/tutorials/advanced/dynamic_quantization_tutorial.html) and [here](https://pytorch.org/tutorials/intermediate/dynamic_quantization_bert_tutorial.html).
+     * See the documentation for the function [here](https://pytorch.org/docs/stable/generated/torch.ao.quantization.quantize_dynamic.html) an end-to-end example in our tutorials [here](https://pytorch.org/tutorials/advanced/dynamic_quantization_tutorial.html) and [here](https://pytorch.org/tutorials/intermediate/dynamic_quantization_bert_tutorial.html).
 
 2. ### **Post-Training Static Quantization**
 
@@ -197,7 +197,7 @@ Quantization provides a 4x reduction in the model size and a speedup of 2x to 3x
 </div>
 
 ### **Accuracy results**
-We also compared the accuracy of static quantized models with the floating point models on Imagenet. For dynamic quantization, we [compared](https://github.com/huggingface/transformers/blob/master/examples/run_glue.py) the F1 score of BERT on the GLUE benchmark for MRPC.
+We also compared the accuracy of static quantized models with the floating point models on Imagenet. For dynamic quantization, we [compared](https://github.com/huggingface/transformers/blob/main/examples/pytorch/text-classification/run_glue.py) the F1 score of BERT on the GLUE benchmark for MRPC.
 
 #### **Computer Vision Model accuracy**
 
