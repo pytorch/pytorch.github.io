@@ -37,7 +37,7 @@ In the example above, when multiplying x and y to obtain v, the engine will exte
   <p>Figure 2: Computational graph extended after executing the logarithm</p>
 </div>
 
-Continuing, the engine now calculates the <a href="https://www.codecogs.com/eqnedit.php?latex=log(v)" target="_blank"><img src="https://latex.codecogs.com/gif.latex?log(v)" title="log(v)" /></a> operation and extends the graph again with the log derivative that it knows to be <a href="https://www.codecogs.com/eqnedit.php?latex=\frac{1}{v}" target="_blank"><img src="https://latex.codecogs.com/gif.latex?\frac{1}{v}" title="\frac{1}{v}" /></a>. This is shown in figure 3. This operation generates the result <a href="https://www.codecogs.com/eqnedit.php?latex=\frac{\partial&space;w}{\partial&space;v}" target="_blank"><img src="https://latex.codecogs.com/gif.latex?\frac{\partial&space;w}{\partial&space;v}" title="\frac{\partial w}{\partial v}" /></a> that when propagated backward and multiplied by the multiplication derivative as in the chain rule, generates the derivatives <a href="https://www.codecogs.com/eqnedit.php?latex=\frac{\partial&space;w}{\partial&space;x}" target="_blank"><img src="https://latex.codecogs.com/gif.latex?\frac{\partial&space;w}{\partial&space;x}" title="\frac{\partial w}{\partial x}" /></a>, <a href="https://www.codecogs.com/eqnedit.php?latex=\frac{\partial&space;w}{\partial&space;x}" target="_blank"><img src="https://latex.codecogs.com/gif.latex?\frac{\partial&space;w}{\partial&space;x}" title="\frac{\partial w}{\partial x}" /></a>.
+Continuing, the engine now calculates the <a href="https://www.codecogs.com/eqnedit.php?latex=log(v)" target="_blank"><img src="https://latex.codecogs.com/gif.latex?log(v)" title="log(v)" /></a> operation and extends the graph again with the log derivative that it knows to be <a href="https://www.codecogs.com/eqnedit.php?latex=\frac{1}{v}" target="_blank"><img src="https://latex.codecogs.com/gif.latex?\frac{1}{v}" title="\frac{1}{v}" /></a>. This is shown in figure 3. This operation generates the result <a href="https://www.codecogs.com/eqnedit.php?latex=\frac{\partial&space;w}{\partial&space;v}" target="_blank"><img src="https://latex.codecogs.com/gif.latex?\frac{\partial&space;w}{\partial&space;v}" title="\frac{\partial w}{\partial v}" /></a> that when propagated backward and multiplied by the multiplication derivative as in the chain rule, generates the derivatives <a href="https://www.codecogs.com/eqnedit.php?latex=\frac{\partial&space;w}{\partial&space;x}" target="_blank"><img src="https://latex.codecogs.com/gif.latex?\frac{\partial&space;w}{\partial&space;x}" title="\frac{\partial w}{\partial x}" /></a>, <a href="https://www.codecogs.com/eqnedit.php?latex=\frac{\partial&space;w}{\partial&space;y}" target="_blank"><img src="https://latex.codecogs.com/gif.latex?\frac{\partial&space;w}{\partial&space;y}" title="\frac{\partial w}{\partial y}" /></a>.
 
 <div class="text-center">
   <img src="{{ site.baseurl }}/assets/images/extended_computational_graph.png" width="100%">
@@ -111,7 +111,7 @@ We can execute the same expression in PyTorch and calculate the gradient of the 
   <pre>>>> y.backward(1.0)</pre>
   <pre>>>> x.grad</pre>
   tensor([1.3633,
-          0.1912])</pre>
+          0.1912])
 </div>
 
 The result is the same as our hand-calculated Jacobian-vector product!

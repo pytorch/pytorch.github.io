@@ -13,29 +13,19 @@ PyTorch is supported on macOS 10.15 (Catalina) or above.
 ### Python
 {: #mac-python}
 
-It is recommended that you use Python 3.8 - 3.11.
+It is recommended that you use Python 3.9 - 3.12.
 You can install Python either through the Anaconda
 package manager (see [below](#anaconda)), [Homebrew](https://brew.sh/), or
 the [Python website](https://www.python.org/downloads/mac-osx/).
 
-In one of the upcoming PyTorch releases, support for Python 3.8 will be deprecated.
-
 ### Package Manager
 {: #mac-package-manager}
 
-To install the PyTorch binaries, you will need to use one of two supported package managers: [Anaconda](https://www.anaconda.com/download/#macos) or [pip](https://pypi.org/project/pip/). Anaconda is the recommended package manager as it will provide you all of the PyTorch dependencies in one, sandboxed install, including Python.
-
+To install the PyTorch binaries, you will need to use one of two supported package managers: [pip](https://pypi.org/project/pip/) or [Anaconda](https://www.anaconda.com/download/#macos). 
 #### Anaconda
 
-To install Anaconda, you can [download graphical installer](https://www.anaconda.com/download/#macos) or use the command-line installer. If you use the command-line installer, you can right-click on the installer link, select `Copy Link Address`, or use the following commands on Intel Mac:
+To install Anaconda, you can [download graphical installer](https://www.anaconda.com/download/#macos) or use the command-line installer. If you use the command-line installer, you can right-click on the installer link, select `Copy Link Address`, or use the following commands on Mac computer with Apple silicon:
 
-```bash
-# The version of Anaconda may be different depending on when you are installing`
-curl -O https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-x86_64.sh
-sh Miniconda3-latest-MacOSX-x86_64.sh
-# and follow the prompts. The defaults are generally good.`
-```
-or following commands on M1 Mac:
 ```bash
 # The version of Anaconda may be different depending on when you are installing`
 curl -O https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-arm64.sh
