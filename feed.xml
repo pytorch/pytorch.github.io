@@ -4,7 +4,7 @@
   <generator uri="https://jekyllrb.com/" version="3.9.0">Jekyll</generator>
   <link href="https://pytorch.org/feed.xml" rel="self" type="application/atom+xml" />
   <link href="https://pytorch.org/" rel="alternate" type="text/html" />
-  <updated>2024-10-31T11:15:02-07:00</updated>
+  <updated>2024-11-01T09:50:59-07:00</updated>
   <id>https://pytorch.org/feed.xml</id>
 
   
@@ -29,6 +29,206 @@
 
   
   
+  
+    <entry>
+      <title type="html">Deep Dive on Cutlass Ping-Pong GEMM Kernel</title>
+      <link href="https://pytorch.org/blog/cutlass-ping-pong-gemm-kernel/" rel="alternate" type="text/html" title="Deep Dive on Cutlass Ping-Pong GEMM Kernel" />
+      <published>2024-11-01T00:00:00-07:00</published>
+      <updated>2024-11-01T00:00:00-07:00</updated>
+      <id>https://pytorch.org/blog/cutlass-ping-pong-gemm-kernel</id>
+      <content type="html" xml:base="https://pytorch.org/blog/cutlass-ping-pong-gemm-kernel/">&lt;p&gt;&lt;img src=&quot;/assets/images/cutlass-ping-pong-gemm-kernel/fg1.png&quot; alt=&quot;Figure 1. FP8 GEMM Throughput Comparison CUTLASS vs Triton&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Figure 1. FP8 GEMM Throughput Comparison CUTLASS vs Triton&lt;/strong&gt;&lt;/p&gt;
+
+&lt;h2 id=&quot;summary&quot;&gt;Summary&lt;/h2&gt;
+
+&lt;p&gt;In this post, we provide an overview, with relevant FP8 inference kernel benchmarking, of the cutlass Ping-Pong GEMM kernel.&lt;/p&gt;
+
+&lt;p&gt;Ping-Pong is one of the fastest matmul (GEMM) kernel architectures available for the Hopper GPU architecture. Ping-Pong is a member of the Warp Group Specialized Persistent Kernels family, which includes both Cooperative and Ping-Pong variants. Relative to previous GPUs, Hopper’s substantial tensor core compute capability requires deep asynchronous software pipelining in order to achieve peak performance.&lt;/p&gt;
+
+&lt;p&gt;The Ping-Pong and Cooperative kernels exemplify this paradigm, as the key design patterns are persistent kernels to amortize launch and prologue overhead, and ‘async everything’ with specialized warp groups with two consumers and one producer, to create a highly overlapped processing pipeline that is able to continuously supply data to the tensor cores.&lt;/p&gt;
+
+&lt;p&gt;When the H100 (Hopper) GPU was launched, Nvidia billed it as the first truly asynchronous GPU. That statement highlights the need for H100 specific kernel architectures to also be asynchronous in order to fully maximize computational/GEMM throughput.&lt;/p&gt;
+
+&lt;p&gt;The pingpong GEMM, introduced in CUTLASS 3.x, exemplifies this by moving all aspects of the kernel to a ‘fully asynchronous’ processing paradigm.  In this blog, we’ll showcase the core features of the ping-pong kernel design as well as showcase its performance on inference workloads vs cublas and triton split-k kernels.&lt;/p&gt;
+
+&lt;h2 id=&quot;ping-pong-kernel-design&quot;&gt;Ping-Pong Kernel Design&lt;/h2&gt;
+
+&lt;p&gt;Ping-Pong (or technically ‘sm90_gemm_tma_warpspecialized_pingpong’) operates with an asynchronous pipeline, leveraging warp specialization. Instead of the more classical homogeneous kernels, “warp groups” take on specialized roles. Note that a warp group consists of 4 warps of 32 threads each, or 128 total threads.&lt;/p&gt;
+
+&lt;p&gt;On earlier architectures, latency was usually hidden by running multiple thread blocks per SM. However, with Hopper, the Tensor Core throughput is so high that it necessitates moving to deeper pipelines. These deeper pipelines then hinder running multiple thread blocks per SM. Thus, persistent thread blocks now issue collective main loops across multiple tiles and multiple warp groups. Thread block clusters are allocated based on the total SM count.&lt;/p&gt;
+
+&lt;p&gt;For Ping-Pong, each warp group takes on a specialized role of either Data producer or Data consumer.&lt;/p&gt;
+
+&lt;p&gt;The producer warp group focuses on producing data movement to fill the shared memory buffers (via TMA). Two other warp groups are dedicated consumers that process the math (MMA) portion with tensor cores, and then do any follow up work and write their results back to global memory (epilogue).&lt;/p&gt;
+
+&lt;p&gt;Producer warp groups work with TMA (Tensor Memory Accelerator), and are deliberately kept as lightweight as possible. In fact, in Ping-Pong, they deliberately reduce their register resources to improve occupancy. Producers will reduce their max register counts by 40, vs consumers will increase their max register count by 232, an effect we can see in the cutlass source and corresponding SASS:&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/cutlass-ping-pong-gemm-kernel/fg2.png&quot; alt=&quot;source code&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Unique to Ping-Pong, each consumer works on separate C output tiles. (For reference, the cooperative kernel is largely equivalent to Ping-Pong, but both consumer groups work on the same C output tile). Further, the two consumer warp groups then split their work between the main loop MMA and epilogue.&lt;/p&gt;
+
+&lt;p&gt;This is shown in the below image:&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/cutlass-ping-pong-gemm-kernel/fg3.png&quot; alt=&quot;Figure 2: An overview of the Ping-Pong Kernel pipeline. Time moves left to right.&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Figure 2: An overview of the Ping-Pong Kernel pipeline. Time moves left to right.&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;By having two consumers, it means that one can be using the tensor cores for MMA while the other performs the epilogue, and then vice-versa. This maximizes the ‘continuous usage’ of the tensor cores on each SM, and is a key part of the reason for the max throughput. The tensor cores can be continuously fed data to realize their (near) maximum compute capability. (See the bottom section of the Fig 2 illustration above).&lt;/p&gt;
+
+&lt;p&gt;Similar to how Producer threads stay focused only on data movements, MMA threads only issue MMA instructions in order to achieve peak issue rate. MMA threads must issue multiple MMA instructions and keep these in flight against TMA wait barriers.&lt;/p&gt;
+
+&lt;p&gt;An excerpt of the kernel code is shown below to cement the specialization aspects:&lt;/p&gt;
+
+&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;// Two types of warp group 'roles' 
+enum class WarpGroupRole {
+      Producer = 0,
+      Consumer0 = 1,
+      Consumer1 = 2
+    };
+
+//warp group role assignment
+auto warp_group_role = WarpGroupRole(canonical_warp_group_idx());
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;h2 id=&quot;data-movement-with-producers-and-tensor-memory-accelerator&quot;&gt;Data Movement with Producers and Tensor Memory Accelerator&lt;/h2&gt;
+
+&lt;p&gt;The producer warps focus exclusively on data movement - specifically they are kept as lightweight as possible and in fact give up some of their register space to the consumer warps (keeping only 40 registers, while consumers will get 232). Their main task is issuing TMA (tensor memory accelerator) commands to move data from Global memory to shared memory as soon as a shared memory buffer is signaled as being empty.&lt;/p&gt;
+
+&lt;p&gt;To expand on TMA, or Tensor Memory Accelerator, TMA is a hardware component introduced with H100’s that asynchronously handles the transfer of memory from HBM (global memory) to shared memory. By having a dedicated hardware unit for memory movement, worker threads are freed to engage in other work rather than computing and managing data movement. TMA not only handles the movement of the data itself, but also calculates the required destination memory addresses, can apply any transforms (reductions, etc.) to the data and can handle layout transformations to deliver data to shared memory in a ‘swizzled’ pattern so that it’s ready for use without any bank conflicts. Finally, it can also multicast the same data if needed to other SM’s that are members of the same thread cluster. Once the data has been delivered, TMA will then signal the consumer of interest that the data is ready.&lt;/p&gt;
+
+&lt;h2 id=&quot;cutlass-asynchronous-pipeline-class&quot;&gt;CUTLASS Asynchronous Pipeline Class&lt;/h2&gt;
+
+&lt;p&gt;This signaling between producers and consumers is coordinated via the new Asynchronous Pipeline Class which Cutlass describes as follows:&lt;/p&gt;
+
+&lt;p&gt;“Implementing a persistent GEMM algorithm calls for managing dozens of different kinds of asynchronously executing operations that synchronize using multiple barriers organized as a circular list.&lt;/p&gt;
+
+&lt;p&gt;This complexity is too much for human programmers to manage by hand.&lt;/p&gt;
+
+&lt;p&gt;As a result, we have developed [&lt;a href=&quot;https://l.workplace.com/l.php?u=https%3A%2F%2Fgithub.com%2FNVIDIA%2Fcutlass%2Fblob%2Fmain%2Finclude%2Fcutlass%2Fpipeline%2Fsm90_pipeline.hpp&amp;amp;h=AT0Qy69t9mn_9VGkJlf1TkC_yCVPAQbYzHtS9it0ZVxTxVasGZfb6u-VHKReULm29NsLhp3DtuRfN4BHnzczniArsCFe8Uzj7izIx646Otyl4lEwl9jUHDhTcUq87KfS919MkadFMjq5i4qtkbe7QbgZEMbhFi0ARgvz3-u7_X0Hf3kHwQ&amp;amp;__tn__=-UK-R&amp;amp;c[0]=AT2Wep-mQJcJ7w2cBPcqoNcO9gLYx7_Qg9TGIcfKPSoo8kGdDtl70vKog1VICaOX45DhNP-Eu6pUbUl9TxGeGLQHgzyXWuxAgDQrdlOhhiOC3QRDMckh2vCi8RADkSCainRbZ5JoF7CERyij7CrhsSskOfVqQ_fvN-lKG6W2_TkvMFLe8UbKNPkzSqjzfdo&quot;&gt;Cutlass Pipeline Async Class&lt;/a&gt;]…”&lt;/p&gt;
+
+&lt;h2 id=&quot;barriers-and-synchronization-within-the-ping-pong-async-pipeline&quot;&gt;Barriers and synchronization within the Ping-Pong async pipeline&lt;/h2&gt;
+
+&lt;p&gt;Producers must ‘acquire’ a given smem buffer via ‘producer_acquire’. At the start, a pipeline is empty meaning that producer threads can immediately acquire the barrier and begin moving data.&lt;/p&gt;
+
+&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;PipelineState mainloop_pipe_producer_state = cutlass::make_producer_start_state&amp;lt;MainloopPipeline&amp;gt;();
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Once the data movement is complete, producers issue the ‘producer_commit’ method to signal the consumer threads that data is ready.  &lt;br /&gt;
+However, for Ping-Pong, this is actually a noop instruction since TMA based producer’s barriers are automatically updated by the TMA when writes are completed.&lt;/p&gt;
+
+&lt;p&gt;consumer_wait - wait for data from producer threads (blocking).&lt;/p&gt;
+
+&lt;p&gt;consumer_release - signal waiting producer threads that they are finished consuming data from a given smem buffer. In other words, allow producers to go to work refilling this with new data.&lt;/p&gt;
+
+&lt;p&gt;From there, synchronization will begin in earnest where the producers will wait via the blocking producer acquire until they can acquire a lock, at which point their data movement work will repeat. This continues until the work is finished.&lt;/p&gt;
+
+&lt;p&gt;To provide a pseudo-code overview:&lt;/p&gt;
+
+&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;//producer
+While (work_tile_info.is_valid_tile) {
+
+	collective_mainloop.dma() // fetch data with TMA
+	scheduler.advance_to_next_work()
+	Work_tile_info = scheduler.get_current_work()
+
+}
+
+// Consumer 1, Consumer 2
+While (work_tile_info.is_valid_tile()) {
+
+	collective_mainloop.mma()
+	scheduler.advance_to_next_work()
+	Work_tile_info = scheduler.get_current_work()
+
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;And a visual birds-eye view putting it all together with the underlying hardware:&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/cutlass-ping-pong-gemm-kernel/fg4.png&quot; alt=&quot;Figure 3: An overview of the full async pipeline for Ping-Pong&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Figure 3: An overview of the full async pipeline for Ping-Pong&lt;/strong&gt;&lt;/p&gt;
+
+&lt;h2 id=&quot;step-by-step-breakdown-of-ping-pong-computation-loop&quot;&gt;Step-by-Step Breakdown of Ping-Pong Computation Loop&lt;/h2&gt;
+
+&lt;p&gt;Finally, a more detailed logical breakout of the Ping-Pong processing loop:&lt;/p&gt;
+
+&lt;p&gt;A - Producer (DMA) warp group acquires a lock on a shared memory buffer.&lt;/p&gt;
+
+&lt;p&gt;B - this allows it to kick off a tma cp_async.bulk request to the tma chip (via a single thread).&lt;/p&gt;
+
+&lt;p&gt;C - TMA computes the actual shared memory addressing required, and moves the data to shared memory. As part of this, swizzling is performed in order to layout the data in smem for the fastest (no bank conflict) access.&lt;/p&gt;
+
+&lt;p&gt;C1 - potentially, data can also be multicast to other SMs and/or it may need to wait for data from other tma multicast to complete the loading. (threadblock clusters now share shared memory across multiple SMs!)&lt;/p&gt;
+
+&lt;p&gt;D - At this point, the barrier is updated to signal the arrival of the data to smem.&lt;/p&gt;
+
+&lt;p&gt;E - The relevant consumer warpgroup now gets to work by issuing multiple wgmma.mma_async commands, which then read the data from smem to Tensor cores as part of it’s wgmma.mma_async matmul operation.&lt;/p&gt;
+
+&lt;p&gt;F - the MMA accumulator values are written to register memory as the tiles are completed.&lt;/p&gt;
+
+&lt;p&gt;G - the consumer warp group releases the barrier on the shared memory.&lt;/p&gt;
+
+&lt;p&gt;H - the producer warp groups go to work issuing the next tma instruction to refill the now free smem buffer.&lt;/p&gt;
+
+&lt;p&gt;I - The consumer warp group simultaneously applies any epilogue actions to the accumulator, and then move data from register to a different smem buffer.&lt;/p&gt;
+
+&lt;p&gt;J - The consumer warp issues a cp_async command to move data from smem to global memory.&lt;/p&gt;
+
+&lt;p&gt;The cycle repeats until the work is completed. Hopefully this provides you with a working understanding of the core concepts that power Ping-Pong’s impressive performance.&lt;/p&gt;
+
+&lt;h2 id=&quot;microbenchmarks&quot;&gt;Microbenchmarks&lt;/h2&gt;
+
+&lt;p&gt;To showcase some of Ping-Pong’s performance, below are some comparison charts related to our work on designing fast inference kernels.&lt;/p&gt;
+
+&lt;p&gt;First a general benchmarking of the three fastest kernels so far (lower is better): \&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/cutlass-ping-pong-gemm-kernel/fg5.png&quot; alt=&quot;Figure 4, above: Benchmark timings of FP8 GEMMs, lower is better (faster)&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Figure 4, above: Benchmark timings of FP8 GEMMs, lower is better (faster)&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;And translating that into a relative speedup chart of Ping-Pong vs cuBLAS and Triton:&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/cutlass-ping-pong-gemm-kernel/fg6.png&quot; alt=&quot;Figure 5, above: Relative speedup of Ping-Pong vs the two closest kernels.&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Figure 5, above: Relative speedup of Ping-Pong vs the two closest kernels.&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;The full source code for the Ping-Pong kernel is here (619 lines of deeply templated Cutlass code, or to paraphrase the famous turtle meme - “it’s templates…all the way down! ):&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://github.com/NVIDIA/cutlass/blob/main/include/cutlass/gemm/kernel/sm90_gemm_tma_warpspecialized_pingpong.hpp&quot;&gt;https://github.com/NVIDIA/cutlass/blob/main/include/cutlass/gemm/kernel/sm90_gemm_tma_warpspecialized_pingpong.hpp&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;In addition, we have implemented PingPong as a CPP extension to make it easy to integrate into use with PyTorch here (along with a simple test script showing it’s usage):&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://github.com/pytorch-labs/applied-ai/tree/main/kernels/cuda/cutlass_gemm&quot;&gt;https://github.com/pytorch-labs/applied-ai/tree/main/kernels/cuda/cutlass_gemm&lt;/a&gt;&lt;/p&gt;
+
+&lt;h2 id=&quot;future-work&quot;&gt;Future Work&lt;/h2&gt;
+
+&lt;p&gt;Data movement is usually the biggest impediment to top performance for any kernel, and thus having an optimal strategy understanding of TMA (Tensor Memory Accelerator) on Hopper is vital. We previously published work on &lt;a href=&quot;https://pytorch.org/blog/hopper-tma-unit/&quot;&gt;TMA usage in Triton&lt;/a&gt;. Once features like warp specialization are enabled in Triton, we plan to do another deep dive on how Triton kernels like FP8 GEMM and FlashAttention can leverage kernel designs like Ping-Pong for acceleration on Hopper GPUs.&lt;/p&gt;</content>
+
+      
+      
+      
+      
+      
+
+      <author>
+          <name>Less Wright, Adnan Hoque</name>
+        
+        
+      </author>
+
+      
+
+      
+
+      
+        <summary type="html"></summary>
+      
+
+      
+      
+    </entry>
   
     <entry>
       <title type="html">Deploying LLMs with TorchServe + vLLM</title>
@@ -1817,62 +2017,6 @@ We also recommend the comprehensive, end-to-end &lt;a href=&quot;https://pytorch
 
       
         <summary type="html">The challenge of PyTorch’s lower CPU performance on Windows compared to Linux has been a significant issue. There are multiple factors leading to this performance disparity. Through our investigation, we’ve identified several reasons for poor CPU performance on Windows, two primary issues have been pinpointed: the inefficiency of the Windows default malloc memory allocator and the absence of SIMD for vectorization optimizations on the Windows platform. In this article, we show how PyTorch CPU performance on Windows has improved from the previous releases and where it stands as of PyTorch 2.4.1. Memory Allocation Optimization in PyTorch 2.1.2 and later In versions prior to PyTorch 2.1.2, PyTorch relied on the operating system’s default malloc function for memory allocation. The default malloc memory allocation on the Windows platform was less efficient compared to the malloc implementation mechanism on the Linux platform, leading to increased memory allocation times and reduced performance. To address this, we have substituted the default Windows malloc with mimalloc, a more efficient memory allocator developed by Microsoft. This update, included with the release of PyTorch 2.1.2 and later, has significantly enhanced the CPU performance of PyTorch on Windows, as shown in Figure 1.1. PyTorch CPU Performance Improvement on Windows with Memory Allocation Optimization Figure 1.1: Relative throughput improvement achieved by upgrading from Windows PyTorch version 2.0.1 to 2.1.2 (higher is better). The graph illustrates that with the release of PyTorch 2.1.2, there has been a notable enhancement in CPU performance on the Windows platform. The degree of improvement varies across different models, which can be attributed to the diverse mix of operations they perform and their corresponding memory access patterns. While the BERT model shows a modest performance gain, models like ResNet50 and MobileNet-v3 Large benefit from more pronounced improvements. On a high-performance CPU, memory allocation becomes a performance bottleneck. This is also why addressing this issue has led to such significant performance improvements. As shown in the graphs below, we see that PyTorch CPU performance on Windows can significantly be improved. However, there is still a noticeable gap when compared to its performance on Linux. The absence of vectorization optimizations in the Windows variant of PyTorch CPU is a key factor to the remaining performance gap. Windows vs Linux Performance on PyTorch 2.0.1 Figure 1.2: Relative performance of Windows vs Linux with PyTorch version 2.0.1 (higher is better). Windows vs Linux Performance on PyTorch 2.1.2 Figure 1.3: Relative performance of Windows vs Linux with PyTorch version 2.1.2 (higher is better). Vectorization Optimization in PyTorch 2.4.1 and later Prior to PyTorch 2.4.1, the Windows build of PyTorch lacked SIMD for vectorization optimizations, a feature that the Linux build leveraged for improved performance. This discrepancy was due to the SLEEF Library’s integration issues on Windows, which is a SIMD Library for Evaluating Elementary Functions, vectorized libm and DFT and is essential for efficient trigonometric calculations. Through a collaborative effort with engineers from ARM and Qualcomm, these challenges were resolved, enabling the integration of SIMD into PyTorch for Windows. The PyTorch 2.4.1 update has thus significantly enhanced PyTorch’s CPU performance on Windows, as shown in Figure 2.1. PyTorch CPU Performance Improvement on Windows with Vertorization Optimization Figure 2.1: Relative throughput improvement achieved by upgrading from PyTorch CPU version 2.1.2 to 2.4.1 (higher is better). As shown in the graph below, we see that PyTorch CPU performance on Windows ahieved the performance on Linux. Windows vs Linux Performance on PyTorch 2.4.1 Figure 2.2: Relative performance of Windows vs Linux with PyTorch version 2.4.1 (higher is better). CONCLUSION From PyTorch 2.0.1 to PyTorch 2.4.1, the CPU performance gap between Windows and Linux has been continuously narrowing. We compared the ratio of CPU performance on Windows to CPU performance on Linux across different versions, and the results are shown in the following graph. Windows vs Linux Performance on different version of PyTorch Figure 3: Performance Ratio for Windows to Linux with different version of PyTorch (higher is better). The graph shows that with PyTorch 2.4.1, CPU performance on Windows has nearly converged with that on Linux, and on some models, it has even surpassed Linux. For example, in the case of DistillBERT and RoBERTa models, the CPU performance ratio of Windows to Linux has achieved a remarkable 102%. However, certain models, including MobileNet-v3, still show a performance discrepancy. Intel engineers will continue to collaborate with Meta engineers, to reduce the performance gap of PyTorch CPU between Windows and Linux. HOW TO TAKE ADVANTAGE OF THE OPTIMIZATIONS Install PyTorch CPU 2.4.1 or later on Windows from the official repository, and you may automatically experience a performance boost with memory allocation and vectorizations. ACKNOWLEDGMENTS The results presented in this blog post was achieved through the collaborative effort of the Intel PyTorch team and Meta. We would like to express our sincere gratitude to Xu Han, Jiong Gong, Haozhe Zhu, Mingfei Ma, Chuanqi Wang, Guobing Chen and Eikan Wang. Their expertise and dedication have been instrumental in achieving the optimizations and performance improvements discussed here. Thanks to Jiachen Pu from community for his participation in the issue discussion and suggesting the use of mimalloc. We’d also like to express our gratitude to Microsoft for providing such an easily integrated and performant mallocation library. Thanks to Pierre Blanchard , Nathan Sircombe from ARM and Alex Reinking from Adobe for their contribution in overcome the compatibility issues with the sleef integrated to PyTorch Windows. Finally we want to thank Jing Xu, Weizhuo Zhang and Zhaoqiong Zheng for their contributions to this blog. Product and Performance Information The configurations in the table are collected with svr-info. Test by Intel on August 30, 2024. Specification Configuration1 Configuration2 Name ThinkBook 14 G5+ IRH ThinkBook 14 G5+ IRH Time Fri Aug 30 02:43:02 PM UTC 2024 Fri Aug 30 02:43:02 PM UTC 2024 System LENOVO LENOVO Baseboard LENOVO LENOVO Chassis LENOVO LENOVO CPU Model 13th Gen Intel(R) Core(TM) i7-13700H 13th Gen Intel(R) Core(TM) i7-13700H Microarchitecture Unknown Intel Unknown Intel Sockets 1 1 Cores per Socket 14 14 Hyperthreading Enabled Enabled CPUs 20 20 Intel Turbo Boost Enabled Enabled Base Frequency 2.4GHz 2.4GHz All-core Maximum Frequency 4.7GHz 4.7GHz Maximum Frequency 4.8GHz 4.8GHz NUMA Nodes 1 1 Prefetchers L2 HW: Enabled, L2 Adj.: Enabled, DCU HW: Enabled, DCU IP: Enabled L2 HW: Enabled, L2 Adj.: Enabled, DCU HW: Enabled, DCU IP: Enabled PPINs - - Accelerators DLB, DSA, IAA, QAT DLB, DSA, IAA, QAT Installed Memory 32GB (8x4GB LPDDR4 7400 MT/s [5200 MT/s]) 32GB (8x4GB LPDDR4 7400 MT/s [5200 MT/s]) Hugepagesize 2048kb 2048kb Transparent Huge Pages madvise madvise Automatic NUMA Balancing Disabled Disabled NIC “1. Raptor Lake PCH CNVi WiFi 2. Intel Corporation” “1. Raptor Lake PCH CNVi WiFi 2. Intel Corporation” Disk Micron MTFDKBA512TFH 500G Micron MTFDKBA512TFH 500G BIOS LBCN22WW LBCN22WW Microcode 0x411c 0x411c OS Windows 11 Desktop Ubuntu 23.10 Kernel OS Build 19045.4412 6.5.0-27-generic TDP 200 watts 200 watts Power &amp;amp; Perf Policy Normal Powersave (7) Normal Powersave (7) Frequency Governor performance performance Frequency Driver intel_pstate intel_pstate Max C-State 9 9 Notices and Disclaimers Performance varies by use, configuration and other factors. Learn more on the Performance Index site. Performance results are based on testing as of dates shown in configurations and may not reflect all publicly available updates. See backup for configuration details. No product or component can be absolutely secure. Your costs and results may vary. Intel technologies may require enabled hardware, software or service activation. Intel Corporation. Intel, the Intel logo, and other Intel marks are trademarks of Intel Corporation or its subsidiaries. Other names and brands may be claimed as the property of others.</summary>
-      
-
-      
-      
-    </entry>
-  
-    <entry>
-      <title type="html">PyTorch Foundation Technical Advisory Council Elects New Leadership</title>
-      <link href="https://pytorch.org/blog/tac-elects-new-leadership/" rel="alternate" type="text/html" title="PyTorch Foundation Technical Advisory Council Elects New Leadership" />
-      <published>2024-10-08T00:00:00-07:00</published>
-      <updated>2024-10-08T00:00:00-07:00</updated>
-      <id>https://pytorch.org/blog/tac-elects-new-leadership</id>
-      <content type="html" xml:base="https://pytorch.org/blog/tac-elects-new-leadership/">&lt;p&gt;We are pleased to announce the first-ever Chair and Vice Chair of the PyTorch Foundation’s Technical Advisory Council (TAC): &lt;strong&gt;Luca Antiga&lt;/strong&gt; as the Chair and &lt;strong&gt;Jiong Gong&lt;/strong&gt; as Vice Chair. Both leaders bring extensive experience and deep commitment to the PyTorch community, and they are set to guide the TAC in its mission to foster an open, diverse, and innovative PyTorch technical community.&lt;/p&gt;
-
-&lt;h2 id=&quot;meet-the-new-leadership&quot;&gt;Meet the New Leadership&lt;/h2&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/tac-elects-new-leadership/luca-antiga.jpg&quot; alt=&quot;Luca Antiga&quot; style=&quot;max-width:350px&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;Luca Antiga is the CTO at Lightning AI since 2022. He is an early contributor to PyTorch core and co-authored “Deep Learning with PyTorch” (published by Manning). He started his journey as a researcher in Bioengineering, and later co-founded Orobix, a company focused on building and deploying AI in production settings.&lt;/p&gt;
-
-&lt;p&gt;“I am looking forward to taking on the role of the chair of the PyTorch TAC,” says Luca. “As the TAC chair, I will ensure effective, timely topic selection and enhance visibility of technical needs from the board members and from the ecosystem at large. I will strive for directional, cohesive messaging throughout the transition of PyTorch from Meta to the Linux Foundation.”&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/tac-elects-new-leadership/jiong-gong.jpg&quot; alt=&quot;Jiong Gong&quot; style=&quot;max-width:350px; margin-top: 40px&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;Jiong Gong is a Principal Engineer and SW Architect for PyTorch Optimization from Intel. He serves as one of the PyTorch CPU module maintainers and is an active contributor to the TorchInductor CPU backend.&lt;/p&gt;
-
-&lt;p&gt;“I plan to further strengthen the collaboration between PyTorch developers and hardware vendors, promoting innovation and performance optimization across various hardware platforms, enhancing PyTorch ecosystem and streamlining the decision-making process,” says Jiong. “I am honored to serve as the vice chair of the TAC.”&lt;/p&gt;
-
-&lt;h2 id=&quot;what-does-the-tac-do&quot;&gt;What Does the TAC Do?&lt;/h2&gt;
-
-&lt;p&gt;The PyTorch Foundation’s TAC provides a forum for technical communication, leadership,  and collaboration for the PyTorch Foundation. The committee members are members of the PyTorch Foundation.  The committee holds open meetings once a month that anyone in the community can attend.  The committee provides thought leadership on technical topics, knowledge sharing, and a forum to discuss issues with other technical experts in the community.&lt;/p&gt;
-
-&lt;h2 id=&quot;new-tac-webpage&quot;&gt;New TAC Webpage&lt;/h2&gt;
-
-&lt;p&gt;Stay connected with the PyTorch Foundation’s Technical Advisory Council (TAC) by visiting our new &lt;a href=&quot;/tac&quot;&gt;TAC webpage&lt;/a&gt;. Here you can find the TAC members, where to view upcoming meeting agendas, access presentations, attend public meetings, watch meeting recordings and participate in discussions on key technical topics.&lt;/p&gt;
-
-&lt;p&gt;Plus stay tuned on our blog for regular updates from the PyTorch Foundation TAC leadership.&lt;/p&gt;</content>
-
-      
-      
-      
-      
-      
-
-      <author>
-          <name>Team PyTorch</name>
-        
-        
-      </author>
-
-      
-
-      
-
-      
-        <summary type="html">We are pleased to announce the first-ever Chair and Vice Chair of the PyTorch Foundation’s Technical Advisory Council (TAC): Luca Antiga as the Chair and Jiong Gong as Vice Chair. Both leaders bring extensive experience and deep commitment to the PyTorch community, and they are set to guide the TAC in its mission to foster an open, diverse, and innovative PyTorch technical community. Meet the New Leadership Luca Antiga is the CTO at Lightning AI since 2022. He is an early contributor to PyTorch core and co-authored “Deep Learning with PyTorch” (published by Manning). He started his journey as a researcher in Bioengineering, and later co-founded Orobix, a company focused on building and deploying AI in production settings. “I am looking forward to taking on the role of the chair of the PyTorch TAC,” says Luca. “As the TAC chair, I will ensure effective, timely topic selection and enhance visibility of technical needs from the board members and from the ecosystem at large. I will strive for directional, cohesive messaging throughout the transition of PyTorch from Meta to the Linux Foundation.” Jiong Gong is a Principal Engineer and SW Architect for PyTorch Optimization from Intel. He serves as one of the PyTorch CPU module maintainers and is an active contributor to the TorchInductor CPU backend. “I plan to further strengthen the collaboration between PyTorch developers and hardware vendors, promoting innovation and performance optimization across various hardware platforms, enhancing PyTorch ecosystem and streamlining the decision-making process,” says Jiong. “I am honored to serve as the vice chair of the TAC.” What Does the TAC Do? The PyTorch Foundation’s TAC provides a forum for technical communication, leadership, and collaboration for the PyTorch Foundation. The committee members are members of the PyTorch Foundation. The committee holds open meetings once a month that anyone in the community can attend. The committee provides thought leadership on technical topics, knowledge sharing, and a forum to discuss issues with other technical experts in the community. New TAC Webpage Stay connected with the PyTorch Foundation’s Technical Advisory Council (TAC) by visiting our new TAC webpage. Here you can find the TAC members, where to view upcoming meeting agendas, access presentations, attend public meetings, watch meeting recordings and participate in discussions on key technical topics. Plus stay tuned on our blog for regular updates from the PyTorch Foundation TAC leadership.</summary>
       
 
       
