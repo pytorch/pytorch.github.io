@@ -184,11 +184,16 @@ And translating that into a relative speedup chart of Ping-Pong vs cuBLAS and Tr
 
 The full source code for the Ping-Pong kernel is here (619 lines of deeply templated Cutlass code, or to paraphrase the famous turtle meme - "it's templates...all the way down! ):
 
-[https://github.com/NVIDIA/cutlass/blob/main/include/cutlass/gemm/kernel/sm90_gemm_tma_warpspecialized_pingpong.hpp](https://github.com/NVIDIA/cutlass/blob/main/include/cutlass/gemm/kernel/sm90_gemm_tma_warpspecialized_pingpong.hpp)
+- [https://github.com/NVIDIA/cutlass/blob/main/include/cutlass/gemm/kernel/sm90_gemm_tma_warpspecialized_pingpong.hpp](https://github.com/NVIDIA/cutlass/blob/main/include/cutlass/gemm/kernel/sm90_gemm_tma_warpspecialized_pingpong.hpp)
 
 In addition, we have implemented PingPong as a CPP extension to make it easy to integrate into use with PyTorch here (along with a simple test script showing it’s usage):
 
-[https://github.com/pytorch-labs/applied-ai/tree/main/kernels/cuda/cutlass_gemm](https://github.com/pytorch-labs/applied-ai/tree/main/kernels/cuda/cutlass_gemm)
+- [https://github.com/pytorch-labs/applied-ai/tree/main/kernels/cuda/cutlass_gemm](https://github.com/pytorch-labs/applied-ai/tree/main/kernels/cuda/cutlass_gemm)
+
+Finally, for continued learning, Nvidia has two GTC videos that dive into kernel design with Cutlass:
+
+- [Developing Optimal CUDA Kernels on Hopper Tensor Cores \| GTC Digital Spring 2023 \| NVIDIA On-Demand](https://www.nvidia.com/en-us/on-demand/session/gtcspring23-s51413/)
+- [CUTLASS: A Performant, Flexible, and Portable Way to Target Hopper Tensor Cores \| GTC 24 2024 \| NVIDIA On-Demand](https://www.nvidia.com/en-us/on-demand/session/gtc24-s61198/)
 
 ## Future Work
 
