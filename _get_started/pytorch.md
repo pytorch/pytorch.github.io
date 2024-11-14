@@ -1,6 +1,6 @@
 ---
 layout: get_started
-title: PyTorch 2.0
+title: PyTorch 2.x
 permalink: /get-started/pytorch-2.0/
 featured-img: "assets/images/featured-img-pytorch-2.png"
 background-class: get-started-background

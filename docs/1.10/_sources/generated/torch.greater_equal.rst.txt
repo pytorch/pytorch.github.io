@@ -1,6 +1,0 @@
-﻿torch.greater\_equal
-====================
-
-.. currentmodule:: torch
-
-.. autofunction:: greater_equal

@@ -1,6 +1,0 @@
-﻿torch.polar
-===========
-
-.. currentmodule:: torch
-
-.. autofunction:: polar
