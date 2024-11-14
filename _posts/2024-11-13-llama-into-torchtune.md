@@ -105,7 +105,7 @@ The idea of knowledge distillation is that a smaller model can achieve better pe
    </td>
   </tr>
   <tr>
-   <td><a href="https://arxiv.org/pdf/2404.02657">AKL</a>
+   <td>AKL
    </td>
    <td>24.4
    </td>
@@ -176,7 +176,6 @@ Below is a simplified example of how knowledge distillation differs from supervi
    <pre class="highlight">
    <code>
 model = llama3_2_1b()
-teacher_model = llama3_1_8b()
 ce_loss = CrossEntropyLoss()
 kd_loss = ForwardKLLoss()
 
@@ -184,7 +183,6 @@ tokens, labels = batch["tokens"], batch["labels"]
 logits = model(tokens, ...)
 
 loss = ce_loss(logits, labels)
-
 loss.backward()
 
    </code>
