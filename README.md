@@ -14,7 +14,7 @@ Install the following packages before attempting to setup the project:
 
 On OSX, you can use:
 
-```
+```bash
 brew install rbenv ruby-build nvm
 ```
 
@@ -22,29 +22,26 @@ brew install rbenv ruby-build nvm
 
 #### Install required Ruby version:
 
-```
+```bash
 #### You only need to run these commands if you are missing the needed Ruby version.
-
 rbenv install `cat .ruby-version`
-gem install bundler -v 1.16.3
+gem install bundler -v 2.5.23
 rbenv rehash
-
-####
 
 bundle install
 rbenv rehash
 ```
 
-#### Install required Node version
+#### Install Node
 
-```
+```bash
 nvm install
 nvm use
 ```
 
 #### Install Yarn
 
-```
+```bash
 brew install yarn --ignore-dependencies
 yarn install
 ```
@@ -53,19 +50,15 @@ yarn install
 
 To run the website locally for development:
 
-```
+```bash
 make serve
 ```
 
 Then navigate to [localhost:4000](localhost:4000).
 
-Note the `serve` task is contained in a `Makefile` in the root directory. We are using `make` as an alternative to the standard `jekyll serve` as we want to run `yarn`, which is not included in Jekyll by default.
-
-### Building the Static Site
-
 To build the static website from source:
 
-```
+```bash
 make build
 ```
 
