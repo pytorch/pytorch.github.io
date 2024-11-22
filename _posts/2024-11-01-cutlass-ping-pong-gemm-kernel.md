@@ -1,6 +1,6 @@
 ---
 layout: blog_detail
-title: "Deep Dive on Cutlass Ping-Pong GEMM Kernel"
+title: "Deep Dive on CUTLASS Ping-Pong GEMM Kernel"
 author: Less Wright, Adnan Hoque
 ---
 
@@ -10,7 +10,7 @@ author: Less Wright, Adnan Hoque
 
 ## Summary
 
-In this post, we provide an overview, with relevant FP8 inference kernel benchmarking, of the cutlass Ping-Pong GEMM kernel.
+In this post, we provide an overview, with relevant FP8 inference kernel benchmarking, of the CUTLASS Ping-Pong GEMM kernel.
 
 Ping-Pong is one of the fastest matmul (GEMM) kernel architectures available for the Hopper GPU architecture. Ping-Pong is a member of the Warp Group Specialized Persistent Kernels family, which includes both Cooperative and Ping-Pong variants. Relative to previous GPUs, Hopper’s substantial tensor core compute capability requires deep asynchronous software pipelining in order to achieve peak performance.
 
@@ -30,7 +30,7 @@ For Ping-Pong, each warp group takes on a specialized role of either Data produc
 
 The producer warp group focuses on producing data movement to fill the shared memory buffers (via TMA). Two other warp groups are dedicated consumers that process the math (MMA) portion with tensor cores, and then do any follow up work and write their results back to global memory (epilogue).
 
-Producer warp groups work with TMA (Tensor Memory Accelerator), and are deliberately kept as lightweight as possible. In fact, in Ping-Pong, they deliberately reduce their register resources to improve occupancy. Producers will reduce their max register counts by 40, vs consumers will increase their max register count by 232, an effect we can see in the cutlass source and corresponding SASS:
+Producer warp groups work with TMA (Tensor Memory Accelerator), and are deliberately kept as lightweight as possible. In fact, in Ping-Pong, they deliberately reduce their register resources to improve occupancy. Producers will reduce their max register counts by 40, vs consumers will increase their max register count by 232, an effect we can see in the CUTLASS source and corresponding SASS:
 
 
 ![source code](/assets/images/cutlass-ping-pong-gemm-kernel/fg2.png){:style="width:100%"}
@@ -76,13 +76,13 @@ To expand on TMA, or Tensor Memory Accelerator, TMA is a hardware component intr
 
 ## CUTLASS Asynchronous Pipeline Class
 
-This signaling between producers and consumers is coordinated via the new Asynchronous Pipeline Class which Cutlass describes as follows:
+This signaling between producers and consumers is coordinated via the new Asynchronous Pipeline Class which CUTLASS describes as follows:
 
 “Implementing a persistent GEMM algorithm calls for managing dozens of different kinds of asynchronously executing operations that synchronize using multiple barriers organized as a circular list.
 
 This complexity is too much for human programmers to manage by hand.
 
-As a result, we have developed [[Cutlass Pipeline Async Class](https://l.workplace.com/l.php?u=https%3A%2F%2Fgithub.com%2FNVIDIA%2Fcutlass%2Fblob%2Fmain%2Finclude%2Fcutlass%2Fpipeline%2Fsm90_pipeline.hpp&h=AT0Qy69t9mn_9VGkJlf1TkC_yCVPAQbYzHtS9it0ZVxTxVasGZfb6u-VHKReULm29NsLhp3DtuRfN4BHnzczniArsCFe8Uzj7izIx646Otyl4lEwl9jUHDhTcUq87KfS919MkadFMjq5i4qtkbe7QbgZEMbhFi0ARgvz3-u7_X0Hf3kHwQ&__tn__=-UK-R&c[0]=AT2Wep-mQJcJ7w2cBPcqoNcO9gLYx7_Qg9TGIcfKPSoo8kGdDtl70vKog1VICaOX45DhNP-Eu6pUbUl9TxGeGLQHgzyXWuxAgDQrdlOhhiOC3QRDMckh2vCi8RADkSCainRbZ5JoF7CERyij7CrhsSskOfVqQ_fvN-lKG6W2_TkvMFLe8UbKNPkzSqjzfdo)]…”
+As a result, we have developed [[CUTLASS Pipeline Async Class](https://l.workplace.com/l.php?u=https%3A%2F%2Fgithub.com%2FNVIDIA%2Fcutlass%2Fblob%2Fmain%2Finclude%2Fcutlass%2Fpipeline%2Fsm90_pipeline.hpp&h=AT0Qy69t9mn_9VGkJlf1TkC_yCVPAQbYzHtS9it0ZVxTxVasGZfb6u-VHKReULm29NsLhp3DtuRfN4BHnzczniArsCFe8Uzj7izIx646Otyl4lEwl9jUHDhTcUq87KfS919MkadFMjq5i4qtkbe7QbgZEMbhFi0ARgvz3-u7_X0Hf3kHwQ&__tn__=-UK-R&c[0]=AT2Wep-mQJcJ7w2cBPcqoNcO9gLYx7_Qg9TGIcfKPSoo8kGdDtl70vKog1VICaOX45DhNP-Eu6pUbUl9TxGeGLQHgzyXWuxAgDQrdlOhhiOC3QRDMckh2vCi8RADkSCainRbZ5JoF7CERyij7CrhsSskOfVqQ_fvN-lKG6W2_TkvMFLe8UbKNPkzSqjzfdo)]…”
 
 ## Barriers and synchronization within the Ping-Pong async pipeline
 
@@ -182,7 +182,7 @@ And translating that into a relative speedup chart of Ping-Pong vs cuBLAS and Tr
 
 **Figure 5, above: Relative speedup of Ping-Pong vs the two closest kernels.**
 
-The full source code for the Ping-Pong kernel is here (619 lines of deeply templated Cutlass code, or to paraphrase the famous turtle meme - "it's templates...all the way down! ):
+The full source code for the Ping-Pong kernel is here (619 lines of deeply templated CUTLASS code, or to paraphrase the famous turtle meme - "it's templates...all the way down! ):
 
 - [https://github.com/NVIDIA/cutlass/blob/main/include/cutlass/gemm/kernel/sm90_gemm_tma_warpspecialized_pingpong.hpp](https://github.com/NVIDIA/cutlass/blob/main/include/cutlass/gemm/kernel/sm90_gemm_tma_warpspecialized_pingpong.hpp)
 
@@ -190,7 +190,7 @@ In addition, we have implemented PingPong as a CPP extension to make it easy to 
 
 - [https://github.com/pytorch-labs/applied-ai/tree/main/kernels/cuda/cutlass_gemm](https://github.com/pytorch-labs/applied-ai/tree/main/kernels/cuda/cutlass_gemm)
 
-Finally, for continued learning, Nvidia has two GTC videos that dive into kernel design with Cutlass:
+Finally, for continued learning, Nvidia has two GTC videos that dive into kernel design with CUTLASS:
 
 - [Developing Optimal CUDA Kernels on Hopper Tensor Cores \| GTC Digital Spring 2023 \| NVIDIA On-Demand](https://www.nvidia.com/en-us/on-demand/session/gtcspring23-s51413/)
 - [CUTLASS: A Performant, Flexible, and Portable Way to Target Hopper Tensor Cores \| GTC 24 2024 \| NVIDIA On-Demand](https://www.nvidia.com/en-us/on-demand/session/gtc24-s61198/)
