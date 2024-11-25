@@ -4,7 +4,7 @@
   <generator uri="https://jekyllrb.com/" version="3.9.0">Jekyll</generator>
   <link href="https://pytorch.org/feed.xml" rel="self" type="application/atom+xml" />
   <link href="https://pytorch.org/" rel="alternate" type="text/html" />
-  <updated>2024-11-22T08:52:47-08:00</updated>
+  <updated>2024-11-25T08:28:33-08:00</updated>
   <id>https://pytorch.org/feed.xml</id>
 
   
@@ -29,6 +29,258 @@
 
   
   
+  
+    <entry>
+      <title type="html">Supercharging Training using float8 and FSDP2</title>
+      <link href="https://pytorch.org/blog/training-using-float8-fsdp2/" rel="alternate" type="text/html" title="Supercharging Training using float8 and FSDP2" />
+      <published>2024-11-25T00:00:00-08:00</published>
+      <updated>2024-11-25T00:00:00-08:00</updated>
+      <id>https://pytorch.org/blog/training-using-float8-fsdp2</id>
+      <content type="html" xml:base="https://pytorch.org/blog/training-using-float8-fsdp2/">&lt;p&gt;&lt;strong&gt;IBM&lt;/strong&gt;: Tuan Hoang Trong, Alexei Karve, Yan Koyfman, Linsong Chu, Divya Kumari, Shweta Salaria, Robert Walkup, Praneet Adusumilli, Nirmit Desai, Raghu Ganti, Seetharami Seelam&lt;br /&gt;
+&lt;strong&gt;Meta&lt;/strong&gt;: Less Wright, Wei Feng, Vasiliy Kuznetsov, Driss Guesseous&lt;/p&gt;
+
+&lt;p&gt;In this blog, we will demonstrate how we achieve up to &lt;strong&gt;50% throughput speedup&lt;/strong&gt; while achieving loss and evaluation benchmark parity in training over &lt;a href=&quot;https://pytorch.org/blog/maximizing-training-throughput/&quot;&gt;FSDP1 bf16 training&lt;/a&gt;. We achieve this speedup by leveraging FSDP2, DTensor, and torch.compile with torchao’s float8 via linear layer updates (compute), and float8 all_gathers for weight communication. We showcase these improvements across a spectrum of Meta LLaMa model architecture sizes, ranging from small 1.8B model size all the way to 405B model size, making training faster than ever.&lt;/p&gt;
+
+&lt;p&gt;We demonstrate these improvements using the Meta Llama3 architecture, and then perform model quality studies at two scales: 100B tokens at 8B model size, and 50B tokens at 70B model size, which provide an exact comparison of float8 and bf16 training loss curves. We demonstrate that the loss curves result in identical loss convergence across these model training runs compared to the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;bf16&lt;/code&gt; counterpart. Further, we train a 3B model to 1T tokens using the FineWeb-edu dataset and run standard evaluation benchmarks to ensure that the model quality is intact and comparable to a &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;bf16&lt;/code&gt; run.&lt;/p&gt;
+
+&lt;p&gt;At IBM Research, we plan to adopt these capabilities for our data ablations to improve the number of experiments we can perform in a given GPU budget. Longer term, we will follow up with a larger scale model run to demonstrate the end-to-end feasibility of &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;float8&lt;/code&gt; training.&lt;/p&gt;
+
+&lt;h2 id=&quot;what-is-float8&quot;&gt;What is Float8?&lt;/h2&gt;
+
+&lt;p&gt;The &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;float8&lt;/code&gt; format for training models was introduced by NVIDIA, ARM, and Intel in a &lt;a href=&quot;https://arxiv.org/abs/2209.05433&quot;&gt;2022 paper&lt;/a&gt; which demonstrated the feasibility of training using lower precision float8, without sacrificing model quality. With the introduction of newer GPUs like the NVIDIA Hopper series, FP8 training became feasible with the potential of more than 2x improvement in training throughput due to native float8 tensor core support. There are a few challenges to realize this promise:  &lt;br /&gt;
+(i) Enable the core model operations like &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;matmul&lt;/code&gt; and &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;attention&lt;/code&gt; in &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;float8&lt;/code&gt;,  &lt;br /&gt;
+(ii) Enable &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;float8&lt;/code&gt; training in a distributed framework, and  &lt;br /&gt;
+(iii) Enable weight communication between GPUs in &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;float8&lt;/code&gt;.  &lt;br /&gt;
+While the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;float8&lt;/code&gt; &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;matmul&lt;/code&gt; was enabled by NVIDIA libraries, the latter two were provided in recent updates to &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;FSDP2&lt;/code&gt; and &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;torchao&lt;/code&gt;.&lt;/p&gt;
+
+&lt;p&gt;In this blog, we are using &lt;a href=&quot;https://github.com/pytorch/torchtitan&quot;&gt;torchtitan&lt;/a&gt; as the entry point for training, IBM’s deterministic data loader, the &lt;code&gt;float8&lt;/code&gt; linear layer implementation from &lt;a href=&quot;https://www.google.com/url?q=https://github.com/pytorch/ao/tree/main/torchao/float8&amp;amp;sa=D&amp;amp;source=docs&amp;amp;ust=1730743084184771&amp;amp;usg=AOvVaw21FdkNG452P-nDIO-hIwcW&quot;&gt;torchao&lt;/a&gt;, and the &lt;code&gt;float8 all gather&lt;/code&gt; from the latest PyTorch nightlies in conjunction with FSDP2. For this training, we are using the float8  per tensor (tensorwise) scaling granularity rather than rowwise. We leverage &lt;code&gt;torch.compile&lt;/code&gt; to ensure that we get maximum performance gains. We are computing &lt;code&gt;attention&lt;/code&gt; in &lt;code&gt;bf16&lt;/code&gt; using SDPA and are currently working on moving this to float8 as well.&lt;/p&gt;
+
+&lt;h2 id=&quot;experiments&quot;&gt;Experiments&lt;/h2&gt;
+
+&lt;p&gt;We perform various experiments to demonstrate the benefits of float8 training. The first is to ensure that model quality is not sacrificed. To verify this, we train an 8B model and 70B model for a few thousand steps and compare the loss curves between both the float8 and bf16 training run. Our experiments are performed on three different H100 clusters with 128, 256, and 512 H100 GPU configurations in very different environments to demonstrate reproducibility. The first cluster is customized on &lt;a href=&quot;https://engineering.fb.com/2024/03/12/data-center-engineering/building-metas-genai-infrastructure/&quot;&gt;Grand Teton&lt;/a&gt; in Meta with 400Gbps custom interconnect, the second is an IBM research cluster with 3.2Tbps Infiniband interconnect, and the third is an IBM Cloud cluster with 3.2Tbps RoCE interconnect for GPU-to-GPU communication.&lt;/p&gt;
+
+&lt;p&gt;First, we plot the loss curve comparisons for both these models in the below figures to demonstrate loss parity for a few thousand steps.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/training-using-float8-fsdp2/fg1.png&quot; alt=&quot;Figure 1: (a) 8B model loss parity for 2k steps, (b) 70B loss parity for 1k steps&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/training-using-float8-fsdp2/fg2.png&quot; alt=&quot;Figure 1: (a) 8B model loss parity for 2k steps, (b) 70B loss parity for 1k steps&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;em&gt;Figure 1: (a) 8B model loss parity for 2k steps, (b) 70B loss parity for 1k steps&lt;/em&gt;&lt;/p&gt;
+
+&lt;p&gt;We observe that across these different models and in different environments, we obtain loss parity for the small scale of tokens. Next, we characterize the throughput gains for four different model sizes ranging from 1.8B to 405B. We explored the best batch size and activation checkpointing schemes for both the float8 and bf16 training runs to determine the tokens/sec/GPU (wps) metric and report the performance gain. For the 405B model, we leveraged &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;DTensor&lt;/code&gt; for tensor parallel training with FSDP2. We use a sequence length of 8K for all our measurements.&lt;/p&gt;
+
+&lt;table class=&quot;table table-bordered&quot;&gt;
+  &lt;tr&gt;
+   &lt;td&gt;&lt;strong&gt;Model size&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;wps (bf16) &lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;wps (float8)&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;Percent gain&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;1.8B
+   &lt;/td&gt;
+   &lt;td&gt;29K
+   &lt;/td&gt;
+   &lt;td&gt;35K
+   &lt;/td&gt;
+   &lt;td&gt;18%
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;8B
+   &lt;/td&gt;
+   &lt;td&gt;8K
+   &lt;/td&gt;
+   &lt;td&gt;10K
+   &lt;/td&gt;
+   &lt;td&gt;28%
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;70B
+   &lt;/td&gt;
+   &lt;td&gt;956
+   &lt;/td&gt;
+   &lt;td&gt;1430
+   &lt;/td&gt;
+   &lt;td&gt;50%
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;405B (TP4)
+   &lt;/td&gt;
+   &lt;td&gt;149
+   &lt;/td&gt;
+   &lt;td&gt;227
+   &lt;/td&gt;
+   &lt;td&gt;52%
+   &lt;/td&gt;
+  &lt;/tr&gt;
+&lt;/table&gt;
+
+&lt;p&gt;&lt;em&gt;Table 1: Performance gains over bf16 (both bf16 and float8 use torch.compile)&lt;/em&gt;&lt;/p&gt;
+
+&lt;p&gt;We observe from Table 1 that the gains for larger models (70B and 405B) reach up to 50%, the smaller models see gains between roughly 20 and 30%. In further experiments, we observed that the addition of &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;float8&lt;/code&gt; &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;all_gather&lt;/code&gt; enables a boost of ~5% beyond the compute itself in &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;float8&lt;/code&gt;, which is inline with the observations in this &lt;a href=&quot;https://aws.amazon.com/blogs/machine-learning/efficient-pre-training-of-llama-3-like-model-architectures-using-torchtitan-on-amazon-sagemaker/&quot;&gt;blog&lt;/a&gt;.&lt;/p&gt;
+
+&lt;p&gt;Second, to demonstrate the effectiveness of an FP8 model, we trained a 3B model following the Llama3 architecture for 1T tokens using the FineWeb-edu dataset from Hugging Face. We performed evaluations using the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;lm-eval-harness&lt;/code&gt; framework and present a small portion of these results in the below table. We observe that the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;bf16&lt;/code&gt; performance is marginally better than the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;float8&lt;/code&gt; scores (about one percent). While some scores are significantly better with &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;bf16&lt;/code&gt; (e.g., MMLU is 3 pts higher), we expect these gaps to vanish when the right hyper parameters are chosen and across larger scale training runs (e.g., the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;bf16&lt;/code&gt; run had half the batch size and it is well known that smaller batch size runs can improve evaluation scores).&lt;/p&gt;
+
+&lt;table class=&quot;table table-bordered&quot;&gt;
+  &lt;tr&gt;
+   &lt;td&gt;&lt;strong&gt;Benchmark&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;Score (float8)&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;Score (bf16)&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;MMLU (5-shot)
+   &lt;/td&gt;
+   &lt;td&gt;0.26
+   &lt;/td&gt;
+   &lt;td&gt;0.29
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;ARC-e
+   &lt;/td&gt;
+   &lt;td&gt;0.73
+   &lt;/td&gt;
+   &lt;td&gt;0.73
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;ARC-c
+   &lt;/td&gt;
+   &lt;td&gt;0.43
+   &lt;/td&gt;
+   &lt;td&gt;0.46
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;Hellaswag
+   &lt;/td&gt;
+   &lt;td&gt;0.65
+   &lt;/td&gt;
+   &lt;td&gt;0.67
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;sciq
+   &lt;/td&gt;
+   &lt;td&gt;0.89
+   &lt;/td&gt;
+   &lt;td&gt;0.88
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;OpenBook QA
+   &lt;/td&gt;
+   &lt;td&gt;0.43
+   &lt;/td&gt;
+   &lt;td&gt;0.43
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;PIQA
+   &lt;/td&gt;
+   &lt;td&gt;0.76
+   &lt;/td&gt;
+   &lt;td&gt;0.76
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;Winogrande
+   &lt;/td&gt;
+   &lt;td&gt;0.60
+   &lt;/td&gt;
+   &lt;td&gt;0.65
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;&lt;strong&gt;Average&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;0.59&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;0.60&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+&lt;/table&gt;
+
+&lt;p&gt;&lt;em&gt;Table 2: Benchmark scores for float8 trained model running in FP16 for eval (at 1T tokens of FineWeb pre-training).&lt;/em&gt;&lt;/p&gt;
+
+&lt;p&gt;Finally, we scale our experiments to 512 H100 GPUs on the IBM Cloud cluster. We were able to recreate the results and speedups that we observed even at 512 GPU scale. We summarize these results only for the large models in the below table (70B and 405B).&lt;/p&gt;
+
+&lt;table class=&quot;table table-bordered&quot;&gt;
+  &lt;tr&gt;
+   &lt;td&gt;&lt;strong&gt;Model size&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;wps (bf16) &lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;wps (float8)&lt;/strong&gt;
+   &lt;/td&gt;
+   &lt;td&gt;&lt;strong&gt;Percent gain&lt;/strong&gt;
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;70B
+   &lt;/td&gt;
+   &lt;td&gt;960
+   &lt;/td&gt;
+   &lt;td&gt;1448
+   &lt;/td&gt;
+   &lt;td&gt;51%
+   &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td&gt;405B (TP4)
+   &lt;/td&gt;
+   &lt;td&gt;152
+   &lt;/td&gt;
+   &lt;td&gt;217
+   &lt;/td&gt;
+   &lt;td&gt;43%
+   &lt;/td&gt;
+  &lt;/tr&gt;
+&lt;/table&gt;
+
+&lt;p&gt;&lt;em&gt;Table 3: Performance gains over bf16 (both bf16 and float8 use torch.compile) for 512 GPU scale&lt;/em&gt;&lt;/p&gt;
+
+&lt;h2 id=&quot;future-work&quot;&gt;Future work&lt;/h2&gt;
+
+&lt;p&gt;We are also working on evaluating other forms of parallelism such as Context Parallelism. We plan to evaluate all of these features to demonstrate the composability and ability to make choices for training large scale models.&lt;/p&gt;
+
+&lt;h2 id=&quot;acknowledgements&quot;&gt;Acknowledgements&lt;/h2&gt;
+
+&lt;p&gt;We thank Davis Wertheimer from IBM Research for enabling the data loader for torchtitan runs enabling us to replay data in the same order across multiple runs. We also thank IBM Cloud for enabling us with early test access to the H100 cluster.&lt;/p&gt;</content>
+
+      
+      
+      
+      
+      
+
+      <author>
+          <name>IBM and Meta</name>
+        
+        
+      </author>
+
+      
+
+      
+
+      
+        <summary type="html">IBM: Tuan Hoang Trong, Alexei Karve, Yan Koyfman, Linsong Chu, Divya Kumari, Shweta Salaria, Robert Walkup, Praneet Adusumilli, Nirmit Desai, Raghu Ganti, Seetharami Seelam Meta: Less Wright, Wei Feng, Vasiliy Kuznetsov, Driss Guesseous</summary>
+      
+
+      
+      
+    </entry>
   
     <entry>
       <title type="html">Rebellions Joins the PyTorch Foundation as a General Member</title>
@@ -2189,152 +2441,6 @@ Since the original release of ExecuTorch alpha, we’ve seen a growing interest 
 
       
         <summary type="html">ExecuTorch has achieved Beta status with the release of v0.4, providing stable APIs and runtime, as well as extensive kernel coverage. ExecuTorch is the recommended on-device inference engine for Llama 3.2 1B/3B models, offering enhanced performance and memory efficiency for both original and quantized models. There has been a significant increase in adoption and ecosystem growth for ExecuTorch, and the focus is now on improving reliability, performance, and coverage for non-CPU backends as the next steps.</summary>
-      
-
-      
-      
-    </entry>
-  
-    <entry>
-      <title type="html">TorchRec and FBGEMM 1.0 Stable Release</title>
-      <link href="https://pytorch.org/blog/torchrec-fbgemm-1/" rel="alternate" type="text/html" title="TorchRec and FBGEMM 1.0 Stable Release" />
-      <published>2024-10-23T00:00:00-07:00</published>
-      <updated>2024-10-23T00:00:00-07:00</updated>
-      <id>https://pytorch.org/blog/torchrec-fbgemm-1</id>
-      <content type="html" xml:base="https://pytorch.org/blog/torchrec-fbgemm-1/">&lt;p&gt;We are happy to announce the stable release, 1.0, for &lt;a href=&quot;https://github.com/pytorch/torchrec&quot;&gt;TorchRec&lt;/a&gt; and &lt;a href=&quot;https://github.com/pytorch/FBGEMM&quot;&gt;FBGEMM&lt;/a&gt;. TorchRec is the PyTorch native recommendation systems library, powered by FBGEMM’s (Facebook GEneral Matrix Multiplication) efficient, low-level kernels.&lt;/p&gt;
-
-&lt;h2 id=&quot;torchrec&quot;&gt;TorchRec&lt;/h2&gt;
-
-&lt;p&gt;&lt;a href=&quot;https://pytorch.org/blog/introducing-torchrec/&quot;&gt;Initially open sourced in 2022&lt;/a&gt;, &lt;a href=&quot;https://github.com/pytorch/torchrec&quot;&gt;TorchRec&lt;/a&gt; provides common primitives for creating state-of-the-art personalization models:&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;Simple, optimized APIs for distributed training across hundreds of GPUs&lt;/li&gt;
-  &lt;li&gt;Advanced sharding techniques for embeddings&lt;/li&gt;
-  &lt;li&gt;Modules common in authoring recommendation systems&lt;/li&gt;
-  &lt;li&gt;Frictionless path to distributed inference with APIs for quantization and sharding of TorchRec models&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;Since then, TorchRec has matured significantly, with wide internal adoption across many Meta production recommendation models for training and inference, alongside new features such as: &lt;a href=&quot;https://github.com/pytorch/torchrec/releases?page=1&quot;&gt;variable batched embeddings, embedding offloading, zero collision hashing, etc.&lt;/a&gt; Furthermore, TorchRec has a presence outside of Meta, such as &lt;a href=&quot;https://docs.databricks.com/en/machine-learning/train-recommender-models.html&quot;&gt;in recommendation models at Databricks&lt;/a&gt; and in the &lt;a href=&quot;https://github.com/twitter/the-algorithm-ml&quot;&gt;Twitter algorithm&lt;/a&gt;. As a result, standard TorchRec features have been marked as &lt;strong&gt;stable&lt;/strong&gt;, with PyTorch style BC guarantees, and can be seen on the &lt;a href=&quot;https://pytorch.org/torchrec/&quot;&gt;revamped TorchRec documentation&lt;/a&gt;.&lt;/p&gt;
-
-&lt;h2 id=&quot;fbgemm&quot;&gt;FBGEMM&lt;/h2&gt;
-
-&lt;p&gt;&lt;a href=&quot;https://pytorch.org/FBGEMM/&quot;&gt;FBGEMM is a library that provides high-performance kernels for CPUs and GPUs&lt;/a&gt;. Since 2018, FBGEMM has supported the efficient execution of Meta-internal and external AI/ML workloads by expanding its scope from &lt;a href=&quot;https://arxiv.org/abs/2101.05615&quot;&gt;performance-critical kernels for inference on CPUs&lt;/a&gt; to more complex sparse operators for both training and inference – and recently for Generative AI – on CPUs and GPUs.&lt;/p&gt;
-
-&lt;p&gt;FBGEMM has been empowering TorchRec through its backend high-performance kernel implementations for recommendation workloads, ranging from embedding bag kernels to jagged tensor operations. Together with TorchRec, we released FBGEMM 1.0, which guarantees the functionality and backward-compatibility of several stable APIs serving its core features with &lt;a href=&quot;https://pytorch.org/FBGEMM/&quot;&gt;enhanced documentation&lt;/a&gt;.&lt;/p&gt;
-
-&lt;h2 id=&quot;performance&quot;&gt;Performance&lt;/h2&gt;
-
-&lt;p&gt;&lt;a href=&quot;https://ai.meta.com/blog/dlrm-an-advanced-open-source-deep-learning-recommendation-model/&quot;&gt;DLRM (Deep Learning Recommendation Model)&lt;/a&gt; is the standard neural network architecture for powering recommendations at Meta, with categorical features being processed through embeddings, while continuous (dense) features are processed with a bottom multilayer perceptron. The following diagram depicts the basic architecture of DLRM, with a second order interaction layer between the dense and sparse features and a top MLP for generating the prediction.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/torchrec-1.png&quot; alt=&quot;flow diagram&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;TorchRec provides standardized modules with significant optimizations in fusing embedding lookups. EBC is a traditional PyTorch embedding module implementation, containing a collection of &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;torch.nn.EmbeddingBags.&lt;/code&gt; FusedEBC, powered by FBGEMM for high performance operations on embedding tables with a fused optimizer and UVM caching/management for alleviating memory constraints, is the optimized version present in sharded TorchRec modules for distributed training and inference. The below benchmark demonstrates the vast performance improvements of FusedEBC in comparison to a traditional PyTorch embedding module implementation (EBC) and the ability for FusedEBC to handle much larger embeddings than what is available on GPU memory with UVM caching.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/torchrec-2.png&quot; alt=&quot;performance chart&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
-
-&lt;h2 id=&quot;torchrec-data-types&quot;&gt;TorchRec Data Types&lt;/h2&gt;
-
-&lt;p&gt;TorchRec provides standard &lt;a href=&quot;https://pytorch.org/torchrec/datatypes-api-reference.html&quot;&gt;data types&lt;/a&gt; and &lt;a href=&quot;https://pytorch.org/torchrec/modules-api-reference.html&quot;&gt;modules&lt;/a&gt; for easy handling of distributed embeddings. Here is a simple example setting up a collection of embedding tables through TorchRec:&lt;/p&gt;
-
-&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;from torchrec import EmbeddingBagCollection
-from torchrec import KeyedJaggedTensor
-from torchrec import JaggedTensor
-
-ebc = torchrec.EmbeddingBagCollection(
-    device=&quot;cpu&quot;,
-    tables=[
-        torchrec.EmbeddingBagConfig(
-            name=&quot;product_table&quot;,
-            embedding_dim=64,
-            num_embeddings=4096,
-            feature_names=[&quot;product&quot;],
-            pooling=torchrec.PoolingType.SUM,
-        ),
-        torchrec.EmbeddingBagConfig(
-            name=&quot;user_table&quot;,
-            embedding_dim=64,
-            num_embeddings=4096,
-            feature_names=[&quot;user&quot;],
-            pooling=torchrec.PoolingType.SUM,
-        )
-    ]
-)
-
-product_jt = JaggedTensor(
-    values=torch.tensor([1, 2, 1, 5]), lengths=torch.tensor([3, 1])
-)
-user_jt = JaggedTensor(values=torch.tensor([2, 3, 4, 1]), lengths=torch.tensor([2, 2]))
-
-kjt = KeyedJaggedTensor.from_jt_dict({&quot;product&quot;: product_jt, &quot;user&quot;: user_jt})
-
-print(&quot;Call EmbeddingBagCollection Forward: &quot;, ebc(kjt))
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;h2 id=&quot;sharding&quot;&gt;Sharding&lt;/h2&gt;
-
-&lt;p&gt;TorchRec provides a planner class that automatically generates an optimized sharding plan across many GPUs. Here we demonstrate generating a sharding plan across two GPUs:&lt;/p&gt;
-
-&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;from torchrec.distributed.planner import EmbeddingShardingPlanner, Topology
-
-planner = EmbeddingShardingPlanner(
-    topology=Topology(
-        world_size=2,
-        compute_device=&quot;cuda&quot;,
-    )
-)
-
-plan = planner.collective_plan(ebc, [sharder], pg)
-
-print(f&quot;Sharding Plan generated: {plan}&quot;)
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;h2 id=&quot;model-parallel&quot;&gt;Model Parallel&lt;/h2&gt;
-
-&lt;p&gt;TorchRec’s main distributed training API is &lt;a href=&quot;https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module&quot;&gt;DistributedModelParallel&lt;/a&gt;, which calls the planner to generate a sharding plan (demonstrated above) and shards TorchRec modules according to that plan. We demonstrate using &lt;a href=&quot;https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module&quot;&gt;DistributedModelParallel&lt;/a&gt; to our EmbeddingBagCollection for sharding embeddings distributed training:&lt;/p&gt;
-
-&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;model = torchrec.distributed.DistributedModelParallel(ebc, device=torch.device(&quot;cuda&quot;))
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;h2 id=&quot;inference&quot;&gt;Inference&lt;/h2&gt;
-
-&lt;p&gt;TorchRec provides simple APIs for quantizing and sharding embeddings for a model for distributed inference. The usage is demonstrated below:&lt;/p&gt;
-
-&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;from torchrec.inference.modules import (
-    quantize_inference_model,
-    shard_quant_model,
-)
-quant_model = quantize_inference_model(ebc)
-sharded_model, _ = shard_quant_model(
-    quant_model, compute_device=device, sharding_device=device
-)
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;h2 id=&quot;conclusion&quot;&gt;Conclusion&lt;/h2&gt;
-
-&lt;p&gt;TorchRec and FBGEMM are now stable, with optimized features for large scale recommendation systems.&lt;/p&gt;
-
-&lt;p&gt;For setting up TorchRec and FBGEMM, check out the &lt;a href=&quot;https://pytorch.org/torchrec/setup-torchrec.html&quot;&gt;getting started guide&lt;/a&gt;. &lt;br /&gt;
- &lt;br /&gt;
-We also recommend the comprehensive, end-to-end &lt;a href=&quot;https://pytorch.org/tutorials/intermediate/torchrec_intro_tutorial.html#&quot;&gt;tutorial for introducing the features in TorchRec and FBGEMM&lt;/a&gt;.&lt;/p&gt;</content>
-
-      
-      
-      
-      
-      
-
-      <author>
-          <name>Paul Zhang, Zain Huda, Sarunya Pumma, Shintaro Iwasaki, Supadchaya Puangpontip, Benson Ma</name>
-        
-        
-      </author>
-
-      
-
-      
-
-      
-        <summary type="html">We are happy to announce the stable release, 1.0, for TorchRec and FBGEMM. TorchRec is the PyTorch native recommendation systems library, powered by FBGEMM’s (Facebook GEneral Matrix Multiplication) efficient, low-level kernels.</summary>
       
 
       
