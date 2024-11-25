@@ -1,8 +1,11 @@
 ---
 layout: blog_detail
 title: "Supercharging Training using float8 and FSDP2"
-author: "IBM: Tuan Hoang Trong, Alexei Karve, Yan Koyfman, Linsong Chu, Divya Kumari, Shweta Salaria, Robert Walkup, Praneet Adusumilli, Nirmit Desai, Raghu Ganti, Seetharami Seelam, Meta: Less Wright, Wei Feng, Vasiliy Kuznetsov, Driss Guesseous"
+author: "IBM and Meta"
 ---
+
+**IBM**: Tuan Hoang Trong, Alexei Karve, Yan Koyfman, Linsong Chu, Divya Kumari, Shweta Salaria, Robert Walkup, Praneet Adusumilli, Nirmit Desai, Raghu Ganti, Seetharami Seelam  
+**Meta**: Less Wright, Wei Feng, Vasiliy Kuznetsov, Driss Guesseous
 
 In this blog, we will demonstrate how we achieve up to **50% throughput speedup** while achieving loss and evaluation benchmark parity in training over [FSDP1 bf16 training](https://pytorch.org/blog/maximizing-training-throughput/). We achieve this speedup by leveraging FSDP2, DTensor, and torch.compile with torchao’s float8 via linear layer updates (compute), and float8 all_gathers for weight communication. We showcase these improvements across a spectrum of Meta LLaMa model architecture sizes, ranging from small 1.8B model size all the way to 405B model size, making training faster than ever.
 
