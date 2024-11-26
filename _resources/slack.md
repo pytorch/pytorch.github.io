@@ -1,9 +1,9 @@
 ---
 title: Slack
-summary-home: 'Discuss advanced topics. Request access: https://bit.ly/ptslack'
-summary: 'Discuss advanced topics. Request access: https://bit.ly/ptslack'
+summary-home: 'Discuss advanced topics. It is closed-invite only.'
+summary: 'Discuss advanced topics. It is closed-invite only.'
 class: slack
-link: https://bit.ly/ptslack
+link: https://pytorch.slack.com
 order: 2
 featured-home: true
 ---
