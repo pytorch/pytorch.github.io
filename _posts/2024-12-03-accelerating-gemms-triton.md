@@ -86,7 +86,7 @@ For more details on how TMA is used in Triton see our [previous blog](https://py
 Warp Specialization is a technique to leverage pipeline parallelism on GPUs. This experimental feature enables the expression of specialized threads through a [tl.async_task API](https://github.com/facebookexperimental/triton/tree/ws), allowing the user to specify how operations in a Triton program should be “split” amongst warps. The cooperative Triton kernel performs different types of computation and loads that each take place on their own dedicated hardware. Having dedicated hardware for each of these specialized tasks makes it possible to realize parallelism efficiently for operations that have no data dependency.
 
 
-![Figure 3. Logical view of dedicated HW units in NVIDIA H100 SM](/assets/images/accelerating-gemms-triton/fg3.png){:style="width:100%"}
+![Figure 3. Logical view of dedicated HW units in NVIDIA H100 SM](/assets/images/accelerating-gemms-triton/fg3.png){:style="width:100%; max-width:400px; display: block; margin-left:auto; margin-right:auto;"}
 
 
 
@@ -109,7 +109,7 @@ These steps can be assigned to “tasks” which are carried out by specialized 
 
 **Figure 4.** Warp-Specialized Persistent Cooperative kernel (source: [NVIDIA](https://drive.google.com/file/d/18sthk6IUOKbdtFphpm_jZNXoJenbWR8m/view))
 
-This is different from the ping-pong schedule we discussed in our [previous blog](https://pytorch.org/blog/cutlass-ping-pong-gemm-kernel/), where each consumer warp group works on *different *output tiles. We note that the Tensor Core ops are not overlapped with the epilogue computation. Decreased utilization of the Tensor Core pipeline during the epilogue phase of the computation will reduce register pressure for the consumer warp group compared to ping-pong which always keeps the Tensor Core busy, thus allowing for larger tile sizes.
+This is different from the ping-pong schedule we discussed in our [previous blog](https://pytorch.org/blog/cutlass-ping-pong-gemm-kernel/), where each consumer warp group works on *different* output tiles. We note that the Tensor Core ops are not overlapped with the epilogue computation. Decreased utilization of the Tensor Core pipeline during the epilogue phase of the computation will reduce register pressure for the consumer warp group compared to ping-pong which always keeps the Tensor Core busy, thus allowing for larger tile sizes.
 
 Lastly, our kernel is designed to be persistent when the grid size exceeds the number of available compute units on H100 GPUs (132). Persistent kernels remain active on the GPU for an extended period and compute multiple output tiles during its lifetime. Our kernel leverages TMA async shared to global memory stores, while continuing to do work on the next output tile as opposed to incurring the cost of scheduling multiple threadblocks. 
 
@@ -121,7 +121,7 @@ Lastly, our kernel is designed to be persistent when the grid size exceeds the n
 
 **Figure 5:** Latency comparison (us) of Gridquant-GEMM vs our best performing SplitK kernel for small batch regime and Llama3 8192 N,K sizing. ***(lower-is-better)***
 
-The Warp-Specialized Triton kernel achieves SOTA performance at the above small-M and square matrix shapes, achieving a nearly **1.2x **speedup over the SplitK Triton kernel, which was the previous best performing strategy for Triton GEMMs in this low arithmetic intensity regime. For future work, we plan to tune our kernel performance for the medium-to-large M regime and non-square matrices.
+The Warp-Specialized Triton kernel achieves SOTA performance at the above small-M and square matrix shapes, achieving a nearly **1.2x** speedup over the SplitK Triton kernel, which was the previous best performing strategy for Triton GEMMs in this low arithmetic intensity regime. For future work, we plan to tune our kernel performance for the medium-to-large M regime and non-square matrices.
 
 ## Conclusion and Future Work
 
