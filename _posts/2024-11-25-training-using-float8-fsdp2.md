@@ -2,6 +2,7 @@
 layout: blog_detail
 title: "Supercharging Training using float8 and FSDP2"
 author: "IBM and Meta"
+excerpt: "In this blog, we will demonstrate how we achieve up to 50% throughput speedup while achieving loss and evaluation benchmark parity in training over FSDP1 bf16 training"
 ---
 
 **IBM**: Tuan Hoang Trong, Alexei Karve, Yan Koyfman, Linsong Chu, Divya Kumari, Shweta Salaria, Robert Walkup, Praneet Adusumilli, Nirmit Desai, Raghu Ganti, Seetharami Seelam  
