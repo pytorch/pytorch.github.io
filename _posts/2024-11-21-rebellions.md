@@ -1,6 +1,7 @@
 ---
 layout: blog_detail
 title: "Rebellions Joins the PyTorch Foundation as a General Member"
+excerpt: "The PyTorch Foundation, a neutral home for the deep learning community to collaborate on the open source PyTorch framework and ecosystem, is announcing today that Rebellions has joined as a general member."
 ---
 
 ![Rebellions logo](/assets/images/rebellions-logo.svg){:style="max-width:350px;width:100%;float:right;margin: 20px;"}
