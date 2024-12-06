@@ -1,6 +1,8 @@
 ---
 layout: blog_detail
 title: "vLLM Joins PyTorch Ecosystem: Easy, Fast, and Cheap LLM Serving for Everyone"
+author: vLLM Team
+hidden: true
 ---
 
 ![vllm logo](/assets/images/vllm.png){:style="width:100%;display: block;max-width:400px; margin-left:auto; margin-right:auto;"}
