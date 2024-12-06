@@ -4,7 +4,7 @@
   <generator uri="https://jekyllrb.com/" version="3.9.0">Jekyll</generator>
   <link href="https://pytorch.org/feed.xml" rel="self" type="application/atom+xml" />
   <link href="https://pytorch.org/" rel="alternate" type="text/html" />
-  <updated>2024-12-05T12:42:10-08:00</updated>
+  <updated>2024-12-06T08:27:44-08:00</updated>
   <id>https://pytorch.org/feed.xml</id>
 
   
@@ -29,6 +29,146 @@
 
   
   
+  
+    <entry>
+      <title type="html">Accelerating 2D Dynamic Block Quantized Float8 GEMMs in Triton</title>
+      <link href="https://pytorch.org/blog/accelerating-gemms-triton/" rel="alternate" type="text/html" title="Accelerating 2D Dynamic Block Quantized Float8 GEMMs in Triton" />
+      <published>2024-12-06T00:00:00-08:00</published>
+      <updated>2024-12-06T00:00:00-08:00</updated>
+      <id>https://pytorch.org/blog/accelerating-gemms-triton</id>
+      <content type="html" xml:base="https://pytorch.org/blog/accelerating-gemms-triton/">&lt;p&gt;2D block quantization for Float8 (FP8) holds the promise of improving the accuracy of Float8 quantization while also accelerating GEMM’s for both inference and training.  In this blog, we showcase advances using Triton for the two main phases involved in doing block quantized Float8 GEMMs.&lt;/p&gt;
+
+&lt;p&gt;For the incoming quantization of A and B tensors from high precision (BFloat16) to Float8, we showcase GridQuant which leverages a mini-grid stride loop style of processing with nearly &lt;strong&gt;2x&lt;/strong&gt; speedups (99.31%) over a current 2D block quantization kernel.&lt;/p&gt;
+
+&lt;p&gt;For the Float8 GEMM, we showcase 3 new developments for Triton - Warp Specialization, TMA and a persistent kernel to effectively create a cooperative style kernel (an alternative to the &lt;a href=&quot;https://pytorch.org/blog/cutlass-ping-pong-gemm-kernel/&quot;&gt;Ping-Pong schedule&lt;/a&gt;).  As a result, we achieve ~&lt;strong&gt;1.2x&lt;/strong&gt; speedup over our best-performing SplitK kernel from last year.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-gemms-triton/fg1.png&quot; alt=&quot;Figure 1: A comparison of the 2D quantization speedup over a current baseline, across a range of sizes.&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Figure 1:&lt;/strong&gt; A comparison of the 2D quantization speedup over a current baseline, across a range of sizes. &lt;strong&gt;&lt;em&gt;(lower-is-better)&lt;/em&gt;&lt;/strong&gt;&lt;/p&gt;
+
+&lt;h2 id=&quot;why-2d-blockwise-quantization-for-fp8&quot;&gt;Why 2D Blockwise Quantization for FP8?&lt;/h2&gt;
+
+&lt;p&gt;Generally speaking, the accuracy of fp8 quantization improves as we move from tensor-wise scaling, to row-wise scaling, to 2D block-wise, and then finally to column-wise scaling.  This is because features for a given token are stored in each column, and thus each column in that tensor is more similarly scaled.&lt;/p&gt;
+
+&lt;p&gt;To minimize the number of outliers of a given numerical set, we want to find commonality so that numbers are being scaled in a similar fashion.  For transformers, this means column based quantization could be optimal…however, columnar memory access is massively inefficient due to the data being laid out in memory in a rowwise contiguous manner.  Thus columnwise loading would require memory access involving large strides in memory to pull isolated values, contrary to the core tenets of efficient memory access.&lt;/p&gt;
+
+&lt;p&gt;However, 2D is the next best option as it includes some aspects of columnar while being more memory efficient to pull since we can vectorize these loads with 2D vectorization.  Therefore, we want to find ways to improve the speed for 2D block quantization which is why we developed the GridQuant kernel.&lt;/p&gt;
+
+&lt;p&gt;For the quantization process, we need to 2D block quantize both the higher precision BF16 incoming tensors (A = input activations, B = weights) and then proceed to do the Float8 matmul using the quantized tensors and their 2D block scaling values, and return an output C tensor in BF16.&lt;/p&gt;
+
+&lt;h2 id=&quot;how-does-gridquant-improve-2d-block-quantization-efficiency&quot;&gt;How does GridQuant improve 2D block quantization efficiency?&lt;/h2&gt;
+
+&lt;p&gt;The GridQuant kernel has several improvements over the initial baseline quantization implementation which was a standard tile based implementation.  The GridQuant kernel has two full passes through the entire input tensor and works as follows:&lt;/p&gt;
+
+&lt;h2 id=&quot;phase-1---determine-the-max-abs-value-for-each-256x256-sub-block-from-the-incoming-high-precision-tensor&quot;&gt;Phase 1 - Determine the max abs value for each 256x256 sub block from the incoming high precision tensor.&lt;/h2&gt;
+
+&lt;p&gt;1 - We divide the BF16 tensor into 256 x 256 sub blocks.  This quantization size is configurable, but 256x256 is the default as it provides a blend of quantization precision and processing efficiency.&lt;/p&gt;
+
+&lt;p&gt;2 - Each 256x256 sub-block is subdivided into 64 sub-blocks arranged in an 8x8 pattern, with each sub-block processing a 32x32 element block. A single warp (32 threads) handles the computation for all elements within its assigned 32x32 block.&lt;/p&gt;
+
+&lt;p&gt;3 - We declare a 32x32 max_vals array in shared memory.  This will store the current max val for each position i,j as the 2d vector block moves across the entire 256x256 sub_block.&lt;/p&gt;
+
+&lt;p&gt;This is an important improvement because it means we can do vectorized, rather than scalar, updates to the max vals scoring system and allows for much more efficient updates.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-gemms-triton/fg2.png&quot; alt=&quot;Figure 2: The Fractionalized layout of an incoming tensor - a grid of 256x256 is created across the tensor, and within each 256x256 block, it is further refined into 32x32 sub blocks. A 32x32 max_vals is created for each 256x256 block.&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Figure 2:&lt;/strong&gt; The Fractionalized layout of an incoming tensor - a grid of 256x256 is created across the tensor, and within each 256x256 block, it is further refined into 32x32 sub blocks. A 32x32 max_vals is created for each 256x256 block.&lt;/p&gt;
+
+&lt;p&gt;4 - Each warp processes a 32x32 chunk and because we are using 4 warps, we ensure the Triton compiler can pipeline the memory loads for the next 32x32 chunk with the actual processing of absmax calculations for the current chunk.  This ensures that the warp scheduler is able to toggle warps loading data with those processing and keep the SM continuously busy.&lt;/p&gt;
+
+&lt;p&gt;5 - The 32x32 2D vector block processing is moved across and through the entire 256x256 subblock in a grid stride looping fashion, with each warp updating the shared memory 32x32 max_vals against its current 32x32 sub-block. Thus max_vals[i,j] holds the latest max value as each sub block is processed.&lt;/p&gt;
+
+&lt;p&gt;After completing the 256x256 block grid stride loop, the maxvals matrix is then itself reduced to find the absolute single max value for that entire 256 block.&lt;/p&gt;
+
+&lt;p&gt;This gives us our final scaling factor value for this 2D 256 x 256 block.&lt;/p&gt;
+
+&lt;h2 id=&quot;phase-2---quantize-the-256x256-block-values-to-float8--by-using-the-single-max-value-scaling-factor-found-during-phase-1&quot;&gt;Phase 2 - Quantize the 256x256 block values to Float8,  by using the single max value scaling factor found during Phase 1.&lt;/h2&gt;
+
+&lt;p&gt;Next, we make a second pass through the entire 256x256 block to rescale all the numbers using this max value found in phase 1 to convert them to the float 8 format.&lt;/p&gt;
+
+&lt;p&gt;Because we know we need to do 2 complete passes, for the loads during the phase 1 portion we instruct the triton compiler to keep these values in cache at higher priority (evict policy = last).&lt;/p&gt;
+
+&lt;p&gt;This means that during the second pass, we can get a high hit rate from the L2 cache which provides much faster memory access than going all the way to HBM.&lt;/p&gt;
+
+&lt;p&gt;With the 2D block quantization processing complete when all 256 x256 blocks are processed, we can return the new Float8 quantized tensor along with it’s scaling factor matrix, which we’ll use in the next phase of the GEMM processing.   This input quantization is repeated for the second input tensor as well, meaning we end up with A_Float 8, A_scaling_matrix, and B_Float8 and B_scaling matrix.&lt;/p&gt;
+
+&lt;h2 id=&quot;gridquant---gemm-kernel&quot;&gt;GridQuant - GEMM Kernel&lt;/h2&gt;
+
+&lt;p&gt;The GridQuant-GEMM kernel takes in the four outputs from the quantization above for processing. Our high-performance GEMM kernel features several new Triton developments to achieve SOTA performance for matrix shape profiles relevant in LLM inference during the decoding phase.&lt;/p&gt;
+
+&lt;p&gt;These new features are commonly found in Hopper optimized kernels like &lt;a href=&quot;https://arxiv.org/abs/2407.08608&quot;&gt;FlashAttention-3&lt;/a&gt; and &lt;a href=&quot;https://neuralmagic.com/blog/introducing-machete-a-mixed-input-gemm-kernel-optimized-for-nvidia-hopper-gpus/&quot;&gt;Machete&lt;/a&gt;, built using &lt;a href=&quot;https://github.com/NVIDIA/cutlass&quot;&gt;CUTLASS 3.x&lt;/a&gt;. Here, we discuss these methods and showcase the performance benefits that can be achieved leveraging them in Triton.&lt;/p&gt;
+
+&lt;h2 id=&quot;tensor-memory-accelerator-tma&quot;&gt;Tensor Memory Accelerator (TMA)&lt;/h2&gt;
+
+&lt;p&gt;The TMA unit on NVIDIA Hopper GPUs, is a dedicated hardware unit for load/store operations that act on multidimensional tensors commonly found in AI workloads. This has several important benefits.&lt;/p&gt;
+
+&lt;p&gt;Transferring data from global and shared memory can occur without involving other resources on GPU SMs, freeing up registers and CUDA Cores. Further, when used in warp-specialized kernels, light-weight TMA operations can be assigned to a producer warp allowing for a high degree of overlap of memory transfers and computation.&lt;/p&gt;
+
+&lt;p&gt;For more details on how TMA is used in Triton see our &lt;a href=&quot;https://pytorch.org/blog/hopper-tma-unit/&quot;&gt;previous blog&lt;/a&gt;.&lt;/p&gt;
+
+&lt;h2 id=&quot;warp-specialization-cooperative-persistent-kernel-design&quot;&gt;Warp-Specialization (Cooperative Persistent Kernel Design)&lt;/h2&gt;
+
+&lt;p&gt;Warp Specialization is a technique to leverage pipeline parallelism on GPUs. This experimental feature enables the expression of specialized threads through a &lt;a href=&quot;https://github.com/facebookexperimental/triton/tree/ws&quot;&gt;tl.async_task API&lt;/a&gt;, allowing the user to specify how operations in a Triton program should be “split” amongst warps. The cooperative Triton kernel performs different types of computation and loads that each take place on their own dedicated hardware. Having dedicated hardware for each of these specialized tasks makes it possible to realize parallelism efficiently for operations that have no data dependency.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-gemms-triton/fg3.png&quot; alt=&quot;Figure 3. Logical view of dedicated HW units in NVIDIA H100 SM&quot; style=&quot;width:100%; max-width:400px; display: block; margin-left:auto; margin-right:auto;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Figure 3.&lt;/strong&gt; Logical view of dedicated HW units in NVIDIA H100 SM&lt;/p&gt;
+
+&lt;p&gt;The operations in our kernel that create the pipeline are:&lt;/p&gt;
+
+&lt;p&gt;A - Load per-block scale from GMEM into SMEM (cp.async engine)&lt;/p&gt;
+
+&lt;p&gt;B - Load activation (A) and Weight (B) tiles from GMEM into SMEM (TMA)&lt;/p&gt;
+
+&lt;p&gt;C - Matrix-Multiplication of A tile and B tile = C tile  (Tensor Core)&lt;/p&gt;
+
+&lt;p&gt;D - Scale C tile with per-block scale from A and per-block scale from B (CUDA core)&lt;/p&gt;
+
+&lt;p&gt;These steps can be assigned to “tasks” which are carried out by specialized warp groups in a threadblock. The cooperative strategy has three warp groups. A producer warp group that is responsible for feeding the compute units and 2 consumer warp groups that perform the computation. The two consumer warp groups each work on half of the same output tile.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-gemms-triton/fg4.png&quot; alt=&quot;Figure 4. Warp-Specialized Persistent Cooperative kernel&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Figure 4.&lt;/strong&gt; Warp-Specialized Persistent Cooperative kernel (source: &lt;a href=&quot;https://drive.google.com/file/d/18sthk6IUOKbdtFphpm_jZNXoJenbWR8m/view&quot;&gt;NVIDIA&lt;/a&gt;)&lt;/p&gt;
+
+&lt;p&gt;This is different from the ping-pong schedule we discussed in our &lt;a href=&quot;https://pytorch.org/blog/cutlass-ping-pong-gemm-kernel/&quot;&gt;previous blog&lt;/a&gt;, where each consumer warp group works on &lt;em&gt;different&lt;/em&gt; output tiles. We note that the Tensor Core ops are not overlapped with the epilogue computation. Decreased utilization of the Tensor Core pipeline during the epilogue phase of the computation will reduce register pressure for the consumer warp group compared to ping-pong which always keeps the Tensor Core busy, thus allowing for larger tile sizes.&lt;/p&gt;
+
+&lt;p&gt;Lastly, our kernel is designed to be persistent when the grid size exceeds the number of available compute units on H100 GPUs (132). Persistent kernels remain active on the GPU for an extended period and compute multiple output tiles during its lifetime. Our kernel leverages TMA async shared to global memory stores, while continuing to do work on the next output tile as opposed to incurring the cost of scheduling multiple threadblocks.&lt;/p&gt;
+
+&lt;h2 id=&quot;microbenchmarks&quot;&gt;Microbenchmarks&lt;/h2&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/accelerating-gemms-triton/fg5.png&quot; alt=&quot;Figure 5: Latency comparison (us) of Gridquant-GEMM vs our best performing SplitK kernel for small batch regime and Llama3 8192 N,K sizing.&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Figure 5:&lt;/strong&gt; Latency comparison (us) of Gridquant-GEMM vs our best performing SplitK kernel for small batch regime and Llama3 8192 N,K sizing. &lt;strong&gt;&lt;em&gt;(lower-is-better)&lt;/em&gt;&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;The Warp-Specialized Triton kernel achieves SOTA performance at the above small-M and square matrix shapes, achieving a nearly &lt;strong&gt;1.2x&lt;/strong&gt; speedup over the SplitK Triton kernel, which was the previous best performing strategy for Triton GEMMs in this low arithmetic intensity regime. For future work, we plan to tune our kernel performance for the medium-to-large M regime and non-square matrices.&lt;/p&gt;
+
+&lt;h2 id=&quot;conclusion-and-future-work&quot;&gt;Conclusion and Future Work&lt;/h2&gt;
+
+&lt;p&gt;Future work includes benchmarking gridquant on end to end workflows. In addition, we plan to run more extensive benchmarks on non-square (rectangular) matrices as well as medium-to-large M sizes. Finally, we plan to explore ping-pong style warp-specialization in Triton versus the current cooperative implementation.&lt;/p&gt;</content>
+
+      
+      
+      
+      
+      
+
+      <author>
+          <name>Meta: Less Wright, IBM: Adnan Hoque</name>
+        
+        
+      </author>
+
+      
+
+      
+
+      
+        <summary type="html">2D block quantization for Float8 (FP8) holds the promise of improving the accuracy of Float8 quantization while also accelerating GEMM’s for both inference and training. In this blog, we showcase advances using Triton for the two main phases involved in doing block quantized Float8 GEMMs.</summary>
+      
+
+      
+      
+    </entry>
   
     <entry>
       <title type="html">HadaCore: Tensor Core Accelerated Hadamard Transform Kernel</title>
@@ -2243,331 +2383,6 @@ module attributes {&quot;triton_gpu.num-ctas&quot; = 1 : i32, &quot;triton_gpu.n
 
       
         <summary type="html">At the recent PyTorch Conference, Arm highlighted the widespread impact of its technology, spanning from cloud to edge, emphasizing its commitment to delivering its advanced AI computing capabilities seamlessly to millions of developers worldwide.</summary>
-      
-
-      
-      
-    </entry>
-  
-    <entry>
-      <title type="html">Intel GPU Support Now Available in PyTorch 2.5</title>
-      <link href="https://pytorch.org/blog/intel-gpu-support-pytorch-2-5/" rel="alternate" type="text/html" title="Intel GPU Support Now Available in PyTorch 2.5" />
-      <published>2024-10-25T00:00:00-07:00</published>
-      <updated>2024-10-25T00:00:00-07:00</updated>
-      <id>https://pytorch.org/blog/intel-gpu-support-pytorch-2-5</id>
-      <content type="html" xml:base="https://pytorch.org/blog/intel-gpu-support-pytorch-2-5/">&lt;p&gt;Support for Intel GPUs is now available in PyTorch® 2.5, providing improved functionality and performance for Intel GPUs which including &lt;a href=&quot;https://www.intel.com/content/www/us/en/products/details/discrete-gpus/arc.html&quot;&gt;Intel® Arc™ discrete graphics&lt;/a&gt;, &lt;a href=&quot;https://www.intel.com/content/www/us/en/products/details/processors/core-ultra.html&quot;&gt;Intel® Core™ Ultra processors&lt;/a&gt; with built-in Intel® Arc™ graphics and &lt;a href=&quot;https://www.intel.com/content/www/us/en/products/details/discrete-gpus/data-center-gpu/max-series.html&quot;&gt;Intel® Data Center GPU Max Series&lt;/a&gt;. This integration brings Intel GPUs and the SYCL* software stack into the official PyTorch stack, ensuring a consistent user experience and enabling more extensive AI application scenarios, particularly in the AI PC domain.&lt;/p&gt;
-
-&lt;p&gt;Developers and customers building for and using Intel GPUs will have a better user experience by directly obtaining continuous software support from native PyTorch, unified software distribution, and consistent product release time.&lt;/p&gt;
-
-&lt;p&gt;Furthermore, Intel GPU support provides more choices to users. Now PyTorch provides a consistent GPU programming paradigm on both front ends and back ends. Developers can now run and deploy workloads on Intel GPUs with minimal coding efforts.&lt;/p&gt;
-
-&lt;h2 id=&quot;overview-of-intel-gpu-support&quot;&gt;&lt;strong&gt;Overview of Intel GPU support&lt;/strong&gt;&lt;/h2&gt;
-
-&lt;p&gt;Intel GPU support in PyTorch provides eager mode and graph mode support in the PyTorch built-in front end. Eager mode now has an implementation of commonly used Aten operators with the SYCL programming language. Graph mode (torch.compile) now has an enabled Intel GPU back end to implement the optimization for Intel GPUs and to integrate Triton. &lt;/p&gt;
-
-&lt;p&gt;Essential components of Intel GPU support were added to PyTorch, including runtime, Aten operators, oneDNN, TorchInductor, Triton and Intel GPU tool chains integration. Meanwhile, quantization and distributed are being actively developed in preparation for the PyTorch 2.6 release.&lt;/p&gt;
-
-&lt;h2 id=&quot;features&quot;&gt;&lt;strong&gt;Features&lt;/strong&gt;&lt;/h2&gt;
-
-&lt;p&gt;In addition to providing key features for Intel® Client GPUs and Intel® Data Center GPU Max Series for inference and training, PyTorch keeps the same user experience as other hardware the PyTorch supports. If you migrate code from CUDA*, you can run the existing application code on an Intel GPU with minimal code changes for the device name (from cuda to xpu). For example:&lt;/p&gt;
-
-&lt;p&gt;&lt;em&gt;# CUDA Code&lt;/em&gt;&lt;br /&gt;
-&lt;strong&gt;tensor&lt;/strong&gt; &lt;strong&gt;=&lt;/strong&gt; &lt;strong&gt;torch.tensor([&lt;/strong&gt;1.0&lt;strong&gt;,&lt;/strong&gt; 2.0&lt;strong&gt;]).to(&lt;/strong&gt;“cuda”&lt;strong&gt;)&lt;/strong&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;em&gt;# Code for Intel GPU&lt;/em&gt;&lt;br /&gt;
-&lt;strong&gt;tensor&lt;/strong&gt; &lt;strong&gt;=&lt;/strong&gt; &lt;strong&gt;torch.tensor([&lt;/strong&gt;1.0&lt;strong&gt;,&lt;/strong&gt; 2.0&lt;strong&gt;]).to(&lt;/strong&gt;“xpu”&lt;strong&gt;)&lt;/strong&gt;&lt;/p&gt;
-
-&lt;p&gt;PyTorch 2.5 features with an Intel GPU include: &lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;Inference and training workflows.&lt;/li&gt;
-  &lt;li&gt;Enhance both torch.compile and eager mode functionalities (more Ops), together with performance improvement, and fully run three Dynamo Hugging Face*, TIMM* and TorchBench* benchmarks for eager and compile modes. &lt;/li&gt;
-  &lt;li&gt;Data types such as FP32, BF16, FP16, and automatic mixed precision (AMP).&lt;/li&gt;
-  &lt;li&gt;Runs on Intel® Client GPUs and Intel® Data Center GPU Max Series.&lt;/li&gt;
-  &lt;li&gt;Supports Linux (Ubuntu, SUSE Linux and Red Hat Linux) and Windows 10/11.&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;h2 id=&quot;get-started&quot;&gt;&lt;strong&gt;Get Started&lt;/strong&gt;&lt;/h2&gt;
-
-&lt;p&gt;Get a tour of the environment setup, PIP wheels installation, and examples on Intel® Client GPUs and Intel® Data Center GPU Max Series from &lt;a href=&quot;https://pytorch.org/docs/main/notes/get_start_xpu.html&quot;&gt;Getting Started Guide&lt;/a&gt;. Support for Intel GPUs can be experienced through PyTorch PIP wheels installation by nightly and preview binary releases.&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;
-    &lt;p&gt;Try Intel® Client GPUs through Intel® Arc™ Graphics family (Codename DG2), Intel® Core™ Ultra processor family with Intel® Graphics (Codename Meteor Lake), and Intel® Core™ Ultra mobile processor family with Intel® Graphics (Codename Lunar Lake).&lt;/p&gt;
-  &lt;/li&gt;
-  &lt;li&gt;
-    &lt;p&gt;Try Intel Data Center GPU Max Series through &lt;a href=&quot;https://cloud.intel.com/&quot;&gt;Intel® Tiber™ AI Cloud&lt;/a&gt;.&lt;/p&gt;
-
-    &lt;ol&gt;
-      &lt;li&gt;
-        &lt;p&gt;To learn how to create a free Standard account, see &lt;a href=&quot;https://console.cloud.intel.com/docs/guides/get_started.html&quot;&gt;Get Started&lt;/a&gt;. Then do the following:&lt;/p&gt;
-
-        &lt;ul&gt;
-          &lt;li&gt;
-            &lt;p&gt;Sign in to the &lt;a href=&quot;https://console.cloud.intel.com/docs/guides/get_started.html&quot;&gt;cloud console&lt;/a&gt;.&lt;/p&gt;
-          &lt;/li&gt;
-          &lt;li&gt;
-            &lt;p&gt;From the &lt;a href=&quot;https://console.cloud.intel.com/training&quot;&gt;Training&lt;/a&gt;&lt;strong&gt; &lt;/strong&gt;section, open the  &lt;a href=&quot;https://console.cloud.intel.com/training/detail/7db2a900-e47d-4b70-8968-cefa08432c1d&quot;&gt;PyTorch on Intel® GPUs&lt;/a&gt;  notebook and click “Launch Jupyter Notebook.”&lt;/p&gt;
-          &lt;/li&gt;
-          &lt;li&gt;
-            &lt;p&gt;Ensure that the &lt;strong&gt;PyTorch 2.5&lt;/strong&gt; kernel is selected for the notebook.&lt;/p&gt;
-          &lt;/li&gt;
-        &lt;/ul&gt;
-      &lt;/li&gt;
-    &lt;/ol&gt;
-  &lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;h2 id=&quot;performance&quot;&gt;&lt;strong&gt;Performance&lt;/strong&gt;&lt;/h2&gt;
-
-&lt;p&gt;The performance of Intel GPU on PyTorch was continuously optimized to achieve decent result on three Dynamo Hugging Face, TIMM and TorchBench benchmarks for eager and compile modes.&lt;/p&gt;
-
-&lt;p&gt;The latest performance data measured on top of PyTorch Dynamo Benchmarking Suite using Intel® Data Center GPU Max Series 1100 single card showcase the FP16/BF16 significant speedup ratio over FP32 on eager mode in Figure 1, and Torch.compile mode speedup ratio over eager mode in Figure 2. Both inference and training reached the similar significant improvements.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/performance-gains-over-fp32-eager-2.png&quot; alt=&quot;Figure 2: FP16/BF16 Performance Gains Over FP32 Eager&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;Figure 2: FP16/BF16 Performance Gains Over FP32 Eager&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/performance-gains-over-fp32-eager.png&quot; alt=&quot;Figure 3: Torch.compile Performance Gains Over Eager Mode&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;Figure 3: Torch.compile Performance Gains Over Eager Mode&lt;/p&gt;
-
-&lt;h2 id=&quot;summary&quot;&gt;&lt;strong&gt;Summary&lt;/strong&gt;&lt;/h2&gt;
-
-&lt;p&gt;Intel GPU on PyTorch 2.5 brings Intel® Client GPUs (Intel® Core™ Ultra processors with built-in Intel® Arc™ graphics and Intel® Arc™ Graphics for dGPU parts) and Intel® Data Center GPU Max Series into the PyTorch ecosystem for AI workload acceleration. Especially, Client GPUs is added to the GPU-supported list for AI PC use scenarios on Windows and Linux environment.&lt;/p&gt;
-
-&lt;p&gt;We warmly welcome the community to evaluate and provide feedback on these enhancements to  &lt;a href=&quot;https://github.com/pytorch/pytorch?tab=readme-ov-file#intel-gpu-support&quot;&gt;Intel GPU support on PyTorch&lt;/a&gt;. &lt;/p&gt;
-
-&lt;h2 id=&quot;resources&quot;&gt;&lt;strong&gt;Resources&lt;/strong&gt;&lt;/h2&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;&lt;a href=&quot;https://pytorch.org/docs/main/notes/get_start_xpu.html&quot;&gt;PyTorch Docs: Getting Started on Intel GPU&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://cloud.intel.com/&quot;&gt;Intel® Tiber™ AI Cloud&lt;/a&gt;&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;h2 id=&quot;acknowledgments&quot;&gt;&lt;strong&gt;Acknowledgments&lt;/strong&gt;&lt;/h2&gt;
-
-&lt;p&gt;We want thank PyTorch open source community for their technical discussions and insights: &lt;a href=&quot;https://github.com/atalman&quot;&gt;Andrey Talman&lt;/a&gt;, &lt;a href=&quot;https://github.com/alband&quot;&gt;Alban Desmaison&lt;/a&gt;, &lt;a href=&quot;https://github.com/malfet&quot;&gt;Nikita Shulga&lt;/a&gt;, &lt;a href=&quot;https://github.com/seemethere&quot;&gt;Eli Uriegas&lt;/a&gt;, &lt;a href=&quot;https://github.com/jansel&quot;&gt;Jason Ansel&lt;/a&gt;, and &lt;a href=&quot;https://github.com/desertfire&quot;&gt;Bin Bao&lt;/a&gt;.&lt;/p&gt;
-
-&lt;p&gt;We also thank collaborators from PyTorch for their professional support and guidance.&lt;/p&gt;
-
-&lt;h2 id=&quot;performance-configuration&quot;&gt;&lt;strong&gt;Performance Configuration&lt;/strong&gt;&lt;/h2&gt;
-
-&lt;p&gt;The configurations in the table are collected with &lt;a href=&quot;https://github.com/intel/svr-info&quot;&gt;svr-info&lt;/a&gt;. Test by Intel on September 12, 2024.&lt;/p&gt;
-
-&lt;h2 id=&quot;table-1&quot;&gt;Table 1&lt;/h2&gt;
-
-&lt;table&gt;
-  &lt;thead&gt;
-    &lt;tr&gt;
-      &lt;th style=&quot;text-align: left&quot;&gt;Component&lt;/th&gt;
-      &lt;th style=&quot;text-align: left&quot;&gt;Details&lt;/th&gt;
-    &lt;/tr&gt;
-  &lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;&lt;strong&gt;Name&lt;/strong&gt;&lt;/td&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;Intel® Max Series GPU 1100 in Intel® Tiber™ Developer Cloud&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;&lt;strong&gt;Time&lt;/strong&gt;&lt;/td&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;Thu Sep 12 08:21:27 UTC 2024&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;&lt;strong&gt;System&lt;/strong&gt;&lt;/td&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;Supermicro SYS-521GE-TNRT&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;&lt;strong&gt;Baseboard&lt;/strong&gt;&lt;/td&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;Supermicro X13DEG-OA&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;&lt;strong&gt;Chassis&lt;/strong&gt;&lt;/td&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;Supermicro Other&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;&lt;strong&gt;CPU Model&lt;/strong&gt;&lt;/td&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;Intel(R) Xeon(R) Platinum 8468V&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;&lt;strong&gt;Microarchitecture&lt;/strong&gt;&lt;/td&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;SPR_XCC&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;&lt;strong&gt;Sockets&lt;/strong&gt;&lt;/td&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;2&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;&lt;strong&gt;Cores per Socket&lt;/strong&gt;&lt;/td&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;48&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;&lt;strong&gt;Hyperthreading&lt;/strong&gt;&lt;/td&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;Enabled&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;&lt;strong&gt;CPUs&lt;/strong&gt;&lt;/td&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;192&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;&lt;strong&gt;Intel Turbo Boost&lt;/strong&gt;&lt;/td&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;Enabled&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;&lt;strong&gt;Base Frequency&lt;/strong&gt;&lt;/td&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;2.4GHz&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;&lt;strong&gt;All-core Maximum Frequency&lt;/strong&gt;&lt;/td&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;2.4GHz&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;&lt;strong&gt;Maximum Frequency&lt;/strong&gt;&lt;/td&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;2.9GHz&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;&lt;strong&gt;NUMA Nodes&lt;/strong&gt;&lt;/td&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;2&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;&lt;strong&gt;Prefetchers&lt;/strong&gt;&lt;/td&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;L2 HW: Enabled, L2 Adj.: Enabled, DCU HW: Enabled, DCU IP: Enabled, AMP: Disabled, Homeless: Disabled, LLC: Disabled&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;&lt;strong&gt;PPINs&lt;/strong&gt;&lt;/td&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;5e3f862ef7ba9d50, 6c85812edfcc84b1&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;&lt;strong&gt;Accelerators&lt;/strong&gt;&lt;/td&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;DLB 2, DSA 2, IAA 2, QAT (on CPU) 2, QAT (on chipset) 0&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;&lt;strong&gt;Installed Memory&lt;/strong&gt;&lt;/td&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;1024GB (16x64GB DDR5 4800 MT/s [4800 MT/s])&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;&lt;strong&gt;Hugepagesize&lt;/strong&gt;&lt;/td&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;2048 kB&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;&lt;strong&gt;Transparent Huge Pages&lt;/strong&gt;&lt;/td&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;madvise&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;&lt;strong&gt;Automatic NUMA Balancing&lt;/strong&gt;&lt;/td&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;Enabled&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;&lt;strong&gt;NIC&lt;/strong&gt;&lt;/td&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;2 x Ethernet Controller X710 for 10GBASE-T, 4 x MT2892 Family [ConnectX-6 Dx]&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;&lt;strong&gt;Disk&lt;/strong&gt;&lt;/td&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;1 x 894.3G Micron_7450_MTFDKBG960TFR&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;&lt;strong&gt;BIOS&lt;/strong&gt;&lt;/td&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;1.4a&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;&lt;strong&gt;Microcode&lt;/strong&gt;&lt;/td&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;0x2b0004b1&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;&lt;strong&gt;OS&lt;/strong&gt;&lt;/td&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;Ubuntu 22.04.2 LTS&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;&lt;strong&gt;Kernel&lt;/strong&gt;&lt;/td&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;5.15.0-73-generic&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;&lt;strong&gt;TDP&lt;/strong&gt;&lt;/td&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;330W&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;&lt;strong&gt;Power &amp;amp; Perf Policy&lt;/strong&gt;&lt;/td&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;Normal (6)&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;&lt;strong&gt;Frequency Governor&lt;/strong&gt;&lt;/td&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;performance&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;&lt;strong&gt;Frequency Driver&lt;/strong&gt;&lt;/td&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;acpi-cpufreq&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;&lt;strong&gt;Max C-State&lt;/strong&gt;&lt;/td&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;9&lt;/td&gt;
-    &lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-
-&lt;h2 id=&quot;table-2&quot;&gt;Table 2&lt;/h2&gt;
-
-&lt;table&gt;
-  &lt;thead&gt;
-    &lt;tr&gt;
-      &lt;th style=&quot;text-align: left&quot;&gt;Component&lt;/th&gt;
-      &lt;th style=&quot;text-align: left&quot;&gt;Details&lt;/th&gt;
-    &lt;/tr&gt;
-  &lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;&lt;strong&gt;Single Card&lt;/strong&gt;&lt;/td&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;Intel® Max Series GPU 1100 series on 4th Gen Intel® Xeon® processors of Intel Tiber Developer Cloud&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;&lt;strong&gt;Workload &amp;amp; version&lt;/strong&gt;&lt;/td&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;Timm ac34701, TorchBench 03cde49, Torchvision d23a6e1, Torchaudio b3f6f51, Transformers 243e186&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;&lt;strong&gt;Software Stack&lt;/strong&gt;&lt;/td&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;intel-for-pytorch-gpu-dev 0.5.3, intel-pti-dev 0.9.0, Intel xpu backend for Triton cc981fe&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;&lt;strong&gt;Framework&lt;/strong&gt;&lt;/td&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;Pytorch 4a3dabd67f8ce63f2fc45f278421cca3cc532cfe&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;&lt;strong&gt;GPU driver&lt;/strong&gt;&lt;/td&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;agama-ci-devel-803.61&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;&lt;strong&gt;GFX FW Version&lt;/strong&gt;&lt;/td&gt;
-      &lt;td style=&quot;text-align: left&quot;&gt;PVC2_1.23374&lt;/td&gt;
-    &lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;
-
-&lt;p&gt;&lt;strong&gt;Notices &amp;amp; Disclaimers&lt;/strong&gt;&lt;/p&gt;
-
-&lt;p&gt;Performance varies by use, configuration and other factors. Learn more on the Performance Index site. Performance results are based on testing as of dates shown in configurations and may not reflect all publicly available updates.  See backup for configuration details.  No product or component can be absolutely secure. Your costs and results may vary. Intel technologies may require enabled hardware, software or service activation.&lt;/p&gt;
-
-&lt;p&gt;Intel Corporation. Intel, the Intel logo, and other Intel marks are trademarks of Intel Corporation or its subsidiaries. Other names and brands may be claimed as the property of others.&lt;/p&gt;
-
-&lt;p&gt;&lt;strong&gt;AI disclaimer:&lt;/strong&gt;&lt;br /&gt;
-AI features may require software purchase, subscription or enablement by a software or platform provider, or may have specific configuration or compatibility requirements. Details at  &lt;a href=&quot;http://www.intel.com/AIPC&quot;&gt;www.intel.com/AIPC&lt;/a&gt;. Results may vary.&lt;/p&gt;</content>
-
-      
-      
-      
-      
-      
-
-      <author>
-          <name>PyTorch Team at Intel</name>
-        
-        
-      </author>
-
-      
-
-      
-
-      
-        <summary type="html">Support for Intel GPUs is now available in PyTorch® 2.5, providing improved functionality and performance for Intel GPUs which including Intel® Arc™ discrete graphics, Intel® Core™ Ultra processors with built-in Intel® Arc™ graphics and Intel® Data Center GPU Max Series. This integration brings Intel GPUs and the SYCL* software stack into the official PyTorch stack, ensuring a consistent user experience and enabling more extensive AI application scenarios, particularly in the AI PC domain.</summary>
       
 
       
