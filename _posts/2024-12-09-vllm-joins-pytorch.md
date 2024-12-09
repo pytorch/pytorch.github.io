@@ -11,17 +11,7 @@ We’re thrilled to announce that the [vLLM project](https://github.com/vllm-pro
 
 Running large language models (LLMs) is both resource-intensive and complex, especially as these models scale to hundreds of billions of parameters. That’s where vLLM comes in — a high-throughput, memory-efficient inference and serving engine designed for LLMs.
 
-Originally built around the innovative [PagedAttention algorithm](https://arxiv.org/abs/2309.06180), vLLM has grown into a comprehensive, state-of-the-art inference engine. A thriving community is also continuously adding new features and optimizations to vLLM, including the following:
-
-
-
-* [Taming Throughput-Latency Tradeoff in LLM Inference with Sarathi-Serve](https://www.usenix.org/conference/osdi24/presentation/agrawal)
-* [Mooncake: A KVCache-centric Disaggregated Architecture for LLM Serving](https://arxiv.org/abs/2407.00079)
-* [Llumnix: Dynamic Scheduling for Large Language Model Serving](https://arxiv.org/abs/2406.03243)
-* [CacheGen: KV Cache Compression and Streaming for Fast Large Language Model Serving](https://blog.vllm.ai/2024/07/25/lfai-perf.html#:~:text=CacheGen%3A%20KV%20Cache%20Compression%20and%20Streaming%20for%20Fast%20Large%20Language%20Model%20Serving)
-* [vAttention: Dynamic Memory Management for Serving LLMs without PagedAttention](https://blog.vllm.ai/2024/07/25/lfai-perf.html#:~:text=vAttention%3A%20Dynamic%20Memory%20Management%20for%20Serving%20LLMs%20without%20PagedAttention)
-* [Andes: Defining and Enhancing Quality-of-Experience in LLM-Based Text Streaming Services](https://blog.vllm.ai/2024/07/25/lfai-perf.html#:~:text=Andes%3A%20Defining%20and%20Enhancing%20Quality%2Dof%2DExperience%20in%20LLM%2DBased%20Text%20Streaming%20Services)
-* [SGLang: Efficient Execution of Structured Language Model Programs](https://blog.vllm.ai/2024/07/25/lfai-perf.html#:~:text=SGLang%3A%20Efficient%20Execution%20of%20Structured%20Language%20Model%20Programs)
+Originally built around the innovative [PagedAttention algorithm](https://arxiv.org/abs/2309.06180), vLLM has grown into a comprehensive, state-of-the-art inference engine. A thriving community is also continuously adding new features and optimizations to vLLM, including pipeline parallelism, chunked prefill, speculative decoding, and disaggregated serving.
 
 Since its release, vLLM has garnered significant attention, achieving over 31,000 GitHub stars—a testament to its popularity and thriving community. This milestone marks an exciting chapter for vLLM as we continue to empower developers and researchers with cutting-edge tools for efficient and scalable AI deployment. Welcome to the next era of LLM inference!
 
