@@ -9,6 +9,8 @@ hidden: true
 
 We’re thrilled to announce that the [vLLM project](https://github.com/vllm-project/vllm) has become a PyTorch ecosystem project, and joined the PyTorch ecosystem family!
 
+For more information on what it means to be a PyTorch ecosystem project, see the [PyTorch Ecosystem Tools page](https://pytorch.org/ecosystem/).
+
 Running large language models (LLMs) is both resource-intensive and complex, especially as these models scale to hundreds of billions of parameters. That’s where vLLM comes in — a high-throughput, memory-efficient inference and serving engine designed for LLMs.
 
 Originally built around the innovative [PagedAttention algorithm](https://arxiv.org/abs/2309.06180), vLLM has grown into a comprehensive, state-of-the-art inference engine. A thriving community is also continuously adding new features and optimizations to vLLM, including pipeline parallelism, chunked prefill, speculative decoding, and disaggregated serving.
