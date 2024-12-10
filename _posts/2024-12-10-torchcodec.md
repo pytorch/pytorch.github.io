@@ -65,8 +65,8 @@ For this reason, we’ve paid particular attention to our decoder’s performanc
 
 1. Decoding and transforming frames from multiple videos at once, inspired by what we have seen in data loading for large-scale training pipelines:
 
-   a. Ten threads decode batches of 50 videos in parallel.
-   b. For each video, decode 10 frames at evenly spaced times.
+   a. Ten threads decode batches of 50 videos in parallel.  
+   b. For each video, decode 10 frames at evenly spaced times.  
    c. For each frame, resize it to a 256x256 resolution.
 
 2. Decoding 10 frames at random locations in a single video.
