@@ -9,10 +9,10 @@ Highlights of torchcodec include:
 
 
 
-* An intuitive decoding API that treats a video file as a Python sequence of frames. We support both index-based and presentation-time based frame retrieval.
+* An intuitive decoding API that treats a video file as a Python sequence of frames. We support both index-based and presentation-time-based frame retrieval.
 * An emphasis on accuracy: we ensure you get the frames you requested, even if your video has variable frame rates.
 * A rich sampling API that makes it easy and efficient to retrieve batches of frames.
-* Best in class CPU decoding performance.
+* Best-in-class CPU decoding performance.
 * CUDA accelerated decoding that enables high throughput when decoding many videos at once.
 * Support for all codecs available in your installed version of FFmpeg.
 * Simple binary installs for Linux and Mac.
@@ -90,7 +90,7 @@ Using the following three videos:
 2. Same as above, except the video is 120 seconds long.
 3. A [promotional video from NASA](https://download.pytorch.org/torchaudio/tutorial-assets/stream-api/NASAs_Most_Scientifically_Complex_Space_Observatory_Requires_Precision-MP4_small.mp4) that is 206 seconds long, 29.7 frames per second and 960x540.
 
-The [experimental script](https://github.com/pytorch/torchcodec/blob/b0de66677bac322e628f04ec90ddeeb0304c6abb/benchmarks/decoders/generate_readme_data.py) is in our repo. Our experiments run on a Linux system with an Intel processor that has 22 available cores and an Nvidia GPU. For CPU decoding, all libraries were instructed to automatically determine the best number of threads to use.
+The [experimental script](https://github.com/pytorch/torchcodec/blob/b0de66677bac322e628f04ec90ddeeb0304c6abb/benchmarks/decoders/generate_readme_data.py) is in our repo. Our experiments run on a Linux system with an Intel processor that has 22 available cores and an NVIDIA GPU. For CPU decoding, all libraries were instructed to automatically determine the best number of threads to use.
 
 
 ![Benchmark chart](/assets/images/benchmark_readme_chart.png){:style="width:100%"}
@@ -99,8 +99,8 @@ From our experiments, we draw several conclusions:
 
 
 
-* Torchcodec is consistently the best-performing library for the primary use-case we designed it for: decoding many videos at once as a part of a training data loading pipeline. In particular, high-resolution videos see great gains with CUDA where decoding and transforms both happen on the GPU.
-* Torchcodec is competitive on the CPU with seek-heavy use-cases such as random and uniform sampling. Currently, torchcodec’s performance is better with shorter videos that have a smaller file size. This performance is due to torchcodec’s emphasis on seek-accuracy, which involves an initial linear scan.
+* Torchcodec is consistently the best-performing library for the primary use case we designed it for: decoding many videos at once as a part of a training data loading pipeline. In particular, high-resolution videos see great gains with CUDA where decoding and transforms both happen on the GPU.
+* Torchcodec is competitive on the CPU with seek-heavy use cases such as random and uniform sampling. Currently, torchcodec’s performance is better with shorter videos that have a smaller file size. This performance is due to torchcodec’s emphasis on seek-accuracy, which involves an initial linear scan.
 * Torchcodec is not as competitive when there is no seeking; that is, opening a video file and decoding from the beginning. This is again due to our emphasis on seek-accuracy and the initial linear scan.
 
 Implementing an [approximate seeking mode](https://github.com/pytorch/torchcodec/issues/427) in torchcodec should resolve these performance gaps, and it’s our highest priority feature for video decoding.
