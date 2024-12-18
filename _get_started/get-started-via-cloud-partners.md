@@ -32,7 +32,7 @@ get-started-via-cloud: true
 {% include_relative installation/google-cloud.md %}
 {% endcapture %}
 
-{% capture google-cloud %}
+{% capture lightning-studios %}
 {% include_relative installation/lightning-studios.md %}
 {% endcapture %}
 
@@ -40,6 +40,7 @@ get-started-via-cloud: true
   <div class="platform aws">{{aws | markdownify }}</div>
   <div class="platform google-cloud">{{google-cloud | markdownify }}</div>
   <div class="platform microsoft-azure">{{azure | markdownify }}</div>
+  <div class="platform lightning-studios">{{lightning-studios | markdownify }}</div>
 </div>
 
 <script page-id="get-started-via-cloud-partners" src="{{ site.baseurl }}/assets/menu-tab-selection.js"></script>
