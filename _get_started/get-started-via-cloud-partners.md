@@ -32,6 +32,9 @@ get-started-via-cloud: true
 {% include_relative installation/google-cloud.md %}
 {% endcapture %}
 
+{% capture google-cloud %}
+{% include_relative installation/lightning-studios.md %}
+{% endcapture %}
 
 <div id="cloud">
   <div class="platform aws">{{aws | markdownify }}</div>
