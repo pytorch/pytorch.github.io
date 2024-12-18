@@ -50,7 +50,7 @@ Note: docTR also provides docker images for an easy deployment, such as a part o
 Now, let’s try docTR’s OCR recognition on this sample:
 
 
-![OCR sample](/assets/images/doctr-joins-pytorch-ecosystem/fg2.png){:style="width:100%;display: block;max-width:300px; margin-left:auto; margin-right:auto;"}
+![OCR sample](/assets/images/doctr-joins-pytorch-ecosystem/fg2.jpg){:style="width:100%;display: block;max-width:300px; margin-left:auto; margin-right:auto;"}
 
 
 The OCR recognition model expects an image with only one word on it and will output the predicted word with a confidence score. You can use the following snippet to test OCR capabilities from docTR:
@@ -70,7 +70,7 @@ result = model(doc)
 print(result)
 ```
 
-Here, the most important line of code is `model = recognition_predictor(pretrained=True)`. This will load a default text recognition model,** **`crnn_vgg16_bn`, but you can select other models through the `arch` parameter. You can check out the [available architectures](https://mindee.github.io/doctr/using_doctr/using_models.html).
+Here, the most important line of code is `model = recognition_predictor(pretrained=True)`. This will load a default text recognition model, `crnn_vgg16_bn`, but you can select other models through the `arch` parameter. You can check out the [available architectures](https://mindee.github.io/doctr/using_doctr/using_models.html).
 
 When run on the sample, the recognition predictor retrieves the following data: `[('MAGAZINE', 0.9872216582298279)]`
 
@@ -86,7 +86,7 @@ Note: using the DocumentFile object docTR provides an easy way to manipulate PDF
 The last example was a crop on a single word. Now, what about an image with several words on it, like this one?
 
 
-![photo of magazines](/assets/images/doctr-joins-pytorch-ecosystem/fg3.jpg){:style="width:100%;display: block;max-width:200px; margin-left:auto; margin-right:auto;"}
+![photo of magazines](/assets/images/doctr-joins-pytorch-ecosystem/fg3.jpg){:style="width:100%;display: block;max-width:300px; margin-left:auto; margin-right:auto;"}
 
 
 A text detection model is used before the text recognition to output a segmentation map representing the location of the text. Following that, the text recognition is applied on every detected patch.
@@ -113,10 +113,10 @@ plt.show()
 Running it on the full sample yields the following:
 
 
-![photo of magazines](/assets/images/doctr-joins-pytorch-ecosystem/fg4.png){:style="width:100%;display: block;max-width:200px; margin-left:auto; margin-right:auto;"}
+![photo of magazines](/assets/images/doctr-joins-pytorch-ecosystem/fg4.png){:style="width:100%;display: block;max-width:300px; margin-left:auto; margin-right:auto;"}
 
 
-Similarly to the text recognition, `detection_predictor` will load a default model (`fast_base `here). You can also load another one by providing it through the `arch` parameter.
+Similarly to the text recognition, `detection_predictor` will load a default model (`fast_base` here). You can also load another one by providing it through the `arch` parameter.
 
 
 ## The full implementation
@@ -137,7 +137,7 @@ result = model(doc)
 result.show()
 ```
 
-![photo of magazines](/assets/images/doctr-joins-pytorch-ecosystem/fg5.png){:style="width:100%;display: block;max-width:200px; margin-left:auto; margin-right:auto;"}
+![photo of magazines](/assets/images/doctr-joins-pytorch-ecosystem/fg5.png){:style="width:100%;display: block;max-width:300px; margin-left:auto; margin-right:auto;"}
 
 The last line should display a matplotlib window which shows the detected patches. Hovering the mouse over them will display their contents.
 
@@ -152,7 +152,7 @@ plt.axis('off')
 plt.show()
 ```
 
-![black text on white](/assets/images/doctr-joins-pytorch-ecosystem/fg6.png){:style="width:100%;display: block;max-width:200px; margin-left:auto; margin-right:auto;"}
+![black text on white](/assets/images/doctr-joins-pytorch-ecosystem/fg6.png){:style="width:100%;display: block;max-width:300px; margin-left:auto; margin-right:auto;"}
 
 
 The pipeline is highly customizable, where you can modify the detection or recognition model behaviors by passing arguments to the `ocr_predictor`. Please refer to the [documentation](https://mindee.github.io/doctr/using_doctr/using_models.html) to learn more about it. 
