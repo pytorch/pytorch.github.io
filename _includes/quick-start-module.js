@@ -27,6 +27,7 @@ var supportedCloudPlatforms = [
   'aws',
   'google-cloud',
   'microsoft-azure',
+  'lightning-studios',
 ];
 
 var os = $(".os > .option");

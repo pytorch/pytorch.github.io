@@ -15,7 +15,7 @@ $(["macos", "linux", "windows"]).each(function(index, osClass) {
 });
 
 // Show cloud partner side nav on click or hide side nav if already open 
-$(["alibaba", "aws", "microsoft-azure", "google-cloud"]).each(function(index, sidebarClass) {
+$(["alibaba", "aws", "microsoft-azure", "google-cloud", "lightning-studios"]).each(function(index, sidebarClass) {
   $("#" + sidebarClass).click(function() {
     showSidebar(sidebarClass, ".get-started-cloud-sidebar li");
     // alibaba filter for centering cloud module
