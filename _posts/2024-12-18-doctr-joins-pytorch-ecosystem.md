@@ -2,6 +2,7 @@
 layout: blog_detail
 title: "docTR joins PyTorch Ecosystem: From Pixels to Data, Building a Recognition Pipeline with PyTorch and docTR"
 author: Olivier Dulcy & Sebastian Olivera, Mindee
+hidden: true
 ---
 
 ![docTR logo](/assets/images/doctr-joins-pytorch-ecosystem/fg1.png){:style="width:100%;display: block;max-width:400px; margin-left:auto; margin-right:auto;"}
