@@ -4,7 +4,7 @@ $([".macos", ".linux", ".windows"]).each(function(index, osClass) {
   buildSidebarMenu(osClass, "#get-started-locally-sidebar-list");
 });
 
-$([".alibaba", ".aws", ".microsoft-azure", ".google-cloud"]).each(function(index, cloudPartner) {
+$([".alibaba", ".aws", ".microsoft-azure", ".google-cloud", ".lightning-studios"]).each(function(index, cloudPartner) {
   buildSidebarMenu(cloudPartner, "#get-started-cloud-sidebar-list");
 });
 
