@@ -4,7 +4,7 @@ $([".macos", ".linux", ".windows"]).each(function(index, osClass) {
   buildSidebarMenu(osClass, "#get-started-locally-sidebar-list");
 });
 
-$([".alibaba", ".aws", ".microsoft-azure", ".google-cloud"]).each(function(index, cloudPartner) {
+$([".alibaba", ".aws", ".microsoft-azure", ".google-cloud", ".lightning-studios"]).each(function(index, cloudPartner) {
   buildSidebarMenu(cloudPartner, "#get-started-cloud-sidebar-list");
 });
 
@@ -15,7 +15,7 @@ $(["macos", "linux", "windows"]).each(function(index, osClass) {
 });
 
 // Show cloud partner side nav on click or hide side nav if already open 
-$(["alibaba", "aws", "microsoft-azure", "google-cloud"]).each(function(index, sidebarClass) {
+$(["alibaba", "aws", "microsoft-azure", "google-cloud", "lightning-studios"]).each(function(index, sidebarClass) {
   $("#" + sidebarClass).click(function() {
     showSidebar(sidebarClass, ".get-started-cloud-sidebar li");
     // alibaba filter for centering cloud module
