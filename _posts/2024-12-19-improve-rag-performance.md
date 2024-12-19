@@ -182,7 +182,7 @@ Self CPU time total: 2.537s
 ```
 
 
- **Table 4:** Profiler output for HuggingFace sentence-transformer embedding model inference on AWS Graviton3-based m7g.xlarge instance with torch.compile, weights pre-packing, and inference_mode
+**Table 4:** Profiler output for HuggingFace sentence-transformer embedding model inference on AWS Graviton3-based m7g.xlarge instance with torch.compile, weights pre-packing, and inference_mode
 
 The following table shows the incremental performance improvements achieved for the standalone embedding model inference.
 
@@ -240,8 +240,7 @@ The following script is an updated example for the embedding model inference wit
 
 ### End-to-End RAG scenario on CPU
 
-** \
-**After optimizing the embedding model inference, we started with a PyTorch eager mode based RAG setup, mainly to validate the functionality on the CPU backend. We built the RAG solution with[ HuggingFaceEmbeddings](https://api.python.langchain.com/en/latest/embeddings/langchain_community.embeddings.huggingface.HuggingFaceEmbeddings.html) from `langchain_community.embeddings`, as shown in the following code snippet.
+After optimizing the embedding model inference, we started with a PyTorch eager mode based RAG setup, mainly to validate the functionality on the CPU backend. We built the RAG solution with[ HuggingFaceEmbeddings](https://api.python.langchain.com/en/latest/embeddings/langchain_community.embeddings.huggingface.HuggingFaceEmbeddings.html) from `langchain_community.embeddings`, as shown in the following code snippet.
 
 
 ```
@@ -419,7 +418,7 @@ We would like to express our gratitude to Eli Uriegas for the support in making 
 
 ## Authors
 
-**Sunita Nadampalli **is a Principal Engineer and AI/ML expert at AWS. She leads AWS Graviton software performance optimizations for AI/ML and HPC workloads. She is passionate about open source software development and delivering high-performance and sustainable software solutions for SoCs based on the Arm ISA.
+**Sunita Nadampalli** is a Principal Engineer and AI/ML expert at AWS. She leads AWS Graviton software performance optimizations for AI/ML and HPC workloads. She is passionate about open source software development and delivering high-performance and sustainable software solutions for SoCs based on the Arm ISA.
 
 **Ankith Gunapal** is an AI Partner Engineer at Meta (PyTorch). He leads customer support, evangelizing & release engineering of TorchServe. He is passionate about solving production problems in model inference and model serving. He also enjoys distilling technically complex material in a user friendly format
 
