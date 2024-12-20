@@ -4,22 +4,6 @@ title: "Improve RAG performance with torch.compile on AWS Graviton Processors"
 author: Sunita Nadampalli(AWS), Ankith Gunapal(Meta), Hamid Shojanazeri(Meta)
 ---
 
-```html
-<pre><code class="language-python">
-<span style="color: green;">print("This line is green")</span>
-print("This line is normal")
-<span style="color: green;">x = 10</span>
-</code></pre>
-```
-
-<div class="code-block">
-<pre>
-<span style="color: green;">let x = 10;</span>
-console.log(x);
-</pre>
-</div>
-
-
 Large Language Models (LLMs) are trained on vast volumes of data and use billions of parameters to support tasks like answering questions, translating languages, and completing sentences. There are a few challenges when working with LLMs such as domain knowledge gaps, factuality issues, and hallucination, which affect their reliability especially for the fields that require high levels of accuracy, such as healthcare, law, or engineering. Retrieval Augmented Generation (RAG) provides a solution to mitigate some of these issues by augmenting LLMs with a specific domain or an organization's internal knowledge base, without the need to retrain the model.
 
 The RAG knowledge source is generally business specific databases which are typically deployed on general-purpose CPU infrastructure. So, deploying RAG on general-purpose CPU infrastructure alongside related business services is both efficient and cost-effective. With this motivation, we evaluated RAG deployment on [AWS Graviton](https://aws.amazon.com/ec2/graviton/) based Amazon EC2 instances which have been delivering up to [40% price-performance advantage](https://aws.amazon.com/ec2/graviton/getting-started/) compared to comparable instances for the majority of the workloads including databases, in-memory caches, big data analytics, media codecs, gaming servers, and machine learning inference. 
@@ -250,9 +234,40 @@ The following table shows the incremental performance improvements achieved for 
 The following script is an updated example for the embedding model inference with the previously discussed optimizations included.  The optimizations are highlighted in **BOLD**.
 
 
-![code optimizations](/assets/images/improve-rag-performance2.jpg){:style="width:100%"}
+<div class="code-block">
+<pre>
+import torch
+from torch.profiler import profile, record_function, ProfilerActivity
+from transformers import AutoTokenizer, AutoModel
+<span style="color: green;">import torch._inductor.config as config</span>
+<span style="color: green;">config.cpp.weight_prepack=True</span>
+<span style="color: green;">config.freezing=True</span>
 
+model_name = "sentence-transformers/all-mpnet-base-v2"
+input_text = ['This is an example sentence', 'Each sentence is converted']
 
+model = AutoModel.from_pretrained(model_name)
+tokenizer = AutoTokenizer.from_pretrained(model_name)
+
+encoded_input = tokenizer(input_text, padding=True, truncation=True, return_tensors='pt')
+
+warmup , actual = 100, 100
+model.eval()
+<span style="color: green;">model = torch.compile(model)</span>
+
+<span style="color: green;">with torch.inference_mode():</span>
+#instead of with torch.no_grad()
+# warmup
+  for i in range(warmup):
+  	embeddings = model(**encoded_input)
+
+  with profile(activities=[ProfilerActivity.CPU]) as prof:
+	with record_function("model_inference"):
+  	for i in range(actual):
+     	embeddings = model(**encoded_input)
+  print(prof.key_averages().table(sort_by="self_cpu_time_total"))
+</pre>
+</div>
 
 ### End-to-End RAG scenario on CPU
 
