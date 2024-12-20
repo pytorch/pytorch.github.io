@@ -4,6 +4,22 @@ title: "Improve RAG performance with torch.compile on AWS Graviton Processors"
 author: Sunita Nadampalli(AWS), Ankith Gunapal(Meta), Hamid Shojanazeri(Meta)
 ---
 
+```html
+<pre><code class="language-python">
+<span style="color: green;">print("This line is green")</span>
+print("This line is normal")
+<span style="color: green;">x = 10</span>
+</code></pre>
+```
+
+<div class="code-block">
+<pre>
+<span style="color: green;">let x = 10;</span>
+console.log(x);
+</pre>
+</div>
+
+
 Large Language Models (LLMs) are trained on vast volumes of data and use billions of parameters to support tasks like answering questions, translating languages, and completing sentences. There are a few challenges when working with LLMs such as domain knowledge gaps, factuality issues, and hallucination, which affect their reliability especially for the fields that require high levels of accuracy, such as healthcare, law, or engineering. Retrieval Augmented Generation (RAG) provides a solution to mitigate some of these issues by augmenting LLMs with a specific domain or an organization's internal knowledge base, without the need to retrain the model.
 
 The RAG knowledge source is generally business specific databases which are typically deployed on general-purpose CPU infrastructure. So, deploying RAG on general-purpose CPU infrastructure alongside related business services is both efficient and cost-effective. With this motivation, we evaluated RAG deployment on [AWS Graviton](https://aws.amazon.com/ec2/graviton/) based Amazon EC2 instances which have been delivering up to [40% price-performance advantage](https://aws.amazon.com/ec2/graviton/getting-started/) compared to comparable instances for the majority of the workloads including databases, in-memory caches, big data analytics, media codecs, gaming servers, and machine learning inference. 
