@@ -231,7 +231,7 @@ The following table shows the incremental performance improvements achieved for 
 </table>
 
 
-The following script is an updated example for the embedding model inference with the previously discussed optimizations included.  The optimizations are highlighted in **BOLD**.
+The following script is an updated example for the embedding model inference with the previously discussed optimizations included. The optimizations are highlighted in <span style="color: green;">GREEN</span>.
 
 
 <div class="code-block">
