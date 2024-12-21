@@ -22,7 +22,7 @@ To view the full catalogue of poster, please visit **[PyTorch Ecosystem Day 2021
 
 ### New Contributor Resources 
 Today, we are also sharing new contributor resources that we are trying out to give you the most access to up-to-date news, networking opportunities and more. 
-* [Contributor Newsletter](https://pytorch.org/resources/contributors/) - Includes curated news including RFCs, feature roadmaps, notable PRs, editorials from developers, and more to support keeping track of everything that’s happening in our community. 
+* [Contributor Newsletter](https://pytorch.org/newsletter/) - Includes curated news including RFCs, feature roadmaps, notable PRs, editorials from developers, and more to support keeping track of everything that’s happening in our community. 
 * [Contributors Discussion Forum](https://dev-discuss.pytorch.org/) - Designed for contributors to learn and collaborate on the latest development across PyTorch. 
 * [PyTorch Developer Podcast (Beta)](https://pytorch-dev-podcast.simplecast.com/) - Edward Yang, PyTorch Research Scientist, at Facebook AI shares bite-sized (10 to 20 mins) podcast episodes discussing topics about all sorts of internal development topics in PyTorch.
 
