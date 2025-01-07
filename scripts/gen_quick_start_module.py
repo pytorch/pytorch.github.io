@@ -83,6 +83,12 @@ def write_published_versions(versions):
     with open(BASE_DIR / "published_versions.json", "w") as outfile:
         json.dump(versions, outfile, indent=2)
 
+# Create release matrix for PyTorch website.
+# It's utilized to populate config data for 
+# the "Start Locally" installation options table.
+def write_release_matrix(matrix):
+    with open(BASE_DIR / "release_matrix.json", "w") as outfile:
+        json.dump(matrix, outfile, indent=2)
 
 def read_matrix_for_os(osys: OperatingSystem, channel: str):
     jsonfile = load_json_from_basedir(f"{osys.value}_{channel}_matrix.json")
@@ -241,6 +247,8 @@ def main():
             release_matrix[val] = {}
             for osys in OperatingSystem:
                 release_matrix[val][osys.value] = read_matrix_for_os(osys, val)
+
+        write_release_matrix(release_matrix)
 
         extract_arch_ver_map(release_matrix)
         for val in ("nightly", "release"):
