@@ -54,7 +54,7 @@ In torchtune, there are two key concepts that are essential for customizing and 
 * Config is a file used by torchtune to configure the training process. It contains settings for the model, data, training parameters, and more. By modifying the Config file, users can easily adjust various aspects of the training process, such as data loading, optimizer settings, and learning rate adjustments. Config files are typically written in YAML format, making them clear and easy to modify.
 * A Recipe in torchtune is a simple, transparent single-file training script in pure PyTorch. Recipes provide the full end-to-end training workflow but are designed to be hackable and easy to extend. Users can choose an existing Recipe or create a custom one to meet their fine-tuning needs.
 
-When fine-tuning a model using the Ascend backend, torchtune simplifies the process by allowing you to specify the device type directly in the configuration file. Once you specify ***npu*** as the device type, torchtune automatically detects and utilizes the Ascend NPU for training and inference. This design allows users to focus on model fine-tuning without needing to worry about hardware details.
+When fine-tuning a model using the Ascend backend, torchtune simplifies the process by allowing you to specify the device type directly in the configuration file. Once you specify **npu** as the device type, torchtune automatically detects and utilizes the Ascend NPU for training and inference. This design allows users to focus on model fine-tuning without needing to worry about hardware details.
 
 Specifically, you just need to set the relevant parameters in the **Config** file, indicating the device type as ***npu***, such as:
 
@@ -77,7 +77,7 @@ dataset:
 ```
 
 
-Once you've specified the ***npu*** device type in your configuration file, you can easily begin the model fine-tuning process. Simply run the following command, and torchtune will automatically start the fine-tuning process on the Ascend backend: 
+Once you've specified the **npu** device type in your configuration file, you can easily begin the model fine-tuning process. Simply run the following command, and torchtune will automatically start the fine-tuning process on the Ascend backend: 
 
 
 ```
@@ -146,7 +146,7 @@ tune cp generation ./ascend_generation_config.yaml
 ```
 
 
-Let’s modify ***ascend_generation_config.yaml*** to include the following changes. Again, you only need to replace two fields: **output_dir** and **checkpoint_files**. 
+Let’s modify **ascend_generation_config.yaml** to include the following changes. Again, you only need to replace two fields: **output_dir** and **checkpoint_files**. 
 
 
 ```
