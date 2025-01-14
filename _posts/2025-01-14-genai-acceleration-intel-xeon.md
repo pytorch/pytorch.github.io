@@ -39,7 +39,7 @@ Figure 1. Weight-only Quantization Pattern. Source: Mingfei Ma, Intel
 
 
 
-* Weight Prepacking & Micro Kernel Design.
+* **Weight Prepacking & Micro Kernel Design.**
 
     To maximize throughput, GPTFast allows model weights to be prepacked into hardware-specific layouts on int4 using internal PyTorch ATen APIs. Inspired by Llama.cpp, we prepacked the model weights from [N, K] to [N/kNTileSize, K, kNTileSize/2], with kNTileSize set to 64 on avx512. First, the model weights are blocked along the N dimension, then the two innermost dimensions are transposed. To minimize de-quantization overhead in kernel computation, we shuffle the 64 data elements on the same row in an interleaved pattern, packing Lane2 & Lane0 together and Lane3 & Lane1 together, as illustrated in Figure 2. 
 
@@ -97,23 +97,28 @@ Diffusion Fast offers a simple and efficient PyTorch native acceleration for tex
     SDPA is a key mechanism used in transformer models, PyTorch provides a fused implementation to show large performance benefits over a naive implementation.
 
 
-    **Model Usage on Native PyTorch CPU**
+## Model Usage on Native PyTorch CPU
 
 
 ### [GPTFast](https://github.com/pytorch-labs/gpt-fast)
 
 To launch WOQ in GPTFast, first quantize the model weights. For example, to quantize with int4 and group size of 32:
 
+```
 python quantize.py --checkpoint_path checkpoints/$MODEL_REPO/model.pth --mode int4 –group size 32
+```
 
 Then run generation by passing the int4 checkpoint to generate.py
 
+```
 python generate.py --checkpoint_path checkpoints/$MODEL_REPO/model_int4.g32.pth --compile --device $DEVICE
+```
 
 To use CPU backend in GPTFast, simply switch DEVICE variable from cuda to CPU.
 
 ### [Segment Anything Fast](https://github.com/pytorch-labs/segment-anything-fast)
 
+```
 cd experiments
 
 export SEGMENT_ANYTHING_FAST_USE_FLASH_4=0
@@ -121,10 +126,13 @@ export SEGMENT_ANYTHING_FAST_USE_FLASH_4=0
 python run_experiments.py 16 vit_b &lt;pytorch_github> &lt;segment-anything_github> &lt;path_to_experiments_data> --run-experiments --num-workers 32 --device cpu
 
 python run_experiments.py 16 vit_h &lt;pytorch_github> &lt;segment-anything_github> &lt;path_to_experiments_data> --run-experiments --num-workers 32 --device cpu
+```
 
 ### Use [Diffusion Fast](https://github.com/huggingface/diffusion-fast)
 
+```
 python run_benchmark.py --compile_unet --compile_vae --device=cpu
+```
 
 ## Performance Evaluation
 
@@ -134,7 +142,7 @@ We ran llama-2-7b-chat model based on [test branch](https://github.com/yanbing-j
 
 
 
-* Use torch.compile to automatically fuse elementwise operators.
+* Use `torch.compile` to automatically fuse elementwise operators.
 * Reduce memory footprint with WOQ-int8.
 * Further reduce memory footprint with WOQ-int4.
 * Use AVX512 which enables faster de-quant in micro kernels.
