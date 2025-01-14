@@ -208,4 +208,4 @@ Intel Corporation. Intel, the Intel logo, and other Intel marks are trademarks o
 
 ## AI disclaimer:
 
-AI features may require software purchase, subscription or enablement by a software or platform provider, or may have specific configuration or compatibility requirements. Details at [www.intel.com/AIPC](www.intel.com/AIPC). Results may vary.
+AI features may require software purchase, subscription or enablement by a software or platform provider, or may have specific configuration or compatibility requirements. Details at [www.intel.com/AIPC](https://www.intel.com/AIPC). Results may vary.
