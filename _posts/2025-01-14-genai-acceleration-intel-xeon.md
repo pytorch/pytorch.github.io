@@ -128,7 +128,7 @@ python run_experiments.py 16 vit_b &lt;pytorch_github> &lt;segment-anything_gith
 python run_experiments.py 16 vit_h &lt;pytorch_github> &lt;segment-anything_github> &lt;path_to_experiments_data> --run-experiments --num-workers 32 --device cpu
 ```
 
-### Use [Diffusion Fast](https://github.com/huggingface/diffusion-fast)
+### [Diffusion Fast](https://github.com/huggingface/diffusion-fast)
 
 ```
 python run_benchmark.py --compile_unet --compile_vae --device=cpu
@@ -192,14 +192,6 @@ Part 3: How to accelerate [text-to-image diffusion models up to 3x](https://pyto
 
 Part 4: How to speed up FAIR’s [Seamless M4T-v2 model by 2.7x](https://pytorch.org/blog/accelerating-generative-ai-4/).
 
-## References
-
-[Accelerating Generative AI with PyTorch: Segment Anything, Fast](https://pytorch.org/blog/accelerating-generative-ai/)
-
-[Accelerating Generative AI with PyTorch II: GPT, Fast](https://pytorch.org/blog/accelerating-generative-ai-2/)
-
-[Accelerating Generative AI Part III: Diffusion, Fast](https://pytorch.org/blog/accelerating-generative-ai-3/)
-
 ## Product and Performance Information
 
 Figure 4: Intel Xeon Scalable Processors: Measurement on 4th Gen Intel Xeon Scalable processor using: 2x Intel(R) Xeon(R) Platinum 8480+, 56cores, HT On, Turbo On, NUMA 2, Integrated Accelerators Available [used]: DLB 2 [0], DSA 2 [0], IAA 2 [0], QAT 2 [0], Total Memory 512GB (16x32GB DDR5 4800 MT/s [4800 MT/s]), BIOS 3B07.TEL2P1, microcode 0x2b000590, Samsung SSD 970 EVO Plus 2TB, CentOS Stream 9, 5.14.0-437.el9.x86_64, run single socket (1 instances in total with: 56 cores per instance, Batch Size 1 per instance), Models run with PyTorch 2.5 wheel. Test by Intel on 10/15/24.
@@ -216,4 +208,4 @@ Intel Corporation. Intel, the Intel logo, and other Intel marks are trademarks o
 
 ## AI disclaimer:
 
-AI features may require software purchase, subscription or enablement by a software or platform provider, or may have specific configuration or compatibility requirements. Details at www.intel.com/AIPC. Results may vary.
+AI features may require software purchase, subscription or enablement by a software or platform provider, or may have specific configuration or compatibility requirements. Details at [www.intel.com/AIPC](www.intel.com/AIPC). Results may vary.
