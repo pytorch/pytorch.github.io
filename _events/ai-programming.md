@@ -7,7 +7,7 @@ poster: assets/images/ai-programming.png
 
 **Date**: January 24, 2025, 1PM ET
 
-<a href="https://streamyard.com/watch/SQkGZqZNzgae">
+<a href="/ai-powered-competitive-programming">
 <img style="width:100%" src="/assets/images/ai-programming.png" alt="AI-Powered Competitive Programming">
 </a>
 
@@ -16,4 +16,4 @@ In this talk, Anton will share how he built an AI agent that ranked #1 in the fi
 
 Anton Pidkuiko is a Software Engineer at Meta, Reality Labs in London. He is currently working on applying the power of Large Language Models to Metaverse Avatar product experiences.
 
-[Register now to join the event](https://streamyard.com/watch/SQkGZqZNzgae)
+[Register now to join the event](/ai-powered-competitive-programming)
