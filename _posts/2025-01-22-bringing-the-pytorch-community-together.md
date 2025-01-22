@@ -1,7 +1,8 @@
 ---
 layout: blog_detail
 title: "Bringing the PyTorch Community Together"
-author: "Team PyTorch"  
+author: "Team PyTorch" 
+hidden: true
 ---
 
 As we step into a new year, it’s a great moment to reflect on the incredible community events that made 2024 a memorable year for the PyTorch Foundation. Global meetups, events, and conferences brought the community together to learn, connect, and grow. Here’s a quick recap of the year’s highlights and what to expect in 2025\.
@@ -30,6 +31,8 @@ The PyTorch Conference in San Francisco was undoubtedly one of the year’s most
 
 ![What Made It Special](/assets/images/community-events-recap/fg6.jpeg){:style="width:100%"}
 
+#### **What Made It Special:**
+
 * Keynote speeches from industry leaders and PyTorch maintainers.  
 * In-depth sessions covering PyTorch’s end-to-end machine learning capabilities.  
 * Hands-on workshops and breakout sessions.  
@@ -45,13 +48,13 @@ The conference’s focus on fostering collaboration underscored PyTorch’s role
 
 #### **GPU MODE IRL Hackathon (September 21\)**
 
-#### PyTorch sponsored this meetup in person in San Francisco where attendees made friends, watched keynotes, hacked all day, took breaks with afternoon talks, and then hacked all night. We heard about torchao, our new quantization and sparsity library, vLLM which deploys PyTorch models in production, llm.c, and more. Key takeaways included: GPU Mode IRL Hackathon 1st place winner was inspired by PyTorch FlexAttention to improve CUTLASS, NCCL in Triton would help us do distributed programming with a minimal NCCL reimplementation in pure Python, No libtorch pytorch binaries dramatically reduces binary sizes for on device deployments.
+PyTorch sponsored this meetup in person in San Francisco where attendees made friends, watched keynotes, hacked all day, took breaks with afternoon talks, and then hacked all night. We heard about torchao, our new quantization and sparsity library, vLLM which deploys PyTorch models in production, llm.c, and more. Key takeaways included: GPU Mode IRL Hackathon 1st place winner was inspired by PyTorch FlexAttention to improve CUTLASS, NCCL in Triton would help us do distributed programming with a minimal NCCL reimplementation in pure Python, No libtorch pytorch binaries dramatically reduces binary sizes for on device deployments.
 
 ![Consumer AI Edge Hackathon (November 22-23)](/assets/images/community-events-recap/fg8.png){:style="width:100%"}
 
 #### **Consumer AI Edge Hackathon (November 22-23)**
 
-#### The PyTorch team served as mentors and coaches in a Hackathon in Paris, co-sponsored by Hugging Face, Scaleway, and Entrepreneur First, challenging teams to create innovative consumer (B2C) applications leveraging Hugging Face, PyTorch and other open source on-device tools and models. 120+ people across 22 teams hacked for 2 days (and nights\!) building the future of AI-powered on-device solutions based on open source models and tools. Participants created innovative applications,  powered by PyTorch, [ExecuTorch](https://github.com/pytorch/executorch/tree/main) and Hugging Face resources, such as an on-device yoga coach, a magical storytelling companion and a Kinect-like experience to mobile phones. The PyTorch team is planning similar events in other geographies in 2025 around innovative on-device AI applications. 
+The PyTorch team served as mentors and coaches in a Hackathon in Paris, co-sponsored by Hugging Face, Scaleway, and Entrepreneur First, challenging teams to create innovative consumer (B2C) applications leveraging Hugging Face, PyTorch and other open source on-device tools and models. 120+ people across 22 teams hacked for 2 days (and nights\!) building the future of AI-powered on-device solutions based on open source models and tools. Participants created innovative applications,  powered by PyTorch, [ExecuTorch](https://github.com/pytorch/executorch/tree/main) and Hugging Face resources, such as an on-device yoga coach, a magical storytelling companion and a Kinect-like experience to mobile phones. The PyTorch team is planning similar events in other geographies in 2025 around innovative on-device AI applications. 
 
 ![PyTorch Korea User Group Meetup (November 30)](/assets/images/community-events-recap/fg9.png){:style="width:100%"}
 
@@ -106,10 +109,10 @@ Summer Series:
 * [Accelerating LLM family of models on Arm Neoverse based Graviton AWS processors with KleidiAI](https://youtu.be/NeHIhQWewug?feature=shared)  
 * [torch.compile: The Missing Manual](https://www.youtube.com/live/rew5CSUaIXg?feature=shared)
 
-Release Live Q\&As:
+Release Live Q&As:
 
-* [PyTorch 2.4: Live Q\&A](https://www.youtube.com/live/ry_QgUIYX1E?feature=shared)  
-* [PyTorch 2.5 Live Q\&A](https://www.youtube.com/live/B3IgXpl4xt4?feature=shared)
+* [PyTorch 2.4: Live Q&A](https://www.youtube.com/live/ry_QgUIYX1E?feature=shared)  
+* [PyTorch 2.5 Live Q&A](https://www.youtube.com/live/B3IgXpl4xt4?feature=shared)
 
 Live Webinars:
 
