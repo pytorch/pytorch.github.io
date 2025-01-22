@@ -16,7 +16,7 @@ We hosted a PyTorch Meetup in Seattle in May at the Meta Bellevue Office where M
 
 The PyTorch Docathon returned for its third edition, spanning over two weeks in June. This unique event focused on improving PyTorch’s documentation with contributions from community members worldwide. Documentation is the backbone of any successful open source project, and PyTorch’s Docathon fostered inclusivity and collaboration, making it easier for new users to adopt the framework and for experienced developers to maximize its potential. The 2024 Docathon resulted in more than 50 merged pull requests and was a testament to the collaborative spirit of the PyTorch community and its commitment to enhancing accessibility and usability. Watch the [PyTorch Docathon Kickoff](https://youtu.be/2D0aej50umA?feature=shared) on YouTube.
 
-![PyTorch Shanghai Meetup (August 15)](/assets/images/community-events-recap/fg3.jpg){:style="width:100%"}
+![PyTorch Shanghai Meetup (August 15)](/assets/images/community-events-recap/fg3.png){:style="width:100%"}
 
 #### **PyTorch Shanghai Meetup (August 15\)**
 
@@ -28,7 +28,7 @@ In August, the [PyTorch Shanghai Meetup](https://pytorch.org/blog/pytorch-shangh
 
 The PyTorch Conference in San Francisco was undoubtedly one of the year’s most significant events. This two-day gathering brought together top-tier researchers, developers, and academic communities, fostering collaboration and innovation in machine learning.
 
-![What Made It Special](/assets/images/community-events-recap/fg6.jpg){:style="width:100%"}
+![What Made It Special](/assets/images/community-events-recap/fg6.jpeg){:style="width:100%"}
 
 * Keynote speeches from industry leaders and PyTorch maintainers.  
 * In-depth sessions covering PyTorch’s end-to-end machine learning capabilities.  
@@ -47,13 +47,13 @@ The conference’s focus on fostering collaboration underscored PyTorch’s role
 
 #### PyTorch sponsored this meetup in person in San Francisco where attendees made friends, watched keynotes, hacked all day, took breaks with afternoon talks, and then hacked all night. We heard about torchao, our new quantization and sparsity library, vLLM which deploys PyTorch models in production, llm.c, and more. Key takeaways included: GPU Mode IRL Hackathon 1st place winner was inspired by PyTorch FlexAttention to improve CUTLASS, NCCL in Triton would help us do distributed programming with a minimal NCCL reimplementation in pure Python, No libtorch pytorch binaries dramatically reduces binary sizes for on device deployments.
 
-![Consumer AI Edge Hackathon (November 22-23)](/assets/images/community-events-recap/fg8.jpg){:style="width:100%"}
+![Consumer AI Edge Hackathon (November 22-23)](/assets/images/community-events-recap/fg8.png){:style="width:100%"}
 
 #### **Consumer AI Edge Hackathon (November 22-23)**
 
 #### The PyTorch team served as mentors and coaches in a Hackathon in Paris, co-sponsored by Hugging Face, Scaleway, and Entrepreneur First, challenging teams to create innovative consumer (B2C) applications leveraging Hugging Face, PyTorch and other open source on-device tools and models. 120+ people across 22 teams hacked for 2 days (and nights\!) building the future of AI-powered on-device solutions based on open source models and tools. Participants created innovative applications,  powered by PyTorch, [ExecuTorch](https://github.com/pytorch/executorch/tree/main) and Hugging Face resources, such as an on-device yoga coach, a magical storytelling companion and a Kinect-like experience to mobile phones. The PyTorch team is planning similar events in other geographies in 2025 around innovative on-device AI applications. 
 
-![PyTorch Korea User Group Meetup (November 30)](/assets/images/community-events-recap/fg9.jpg){:style="width:100%"}
+![PyTorch Korea User Group Meetup (November 30)](/assets/images/community-events-recap/fg9.png){:style="width:100%"}
 
 #### **PyTorch Korea User Group Meetup (November 30\)**
 
@@ -71,7 +71,7 @@ The PyTorch Korea User Group reaches tens of thousands of Korean AI developers e
 * [GitHub Repository](https://github.com/PyTorchKorea)  
 * [YouTube Channel](https://youtube.com/@pytorchkr)
 
-![PyTorch Korea User Group 2025 Events Overview](/assets/images/community-events-recap/fg2.jpg){:style="width:100%"}
+![PyTorch Korea User Group 2025 Events Overview](/assets/images/community-events-recap/fg2.jpeg){:style="width:100%"}
 
 The PyTorch Korea User Group has planned three major activities for the year:
 
@@ -86,7 +86,7 @@ The PyTorch Korea User Group has planned three major activities for the year:
 
 The PyTorch Foundation co-hosted a social event at NeurIPS along with The Fin AI and Open Finance Foundation that featured engaging discussions on open source AI and applications in finance.
 
-![PyTorch Webinars](/assets/images/community-events-recap/fg7.jpg){:style="width:100%"}
+![PyTorch Webinars](/assets/images/community-events-recap/fg7.jpeg){:style="width:100%"}
 
 **PyTorch Webinars**
 
