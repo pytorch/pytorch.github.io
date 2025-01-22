@@ -1,7 +1,7 @@
 ---
 layout: blog_detail
 title: "Accelerating LLM Inference with GemLite, TorchAO and SGLang"
-author: "Teams at PyTorch, Mobius Labs and SGLang" 
+author: "Teams at PyTorch, Mobius Labs and SGLang"  
 ---
 
 Large Language Models (LLMs) are typically very resource-intensive, requiring significant amounts of memory, compute and power to operate effectively. Quantization provides a solution by reducing weights and activations from 16 bit floats to lower bitrates (e.g., 8 bit, 4 bit, 2 bit), achieving significant speedup and memory savings and also enables support for larger batch sizes.
