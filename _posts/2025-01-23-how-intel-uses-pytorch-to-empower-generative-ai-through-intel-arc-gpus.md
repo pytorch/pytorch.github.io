@@ -1,8 +1,6 @@
 ---
 layout: blog_detail
 title: "How Intel Uses PyTorch to Empower Generative AI through Intel Arc GPUs"
-author: "Team PyTorch" 
-hidden: true
 ---
 
 Intel has long been at the forefront of technological innovation, and its recent venture into Generative AI (GenAI) solutions is no exception. With the rise of AI-powered gaming experiences, Intel sought to deliver an accessible and intuitive GenAI inferencing solution tailored for AI PCs powered by Intel’s latest GPUs. By leveraging PyTorch as the backbone for development efforts, Intel successfully launched AI Playground, an open source application that showcases advanced GenAI workloads.
