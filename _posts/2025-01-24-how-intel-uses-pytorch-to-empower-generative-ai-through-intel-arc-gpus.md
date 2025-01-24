@@ -8,7 +8,7 @@ Intel has long been at the forefront of technological innovation, and its recent
 
 **The Business Challenge**
 
-Our goal was to deliver an accessible and intuitive Generative AI (GenAI) inferencing solution tailored for AI PCs powered by Intel. We recognized the need to showcase the capabilities of the latest GenAI workloads on our newest line of client GPUs. To address this, we developed a starter application, [AI Playground](https://github.com/intel/ai-playground), which is open source and includes a comprehensive developer reference sample available on GitHub using PyTorch. This application seamlessly integrates image generation, image enhancement, and chatbot functionalities, using retrieval-augmented generation (RAG) features, all within a single, user-friendly installation package. This initiative not only demonstrates the functionality of these AI workloads but also serves as an educational resource for the ecosystem, guiding developers on effectively leveraging the [Intel® Arc™ GPU](https://www.intel.com/content/www/us/en/products/details/discrete-gpus/arc.html) product line for advanced AI applications. This solution leverages Intel® Arc™ Xe Cores and [Xe Matrix Extensions (XMX)](https://www.intel.com/content/www/us/en/support/articles/000091112/graphics.html) for accelerating inferencing.
+Our goal was to deliver an accessible and intuitive GenAI inferencing solution tailored for AI PCs powered by Intel. We recognized the need to showcase the capabilities of the latest GenAI workloads on our newest line of client GPUs. To address this, we developed a starter application, [AI Playground](https://github.com/intel/ai-playground), which is open source and includes a comprehensive developer reference sample available on GitHub using PyTorch. This application seamlessly integrates image generation, image enhancement, and chatbot functionalities, using retrieval-augmented generation (RAG) features, all within a single, user-friendly installation package. This initiative not only demonstrates the functionality of these AI workloads but also serves as an educational resource for the ecosystem, guiding developers on effectively leveraging the [Intel® Arc™ GPU](https://www.intel.com/content/www/us/en/products/details/discrete-gpus/arc.html) product line for advanced AI applications. This solution leverages Intel® Arc™ Xe Cores and [Xe Matrix Extensions (XMX)](https://www.intel.com/content/www/us/en/support/articles/000091112/graphics.html) for accelerating inferencing.
 
 ![AI Playground](/assets/images/intel-case-study/fg1.png){:style="width:100%"}
 
@@ -22,7 +22,7 @@ PyTorch has been instrumental in addressing our AI challenges by providing a rob
 
 **A Word from Intel**
 
-*With PyTorch as the backbone of our AI Playground project, we achieved rapid development cycles that significantly accelerated our time to market. This flexibility enabled us to iteratively enhance features and effectively align with the commitments of our upcoming hardware launches in 2024\.*
+*With PyTorch as the backbone of our AI Playground project, we achieved rapid development cycles that significantly accelerated our time to market. This flexibility enabled us to iteratively enhance features and effectively align with the commitments of our hardware launches in 2024\.*
 
 *\-Bob Duffy, AI Playground Product Manager*
 
