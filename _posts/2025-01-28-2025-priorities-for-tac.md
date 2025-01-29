@@ -4,6 +4,9 @@ title: "2025 Priorities for the PyTorch Technical Advisory Council (TAC)"
 author: "Luca Antiga, PyTorch TAC Chair" 
 ---
 
+![social share](/assets/images/1738166706211.jpg){:style="max-width:600px; width:100%; display: block; margin-left: auto; margin-right: auto"}
+
+
 [2024 has been a year of incredible growth for PyTorch](https://pytorch.org/blog/2024-year-in-review/). As that continues in 2025, the PyTorch Foundation has made important steps towards evolving the governance of the project under the Linux Foundation’s vendor-neutral umbrella.
 
 An important piece of governance for PyTorch is represented by the Technical Advisory Council (TAC). The TAC acts as a bridge between the industry, including but not limited to the PyTorch Foundation members, the community, and the PyTorch core development team.
