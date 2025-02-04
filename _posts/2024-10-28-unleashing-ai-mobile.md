@@ -2,6 +2,7 @@
 layout: blog_detail
 title: "Unleashing the Power of AI on Mobile: LLM Inference for Llama 3.2 Quantized Models with ExecuTorch and KleidiAI"
 author: Gian Marco Iodice, Arm and Digant Desai, Meta
+excerpt: "At the recent PyTorch Conference, Arm highlighted the widespread impact of its technology, spanning from cloud to edge, emphasizing its commitment to delivering its advanced AI computing capabilities seamlessly to millions of developers worldwide."
 ---
 
 ## Introduction

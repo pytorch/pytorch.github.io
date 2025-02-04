@@ -2,6 +2,7 @@
 layout: blog_detail
 title: "Deep Dive on CUTLASS Ping-Pong GEMM Kernel"
 author: Less Wright, Adnan Hoque
+excerpt: "In this post, we provide an overview, with relevant FP8 inference kernel benchmarking, of the CUTLASS Ping-Pong GEMM kernel."
 ---
 
 ![Figure 1. FP8 GEMM Throughput Comparison CUTLASS vs Triton](/assets/images/cutlass-ping-pong-gemm-kernel/fg1.png){:style="width:100%"}
