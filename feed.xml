@@ -4,7 +4,7 @@
   <generator uri="https://jekyllrb.com/" version="3.9.0">Jekyll</generator>
   <link href="https://pytorch.org/feed.xml" rel="self" type="application/atom+xml" />
   <link href="https://pytorch.org/" rel="alternate" type="text/html" />
-  <updated>2025-01-31T17:26:38-08:00</updated>
+  <updated>2025-02-05T13:37:09-08:00</updated>
   <id>https://pytorch.org/feed.xml</id>
 
   
@@ -29,6 +29,131 @@
 
   
   
+  
+    <entry>
+      <title type="html">Enabling advanced GPU features in PyTorch - Warp Specialization</title>
+      <link href="https://pytorch.org/blog/warp-specialization/" rel="alternate" type="text/html" title="Enabling advanced GPU features in PyTorch - Warp Specialization" />
+      <published>2025-02-05T00:00:00-08:00</published>
+      <updated>2025-02-05T00:00:00-08:00</updated>
+      <id>https://pytorch.org/blog/warp-specialization</id>
+      <content type="html" xml:base="https://pytorch.org/blog/warp-specialization/">&lt;p&gt;&lt;strong&gt;Meta&lt;/strong&gt;: Hongtao Yu, Manman Ren, Bert Maher, Shane Nay  &lt;br /&gt;
+&lt;strong&gt;NVIDIA&lt;/strong&gt;: Gustav Zhu, Shuhao Jiang&lt;/p&gt;
+
+&lt;p&gt;Over the past few months, we have been working on enabling advanced GPU features for PyTorch and Triton users through the Triton compiler. One of our key goals has been to introduce warp specialization support on NVIDIA Hopper GPUs. Today, we are thrilled to announce that our efforts have resulted in the rollout of fully automated Triton warp specialization, now available to users in the upcoming release of Triton &lt;a href=&quot;https://github.com/triton-lang/triton/tree/release/3.2.x&quot;&gt;3.2&lt;/a&gt;, which will ship with PyTorch 2.6. PyTorch users can leverage this feature by &lt;a href=&quot;https://pytorch.org/tutorials/recipes/torch_compile_user_defined_triton_kernel_tutorial.html&quot;&gt;implementing user-defined Triton kernels&lt;/a&gt;. This work leveraged an initial implementation of warp specialization in Triton by NVIDIA and we look forward to further development with the community in the future.&lt;/p&gt;
+
+&lt;p&gt;Warp specialization (WS) is a GPU programming technique where warps (a group of 32 threads on NVIDIA GPUs) within a threadblock are assigned distinct roles or tasks. This approach optimizes performance by enabling efficient execution of workloads that require task differentiation or cooperative processing. It enhances kernel performance by leveraging an asynchronous execution model, where different parts of the kernel are managed by separate hardware units. Data communication between these units, facilitated via shared memory on the NVIDIA H100, is highly efficient. Compared to a uniform warp approach, warp specialization allows the hardware multitasking warp scheduler to operate more effectively, maximizing resource utilization and overall performance.&lt;/p&gt;
+
+&lt;p&gt;Using GEMM as an example, a typical uniform warp approach on the H100 GPU involves 8 warps per thread block collectively computing a tile of the output tensor. These 8 warps are divided into two warp groups (WG), with each group cooperatively computing half of the tile using efficient warp-group-level MMA (WGMMA) instructions, as illustrated in Figure 1.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/warp-specialization/fg1.jpg&quot; alt=&quot;Figure 1. GEMM K-loop Body with Uniform Warps&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Figure 1. GEMM K-loop Body with Uniform Warps&lt;/p&gt;
+
+&lt;p&gt;The implementation is clean, easy to understand, and generally performs well, thanks to an elegant software pipeliner. The pipeliner’s purpose is to enhance instruction-level parallelism by executing non-dependent operations on different hardware units. For instance, load operations from the next loop iteration can be executed simultaneously with WGMMA operations in the current iteration. However, this approach relies heavily on the compiler to craft an instruction sequence that ensures load and WGMMA instructions are issued at precisely the right time. While this is relatively straightforward for GEMM, which involves a limited number of operations, it becomes significantly more challenging for more complex kernels, such as flash attention.&lt;/p&gt;
+
+&lt;p&gt;On the other hand, warp specialization addresses programming challenges by separating operations intended to run simultaneously on different hardware units into distinct warps, synchronizing them efficiently using low-cost barriers in shared memory. This allows each warp to have its own instruction sequence, enabling instructions to be issued and executed continuously without being interrupted by other operations, thanks to the multi-way warp scheduler. An illustration of a warp-specialized GEMM can be seen in Figure 2.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/warp-specialization/fg2.jpg&quot; alt=&quot;Figure 2. GEMM K-loop Body with Specialized Warps&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Figure 2. GEMM K-loop Body with Specialized Warps&lt;/p&gt;
+
+&lt;h2 id=&quot;how-to-enable-ws&quot;&gt;How to enable WS&lt;/h2&gt;
+
+&lt;p&gt;To enable warp specialization, users simply need to specify two autotune flags: num_consumer_groups and num_buffers_warp_spec. For example, a warp-specialized GEMM implementation might look as shown below.  Users can enable warp specialization by setting a non-zero value for num_consumer_groups, which defines the number of consumer warp groups. There is no corresponding flag to set the number of producer warp groups, as currently only one producer is supported. The num_buffers_warp_spec flag specifies the number of buffers the producer warp group will use to communicate with the consumer warp groups. A working example of a warp-specialized kernel is provided in the persistent GEMM &lt;a href=&quot;https://github.com/triton-lang/triton/blob/6771065cb3137f7e64454cc047b9b74d577cbf7f/python/tutorials/09-persistent-matmul.py#L620&quot;&gt;tutorial&lt;/a&gt;.&lt;/p&gt;
+
+&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;@triton.autotune(
+    configs=[
+        triton.Config(
+            {
+                &quot;BLOCK_SIZE_M&quot;: 128,
+                &quot;BLOCK_SIZE_N&quot;: 256,
+                &quot;BLOCK_SIZE_K&quot;: 64,
+                &quot;GROUP_SIZE_M&quot;: 8,
+            },
+            num_stages=2,
+            num_warps=4,
+            num_consumer_groups=2,
+            num_buffers_warp_spec=3,
+        ),
+    ],
+    key=[&quot;M&quot;, &quot;N&quot;, &quot;K&quot;],
+)
+@triton.jit
+def matmul_persistent_ws_kernel(
+   a_ptr, b_ptr, c_ptr, M, N, K,
+   stride_am, stride_ak, stride_bk, stride_bn, stride_cm, stride_cn,
+   BLOCK_M: tl.constexpr, BLOCK_N: tl.constexpr, BLOCK_K: tl.constexpr,
+):
+   pid = tl.program_id(axis=0)
+   num_pid_m = tl.cdiv(M, BLOCK_M)
+   num_pid_n = tl.cdiv(N, BLOCK_N)
+   pid_m = pid // num_pid_m
+   pid_n = pid % num_pid_n
+   offs_m = pid_m * BLOCK_M + tl.arange(0, BLOCK_M)
+   offs_n = pid_n * BLOCK_N + tl.arange(0, BLOCK_N)
+   offs_k = tl.arange(0, BLOCK_K)
+   a_ptrs = a_ptr + (offs_m[:, None] * stride_am + offs_k[None, :] * stride_ak)
+   b_ptrs = b_ptr + (offs_k[:, None] * stride_bk + offs_n[None, :] * stride_bn)
+   acc = tl.zeros((BLOCK_M, BLOCK_N), dtype=tl.float32)
+   for k in range(0, tl.cdiv(K, BLOCK_K)):
+       a = tl.load(a_ptrs)
+       b = tl.load(b_ptrs)
+       acc += tl.dot(a, b)
+       a_ptrs += BLOCK_K * stride_ak
+       b_ptrs += BLOCK_K * stride_bk
+   c = acc.to(tl.float16)
+   c_ptrs = c_ptr + stride_cm * offs_m[:, None] + stride_cn * offs_n[None, :]
+   tl.store(c_ptrs, c)
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;h2 id=&quot;under-the-hood&quot;&gt;Under the Hood&lt;/h2&gt;
+
+&lt;p&gt;Warp specialization uses a set of hierarchical compiler transformations and IR changes to translate a user’s non-warp-specialized kernel into warp-specialized machine code. These include:&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;strong&gt;Task Partitioning&lt;/strong&gt;: The entire kernel is automatically divided into asynchronous tasks based on predefined heuristics. The compiler determines how to utilize one producer warp group and a user-specified number of consumer warp groups to execute the kernel. It assigns task IDs to specific anchor operations, which then influence the task assignments for remaining operations through asynchronous task ID propagation and dependency analysis. Since shared memory is the most efficient method for data transfer between warp groups across all supported platforms, the compiler optimizes task partitions to minimize register spills to shared memory, ensuring efficient execution.&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;Data Partitioning for Multiple Consumer Groups&lt;/strong&gt;: Efficiently partitioning data among multiple consumer groups is key to optimizing workload distribution. On the H100 GPU, the compiler, by default, attempts to partition the input tensor &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;A&lt;/code&gt; along the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;M&lt;/code&gt; dimension, allowing each consumer group to compute half of the output tensor independently. This strategy, known as &lt;a href=&quot;https://github.com/NVIDIA/cutlass/blob/main/media/docs/efficient_gemm.md#warp-specialization&quot;&gt;cooperative partitioning&lt;/a&gt;, maximizes efficiency under most conditions. However, if this split leads to inefficiencies—such as producing a workload smaller than the native WGMMA instruction size—the compiler dynamically adjusts and partitions along the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;N&lt;/code&gt; dimension instead.&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;Dataflow Pipelining&lt;/strong&gt;: The compiler creates cyclic shared memory buffers to pipeline dataflows across multiple-dimensional loops. Warp-specialized pipelining supports complex control flow. For example, our warp-specialized persistent GEMM kernel uses a doubly-nested loop, allowing the producer to begin fetching data for the next output tile while the consumer is finishing the compute for the prior tile.&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;Communication Operations&lt;/strong&gt;&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;: &lt;/code&gt;We introduced four high-level Triton GPU IR (TTGIR) communication operations&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;—ProducerAcquireOp, ProducerCommitOp, ConsumerWaitOp, &lt;/code&gt;and&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt; ConsumerReleaseOp—&lt;/code&gt;to manage pipelined dataflows. These support both TMA and non-TMA memory operations.&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;Code Partitioning&lt;/strong&gt;: Each async task is outlined into its own standalone code region, guarded by warp group ID checks. Control dependencies are duplicated as needed.&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;TTGIR to LLVM/PTX Materialization&lt;/strong&gt;: TTGIR communication operations are materialized into corresponding LLVM/PTX barrier operations.&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h2 id=&quot;performance&quot;&gt;Performance&lt;/h2&gt;
+
+&lt;p&gt;The &lt;a href=&quot;https://github.com/triton-lang/triton/pull/5622&quot;&gt;warp specialization release&lt;/a&gt; introduces a range of Triton compiler transformations that collectively convert user code into warp-specialized kernels. This feature has been applied to several key kernels, including Flash Attention and FP8 row-wise GEMM, resulting in significant performance gains of 10% to 15%. Below, we highlight the latest performance metrics for these high-impact kernels.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/warp-specialization/fg3.png&quot; alt=&quot;bar chart&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/warp-specialization/fg4.png&quot; alt=&quot;bar chart&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
+
+&lt;h2 id=&quot;future-work&quot;&gt;Future Work&lt;/h2&gt;
+
+&lt;p&gt;Looking ahead, we plan to further enhance Triton’s warp specialization support by introducing new features such as Ping-Pong scheduling, expanded buffer sharing support, improved transparent handling for TMA, refined partitioning heuristics for upcoming NVIDIA hardware.&lt;/p&gt;</content>
+
+      
+      
+      
+      
+      
+
+      <author>
+          <name>Meta and NVIDIA</name>
+        
+        
+      </author>
+
+      
+
+      
+
+      
+        <summary type="html">Meta: Hongtao Yu, Manman Ren, Bert Maher, Shane Nay NVIDIA: Gustav Zhu, Shuhao Jiang</summary>
+      
+
+      
+      
+    </entry>
   
     <entry>
       <title type="html">PyTorch 2.6 Release Blog</title>
@@ -1464,106 +1589,6 @@ INFO:torchtune.utils._logging:Memory used: 0.00 GB
 
       
         <summary type="html">We are excited to announce the addition of embedding operators with low-bit weights (1-8 bit) and linear operators with 8-bit dynamically quantized activations and low-bit weights (1-8 bit) for Arm CPUs in TorchAO, PyTorch’s native low-precision library. These operators work seamlessly across all PyTorch surfaces, including eager, torch.compile, AOTI, and ExecuTorch, and are available to use in torchchat.</summary>
-      
-
-      
-      
-    </entry>
-  
-    <entry>
-      <title type="html">PyTorch Grows as the Dominant Open Source Framework for AI and ML: 2024 Year in Review</title>
-      <link href="https://pytorch.org/blog/2024-year-in-review/" rel="alternate" type="text/html" title="PyTorch Grows as the Dominant Open Source Framework for AI and ML: 2024 Year in Review" />
-      <published>2024-12-23T00:00:00-08:00</published>
-      <updated>2024-12-23T00:00:00-08:00</updated>
-      <id>https://pytorch.org/blog/2024-year-in-review</id>
-      <content type="html" xml:base="https://pytorch.org/blog/2024-year-in-review/">&lt;p&gt;This past year was a monumental year for PyTorch from major releases to the flagship PyTorch Conference. We’ve seen incredible growth in contributions from more than 3,500 individuals and 3,000 organizations. It’s safe to say PyTorch has now become the dominant deep learning framework for AI/ML.  PyTorch leads the model training space with a 63% adoption rate according to the recent &lt;a href=&quot;https://www.linuxfoundation.org/research/gen-ai-2024&quot;&gt;Shaping the Future of Generative AI Report&lt;/a&gt; from the Linux Foundation.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/2024-year-in-review/fg1.jpg&quot; alt=&quot;group at a conference&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;The PyTorch Foundation was formed in 2022 with the goal to drive the adoption of AI tooling by fostering and sustaining an ecosystem of open source, vendor-neutral projects centered around PyTorch and today remains a vibrant, collaborative hub created for and by the deep learning community. As we wrap up the year, let’s take a look back at a few highlights and how this year has been one of growth, collaboration, innovation, and community.&lt;/p&gt;
-
-&lt;h2 id=&quot;2024-highlights-a-year-of-growth-and-impact&quot;&gt;2024 Highlights: A Year of Growth and Impact&lt;/h2&gt;
-
-&lt;p&gt;PyTorch accelerated its growth this year. Contributions are up 133%, from double the amount of  organizations worldwide compared to last year.&lt;/p&gt;
-
-&lt;p&gt;The project has seen 20% year-over-year growth in new repositories using PyTorch, and a 30% increase in forks and users this past year.&lt;/p&gt;
-
-&lt;p&gt;Over 70% of AI research implementations are now using PyTorch.&lt;/p&gt;
-
-&lt;p&gt;Statistics based on the &lt;a href=&quot;https://www.linuxfoundation.org/resources/publications/linux-foundation-annual-report-2024&quot;&gt;2024 Linux Foundation Annual Report&lt;/a&gt;.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/2024-year-in-review/fg2.jpg&quot; alt=&quot;people at a conference&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;PyTorch Tools ecosystem grew by over 25%, enhancing both software and hardware capabilities. Working with all major cloud service providers, dozens of major software vendors, and industry partners, PyTorch is setting a new bar for the pace and breadth of AI innovation.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/2024-year-in-review/fg3.jpg&quot; alt=&quot;people at a conference&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;This year featured 4 milestone releases for PyTorch in the 2.2, 2.3, 2.4 and 2.5 releases. We observed the release of various hallmark features like &lt;a href=&quot;https://pytorch.org/blog/pytorch2-2/#beta-aotinductor-ahead-of-time-compilation-and-deployment-for-torchexport-ed-programs&quot;&gt;AOTInductor&lt;/a&gt;, &lt;a href=&quot;https://pytorch.org/blog/pytorch2-2/#beta-aotinductor-ahead-of-time-compilation-and-deployment-for-torchexport-ed-programs&quot;&gt;FlashAttention-2 support&lt;/a&gt;, &lt;a href=&quot;https://pytorch.org/blog/pytorch2-3/#beta-tensor-parallelism-introduces-more-efficient-ways-to-train-llms&quot;&gt;Tensor Parallelism&lt;/a&gt;, a new &lt;a href=&quot;https://pytorch.org/blog/pytorch2-4/#beta-new-higher-level-python-custom-operator-api&quot;&gt;Python Custom Operator API&lt;/a&gt;, and the introduction of &lt;a href=&quot;https://pytorch.org/blog/pytorch2-5/#prototype-flexattention&quot;&gt;FlexAttention&lt;/a&gt;. Engineers from across PyTorch Foundation member companies have also come together to introduce support and optimizations for platforms like &lt;a href=&quot;https://pytorch.org/blog/pytorch2-4/#torchcompile-optimizations-for-aws-graviton-aarch64-linux-processors&quot;&gt;Intel GPUs&lt;/a&gt; (XPU), AWS &lt;a href=&quot;https://pytorch.org/blog/pytorch2-4/#torchcompile-optimizations-for-aws-graviton-aarch64-linux-processors&quot;&gt;Graviton&lt;/a&gt; processors, Inductor performance, etc.&lt;/p&gt;
-
-&lt;p&gt;Throughout the year the PyTorch Team has been working hard to introduce a number of new PyTorch-native libraries! The &lt;a href=&quot;https://pytorch.org/blog/executorch-alpha/&quot;&gt;ExecuTorch&lt;/a&gt; team released their alpha in collaboration with partners from Arm, Apple, and Qualcomm Technologies, Inc. then quickly followed with a &lt;a href=&quot;https://pytorch.org/blog/executorch-beta/&quot;&gt;beta&lt;/a&gt; focused on stability and adding MediaTek. &lt;a href=&quot;https://pytorch.org/blog/torchtune-fine-tune-llms/&quot;&gt;TorchTune&lt;/a&gt; established a PyTorch-native library for easily fine-tuning large language models. &lt;a href=&quot;https://pytorch.org/blog/pytorch-native-architecture-optimization/&quot;&gt;TorchAO&lt;/a&gt; introduced a PyTorch native library that makes models faster and smaller by leveraging low bit dtypes, quantization and sparsity. &lt;a href=&quot;https://pytorch.org/blog/torchcodec/&quot;&gt;TorchCodec&lt;/a&gt; was launched to give developers a simple, performant, and PyTorch native way to decode videos into tensors. &lt;a href=&quot;https://pytorch.org/blog/torchrec-fbgemm-1/&quot;&gt;TorchRec&lt;/a&gt; 1.0 was released, the first stable release of the PyTorch native recommendation systems library.&lt;/p&gt;
-
-&lt;p&gt;We’ve also had a number of strong technical showcases throughout the year to highlight how PyTorch can be used! &lt;a href=&quot;https://arxiv.org/html/2410.06511v1&quot;&gt;TorchTitan&lt;/a&gt; exhibited what an open source, PyTorch-native distributed training system could look like for training large language models (LLMs). &lt;a href=&quot;https://pytorch.org/blog/torchchat-local-llm-inference/&quot;&gt;TorchChat&lt;/a&gt; showcased how to seamlessly and performantly run LLMs across laptop, desktop, and mobile devices.&lt;/p&gt;
-
-&lt;p&gt;As well we were very excited to include &lt;a href=&quot;https://pytorch.org/blog/enhancing-deep-learning/&quot;&gt;multiple new projects&lt;/a&gt; into the PyTorch ecosystem throughout 2024, including the introduction of  &lt;a href=&quot;https://pytorch.org/blog/vllm-joins-pytorch/&quot;&gt;vLLM&lt;/a&gt; into the PyTorch Ecosystem, a state-of-the-art inference engine, which gives machine learning engineers an easy, fast, and cheap way of serving LLMs. If you are interested in joining the PyTorch Ecosystem, please &lt;a href=&quot;https://pytorch.org/ecosystem/join&quot;&gt;join&lt;/a&gt;!&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/2024-year-in-review/fg4.jpg&quot; alt=&quot;people at a conference&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;In June in Paris, France we premiered the&lt;a href=&quot;https://pytorch.org/blog/pytorch-documentary/&quot;&gt; official PyTorch documentary&lt;/a&gt; on powering the AI Revolution that spotlights PyTorch’s vibrant ecosystem and its role in advancing AI innovation. The film unveiled the authentic narrative of PyTorch’s inception, attributing its existence to a dedicated group of unsung heroes driving technological innovation.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/2024-year-in-review/fg5.jpg&quot; alt=&quot;people at a conference&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;The &lt;a href=&quot;https://pytorch.org/blog/pytorch-conference-2024-recap/&quot;&gt;PyTorch Conference 2024&lt;/a&gt;, brought in triple the registrations compared to 2023, reflecting the rapid growth of AI and machine learning communities around open source technologies. The two day event included insightful talks, hands-on sessions, and lively discussions about the future of AI, covering everything from generative AI to large language models.&lt;/p&gt;
-
-&lt;p&gt;A brand new Startup Showcase featured early-stage founders pitching their AI startups to a panel of top venture capitalists, a DL Compiler Mini-Summit took a deep dive into the advances in deep learning (DL) compilers that are transforming AI workloads, and a Fine-Tuning Mini-Summit brought together a thriving community of researchers, developers, practitioners and hobbyists to discuss topics like memory efficiency, parameter-efficient fine-tuning, and performance at scale.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/2024-year-in-review/fg6.jpg&quot; alt=&quot;speaking on stage at a conference&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;Outstanding contributors were honored with &lt;a href=&quot;https://pytorch.org/ecosystem/contributor-awards-2024&quot;&gt;PyTorch Contributor Awards&lt;/a&gt;. Congratulations to this year’s nominees and recipients for the outstanding individuals and teams who have played a pivotal role in PyTorch’s journey this year.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/2024-year-in-review/fg7.jpg&quot; alt=&quot;people at a conference&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;PyTorch Foundation membership is growing with the addition of Arm and Rebellions this year. At the year-end mark, Premier Members include: AMD, Arm, AWS, Google Cloud, Huawei, Hugging Face, IBM, Intel, Lightning AI, Meta, Microsoft Azure, and NVIDIA. General Members include: Graphcore, Rebellions, and Snowflake. If your organization is interested in joining, find out how you can &lt;a href=&quot;/join&quot;&gt;become a member&lt;/a&gt; of the PyTorch Foundation.&lt;/p&gt;
-
-&lt;p&gt;PyTorch hosted numerous in-person and virtual events, including&lt;a href=&quot;https://pytorch.org/blog/pytorch-docathon-h2-2024-wrap-up/&quot;&gt; The PyTorch Docathon&lt;/a&gt; where contributors worked to improve PyTorch documentation and foster collaboration, Local meetups around the world brought together interested parties in locations from Shanghai to Seoul, and more than a dozen &lt;a href=&quot;https://www.youtube.com/pytorch&quot;&gt;webinars&lt;/a&gt; brought in attendees from everywhere during our Summer Webinar Series, live Q&amp;amp;As, and Expert Exchanges.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/2024-year-in-review/fg8.jpg&quot; alt=&quot;Matt speaking at a conference&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;PyTorch Foundation welcomed new leadership this year.&lt;a href=&quot;https://pytorch.org/blog/new-executive-director/&quot;&gt; Executive Director Matt White&lt;/a&gt; took the reins in April and immediately began raising the profile of PyTorch across the AI landscape. The&lt;a href=&quot;https://pytorch.org/tac&quot;&gt; Technical Advisory Council (TAC)&lt;/a&gt; also elected&lt;a href=&quot;https://pytorch.org/blog/tac-elects-new-leadership/&quot;&gt; new leadership&lt;/a&gt; with  Luca Antiga, Lightning AI as the Chair and Jiong Gong, Intel as Vice Chair.&lt;/p&gt;
-
-&lt;p&gt;The&lt;a href=&quot;https://pytorch.org/governing-board&quot;&gt; PyTorch Governing Board&lt;/a&gt; continued to set the direction and lead the Foundation in accomplishing its mission. The PyTorch Marketing and Outreach Committee developed programs to maximize the visibility of PyTorch and advance the interests of the community. The PyTorch CI Working Group assembled to successfully migrate the PyTorch CI pipeline to the Linux Foundation.&lt;/p&gt;
-
-&lt;p&gt;Our community joined us on social media with 775 thousand followers strong across X, LinkedIn, Facebook, and YouTube with more than 12 million impressions of PyTorch content throughout the year.  The PyTorch Ecosystem also grew, adding many new projects to leverage PyTorch deep learning across many vertical domains.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/2024-year-in-review/fg9.jpg&quot; alt=&quot;people at a conference&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;PyTorch was mentioned in the media in top technology publications such as The New Stack’s article on &lt;a href=&quot;https://thenewstack.io/why-pytorch-gets-all-the-love/&quot;&gt;Why PyTorch Gets All the Love&lt;/a&gt; and InfoWorld’s article on how the TorchAO&lt;a href=&quot;https://www.infoworld.com/article/3543651/pytorch-library-makes-models-faster-and-smaller.html&quot;&gt; PyTorch library makes models faster and smaller&lt;/a&gt;.&lt;/p&gt;
-
-&lt;p&gt;We published 74 technical and community blogs, and nearly ten million people visited the PyTorch website throughout the year.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/2024-year-in-review/fg10.jpg&quot; alt=&quot;fire dancers at a conference&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;Thanks to each of you who helped make this year an outstanding success! The evolution and growth we’ve seen PyTorch undergo over the past year is driven by the passion, dedication, and ingenuity of this amazing community. Looking ahead to next year, we’re excited to build on this momentum as we continue to push the boundaries of AI.&lt;/p&gt;
-
-&lt;p&gt;Save the date for the &lt;a href=&quot;https://events.linuxfoundation.org/pytorch-conference-2025/&quot;&gt;PyTorch Conference&lt;/a&gt; which will be held October 22-23, 2025 in San Francisco. 2025 promises even greater innovation and stronger community collaboration.&lt;/p&gt;</content>
-
-      
-      
-      
-      
-      
-
-      <author>
-          <name>Eli Uriegas, Meta and Jennifer Bly, PyTorch Foundation</name>
-        
-        
-      </author>
-
-      
-
-      
-
-      
-        <summary type="html">This past year was a monumental year for PyTorch from major releases to the flagship PyTorch Conference. We’ve seen incredible growth in contributions from more than 3,500 individuals and 3,000 organizations. It’s safe to say PyTorch has now become the dominant deep learning framework for AI/ML. PyTorch leads the model training space with a 63% adoption rate according to the recent Shaping the Future of Generative AI Report from the Linux Foundation.</summary>
       
 
       
