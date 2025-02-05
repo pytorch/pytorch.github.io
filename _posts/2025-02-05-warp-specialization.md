@@ -32,6 +32,52 @@ Figure 2. GEMM K-loop Body with Specialized Warps
 
 To enable warp specialization, users simply need to specify two autotune flags: num_consumer_groups and num_buffers_warp_spec. For example, a warp-specialized GEMM implementation might look as shown below.  Users can enable warp specialization by setting a non-zero value for num_consumer_groups, which defines the number of consumer warp groups. There is no corresponding flag to set the number of producer warp groups, as currently only one producer is supported. The num_buffers_warp_spec flag specifies the number of buffers the producer warp group will use to communicate with the consumer warp groups. A working example of a warp-specialized kernel is provided in the persistent GEMM [tutorial](https://github.com/triton-lang/triton/blob/6771065cb3137f7e64454cc047b9b74d577cbf7f/python/tutorials/09-persistent-matmul.py#L620).
 
+```
+@triton.autotune(
+    configs=[
+        triton.Config(
+            {
+                "BLOCK_SIZE_M": 128,
+                "BLOCK_SIZE_N": 256,
+                "BLOCK_SIZE_K": 64,
+                "GROUP_SIZE_M": 8,
+            },
+            num_stages=2,
+            num_warps=4,
+            num_consumer_groups=2,
+            num_buffers_warp_spec=3,
+        ),
+    ],
+    key=["M", "N", "K"],
+)
+@triton.jit
+def matmul_persistent_ws_kernel(
+   a_ptr, b_ptr, c_ptr, M, N, K,
+   stride_am, stride_ak, stride_bk, stride_bn, stride_cm, stride_cn,
+   BLOCK_M: tl.constexpr, BLOCK_N: tl.constexpr, BLOCK_K: tl.constexpr,
+):
+   pid = tl.program_id(axis=0)
+   num_pid_m = tl.cdiv(M, BLOCK_M)
+   num_pid_n = tl.cdiv(N, BLOCK_N)
+   pid_m = pid // num_pid_m
+   pid_n = pid % num_pid_n
+   offs_m = pid_m * BLOCK_M + tl.arange(0, BLOCK_M)
+   offs_n = pid_n * BLOCK_N + tl.arange(0, BLOCK_N)
+   offs_k = tl.arange(0, BLOCK_K)
+   a_ptrs = a_ptr + (offs_m[:, None] * stride_am + offs_k[None, :] * stride_ak)
+   b_ptrs = b_ptr + (offs_k[:, None] * stride_bk + offs_n[None, :] * stride_bn)
+   acc = tl.zeros((BLOCK_M, BLOCK_N), dtype=tl.float32)
+   for k in range(0, tl.cdiv(K, BLOCK_K)):
+       a = tl.load(a_ptrs)
+       b = tl.load(b_ptrs)
+       acc += tl.dot(a, b)
+       a_ptrs += BLOCK_K * stride_ak
+       b_ptrs += BLOCK_K * stride_bk
+   c = acc.to(tl.float16)
+   c_ptrs = c_ptr + stride_cm * offs_m[:, None] + stride_cn * offs_n[None, :]
+   tl.store(c_ptrs, c)
+```
+
 
 ## Under the Hood
 
