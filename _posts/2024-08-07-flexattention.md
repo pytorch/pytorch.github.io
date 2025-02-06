@@ -1,7 +1,7 @@
 ---
 layout: blog_detail
 title: "FlexAttention: The Flexibility of PyTorch with the Performance of FlashAttention"
-author: "Team PyTorch: Horace He, Driss Guessous, Yanbo Liang, Joy Dong"
+author: "Team PyTorch: Driss Guessous, Yanbo Liang, Joy Dong, Horace He"
 ---
 
 ![a cartoon chart flexing his muscles](/assets/images/flexattention/fg1.jpg){:style="width:100%"}
@@ -131,7 +131,7 @@ Alibi is similar to relative positional encodings with one exception \- it has a
 alibi_bias = generate_alibi_bias() # [num_heads]
 
 def alibi(score, b, h, q_idx, kv_idx):
-    bias = alibi_bias[h] * (q_idx - kv_idx)
+    bias = alibi_bias[h] * (kv_idx - q_idx)
     return score + bias
 ```
 
