@@ -1,9 +1,9 @@
 ---
 title: Slack
-summary-home: 'Discuss advanced topics. Request access: https://bit.ly/ptslack'
-summary: 'Discuss advanced topics. Request access: https://bit.ly/ptslack'
+summary-home: 'Discuss advanced topics.'
+summary: 'Discuss advanced topics.'
 class: slack
-link: https://bit.ly/ptslack
+link: https://join.slack.com/t/pytorch/shared_invite/zt-2j2la612p-miUinTTaxXczKOJw48poHA
 order: 2
 featured-home: true
 ---

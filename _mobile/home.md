@@ -9,6 +9,11 @@ published: true
 redirect_from: "/mobile/"
 ---
 
+<div class="note-card">
+<h4>Note</h4>
+<p>PyTorch Mobile is no longer actively supported. Please check out <a href="/executorch-overview">ExecuTorch</a>, PyTorch’s all-new on-device inference library. </p>
+</div>
+
 # PyTorch Mobile
 
 There is a growing need to execute ML models on edge devices to reduce latency, preserve privacy, and enable new interactive use cases.
