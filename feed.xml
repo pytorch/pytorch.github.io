@@ -4,7 +4,7 @@
   <generator uri="https://jekyllrb.com/" version="3.9.0">Jekyll</generator>
   <link href="https://pytorch.org/feed.xml" rel="self" type="application/atom+xml" />
   <link href="https://pytorch.org/" rel="alternate" type="text/html" />
-  <updated>2025-02-13T19:58:40-08:00</updated>
+  <updated>2025-02-19T00:37:33-08:00</updated>
   <id>https://pytorch.org/feed.xml</id>
 
   
@@ -29,6 +29,183 @@
 
   
   
+  
+    <entry>
+      <title type="html">Optimize LLMs for Efficiency &amp;amp; Sustainability</title>
+      <link href="https://pytorch.org/blog/optimize-llms/" rel="alternate" type="text/html" title="Optimize LLMs for Efficiency &amp; Sustainability" />
+      <published>2025-02-19T00:00:00-08:00</published>
+      <updated>2025-02-19T00:00:00-08:00</updated>
+      <id>https://pytorch.org/blog/optimize-llms</id>
+      <content type="html" xml:base="https://pytorch.org/blog/optimize-llms/">&lt;p&gt;The rapid growth of large language model (LLM) applications is linked to rapid growth in energy demand. According to the International Energy Agency (IEA), data center electricity consumption is projected to roughly double by 2026 primarily driven by AI. This is due to the energy-intensive training requirements for massive LLMs – however, the increase in AI Inferencing workloads also plays a role. For example, compared with traditional search queries, a single AI inference can consume about &lt;a href=&quot;https://www.weforum.org/stories/2024/07/generative-ai-energy-emissions/&quot;&gt;10x more energy&lt;/a&gt;.&lt;/p&gt;
+
+&lt;p&gt;As developers, we directly affect how energy-intensive our AI solution is. There are technical decisions we can take to help make our AI solution more environmentally sustainable. Minimizing compute to deliver LLM solutions is not the only requirement for creating sustainable AI use. For example, systemic changes, such as policy interventions may be needed, but utilizing energy efficient solutions is an important factor and is an impactful intervention we can adopt right away.&lt;/p&gt;
+
+&lt;p&gt;With that said, minimizing your LLM inference cloud compute requirements also leads to reducing your cloud bill and makes your app more energy efficient, creating a win-win situation. In this blog, we will take you through the steps to creating an LLM chatbot by optimizing and deploying a Llama 3.1 model on PyTorch, quantifying the computational efficiency benefits of specific architecture decisions.&lt;/p&gt;
+
+&lt;h2 id=&quot;what-will-we-evaluate&quot;&gt;What will we evaluate?&lt;/h2&gt;
+
+&lt;p&gt;For this blog, our goal is to create an immersive fantasy storytelling app where users enter a fantasy world by chatting with a Generative AI. The first location is the land of Wicked, allowing people to role-play walking around the Emerald City and observe the sights and scenes in real-time. We’ll implement this via a chatbot and a custom system prompt.&lt;/p&gt;
+
+&lt;p&gt;We will be evaluating LLM performance on CPUs. You can see the advantages of&lt;a href=&quot;https://www.arm.com/resources/ebook/cpu-inference&quot;&gt; CPU vs GPU inference here&lt;/a&gt;. In general, leveraging CPUs in the cloud for LLM inference is a great choice for models around 10B parameters or less like the Llama series.&lt;/p&gt;
+
+&lt;p&gt;We will also be using Arm-based CPUs, specifically the AWS Graviton series. Based on studies,&lt;a href=&quot;https://newsroom.arm.com/blog/aws-graviton-decarbonize-compute&quot;&gt; the Arm-based Graviton3 server can provide 67.6 percent lower workload carbon intensity built in&lt;/a&gt;. While this study was based on a simulation, it is an excellent start to showing the possibilities for minimizing our app’s energy requirements.&lt;/p&gt;
+
+&lt;p&gt;First, you’ll see how to run a simple LLM chatbot on PyTorch, then explore three techniques to optimize your application for computational efficiency:&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;Model optimization: Utilizing 4-bit quantization and added KleidiAI kernels.&lt;/li&gt;
+  &lt;li&gt;Shortcut optimization: Implementing a vector database to handle common queries.&lt;/li&gt;
+  &lt;li&gt;Architecture optimization: Adopting a serverless architecture.&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;Let’s get started.&lt;/p&gt;
+
+&lt;h2 id=&quot;run-llama-31-via-pytorch-on-aws-graviton4&quot;&gt;Run Llama-3.1 via PyTorch on AWS Graviton4&lt;/h2&gt;
+
+&lt;p&gt;To maximize energy efficiency, we will only use the minimum server resources needed to support this LLM chatbot. For this &lt;a href=&quot;https://huggingface.co/meta-llama/Llama-3.1-8B&quot;&gt;Llama-3.1 8-billion parameter model&lt;/a&gt;, 16 cores, 64GB RAM, and disk space of 50GB is required. We will use the r8g.4xlarge Graviton4 instance running Ubuntu 24.04, as it meets these specifications.&lt;/p&gt;
+
+&lt;p&gt;Spin up this EC2 instance, connect to it, and start installing the requirements:&lt;/p&gt;
+
+&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;    sudo apt-get update
+    sudo apt install gcc g++ build-essential python3-pip python3-venv google-perftools -y
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Then install Torchchat, the library developed by the PyTorch team that enables running LLMs across devices:&lt;/p&gt;
+
+&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;    git clone https://github.com/pytorch/torchchat.git
+    cd torchchat
+    python3 -m venv .venv
+    source .venv/bin/activate
+    ./install/install_requirements.sh 
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Next, install the Llama-3.1-8b model from Hugging Face through the CLI. You will first need to make a Hugging Face access token on your HF account. This will download the 16GB model to your instance, which may take a few minutes:&lt;/p&gt;
+
+&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;    pip install -U &quot;huggingface_hub[cli]&quot;
+    huggingface-cli login
+    	&amp;lt;enter your access token when prompted&amp;gt;
+    python torchchat.py export llama3.1 --output-dso-path exportedModels/llama3.1.so --device cpu --max-seq-length 1024
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Now you are ready to run the LLM model, adding a system prompt to be a guiding storyteller in the land of Wicked:&lt;/p&gt;
+
+&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;    LD_PRELOAD=/usr/lib/aarch64-linux-gnu/libtcmalloc.so.4 TORCHINDUCTOR_CPP_WRAPPER=1 TORCHINDUCTOR_FREEZING=1 OMP_NUM_THREADS=16 python torchchat.py generate llama3.1 --device cpu --chat
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Type ‘y’ to enter a system prompt and enter the following prompt:&lt;/p&gt;
+
+&lt;p&gt;&lt;em&gt;You are the guiding storyteller for a fantasy adventure application. Immerse users in the enchanting world of Wicked, guiding them through interactive, real-time experiences in the Emerald City. Describe vivid sights, dynamic scenes, and engage users in storytelling that feels alive and responsive. Allow users to make choices that shape their journey while maintaining the magical tone of the Wicked universe.&lt;/em&gt;&lt;/p&gt;
+
+&lt;p&gt;Then enter your user query:&lt;/p&gt;
+
+&lt;p&gt;&lt;em&gt;I walk through the Emerald City gates and look up&lt;/em&gt;&lt;/p&gt;
+
+&lt;p&gt;The output will show on the screen, taking about 7 seconds to generate the first token with less than 1 token per second.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/optimize-llms.png&quot; alt=&quot;terminal&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;This example took 245 seconds, or 4 minutes, to generate its complete reply—not very fast. The first optimization we’ll look at will speed up the LLM generation, reducing its computational footprint.&lt;/p&gt;
+
+&lt;h3 id=&quot;optimization-1-kleidiai-and-quantization&quot;&gt;Optimization 1: KleidiAI and Quantization&lt;/h3&gt;
+
+&lt;p&gt;Several optimizations are possible from the basic implementation above. The simplest and quickest one t to do is to quantize the model from FP16 to INT4. This approach trades-off some accuracy while cutting the model size from 16Gb to about 4Gb, increasing the inference speed in the process.&lt;/p&gt;
+
+&lt;p&gt;Another common optimization comes in leveraging TorchAO (Torch Architecture Optimization), the PyTorch library that works seamlessly with TorchChat to enhance model performance through various quantization and sparsity methods.&lt;/p&gt;
+
+&lt;p&gt;Lastly, we’ll use Arm KleidiAI optimizations. These are micro-kernels written in assembly that lead to significant performance improvements for LLM inference on Arm CPUs. You can read more about &lt;a href=&quot;https://learn.arm.com/learning-paths/cross-platform/kleidiai-explainer/&quot;&gt;how KleidiAI kernels work if interested&lt;/a&gt;.&lt;/p&gt;
+
+&lt;p&gt;To implement these optimizations, spin up a fresh EC2 instance and follow the instructions &lt;a href=&quot;https://learn.arm.com/learning-paths/servers-and-cloud-computing/pytorch-llama/&quot;&gt;on how to run a Large Language Model (LLM) chatbot with PyTorch&lt;/a&gt;. When ready, run the model and enter the same system prompt and user query as above. You’ll get results that significantly speed up the inference: Less than 1 second to first token, and about 25 tokens per second.&lt;/p&gt;
+
+&lt;p&gt;This cuts the inference time from 245 seconds to about 10 seconds. This results in less power-draw from your server, as it is spending more time idle vs running a power-hungry inference. All else being equal, this is a more carbon-friendly solution than the non-optimized app. The next two approaches go beyond model inference optimization, modifying the solution architectural to further reduce computational load.&lt;/p&gt;
+
+&lt;h3 id=&quot;optimization-2-faiss-to-match-database-for-common-questions&quot;&gt;Optimization 2: FAISS to match database for common questions&lt;/h3&gt;
+
+&lt;p&gt;As stated in the introduction, model inferences are typically more computationally expensive than other search techniques. What if you could automatically respond to common user queries without performing an LLM inference? Using a query/response database is an option to bypass LLM inference and respond efficiently. For this interactive storytelling app, you can imagine common questions about specific characters, the world itself, and rules about what the chatbot is/is not capable of that can have pre-generated answers.&lt;/p&gt;
+
+&lt;p&gt;However, a traditional exact-match database isn’t sufficient as users can phrase the same query in many ways. Asking about the chatbot’s capabilities could all invite the same answer but be phrased differently:&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;“What are you capable of?”&lt;/li&gt;
+  &lt;li&gt;“Tell me what you can do.”&lt;/li&gt;
+  &lt;li&gt;“How can I interact with you?”&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;Implementing semantic search solves this issue by matching a user’s query to the most relevant pre-generated answer by understanding the user’s intent. The &lt;a href=&quot;https://github.com/facebookresearch/faiss&quot;&gt;FAISS library&lt;/a&gt; is a great option to implement semantic search.&lt;/p&gt;
+
+&lt;p&gt;The computational savings of this approach depends on three factors:&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;Percentage of user queries that can be serviced by semantic search instead of LLM.&lt;/li&gt;
+  &lt;li&gt;Computational cost of running the LLM inference.&lt;/li&gt;
+  &lt;li&gt;Computational cost of running the semantic search.&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;With the savings equation being:&lt;/p&gt;
+
+&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;    Computational_savings = (% of queries) * (LLM_cost – search_cost).
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;This type of architecture makes sense in a few situations. One is if your system has common queries with many repeat questions. Another is large-scale systems with hundreds of thousands of incoming queries, where small percentage savings add up to meaningful changes. Lastly, if your LLM inference is very computationally expensive compared to the search cost, particularly with larger parameter models.&lt;/p&gt;
+
+&lt;p&gt;The final optimization approach is transitioning from server to serverless.&lt;/p&gt;
+
+&lt;h3 id=&quot;optimization-3-serverless-approach&quot;&gt;Optimization 3: Serverless approach&lt;/h3&gt;
+
+&lt;p&gt;Using serverless architectures are popular for many reasons, one being only paying for active compute time, and eliminating costs with idle servers. Idling servers require a non-trivial amount of power to keep on, wasting energy while waiting.&lt;/p&gt;
+
+&lt;p&gt;This cost efficiency translates into being an inherently more environmentally friendly architecture, as it reduces wasteful energy consumption. Further, multiple applications share underlying physical infrastructure, improving resource efficiency.&lt;/p&gt;
+
+&lt;p&gt;To set up your own serverless chatbot, you need to first containerize the quantized Llama-3.1-8b with TorchChat, TorchAO, and Arm KleidiAI optimizations with a python script containing a Lambda entry function &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;lambda_handler&lt;/code&gt;. One deployment option is to upload your container to AWS ECR and attach the container to your Lambda function. Then set up an API Gateway WebSocket or similar to interact with your Lambda through an API.&lt;/p&gt;
+
+&lt;p&gt;There are two notable limitations to using a serverless architecture to host your LLM, the first being token generation speed. Recall that the server-based approach delivered about 25 tokens/second with KleidiAI optimizations. The serverless approach delivers an order of magnitude slower, which we measured at around about 2.5 tokens/second. This limitation mainly results from Lambda functions deploying onto Graviton2 servers. When deployment moves to CPUs with more SIMD channels, like Graviton3 and Graviton4, the tokens/second should increase over time. Learn more about architecture optimizations introduced in Graviton3 via the &lt;a href=&quot;https://developer.arm.com/Processors/Neoverse%20V1&quot;&gt;Arm Neoverse-V1 CPU here&lt;/a&gt;.&lt;/p&gt;
+
+&lt;p&gt;This slower speed restricts the viable use cases for serverless LLM architectures, but there are certain cases where this can be seen as an advantage. In our use cases of interactive storytelling, slowly revealing information creates a sense of immersion, building anticipation and mimicking real-time narration. Other use cases include:&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;Guided meditation apps with slow, relaxing word delivery&lt;/li&gt;
+  &lt;li&gt;Virtual friend engaging in thoughtful conversation, or a therapeutic conversation.&lt;/li&gt;
+  &lt;li&gt;Poetry generation or interactive art to slow delivery creating a contemplative aesthetic.&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;Users may have a better experience with slower token generation in the right applications. When prioritizing a more sustainable solution, restrictions end up becoming strengths. As an analogy, a common critique of modern movies today is that their overreliance on visual effects leads to fewer compelling storylines vs older movies. The cost restrictions of VFX meant older movies had to craft captivating dialog, leveraging skillful camera angles and character positioning to fully engage viewers. Similarly, focusing on sustainable AI architectures can lead to more engaging, immersive experiences when done thoughtfully.&lt;/p&gt;
+
+&lt;p&gt;The second serverless limitation on LLM inferences is the cold-start time of about 50 seconds. If implemented poorly, a user waiting 50 seconds with no alternative will likely leave the app. You can turn this limitation into a feature in our Wicked-based experience with several design tricks:&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;Create a “prologue experience” where you guide users through hard-coded questions and answers, priming them for where they will land in Emerald City and collecting input to shape their upcoming experience.&lt;/li&gt;
+  &lt;li&gt;Make the waiting period a countdown timer, revealing hard-coded text snippets of the story or world-building. A character, like the wizard, could communicate with the user with fragmented lines to build suspense and prime the user into the right mindset.&lt;/li&gt;
+  &lt;li&gt;Create an audio intro with music from the movie or musical, along with rotating visuals to draw users into the atmosphere of the Wicked world.&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h3 id=&quot;thinking-outside-the-box&quot;&gt;Thinking outside the box&lt;/h3&gt;
+
+&lt;p&gt;Implementing a sustainability-minded solution architecture includes and goes beyond optimizing your AI inferences. Understand how users will interact with your system, and right-size your implementation accordingly. Always optimizing for fast tokens per second or time to first token will hide opportunities for engaging features.&lt;/p&gt;
+
+&lt;p&gt;With that said, you should be leveraging straightforward optimizations when possible. Using TorchAO and Arm KleidiAI micro-kernels are great ways to speed up your LLM chatbot. By combining creative solution architectures and optimizing where possible, you can build more sustainable LLM-based applications. Happy coding!&lt;/p&gt;</content>
+
+      
+      
+      
+      
+      
+
+      <author>
+          <name>Facebook</name>
+        
+        
+      </author>
+
+      
+
+      
+
+      
+        <summary type="html">The rapid growth of large language model (LLM) applications is linked to rapid growth in energy demand. According to the International Energy Agency (IEA), data center electricity consumption is projected to roughly double by 2026 primarily driven by AI. This is due to the energy-intensive training requirements for massive LLMs – however, the increase in AI Inferencing workloads also plays a role. For example, compared with traditional search queries, a single AI inference can consume about 10x more energy.</summary>
+      
+
+      
+      
+    </entry>
   
     <entry>
       <title type="html">Solve Real-Word AI Challenges with PyTorch at Datathon 2025: DataOrbit</title>
@@ -1182,230 +1359,6 @@ python3 -m sglang.bench_offline_throughput --model-path meta-llama/Llama-3.1-8B-
 
       
         <summary type="html">PyTorch is one of the most widely used and most powerful deep learning frameworks for training and deploying complex neural networks. It has never been easier to train and deploy AI applications, and low-cost, high-performance, energy-efficient hardware, tools, and technology for creating optimized workflows are more accessible than ever. But data science, machine learning, and devops can be deep topics unto themselves, and it can be overwhelming for developers with one specialty to see how they all come together in the real world, or even to know where to get started.</summary>
-      
-
-      
-      
-    </entry>
-  
-    <entry>
-      <title type="html">GenAI Acceleration for PyTorch 2.5 on Intel® Xeon®Processors</title>
-      <link href="https://pytorch.org/blog/genai-acceleration-intel-xeon/" rel="alternate" type="text/html" title="GenAI Acceleration for PyTorch 2.5 on Intel® Xeon®Processors" />
-      <published>2025-01-14T00:00:00-08:00</published>
-      <updated>2025-01-14T00:00:00-08:00</updated>
-      <id>https://pytorch.org/blog/genai-acceleration-intel-xeon</id>
-      <content type="html" xml:base="https://pytorch.org/blog/genai-acceleration-intel-xeon/">&lt;p&gt;This blog is the fifth in a series focused on accelerating generative AI models with pure, native PyTorch. We demonstrate the GenAI acceleration of GPTFast, Segment Anything Fast, and Diffusion Fast on Intel® Xeon®Processors.&lt;/p&gt;
-
-&lt;p&gt;First, we revisit GPTFast, a remarkable work that speeds up text generation in under 1000 lines of native PyTorch code. Initially, GPTFast supported only the CUDA backend. We will show you how to run GPTFast on CPU and achieve additional performance speedup with weight-only quantization (WOQ).&lt;/p&gt;
-
-&lt;p&gt;In Segment Anything Fast, we have incorporated support for the CPU backend and will demonstrate performance acceleration by leveraging the increased power of CPU with BFloat16, torch.compile, and scaled_dot_product_attention (SDPA) with a block-wise attention mask. The speedup ratio against FP32 can reach 2.91x in vit_b and 3.95x in vit_h.&lt;/p&gt;
-
-&lt;p&gt;Finally, Diffusion Fast now supports the CPU backend and leverages the increased power of CPU with BFloat16, torch.compile, and SDPA. We also optimize the layout propagation rules for convolution, cat, and permute in Inductor CPU to improve performance. The speedup ratio against FP32 can achieve 3.91x in Stable Diffusion XL (SDXL).&lt;/p&gt;
-
-&lt;h2 id=&quot;optimization-strategies-to-boost-performance-on-pytorch-cpu&quot;&gt;Optimization strategies to boost performance on PyTorch CPU&lt;/h2&gt;
-
-&lt;h3 id=&quot;gptfast&quot;&gt;GPTFast&lt;/h3&gt;
-
-&lt;p&gt;Over the past year, generative AI has achieved great success across various language tasks and become increasingly popular. However, generative models face high inference costs due to the memory bandwidth bottlenecks in the auto-regressive decoding process. To address these issues, the PyTorch team published GPTFast which targets accelerating text generation with only pure, native PyTorch. This project developed an LLM from scratch almost 10x faster than the baseline in under 1000 lines of native PyTorch code. Initially, GPTFast supported only the CUDA backend and garnered approximately 5,000 stars in about four months. Inspired by Llama.cpp, the Intel team provided CPU backend support starting with the PyTorch 2.4 release, further enhancing the project’s availability in GPU-free environments. The following are optimization strategies used to boost performance on PyTorch CPU:&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;
-    &lt;p&gt;&lt;strong&gt;Torch.compile&lt;/strong&gt;&lt;/p&gt;
-
-    &lt;p&gt;torch.compile is a PyTorch function introduced since PyTorch 2.0 that aims to solve the problem of accurate graph capturing in PyTorch and ultimately enable software engineers to run their PyTorch programs faster.&lt;/p&gt;
-  &lt;/li&gt;
-  &lt;li&gt;
-    &lt;p&gt;&lt;strong&gt;Weight-only Quantization&lt;/strong&gt;&lt;/p&gt;
-
-    &lt;p&gt;Weight-only quantization (WOQ) is a trade-off between the performance and the accuracy since the bottleneck of the auto-regressive decoding phase in text generation is the memory bandwidth of loading weights and generally WOQ could lead to better accuracy compared to traditional quantization approach such as W8A8. GPTFast supports two types of WOQs: W8A16 and W4A16. To be specific, activations are stored in BFloat16 and model weights could be quantized to int8 and int4, as shown in Figure 1.&lt;/p&gt;
-  &lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/genai-acceleration-intel-xeon/fg1.png&quot; alt=&quot;flow diagram&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;Figure 1. Weight-only Quantization Pattern. Source: Mingfei Ma, Intel&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;
-    &lt;p&gt;&lt;strong&gt;Weight Prepacking &amp;amp; Micro Kernel Design.&lt;/strong&gt;&lt;/p&gt;
-
-    &lt;p&gt;To maximize throughput, GPTFast allows model weights to be prepacked into hardware-specific layouts on int4 using internal PyTorch ATen APIs. Inspired by Llama.cpp, we prepacked the model weights from [N, K] to [N/kNTileSize, K, kNTileSize/2], with kNTileSize set to 64 on avx512. First, the model weights are blocked along the N dimension, then the two innermost dimensions are transposed. To minimize de-quantization overhead in kernel computation, we shuffle the 64 data elements on the same row in an interleaved pattern, packing Lane2 &amp;amp; Lane0 together and Lane3 &amp;amp; Lane1 together, as illustrated in Figure 2.&lt;/p&gt;
-  &lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/genai-acceleration-intel-xeon/fg2.png&quot; alt=&quot;flow diagram&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;Figure 2. Weight Prepacking on Int4. Source: Mingfei Ma, Intel&lt;/p&gt;
-
-&lt;p&gt;During the generation phase, the torch.nn.Linear module will be lowered to be computed with high-performance kernels inside PyTorch ATen, where the quantized weights will be de-quantized first and then accumulated with fused multiply-add (FMA) at the register level, as shown in Figure 3.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/genai-acceleration-intel-xeon/fg3.png&quot; alt=&quot;flow diagram&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;Figure 3. Micro Kernel Design. Source: Mingfei Ma, Intel&lt;/p&gt;
-
-&lt;h3 id=&quot;segment-anything-fast&quot;&gt;Segment Anything Fast&lt;/h3&gt;
-
-&lt;p&gt;Segment Anything Fast offers a simple and efficient PyTorch native acceleration for the Segment Anything Model (SAM) , which is a zero-shot vision model for generating promptable image masks. The following are optimization strategies used to boost performance on PyTorch CPU:&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;
-    &lt;p&gt;&lt;strong&gt;BFloat16&lt;/strong&gt;&lt;/p&gt;
-
-    &lt;p&gt;Bfloat16 is a commonly used half-precision type. Through less precision per parameter and activations, we can save significant time and memory in computation.&lt;/p&gt;
-  &lt;/li&gt;
-  &lt;li&gt;
-    &lt;p&gt;&lt;strong&gt;Torch.compile&lt;/strong&gt;&lt;/p&gt;
-
-    &lt;p&gt;torch.compile is a PyTorch function introduced since PyTorch 2.0 that aims to solve the problem of accurate graph capturing in PyTorch and ultimately enable developers to run their PyTorch programs faster.&lt;/p&gt;
-  &lt;/li&gt;
-  &lt;li&gt;
-    &lt;p&gt;&lt;strong&gt;Scaled Dot Product Attention (SDPA)&lt;/strong&gt;&lt;/p&gt;
-
-    &lt;p&gt;Scaled Dot-Product Attention (SDPA) is a crucial mechanism in transformer models. PyTorch offers a fused implementation that significantly outperforms a naive approaches. For Segment Anything Fast, we convert the attention mask from bfloat16 to float32 in a block-wise manner. This method not only reduces peak memory usage, making it ideal for systems with limited memory resources, but also enhances performance.&lt;/p&gt;
-  &lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;h3 id=&quot;diffusion-fast&quot;&gt;Diffusion Fast&lt;/h3&gt;
-
-&lt;p&gt;Diffusion Fast offers a simple and efficient PyTorch native acceleration for text-to-image diffusion models. The following are optimization strategies used to boost performance on PyTorch CPU:&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;
-    &lt;p&gt;&lt;strong&gt;BFloat16&lt;/strong&gt;&lt;/p&gt;
-
-    &lt;p&gt;Bfloat16 is a commonly used half-precision type. Through less precision per parameter and activations, we can save significant time and memory in computation.&lt;/p&gt;
-  &lt;/li&gt;
-  &lt;li&gt;
-    &lt;p&gt;&lt;strong&gt;Torch.compile&lt;/strong&gt;&lt;/p&gt;
-
-    &lt;p&gt;torch.compile is a PyTorch function introduced since PyTorch 2.0 that aims to solve the problem of accurate graph capturing in PyTorch and ultimately enable software engineers to run their PyTorch programs faster.&lt;/p&gt;
-  &lt;/li&gt;
-  &lt;li&gt;
-    &lt;p&gt;&lt;strong&gt;Scaled Dot Product Attention (SDPA)&lt;/strong&gt;&lt;/p&gt;
-
-    &lt;p&gt;SDPA is a key mechanism used in transformer models, PyTorch provides a fused implementation to show large performance benefits over a naive implementation.&lt;/p&gt;
-  &lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;h2 id=&quot;model-usage-on-native-pytorch-cpu&quot;&gt;Model Usage on Native PyTorch CPU&lt;/h2&gt;
-
-&lt;h3 id=&quot;gptfast-1&quot;&gt;&lt;a href=&quot;https://github.com/pytorch-labs/gpt-fast&quot;&gt;GPTFast&lt;/a&gt;&lt;/h3&gt;
-
-&lt;p&gt;To launch WOQ in GPTFast, first quantize the model weights. For example, to quantize with int4 and group size of 32:&lt;/p&gt;
-
-&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;python quantize.py --checkpoint_path checkpoints/$MODEL_REPO/model.pth --mode int4 –group size 32
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;Then run generation by passing the int4 checkpoint to generate.py&lt;/p&gt;
-
-&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;python generate.py --checkpoint_path checkpoints/$MODEL_REPO/model_int4.g32.pth --compile --device $DEVICE
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;To use CPU backend in GPTFast, simply switch DEVICE variable from cuda to CPU.&lt;/p&gt;
-
-&lt;h3 id=&quot;segment-anything-fast-1&quot;&gt;&lt;a href=&quot;https://github.com/pytorch-labs/segment-anything-fast&quot;&gt;Segment Anything Fast&lt;/a&gt;&lt;/h3&gt;
-
-&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;cd experiments
-
-export SEGMENT_ANYTHING_FAST_USE_FLASH_4=0
-
-python run_experiments.py 16 vit_b &amp;amp;lt;pytorch_github&amp;gt; &amp;amp;lt;segment-anything_github&amp;gt; &amp;amp;lt;path_to_experiments_data&amp;gt; --run-experiments --num-workers 32 --device cpu
-
-python run_experiments.py 16 vit_h &amp;amp;lt;pytorch_github&amp;gt; &amp;amp;lt;segment-anything_github&amp;gt; &amp;amp;lt;path_to_experiments_data&amp;gt; --run-experiments --num-workers 32 --device cpu
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;h3 id=&quot;diffusion-fast-1&quot;&gt;&lt;a href=&quot;https://github.com/huggingface/diffusion-fast&quot;&gt;Diffusion Fast&lt;/a&gt;&lt;/h3&gt;
-
-&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;python run_benchmark.py --compile_unet --compile_vae --device=cpu
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;h2 id=&quot;performance-evaluation&quot;&gt;Performance Evaluation&lt;/h2&gt;
-
-&lt;h3 id=&quot;gptfast-2&quot;&gt;GPTFast&lt;/h3&gt;
-
-&lt;p&gt;We ran llama-2-7b-chat model based on &lt;a href=&quot;https://github.com/yanbing-j/gpt-fast/tree/yanbing/int4pack_mm&quot;&gt;test branch&lt;/a&gt; and the above hardware configuration on PyTorch.  After applying the following steps, we saw a 3.8x boost compared to the baseline in eager mode:&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;Use &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;torch.compile&lt;/code&gt; to automatically fuse elementwise operators.&lt;/li&gt;
-  &lt;li&gt;Reduce memory footprint with WOQ-int8.&lt;/li&gt;
-  &lt;li&gt;Further reduce memory footprint with WOQ-int4.&lt;/li&gt;
-  &lt;li&gt;Use AVX512 which enables faster de-quant in micro kernels.&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/genai-acceleration-intel-xeon/fg4.png&quot; alt=&quot;bar chart&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;Figure 4.  GPTFast Performance speedup in Llama2-7b-chat&lt;/p&gt;
-
-&lt;h3 id=&quot;segment-anything-fast-2&quot;&gt;Segment Anything Fast&lt;/h3&gt;
-
-&lt;p&gt;We ran Segment Anything Fast on the above hardware configuration on PyTorch and achieved a performance speedup of BFloat16 with torch.compile and SDPA compared with FP32 as shown in Figure 5. The speedup ratio against FP32 can achieve 2.91x in vit_b, and 3.95x in vit_h.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/genai-acceleration-intel-xeon/fg5.png&quot; alt=&quot;bar chart&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;Figure 5. Segment Anything Fast Performance speedup in vit_b/vit_h&lt;/p&gt;
-
-&lt;h3 id=&quot;diffusion-fast-2&quot;&gt;Diffusion Fast&lt;/h3&gt;
-
-&lt;p&gt;We ran Diffusion Fast on the above hardware configuration on PyTorch and achieved a performance speedup of BFloat16 with torch.compile and SDPA compared with FP32 as shown in Figure 6. The speedup ratio against FP32 can achieve 3.91x in Stable Diffusion XL (SDXL).&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/genai-acceleration-intel-xeon/fg6.png&quot; alt=&quot;bar chart&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;Figure 6. Diffusion Fast Performance speedup in Stable Diffusion XL&lt;/p&gt;
-
-&lt;h2 id=&quot;conclusion-and-future-work&quot;&gt;Conclusion and Future Work&lt;/h2&gt;
-
-&lt;p&gt;In this blog, we introduced software optimizations for weight-only quantization, torch.compile, and SDPA, demonstrating how we can accelerate text generation with native PyTorch on CPU. Further improvements are expected with the support of the AMX-BF16 instruction set and the optimization of dynamic int8 quantization using torchao on CPU. We will continue to extend our software optimization efforts to a broader scope.&lt;/p&gt;
-
-&lt;h2 id=&quot;acknowledgments&quot;&gt;Acknowledgments&lt;/h2&gt;
-
-&lt;p&gt;The results presented in this blog are a joint effort between Meta and the Intel PyTorch Team. Special thanks to Michael Gschwind from Meta who spent precious time providing substantial assistance. Together we took one more step on the path to improve the PyTorch CPU ecosystem.&lt;/p&gt;
-
-&lt;h2 id=&quot;related-blogs&quot;&gt;Related Blogs&lt;/h2&gt;
-
-&lt;p&gt;Part 1: How to accelerate &lt;a href=&quot;https://pytorch.org/blog/accelerating-generative-ai/&quot;&gt;Segment Anything over 8x&lt;/a&gt; with Segment Anything Fast.&lt;/p&gt;
-
-&lt;p&gt;Part 2: How to accelerate &lt;a href=&quot;https://pytorch.org/blog/accelerating-generative-ai-2/&quot;&gt;Llama-7B by almost 10x&lt;/a&gt; with help of GPTFast.&lt;/p&gt;
-
-&lt;p&gt;Part 3: How to accelerate &lt;a href=&quot;https://pytorch.org/blog/accelerating-generative-ai-3/&quot;&gt;text-to-image diffusion models up to 3x&lt;/a&gt; with Diffusion Fast.&lt;/p&gt;
-
-&lt;p&gt;Part 4: How to speed up FAIR’s &lt;a href=&quot;https://pytorch.org/blog/accelerating-generative-ai-4/&quot;&gt;Seamless M4T-v2 model by 2.7x&lt;/a&gt;.&lt;/p&gt;
-
-&lt;h2 id=&quot;product-and-performance-information&quot;&gt;Product and Performance Information&lt;/h2&gt;
-
-&lt;p&gt;Figure 4: Intel Xeon Scalable Processors: Measurement on 4th Gen Intel Xeon Scalable processor using: 2x Intel(R) Xeon(R) Platinum 8480+, 56cores, HT On, Turbo On, NUMA 2, Integrated Accelerators Available [used]: DLB 2 [0], DSA 2 [0], IAA 2 [0], QAT 2 [0], Total Memory 512GB (16x32GB DDR5 4800 MT/s [4800 MT/s]), BIOS 3B07.TEL2P1, microcode 0x2b000590, Samsung SSD 970 EVO Plus 2TB, CentOS Stream 9, 5.14.0-437.el9.x86_64, run single socket (1 instances in total with: 56 cores per instance, Batch Size 1 per instance), Models run with PyTorch 2.5 wheel. Test by Intel on 10/15/24.&lt;/p&gt;
-
-&lt;p&gt;Figure 5: Intel Xeon Scalable Processors: Measurement on 4th Gen Intel Xeon Scalable processor using: 2x Intel(R) Xeon(R) Platinum 8480+, 56cores, HT On, Turbo On, NUMA 2, Integrated Accelerators Available [used]: DLB 2 [0], DSA 2 [0], IAA 2 [0], QAT 2 [0], Total Memory 512GB (16x32GB DDR5 4800 MT/s [4800 MT/s]), BIOS 3B07.TEL2P1, microcode 0x2b000590, Samsung SSD 970 EVO Plus 2TB, CentOS Stream 9, 5.14.0-437.el9.x86_64, run single socket (1 instances in total with: 56 cores per instance, Batch Size 16 per instance), Models run with PyTorch 2.5 wheel. Test by Intel on 10/15/24.&lt;/p&gt;
-
-&lt;p&gt;Figure 6: Intel Xeon Scalable Processors: Measurement on 4th Gen Intel Xeon Scalable processor using: 2x Intel(R) Xeon(R) Platinum 8480+, 56cores, HT On, Turbo On, NUMA 2, Integrated Accelerators Available [used]: DLB 2 [0], DSA 2 [0], IAA 2 [0], QAT 2 [0], Total Memory 512GB (16x32GB DDR5 4800 MT/s [4800 MT/s]), BIOS 3B07.TEL2P1, microcode 0x2b000590, Samsung SSD 970 EVO Plus 2TB, CentOS Stream 9, 5.14.0-437.el9.x86_64, run single socket (1 instances in total with: 56 cores per instance, Batch Size 1 per instance), Models run with PyTorch 2.5 wheel. Test by Intel on 10/15/24.&lt;/p&gt;
-
-&lt;h2 id=&quot;notices-and-disclaimers&quot;&gt;Notices and Disclaimers&lt;/h2&gt;
-
-&lt;p&gt;Performance varies by use, configuration and other factors. Learn more on the Performance Index site. Performance results are based on testing as of dates shown in configurations and may not reflect all publicly available updates.  See backup for configuration details.  No product or component can be absolutely secure. Your costs and results may vary. Intel technologies may require enabled hardware, software or service activation.&lt;/p&gt;
-
-&lt;p&gt;Intel Corporation. Intel, the Intel logo, and other Intel marks are trademarks of Intel Corporation or its subsidiaries. Other names and brands may be claimed as the property of others.&lt;/p&gt;
-
-&lt;h2 id=&quot;ai-disclaimer&quot;&gt;AI disclaimer:&lt;/h2&gt;
-
-&lt;p&gt;AI features may require software purchase, subscription or enablement by a software or platform provider, or may have specific configuration or compatibility requirements. Details at &lt;a href=&quot;https://www.intel.com/AIPC&quot;&gt;www.intel.com/AIPC&lt;/a&gt;. Results may vary.&lt;/p&gt;</content>
-
-      
-      
-      
-      
-      
-
-      <author>
-          <name>the Intel PyTorch Team</name>
-        
-        
-      </author>
-
-      
-
-      
-
-      
-        <summary type="html">This blog is the fifth in a series focused on accelerating generative AI models with pure, native PyTorch. We demonstrate the GenAI acceleration of GPTFast, Segment Anything Fast, and Diffusion Fast on Intel® Xeon®Processors.</summary>
       
 
       
