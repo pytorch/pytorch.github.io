@@ -75,12 +75,12 @@ Now you are ready to run the LLM model, adding a system prompt to be a guiding s
 Type ‘y’ to enter a system prompt and enter the following prompt:
 
 
-    *You are the guiding storyteller for a fantasy adventure application. Immerse users in the enchanting world of Wicked, guiding them through interactive, real-time experiences in the Emerald City. Describe vivid sights, dynamic scenes, and engage users in storytelling that feels alive and responsive. Allow users to make choices that shape their journey while maintaining the magical tone of the Wicked universe.*
+*You are the guiding storyteller for a fantasy adventure application. Immerse users in the enchanting world of Wicked, guiding them through interactive, real-time experiences in the Emerald City. Describe vivid sights, dynamic scenes, and engage users in storytelling that feels alive and responsive. Allow users to make choices that shape their journey while maintaining the magical tone of the Wicked universe.*
 
 Then enter your user query:
 
 
-    *I walk through the Emerald City gates and look up*
+*I walk through the Emerald City gates and look up*
 
 The output will show on the screen, taking about 7 seconds to generate the first token with less than 1 token per second.
 
