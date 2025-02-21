@@ -20,11 +20,11 @@ See below for some examples to get started with pretrained models.
 
 ### Getting Started with Pretrained Models
 
-Computer Vision
-Natural Language Processing & LLMS
-Computer Vision
-Audio
-Multimodal
+Computer Vision  
+Natural Language Processing & LLMS  
+Computer Vision  
+Audio  
+Multimodal  
 
 <script page-id="building-w-pytorch" src="{{ site.baseurl }}/assets/menu-tab-selection.js"></script>
 <script src="{{ site.baseurl }}/assets/get-started-sidebar.js"></script>
