@@ -26,5 +26,5 @@ Computer Vision
 Audio
 Multimodal
 
-<script page-id="mobile" src="{{ site.baseurl }}/assets/menu-tab-selection.js"></script>
+<script page-id="building-w-pytorch" src="{{ site.baseurl }}/assets/menu-tab-selection.js"></script>
 <script src="{{ site.baseurl }}/assets/get-started-sidebar.js"></script>
