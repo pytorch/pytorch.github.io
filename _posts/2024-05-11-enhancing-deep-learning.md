@@ -8,7 +8,7 @@ Welcome to the thriving PyTorch ecosystem, where a wealth of tools and libraries
 
 Initially, PyTorch aimed to establish a thriving community, enabling developers to access each other's tools, engage in meaningful discussions, and explore the wealth of resources available within the community. 
 
-Today, the PyTorch ecosystem has grown to feature over 100 projects tailored to your needs, providing robust support, enhanced speed, and effortless integration with PyTorch. If your project aligns with our mission, we invite you to [submit](https://pytorch.org/ecosystem/join) it and join this dynamic ecosystem.
+Today, the PyTorch ecosystem has grown to feature over 100 projects tailored to your needs, providing robust support, enhanced speed, and effortless integration with PyTorch. If your project aligns with our mission, we invite you to [submit](https://github.com/pytorch-fdn/ecosystem) it and join this dynamic ecosystem.
 
 New this month, we’ve moved all of our Ecosystem blogs over to our PyTorch.org website to host a space where our community can show off the latest innovations with our users. Read on to hear about the latest projects in the ecosystem!
 
@@ -94,7 +94,7 @@ Our  diverse ecosystem tools are instrumental in PyTorch's success.. They provid
 
 Leveraging these tools empowers developers and researchers to accelerate their deep learning workflows and unlock new possibilities in the field of AI.
 
-Have a tool that would be a good fit for the [PyTorch Ecosystem](https://pytorch.org/ecosystem/)? If you can answer the below questions, we’d love for you to [submit your tool for review](https://pytorch.org/ecosystem/join).
+Have a tool that would be a good fit for the [PyTorch Ecosystem](https://pytorch.org/ecosystem/)? If you can answer the below questions, we’d love for you to [submit your tool for review](https://github.com/pytorch-fdn/ecosystem).
 
 
 
