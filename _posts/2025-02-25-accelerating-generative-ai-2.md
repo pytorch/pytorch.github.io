@@ -714,8 +714,10 @@ MPS
    </td>
   </tr>
   <tr>
-   <td>AO  \
-+ batching \
+   <td>AO 
+   <br/>
++ batching
+<br/>
 + compile (warm)
    </td>
    <td>113
@@ -1160,7 +1162,7 @@ Finally, we deployed our optimized inference onto [Modal](https://modal.com), a 
 
 In particular, compilation and AOTI via torch.export requires extra work. In a naïve deployment that work might be added to every single inference execution, adding latency that dwarfs any improvements from a faster model. This is particularly challenging with elastic or autoscaling infrastructure, where replicas of our inference service need to be regularly and automatically created and destroyed.
 
-We share a deployment script in the torchao repository (<code>[cli_on_modal.py](https://github.com/pytorch/ao/tree/main/examples/sam2_amg_server)</code>) to demonstrate one pattern for an elastic deployment. We build the exported models ahead of time and then upload them to [distributed storage](https://modal.com/docs/guide/volumes). Relative to eager execution, this adds a bit of extra work when replicas spin up since they need to read this data over a network, but this is far less costly than compilation or export.
+We share a deployment script in the torchao repository ([cli_on_modal.py](https://github.com/pytorch/ao/tree/main/examples/sam2_amg_server)) to demonstrate one pattern for an elastic deployment. We build the exported models ahead of time and then upload them to [distributed storage](https://modal.com/docs/guide/volumes). Relative to eager execution, this adds a bit of extra work when replicas spin up since they need to read this data over a network, but this is far less costly than compilation or export.
 
 We benchmarked this deployment with a large batch inference workload: sending 1000 images for concurrent processing. The deployment scales up to ten replicas on ten GPUs at peak and scales down to zero GPUs when inactive.
 
