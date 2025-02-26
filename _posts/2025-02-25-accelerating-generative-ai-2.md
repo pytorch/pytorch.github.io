@@ -15,11 +15,11 @@ We calculate our final results and demonstrate the improvement in a realistic de
    <td>
    </td>
    <td colspan="2" >p50 execution latency
-<p>
+<br/>
 (ms / improvement)
    </td>
    <td colspan="2" >p90 execution latency
-<p>
+<br/>
 (ms / improvement)
    </td>
   </tr>
