@@ -411,11 +411,11 @@ AMG
    <td>memory (MiB)
    </td>
    <td>mIoU / 
-<p>
+<br/>
 fail count
    </td>
    <td>first iteration
-<p>
+<br/>
 (ms)
    </td>
   </tr>
@@ -482,7 +482,7 @@ SPS
    <td>mIoU
    </td>
    <td>first iteration
-<p>
+<br/>
 (ms)
    </td>
   </tr>
@@ -547,7 +547,7 @@ MPS
    <td>mIoU
    </td>
    <td>first iteration
-<p>
+<br/>
 (ms)
    </td>
   </tr>
@@ -615,15 +615,15 @@ AMG
    <td>memory (MiB)
    </td>
    <td>mIoU / 
-<p>
+<br/>
 fail count
    </td>
   </tr>
   <tr>
    <td>AO 
-<p>
+<br/>
 + batching 
-<p>
+<br/>
 + compile (warm)
    </td>
    <td>439
@@ -670,7 +670,7 @@ SPS
   </tr>
   <tr>
    <td>AO 
-<p>
+<br/>
 + compile (warm)
    </td>
    <td>100
@@ -763,11 +763,11 @@ AMG: AO + batching + furious
    <td>memory (MiB)
    </td>
    <td>mIoU / 
-<p>
+<br/>
 fail count
    </td>
    <td>first iteration
-<p>
+<br/>
 (ms)
    </td>
   </tr>
@@ -787,7 +787,7 @@ fail count
   </tr>
   <tr>
    <td>+ load export
-<p>
+<br/>
 (cold)
    </td>
    <td>162
@@ -820,7 +820,7 @@ SPS: AO + furious
    <td>mIoU
    </td>
    <td>first iteration
-<p>
+<br/>
 (ms)
    </td>
   </tr>
@@ -840,7 +840,7 @@ SPS: AO + furious
   </tr>
   <tr>
    <td>+ load export
-<p>
+<br/>
 (cold)
    </td>
    <td>35
@@ -875,7 +875,7 @@ MPS: AO + batching + furious
    <td>mIoU
    </td>
    <td>first iteration
-<p>
+<br/>
 (ms)
    </td>
   </tr>
@@ -895,7 +895,7 @@ MPS: AO + batching + furious
   </tr>
   <tr>
    <td>+ load export
-<p>
+<br/>
 (cold)
    </td>
    <td>43
@@ -956,17 +956,17 @@ AMG: AO + batching + furious
    <td>memory (MiB)
    </td>
    <td>mIoU / 
-<p>
+<br/>
 fail count
    </td>
    <td>first iteration
-<p>
+<br/>
 (ms)
    </td>
   </tr>
   <tr>
    <td>+ load export
-<p>
+<br/>
 (cold)
    </td>
    <td>162
@@ -996,7 +996,7 @@ fail count
   </tr>
   <tr>
    <td>+ load export (warm)
-<p>
+<br/>
 + preproc
    </td>
    <td>136
@@ -1029,13 +1029,13 @@ SPS: AO + furious
    <td>mIoU
    </td>
    <td>first iteration
-<p>
+<br/>
 (ms)
    </td>
   </tr>
   <tr>
    <td>+ load export
-<p>
+<br/>
 (cold)
    </td>
    <td>35
@@ -1065,7 +1065,7 @@ SPS: AO + furious
   </tr>
   <tr>
    <td>+ load export (warm)
-<p>
+<br/>
 + preproc
    </td>
    <td>19
@@ -1098,13 +1098,13 @@ MPS: AO + batching + furious
    <td>mIoU
    </td>
    <td>first iteration
-<p>
+<br/>
 (ms)
    </td>
   </tr>
   <tr>
    <td>+ load export
-<p>
+<br/>
 (cold)
    </td>
    <td>43
@@ -1134,7 +1134,7 @@ MPS: AO + batching + furious
   </tr>
   <tr>
    <td>+ load export (warm)
-<p>
+<br/>
 + preproc
    </td>
    <td>31
@@ -1172,11 +1172,11 @@ First, let’s look at the execution latencies.
    <td>
    </td>
    <td colspan="3" >p50 execution latency
-<p>
+<br/>
 (ms / improvement)
    </td>
    <td colspan="3" >p90 execution latency
-<p>
+<br/>
 (ms / improvement)
    </td>
   </tr>
