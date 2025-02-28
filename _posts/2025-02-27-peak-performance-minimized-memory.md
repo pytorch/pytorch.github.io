@@ -4,7 +4,7 @@ title: "Peak Performance, Minimized Memory: Optimizing torchtune’s performance
 author: LinkedIn and Meta
 ---
 
-**LinkedIn**: Shivam Sahni, Byron Hsu, Yanning Chen
+**LinkedIn**: Shivam Sahni, Byron Hsu, Yanning Chen  
 **Meta**: Ankith Gunapal, Evan Smothers
 
 This blog explores the integration of a custom triton kernel, Liger Kernel with `torch.compile` to enhance the performance of fine-tuning large language models (LLMs) using torchtune. torchtune, a PyTorch-native library, offers modular building blocks and customizable finetuning recipes which include `torch.compile` support for various LLMs, while Liger Kernel provides optimized Triton kernels to improve training efficiency and reduce memory usage. The integration involves modifying the `TransformerDecoder` module in torchtune to bypass the linear layer computation, allowing the Liger Fused Linear Cross Entropy Loss to handle the forward projection weights. Experiments conducted on an NVIDIA A100 instance demonstrate that `torch.compile` outperforms PyTorch Eager in throughput and memory efficiency, with Liger Kernel further reducing peak memory allocation and enabling larger batch sizes. The results show a 47% reduction in peak memory at batch size 256 and a marginal increase in throughput with `meta-llama/Llama-3.2-1B` , confirming the effectiveness of the integration without affecting the loss curves.
