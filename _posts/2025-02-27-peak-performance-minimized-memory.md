@@ -29,11 +29,11 @@ torchtune provides:
 Liger Kernel is an open source library of optimized Triton kernels designed to enhance the efficiency and scalability of training Large Language Models (LLMs). It focuses on kernel-level optimizations such as operation fusing and input chunking, achieving significant improvements in training throughput and GPU memory usage compared to existing implementations like those from HuggingFace. By using a single line of code, Liger Kernel can improve [training throughput by 20% and reduce memory usage by 60%](https://www.linkedin.com/blog/engineering/open-source/liger-kernel-open-source-ecosystem-for-efficient-llm-training). 
 
 
+![Fused Linear Cross Entropy](/assets/images/peak-performance-minimized-memory/fg1.png){:style="width:100%"}
+
 <div class="text-center mb-3">
 <p><a href="https://arxiv.org/pdf/2410.10989" target="_blank">Fused Linear Cross Entropy</a></p>
 </div>
-
-Figure 1: [Fused Linear Cross Entropy](https://arxiv.org/pdf/2410.10989)
 
 The bulk of LIger Kernel’s performance improvement comes from the Fused Linear Cross Entropy (FLCE) Loss, whose core idea is as follows:
 
@@ -133,8 +133,9 @@ To rule out any potential functional issues with our integration of Liger Kernel
 
 ![Plot of loss vs training steps for batch_size=128](/assets/images/peak-performance-minimized-memory/fg4.png){:style="width:100%"}
 
-
-Figure 4: Plot of loss vs training steps for batch_size=128
+<div class="text-center mb-3">
+<p>Figure 4: Plot of loss vs training steps for batch_size=128</p>
+</div>
 
 
 ## Next Steps
