@@ -45,10 +45,9 @@ Submit your proposals and prepare to engage, learn, and network alongside some o
 
 ---
 
+![people arriving at conference](/assets/images/submit-to-speak/fg3.jpg){:style="max-width:300px; display: block; float: right;"}   
+
 **Save up to USD$500 with Super Early Bird Pricing!**
-
-
-![people arriving at conference](/assets/images/submit-to-speak/fg3.jpg){:style="max-width:400px; display: block; float: right;"}   
 
 * Reserve your pass by **11:59 PM PDT on March 21** and score Super Early Bird pricing for just **USD$499**. That’s a savings of up to USD$500! 
 * Student or faculty? Learn more about our **[discounted academic rate](https://events.linuxfoundation.org/pytorch-conference/register/#registration-rates)**.
