@@ -29,8 +29,8 @@ torchtune provides:
 Liger Kernel is an open source library of optimized Triton kernels designed to enhance the efficiency and scalability of training Large Language Models (LLMs). It focuses on kernel-level optimizations such as operation fusing and input chunking, achieving significant improvements in training throughput and GPU memory usage compared to existing implementations like those from HuggingFace. By using a single line of code, Liger Kernel can improve [training throughput by 20% and reduce memory usage by 60%](https://www.linkedin.com/blog/engineering/open-source/liger-kernel-open-source-ecosystem-for-efficient-llm-training). 
 
 
-<div class="text-center">
-<a href="https://arxiv.org/pdf/2410.10989" target="_blank">Fused Linear Cross Entropy</a>
+<div class="text-center mb-3">
+<p><a href="https://arxiv.org/pdf/2410.10989" target="_blank">Fused Linear Cross Entropy</a></p>
 </div>
 
 Figure 1: [Fused Linear Cross Entropy](https://arxiv.org/pdf/2410.10989)
@@ -118,14 +118,14 @@ We notice that with PyTorch Eager, throughput increases with increasing batch_si
 
 ![Plot of tokens/sec per rank vs batch_size](/assets/images/peak-performance-minimized-memory/fg2.png){:style="width:100%"}
 
-<div class="text-center">
-Figure 2: Plot of tokens/sec per rank vs batch_size
+<div class="text-center mb-3">
+<p>Figure 2: Plot of tokens/sec per rank vs batch_size</p>
 </div>
 
 ![Peak memory allocated vs batch_size](/assets/images/peak-performance-minimized-memory/fg3.png){:style="width:100%;margin-top: 60px;"}
 
-<div class="text-center">
-Figure 3: Peak memory allocated vs batch_size
+<div class="text-center mb-3">
+<p>Figure 3: Peak memory allocated vs batch_size</p>
 </div>
 
 To rule out any potential functional issues with our integration of Liger Kernel with torchtune, we plot the loss curve against training steps with & without Liger. We see that there is no visible difference in the loss curves.
