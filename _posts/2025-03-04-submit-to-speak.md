@@ -48,18 +48,16 @@ Submit your proposals and prepare to engage, learn, and network alongside some o
 **Save up to USD$500 with Super Early Bird Pricing!**
 
 
+![people arriving at conference](/assets/images/submit-to-speak/fg3.jpg){:style="max-width:400px; display: block; float: right;"}   
 
 * Reserve your pass by **11:59 PM PDT on March 21** and score Super Early Bird pricing for just **USD$499**. That’s a savings of up to USD$500! 
 * Student or faculty? Learn more about our **[discounted academic rate](https://events.linuxfoundation.org/pytorch-conference/register/#registration-rates)**.
 * Need help covering travel costs? We offer discretionary travel funding for those community members who would otherwise not be able to attend. **[Learn more](https://events.linuxfoundation.org/pytorch-conference/register/#additional-information)**. 
 
  
-<a href="https://events.linuxfoundation.org/pytorch-conference/register/" target="_blank" class="btn btn-lg with-right-arrow">
+<a href="https://events.linuxfoundation.org/pytorch-conference/register/" target="_blank" class="btn mb-4 btn-lg with-right-arrow">
    REGISTER NOW & SAVE
 </a>
-
-![people arriving at conference](/assets/images/submit-to-speak/fg3.jpg){:style="max-width:400px; display: block; margin-left: auto; margin-right: auto"}   
-
 
 ---
 
@@ -71,7 +69,7 @@ Seize your opportunity to influence the future of Generative AI and Machine Lear
 As a sponsor, you'll gain more than visibility; you'll strategically position your organization at the heart of a vibrant, global AI/ML ecosystem. Connect directly with **3,000+** expert attendees, researchers, engineers, and decision-makers, and actively shape the conversations driving the next generation of AI advancements. 
 
  
-<a href="https://events.linuxfoundation.org/pytorch-conference/sponsor/" target="_blank" class="btn btn-lg with-right-arrow">
+<a href="https://events.linuxfoundation.org/pytorch-conference/sponsor/" target="_blank" class="btn mt-3 mb-3 btn-lg with-right-arrow">
    BECOME A SPONSOR
 </a>
 
