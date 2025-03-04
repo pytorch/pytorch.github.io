@@ -22,7 +22,7 @@ As we look at these techniques, we'll compare how these methods fit into a speed
 By default, in eager mode (rather than using `torch.compile`), PyTorch’s autograd preserves intermediate activations for backward computation. For example, if you call `sin` on a tensor `x` during the forward pass, autograd must remember `x` to compute `cos(x)` during backward.
 
 
-![flow diagram](/assets/images/activation-checkpointing-techniques/fg2.png){:style="width:100%"}
+![flow diagram](/assets/images/activation-checkpointing-techniques/fg2.png){:style="max-width:400px; display: block; margin-left: auto; margin-right: auto"}
 
 
 If this tensor `x` is saved at the beginning of the forward pass, it remains in memory throughout both the forward and backward phases. It can only be cleared after it is used to compute the gradient, which happens at the end of the backward pass (due to the reverse order of execution).
@@ -162,7 +162,7 @@ On the speed-versus-memory diagram, SAC is plotted as a range of points from clo
 ![flow diagram](/assets/images/activation-checkpointing-techniques/fg11.png){:style="width:100%"}
 
 
-**Try it out! **(Available in 2.5 as a prototype feature; see [docs](https://pytorch.org/docs/main/checkpoint.html#torch.utils.checkpoint.create_selective_checkpoint_contexts) for more info + copy-pastable example)
+**Try it out!** (Available in 2.5 as a prototype feature; see [docs](https://pytorch.org/docs/main/checkpoint.html#torch.utils.checkpoint.create_selective_checkpoint_contexts) for more info + copy-pastable example)
 
 
 ```
@@ -183,9 +183,8 @@ out = checkpoint(
     context_fn=partial(create_selective_checkpoint_contexts, policy_fn),
 )
 
-
----
 ```
+---
 
 
 
