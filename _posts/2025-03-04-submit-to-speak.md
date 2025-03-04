@@ -38,9 +38,11 @@ Submit your proposals and prepare to engage, learn, and network alongside some o
 
 **Learn more and submit your talk by Sunday, June 1, at 11:59 PDT!**
 
+<div class="text-center">
 <a href="https://events.linuxfoundation.org/pytorch-conference/program/cfp/" target="_blank" class="btn btn-lg with-right-arrow">
    SUBMIT TO SPEAK
 </a>
+</div>
 
 
 ---
@@ -53,10 +55,11 @@ Submit your proposals and prepare to engage, learn, and network alongside some o
 * Student or faculty? Learn more about our **[discounted academic rate](https://events.linuxfoundation.org/pytorch-conference/register/#registration-rates)**.
 * Need help covering travel costs? We offer discretionary travel funding for those community members who would otherwise not be able to attend. **[Learn more](https://events.linuxfoundation.org/pytorch-conference/register/#additional-information)**. 
 
- 
+<div class="text-center">
 <a href="https://events.linuxfoundation.org/pytorch-conference/register/" target="_blank" class="btn mb-4 btn-lg with-right-arrow">
    REGISTER NOW & SAVE
 </a>
+</div>
 
 ---
 
@@ -67,9 +70,10 @@ Seize your opportunity to influence the future of Generative AI and Machine Lear
 
 As a sponsor, you'll gain more than visibility; you'll strategically position your organization at the heart of a vibrant, global AI/ML ecosystem. Connect directly with **3,000+** expert attendees, researchers, engineers, and decision-makers, and actively shape the conversations driving the next generation of AI advancements. 
 
- 
+<div class="text-center">
 <a href="https://events.linuxfoundation.org/pytorch-conference/sponsor/" target="_blank" class="btn mt-3 mb-3 btn-lg with-right-arrow">
    BECOME A SPONSOR
 </a>
+</div>
 
 For more details on CFP submissions, registration, and sponsorship, visit **the** [PyTorch Conference Website](https://events.linuxfoundation.org/pytorch-conference/).
