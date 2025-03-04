@@ -36,9 +36,9 @@ Submit your proposals and prepare to engage, learn, and network alongside some o
 * Edge AI and On-Device
 * DL Compilers and Kernel Authoring
 
-**Learn more and submit your talk by Sunday, June 1, at 11:59 PDT!**
 
 <div class="text-center">
+<p><strong>Learn more and submit your talk by Sunday, June 1, at 11:59 PDT!</strong></p>
 <a href="https://events.linuxfoundation.org/pytorch-conference/program/cfp/" target="_blank" class="btn btn-lg with-right-arrow">
    SUBMIT TO SPEAK
 </a>
