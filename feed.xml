@@ -4,7 +4,7 @@
   <generator uri="https://jekyllrb.com/" version="3.9.0">Jekyll</generator>
   <link href="https://pytorch.org/feed.xml" rel="self" type="application/atom+xml" />
   <link href="https://pytorch.org/" rel="alternate" type="text/html" />
-  <updated>2025-03-04T02:03:33-08:00</updated>
+  <updated>2025-03-05T00:32:06-08:00</updated>
   <id>https://pytorch.org/feed.xml</id>
 
   
@@ -29,6 +29,224 @@
 
   
   
+  
+    <entry>
+      <title type="html">Current and New Activation Checkpointing Techniques in PyTorch</title>
+      <link href="https://pytorch.org/blog/activation-checkpointing-techniques/" rel="alternate" type="text/html" title="Current and New Activation Checkpointing Techniques in PyTorch" />
+      <published>2025-03-05T00:00:00-08:00</published>
+      <updated>2025-03-05T00:00:00-08:00</updated>
+      <id>https://pytorch.org/blog/activation-checkpointing-techniques</id>
+      <content type="html" xml:base="https://pytorch.org/blog/activation-checkpointing-techniques/">&lt;p&gt;As models scale in depth, batch size, and sequence length, etc, activation memory becomes an increasingly significant contributor to the overall memory usage. To help address this, PyTorch provides utilities for &lt;a href=&quot;https://pytorch.org/docs/stable/checkpoint.html&quot;&gt;activation checkpointing&lt;/a&gt;, which reduce the number of saved tensors by recomputing them when needed, trading off memory usage for additional compute.&lt;/p&gt;
+
+&lt;p&gt;In this post, we’ll walk through the basics of what activation memory is, the high-level ideas behind existing activation checkpointing techniques, and also introduce some newer techniques that aim to improve flexibility and provide more optimization/automation out of the box.&lt;/p&gt;
+
+&lt;p&gt;As we look at these techniques, we’ll compare how these methods fit into a speed vs. memory trade-off diagram and hopefully provide some insight on how to choose the right strategy for your use case.&lt;/p&gt;
+
+&lt;p&gt;&lt;em&gt;(If you prefer to jump straight to the new APIs, please skip ahead to the “Selective Activation Checkpoint” and “Memory Budget API” sections below.)&lt;/em&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/activation-checkpointing-techniques/fg1.png&quot; alt=&quot;flow diagram&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
+
+&lt;hr /&gt;
+
+&lt;h2 id=&quot;activation-memory-basics&quot;&gt;Activation Memory Basics&lt;/h2&gt;
+
+&lt;p&gt;By default, in eager mode (rather than using &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;torch.compile&lt;/code&gt;), PyTorch’s autograd preserves intermediate activations for backward computation. For example, if you call &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;sin&lt;/code&gt; on a tensor &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;x&lt;/code&gt; during the forward pass, autograd must remember &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;x&lt;/code&gt; to compute &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;cos(x)&lt;/code&gt; during backward.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/activation-checkpointing-techniques/fg2.png&quot; alt=&quot;flow diagram&quot; style=&quot;max-width:400px; display: block; margin-left: auto; margin-right: auto&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;If this tensor &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;x&lt;/code&gt; is saved at the beginning of the forward pass, it remains in memory throughout both the forward and backward phases. It can only be cleared after it is used to compute the gradient, which happens at the end of the backward pass (due to the reverse order of execution).&lt;/p&gt;
+
+&lt;p&gt;Thus, as you proceed through the forward pass and perform more and more operations, you accumulate more and more activations, resulting in more and more activation memory until it (typically) reaches its peak at the start of backward (at which point activations can start to get cleared).&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/activation-checkpointing-techniques/fg3.png&quot; alt=&quot;flow diagram&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;em&gt;In the diagram above, the orange boxes represent operations, black arrows represent their tensor inputs and outputs. The black arrows that cross over the right represent tensors that autograd saves for backward.&lt;/em&gt;&lt;/p&gt;
+
+&lt;p&gt;A useful way to visually organize this default saving behavior in eager as well as the techniques we’re about to introduce is based on how they trade off speed versus memory.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/activation-checkpointing-techniques/fg4.png&quot; alt=&quot;flow diagram&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;The ideal place to be on this diagram is the top-left, where you have “high” speed but also low memory usage.&lt;/p&gt;
+
+&lt;p&gt;We begin by putting the default saving behavior on the &lt;strong&gt;top-right&lt;/strong&gt; (for reasons we’ll explain in more detail as we introduce more points for other techniques).&lt;/p&gt;
+
+&lt;hr /&gt;
+
+&lt;h2 id=&quot;activation-checkpointing-ac&quot;&gt;Activation Checkpointing (AC)&lt;/h2&gt;
+
+&lt;p&gt;&lt;strong&gt;&lt;a href=&quot;https://pytorch.org/docs/stable/checkpoint.html&quot;&gt;Activation checkpointing (AC)&lt;/a&gt;&lt;/strong&gt; is a popular technique to reduce memory usage in PyTorch.&lt;/p&gt;
+
+&lt;p&gt;During forward, any operations performed inside the AC’d region do not save tensors for backward. (Only the inputs to the function are saved.) During backward, the intermediate activations needed for gradient computation are rematerialized by running the function a second time.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/activation-checkpointing-techniques/fg5.png&quot; alt=&quot;flow diagram&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;em&gt;In the diagram (right), the black box shows where activation checkpointing is applied. Compared to the default eager approach (left), this setup results in fewer tensors being saved (1 versus 3).&lt;/em&gt;&lt;/p&gt;
+
+&lt;p&gt;Applying AC on the right parts of the model has the effect of reducing peak memory, because the intermediate activations are no longer materialized in memory when the memory usage typically peaks (at the beginning of backward).&lt;/p&gt;
+
+&lt;p&gt;On the speed-versus-memory tradeoff diagram, AC is plotted on the &lt;strong&gt;bottom-left.&lt;/strong&gt; Relative to eager mode, it reduces the amount of memory saved for backward but comes with an added cost in compute due to recomputation.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/activation-checkpointing-techniques/fg6.png&quot; alt=&quot;flow diagram&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Note that AC’s speed–memory tradeoff /can/ be adjusted by selecting which parts of the forward pass to checkpoint and by defining how many checkpoint regions to use. However, implementing these changes may require modifying your model’s structure and can be cumbersome depending on how your code is organized. For the purposes of this diagram, we assume only one region is checkpointed; under this assumption, AC appears as a single point on the tradeoff diagram.&lt;/p&gt;
+
+&lt;p&gt;Also note that “memory” here does not refer to peak memory usage; rather, it indicates the how much memory is saved for backward for a fixed region.&lt;/p&gt;
+
+&lt;hr /&gt;
+
+&lt;h2 id=&quot;torchcompile-and-min-cut-partitioner&quot;&gt;torch.compile and min-cut partitioner&lt;/h2&gt;
+
+&lt;p&gt;Another notable approach to keep in mind is &lt;strong&gt;torch.compile&lt;/strong&gt; (introduced in PyTorch 2.0). Like activation checkpointing, &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;torch.compile&lt;/code&gt; can also perform some level of recomputation under the hood. Specifically, it traces the forward and backward computations into a single joint graph, which is then processed by a &lt;a href=&quot;https://dev-discuss.pytorch.org/t/min-cut-optimal-recomputation-i-e-activation-checkpointing-with-aotautograd/467&quot;&gt;“min-cut” partitioner&lt;/a&gt;. This partitioner uses a min-cut/max-flow algorithm to split the graph such that it minimizes the number of tensors that need to be saved for backward.&lt;/p&gt;
+
+&lt;p&gt;At first glance, this might sound a lot like what we want for activation memory reduction. However, the reality is more nuanced. By default, the partitioner’s primary goal is to reduce runtime. As a result, it only recomputes certain types of operations—primarily simpler, fusible, and non-compute-intensive ops (like pointwise ops).&lt;/p&gt;
+
+&lt;p&gt;Placing “compile” on the speed-versus-memory tradeoff diagram…&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/activation-checkpointing-techniques/fg7.png&quot; alt=&quot;flow diagram&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;It is to the top-left of the eager non-AC point, as we expect  &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;torch.compile&lt;/code&gt; to improve on both speed and memory.&lt;/p&gt;
+
+&lt;p&gt;On the other hand, relative to activation checkpointing, torch.compile is more conservative about what it recomputes, placing it closer to the top-left on the speed-versus-memory diagram.&lt;/p&gt;
+
+&lt;hr /&gt;
+
+&lt;h2 id=&quot;selective-activation-checkpoint-new&quot;&gt;Selective Activation Checkpoint [NEW!]&lt;/h2&gt;
+
+&lt;p&gt;While normal checkpointing recomputes every op in a chosen region, &lt;a href=&quot;https://pytorch.org/docs/main/checkpoint.html#torch.utils.checkpoint.create_selective_checkpoint_contexts&quot;&gt;selective activation checkpointing (SAC)&lt;/a&gt; is an additional setting on top of activation checkpointing that you can apply to have a more granular control over which operations to recompute.&lt;/p&gt;
+
+&lt;p&gt;This can be useful if you have certain more expensive operations like matmuls which you prefer to avoid recomputing, but still generally want to recompute cheaper operations like pointwise.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/activation-checkpointing-techniques/fg8.png&quot; alt=&quot;flow diagram&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;em&gt;Where plain AC (left) would save a single tensor and then recompute the entire AC’d region, with SAC (right) you can selectively save specific operations (marked red) in the region, so you can avoid recomputing them.&lt;/em&gt;&lt;/p&gt;
+
+&lt;p&gt;To specify what to selectively save, you can specify a policy_fn. To illustrate the additional trade offs you can make with this, we present two simple policy functions.&lt;/p&gt;
+
+&lt;h3 id=&quot;policy-1-not-recomputing-matmuls&quot;&gt;Policy 1: Not recomputing matmuls:&lt;/h3&gt;
+
+&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;aten = torch.ops.aten
+compute_intensive_ops = [  
+        aten.mm,
+        aten.bmm,
+        aten.addmm,
+] 
+def policy_fn(ctx, op, *args, **kwargs):
+    if op in compute_intensive_ops:
+        return CheckpointPolicy.MUST_SAVE
+    else:
+        return CheckpointPolicy.PREFER_RECOMPUTE
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/activation-checkpointing-techniques/fg9.png&quot; alt=&quot;flow diagram&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
+
+&lt;h3 id=&quot;policy-2-more-aggressively-save-anything-compute-intensive&quot;&gt;Policy 2: More aggressively save anything compute intensive&lt;/h3&gt;
+
+&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;# torch/_functorch/partitioners.py
+aten = torch.ops.aten
+compute_intensive_ops = [  
+   aten.mm,
+   aten.convolution,
+   aten.convolution_backward,
+   aten.bmm,
+   aten.addmm,
+   aten._scaled_dot_product_flash_attention,
+   aten._scaled_dot_product_efficient_attention,
+   aten._flash_attention_forward,
+   aten._efficient_attention_forward,
+   aten.upsample_bilinear2d,
+   aten._scaled_mm
+] 
+def policy_fn(ctx, op, *args, **kwargs):
+    if op in compute_intensive_ops:
+        return CheckpointPolicy.MUST_SAVE
+    else:
+        return CheckpointPolicy.PREFER_RECOMPUTE
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/activation-checkpointing-techniques/fg10.png&quot; alt=&quot;flow diagram&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;On the speed-versus-memory diagram, SAC is plotted as a range of points from closer to AC to closer to Eager, depending on your chosen policy.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/activation-checkpointing-techniques/fg11.png&quot; alt=&quot;flow diagram&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Try it out!&lt;/strong&gt; (Available in 2.5 as a prototype feature; see &lt;a href=&quot;https://pytorch.org/docs/main/checkpoint.html#torch.utils.checkpoint.create_selective_checkpoint_contexts&quot;&gt;docs&lt;/a&gt; for more info + copy-pastable example)&lt;/p&gt;
+
+&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;from torch.utils.checkpoint import checkpoint, create_selective_checkpoint_contexts
+
+# Create a policy function that returns a CheckpointPolicy
+def policy_fn(ctx, op, *args, **kwargs):
+    if op in ops_to_save:
+        return CheckpointPolicy.MUST_SAVE
+    else:
+        return CheckpointPolicy.PREFER_RECOMPUTE
+
+# Use the context_fn= arg of the existing checkpoint API
+out = checkpoint(
+    fn, *args,
+    use_reentrant=False,
+    # Fill in SAC context_fn's policy_fn with functools.partial
+    context_fn=partial(create_selective_checkpoint_contexts, policy_fn),
+)
+
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+&lt;hr /&gt;
+
+&lt;h2 id=&quot;compile-only-memory-budget-api-new&quot;&gt;(compile-only) Memory Budget API [NEW!]&lt;/h2&gt;
+
+&lt;p&gt;As mentioned previously, any given SAC policy can be represented as a point on a speed-memory tradeoff diagram. Not all policies are created equal, however. The “optimal” policies are the ones that fall on a pareto curve, e.g. for all policies that incur the same memory overhead, this policy is the one that minimizes the amount of required compute.&lt;/p&gt;
+
+&lt;p&gt;For users who are using torch.compile, we offer a &lt;strong&gt;memory budget API&lt;/strong&gt; that automatically applies SAC over your compiled region with a pareto-optimal policy given a user-specified “memory budget” between 0 and 1, where a budget of 0 behaves like plain-AC and a budget of 1 behaves like default torch.compile.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/activation-checkpointing-techniques/fg12.png&quot; alt=&quot;flow diagram&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Below are some real results on a transformer model:&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/activation-checkpointing-techniques/fg13.png&quot; alt=&quot;flow diagram&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;We observe a 50% memory reduction by recomputing only pointwise ops, with a steady drop-off as you recompute more and more of your matmuls. Attention is the most expensive, so you tend to want to recompute those last.&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Try it out!&lt;/strong&gt; (Available in 2.4 as an experimental feature; see this &lt;a href=&quot;https://github.com/pytorch/pytorch/blob/68a363548409a3ff17965770304ee5e12fe718d9/torch/_functorch/config.py#L110-L122&quot;&gt;comment block&lt;/a&gt; for more info)&lt;/p&gt;
+
+&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;torch._dynamo.config.activation_memory_budget = 0.5
+
+out = torch.compile(fn)(inp)
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;hr /&gt;
+
+&lt;h2 id=&quot;conclusion&quot;&gt;Conclusion&lt;/h2&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/activation-checkpointing-techniques/fg14.png&quot; alt=&quot;flow diagram&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;In summary, activation checkpointing techniques in PyTorch offer a variety of ways to balance memory and compute demands, from simple region-based checkpointing to more selective and automated methods. By choosing the option that best matches your model’s structure and resource constraints, you can achieve significant memory savings with an acceptable trade-off in compute.&lt;/p&gt;
+
+&lt;h2 id=&quot;acknowledgements&quot;&gt;Acknowledgements&lt;/h2&gt;
+
+&lt;p&gt;We would like to thank Meta’s &lt;a href=&quot;https://github.com/facebookresearch/xformers&quot;&gt;xformers&lt;/a&gt; team including &lt;a href=&quot;https://github.com/fmassa&quot;&gt;Francisco Massa&lt;/a&gt; for working on the original version of Selective Activation Checkpoint.&lt;/p&gt;</content>
+
+      
+      
+      
+      
+      
+
+      <author>
+          <name>Facebook</name>
+        
+        
+      </author>
+
+      
+
+      
+
+      
+        <summary type="html">As models scale in depth, batch size, and sequence length, etc, activation memory becomes an increasingly significant contributor to the overall memory usage. To help address this, PyTorch provides utilities for activation checkpointing, which reduce the number of saved tensors by recomputing them when needed, trading off memory usage for additional compute.</summary>
+      
+
+      
+      
+    </entry>
   
     <entry>
       <title type="html">📣 Submit to Speak at PyTorch Conference + Save on Registration</title>
@@ -2180,180 +2398,6 @@ def matmul_persistent_ws_kernel(
 
       
         <summary type="html">Intel has long been at the forefront of technological innovation, and its recent venture into Generative AI (GenAI) solutions is no exception. With the rise of AI-powered gaming experiences, Intel sought to deliver an accessible and intuitive GenAI inferencing solution tailored for AI PCs powered by Intel’s latest GPUs. By leveraging PyTorch as the backbone for development efforts, Intel successfully launched AI Playground, an open source application that showcases advanced GenAI workloads.</summary>
-      
-
-      
-      
-    </entry>
-  
-    <entry>
-      <title type="html">Bringing the PyTorch Community Together</title>
-      <link href="https://pytorch.org/blog/bringing-the-pytorch-community-together/" rel="alternate" type="text/html" title="Bringing the PyTorch Community Together" />
-      <published>2025-01-22T00:00:00-08:00</published>
-      <updated>2025-01-22T00:00:00-08:00</updated>
-      <id>https://pytorch.org/blog/bringing-the-pytorch-community-together</id>
-      <content type="html" xml:base="https://pytorch.org/blog/bringing-the-pytorch-community-together/">&lt;p&gt;As we step into a new year, it’s a great moment to reflect on the incredible community events that made 2024 a memorable year for the PyTorch Foundation. Global meetups, events, and conferences brought the community together to learn, connect, and grow. Here’s a quick recap of the year’s highlights and what to expect in 2025.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/community-events-recap/fg5.jpg&quot; alt=&quot;PyTorch Seattle Meetup (May 23)&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;strong&gt;PyTorch Seattle Meetup (May 23)&lt;/strong&gt;&lt;/p&gt;
-
-&lt;p&gt;We hosted a PyTorch Meetup in Seattle in May at the Meta Bellevue Office where Meta, Microsoft, and Google gave technical talks and about 60 attendees participated in discussion and networking.&lt;/p&gt;
-
-&lt;p&gt;&lt;strong&gt;PyTorch Docathon 2024 (June 4-20)&lt;/strong&gt;&lt;/p&gt;
-
-&lt;p&gt;The PyTorch Docathon returned for its third edition, spanning over two weeks in June. This unique event focused on improving PyTorch’s documentation with contributions from community members worldwide. Documentation is the backbone of any successful open source project, and PyTorch’s Docathon fostered inclusivity and collaboration, making it easier for new users to adopt the framework and for experienced developers to maximize its potential. The 2024 Docathon resulted in more than 50 merged pull requests and was a testament to the collaborative spirit of the PyTorch community and its commitment to enhancing accessibility and usability. Watch the &lt;a href=&quot;https://youtu.be/2D0aej50umA?feature=shared&quot;&gt;PyTorch Docathon Kickoff&lt;/a&gt; on YouTube.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/community-events-recap/fg3.png&quot; alt=&quot;PyTorch Shanghai Meetup (August 15)&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
-
-&lt;h4 id=&quot;pytorch-shanghai-meetup-august-15&quot;&gt;&lt;strong&gt;PyTorch Shanghai Meetup (August 15)&lt;/strong&gt;&lt;/h4&gt;
-
-&lt;p&gt;In August, the &lt;a href=&quot;https://pytorch.org/blog/pytorch-shanghai-notes/&quot;&gt;PyTorch Shanghai Meetup&lt;/a&gt; brought together developers, researchers, and enthusiasts in Shanghai, China. This event served as a platform for knowledge sharing, with engaging talks and networking opportunities. Highlights from the agenda included insights into PyTorch’s latest developments, community-led presentations showcasing innovative use cases, and networking sessions fostering collaboration among attendees.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/community-events-recap/fg1.jpg&quot; alt=&quot;PyTorch Conference 2024 (September 18-19)&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
-
-&lt;h4 id=&quot;pytorch-conference-2024-september-18-19&quot;&gt;&lt;strong&gt;PyTorch Conference 2024 (September 18-19)&lt;/strong&gt;&lt;/h4&gt;
-
-&lt;p&gt;The PyTorch Conference in San Francisco was undoubtedly one of the year’s most significant events. This two-day gathering brought together top-tier researchers, developers, and academic communities, fostering collaboration and innovation in machine learning.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/community-events-recap/fg6.jpeg&quot; alt=&quot;What Made It Special&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
-
-&lt;h4 id=&quot;what-made-it-special&quot;&gt;&lt;strong&gt;What Made It Special:&lt;/strong&gt;&lt;/h4&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;Keynote speeches from industry leaders and PyTorch maintainers.&lt;/li&gt;
-  &lt;li&gt;In-depth sessions covering PyTorch’s end-to-end machine learning capabilities.&lt;/li&gt;
-  &lt;li&gt;Hands-on workshops and breakout sessions.&lt;/li&gt;
-  &lt;li&gt;A vibrant expo area showcasing cutting-edge tools and applications.&lt;/li&gt;
-  &lt;li&gt;Startup Showcase where early-stage founders pitched their AI startups to a panel of top venture capitalists.&lt;/li&gt;
-  &lt;li&gt;DL Compiler Mini-Summit that took a deep dive into the advances in deep learning (DL) compilers that are transforming AI workloads.&lt;/li&gt;
-  &lt;li&gt;Fine-Tuning Mini-Summit that covered everything from memory efficiency, parameter-efficient fine-tuning and quantization to performance at scale and reproducible evaluations.&lt;/li&gt;
-  &lt;li&gt;Poster Session showcasing innovations in PyTorch, including model optimization, hardware integration, generative AI, quantization, and tools for enhanced performance and usability, with contributions from industry leaders.&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;The conference’s focus on fostering collaboration underscored PyTorch’s role as a driving force in the open source ML community. Missed out? You can watch the &lt;a href=&quot;https://youtube.com/playlist?list=PL_lsbAsL_o2B_znuvm-pDtV_cRhpqZb8l&amp;amp;si=mdoSkqMJYKRlzxlg&quot;&gt;PyTorch Conference 2024 Playlist&lt;/a&gt; to catch any sessions you might have missed.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/community-events-recap/fg4.jpg&quot; alt=&quot;GPU MODE IRL Hackathon (September 21)&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
-
-&lt;h4 id=&quot;gpu-mode-irl-hackathon-september-21&quot;&gt;&lt;strong&gt;GPU MODE IRL Hackathon (September 21)&lt;/strong&gt;&lt;/h4&gt;
-
-&lt;p&gt;PyTorch sponsored this meetup in person in San Francisco where attendees made friends, watched keynotes, hacked all day, took breaks with afternoon talks, and then hacked all night. We heard about torchao, our new quantization and sparsity library, vLLM which deploys PyTorch models in production, llm.c, and more. Key takeaways included: GPU Mode IRL Hackathon 1st place winner was inspired by PyTorch FlexAttention to improve CUTLASS, NCCL in Triton would help us do distributed programming with a minimal NCCL reimplementation in pure Python, No libtorch pytorch binaries dramatically reduces binary sizes for on device deployments.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/community-events-recap/fg8.png&quot; alt=&quot;Consumer AI Edge Hackathon (November 22-23)&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
-
-&lt;h4 id=&quot;consumer-ai-edge-hackathon-november-22-23&quot;&gt;&lt;strong&gt;Consumer AI Edge Hackathon (November 22-23)&lt;/strong&gt;&lt;/h4&gt;
-
-&lt;p&gt;The PyTorch team served as mentors and coaches in a Hackathon in Paris, co-sponsored by Hugging Face, Scaleway, and Entrepreneur First, challenging teams to create innovative consumer (B2C) applications leveraging Hugging Face, PyTorch and other open source on-device tools and models. 120+ people across 22 teams hacked for 2 days (and nights!) building the future of AI-powered on-device solutions based on open source models and tools. Participants created innovative applications,  powered by PyTorch, &lt;a href=&quot;https://github.com/pytorch/executorch/tree/main&quot;&gt;ExecuTorch&lt;/a&gt; and Hugging Face resources, such as an on-device yoga coach, a magical storytelling companion and a Kinect-like experience to mobile phones. The PyTorch team is planning similar events in other geographies in 2025 around innovative on-device AI applications.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/community-events-recap/fg9.png&quot; alt=&quot;PyTorch Korea User Group Meetup (November 30)&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
-
-&lt;h4 id=&quot;pytorch-korea-user-group-meetup-november-30&quot;&gt;&lt;strong&gt;PyTorch Korea User Group Meetup (November 30)&lt;/strong&gt;&lt;/h4&gt;
-
-&lt;p&gt;The PyTorch Korea User Group, founded in 2018, is a community dedicated to introducing PyTorch to Korean-speaking users and growing together. The group began by translating PyTorch 0.3 tutorials into Korean and has since supported PyTorch’s growth in Korea. The group focuses on three primary activities:&lt;/p&gt;
-
-&lt;ol&gt;
-  &lt;li&gt;Sharing knowledge for PyTorch learning and application,&lt;/li&gt;
-  &lt;li&gt;Sharing insights and experiences in the field of artificial intelligence, and&lt;/li&gt;
-  &lt;li&gt;Fostering growth through online and offline networking.&lt;/li&gt;
-&lt;/ol&gt;
-
-&lt;p&gt;The PyTorch Korea User Group reaches tens of thousands of Korean AI developers every month. If you’re interested in their activities, check out these links:&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;&lt;a href=&quot;https://pytorch.kr&quot;&gt;PyTorch Korea User Group&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://tutorials.pytorch.kr&quot;&gt;PyTorch Korean Tutorials&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://discuss.pytorch.kr&quot;&gt;PyTorch Korean Community&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://github.com/PyTorchKorea&quot;&gt;GitHub Repository&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://youtube.com/@pytorchkr&quot;&gt;YouTube Channel&lt;/a&gt;&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/community-events-recap/fg2.jpeg&quot; alt=&quot;PyTorch Korea User Group 2025 Events Overview&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;The PyTorch Korea User Group has planned three major activities for the year:&lt;/p&gt;
-
-&lt;ol&gt;
-  &lt;li&gt;&lt;strong&gt;PyTorch CoreSIG&lt;/strong&gt;&lt;br /&gt;
-Since December 2024, this weekly online event has been held every Wednesday afternoon. Led by Kim Hong-Seok, CSO of Rebellions (a PyTorch member company), it provides in-depth knowledge and experience regarding PyTorch internals. Approximately 150 Korean developers participate weekly, reflecting growing interest in PyTorch Core development in Korea.&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;Offline Meetup&lt;/strong&gt;&lt;br /&gt;
-These meetups provide opportunities to share insights and experiences in PyTorch and artificial intelligence, along with networking. Around 3–4 sessions are planned for this year, focusing on key topics in PyTorch and AI.&lt;/li&gt;
-  &lt;li&gt;&lt;strong&gt;Online Community Engagement&lt;/strong&gt;&lt;br /&gt;
-This activity involves sharing and discussing various projects and papers in the AI field. For more information, visit: &lt;a href=&quot;https://discuss.pytorch.kr&quot;&gt;https://discuss.pytorch.kr&lt;/a&gt;.&lt;/li&gt;
-&lt;/ol&gt;
-
-&lt;h4 id=&quot;open-source-ai-night-at-neurips-2024-december-10&quot;&gt;&lt;strong&gt;Open Source AI Night at NeurIPS 2024 (December 10)&lt;/strong&gt;&lt;/h4&gt;
-
-&lt;p&gt;The PyTorch Foundation co-hosted a social event at NeurIPS along with The Fin AI and Open Finance Foundation that featured engaging discussions on open source AI and applications in finance.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/community-events-recap/fg7.jpeg&quot; alt=&quot;PyTorch Webinars&quot; style=&quot;width:100%&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;strong&gt;PyTorch Webinars&lt;/strong&gt;&lt;/p&gt;
-
-&lt;p&gt;Throughout 2024, PyTorch hosted the following virtual webinars:&lt;/p&gt;
-
-&lt;p&gt;Expert Exchanges:&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;&lt;a href=&quot;https://www.youtube.com/live/HTcnp9NEHGY?feature=shared&quot;&gt;How does batching work on modern CPUs?&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://www.youtube.com/live/Bh-jlh5vlF0?feature=shared&quot;&gt;DistServe: disaggregating prefill and decoding for goodput-optimized LLM inference&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://www.youtube.com/live/RnM84Sv9WpA?feature=shared&quot;&gt;Efficient Streaming Language Models with Attention Sinks&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://www.youtube.com/live/e1qUJFAo10s?feature=shared&quot;&gt;Adapting open source models with Open-Instruct and Tulu&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://www.youtube.com/live/Eqg0VIiWrgM?feature=shared&quot;&gt;Efficient Generative Models: From Sparse to Distributed Inference&lt;/a&gt;&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;Summer Series:&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;&lt;a href=&quot;https://youtu.be/xf2QgioY370?feature=shared&quot;&gt;Using PyTorch for Monocular Depth Estimation Webinar&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://youtu.be/NeHIhQWewug?feature=shared&quot;&gt;Accelerating LLM family of models on Arm Neoverse based Graviton AWS processors with KleidiAI&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://www.youtube.com/live/rew5CSUaIXg?feature=shared&quot;&gt;torch.compile: The Missing Manual&lt;/a&gt;&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;Release Live Q&amp;amp;As:&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;&lt;a href=&quot;https://www.youtube.com/live/ry_QgUIYX1E?feature=shared&quot;&gt;PyTorch 2.4: Live Q&amp;amp;A&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://www.youtube.com/live/B3IgXpl4xt4?feature=shared&quot;&gt;PyTorch 2.5 Live Q&amp;amp;A&lt;/a&gt;&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;Live Webinars:&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;&lt;a href=&quot;https://www.youtube.com/watch?v=EjgTv6aSeqk&quot;&gt;PyTorch Documentary Virtual Premiere&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://www.youtube.com/watch?v=gSC_IHyx0IM&quot;&gt;Using PyTorch to Help Predict Wildfires&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://www.youtube.com/watch?v=zvk3Rr-OjU0&quot;&gt;Seismic Data to Subsurface Models with OpenFWI: Training an AI Model with PyTorch&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;https://www.youtube.com/watch?v=w4JmPkqnD0E&quot;&gt;Dinosaur Bone Hunting with Intel AI&lt;/a&gt;&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;Each of these events underscored the importance of collaboration and community engagement in advancing AI research and applications. Thank you to everyone who participated, organized, and supported these events—your contributions make all the difference!&lt;/p&gt;
-
-&lt;hr /&gt;
-
-&lt;h3 id=&quot;looking-ahead&quot;&gt;&lt;strong&gt;Looking Ahead&lt;/strong&gt;&lt;/h3&gt;
-
-&lt;p&gt;2024 was packed with opportunities to connect, learn, and contribute, and there will be even more ways to connect with the PyTorch community in 2025.&lt;/p&gt;
-
-&lt;p&gt;Mark your calendar! The &lt;a href=&quot;https://events.linuxfoundation.org/pytorch-conference-2025/&quot;&gt;PyTorch Conference&lt;/a&gt; is returning to San Francisco on October 22-23, 2025. Get ready for an exciting event filled with technical deep dives, exciting announcements, insightful sessions, and enhanced opportunities for community collaboration.&lt;/p&gt;
-
-&lt;p&gt;Stay tuned for more upcoming events and opportunities to get involved by &lt;a href=&quot;https://pytorch.org/newsletter&quot;&gt;subscribing to our newsletter&lt;/a&gt;.&lt;/p&gt;</content>
-
-      
-      
-      
-      
-      
-
-      <author>
-          <name>Team PyTorch</name>
-        
-        
-      </author>
-
-      
-
-      
-
-      
-        <summary type="html">As we step into a new year, it’s a great moment to reflect on the incredible community events that made 2024 a memorable year for the PyTorch Foundation. Global meetups, events, and conferences brought the community together to learn, connect, and grow. Here’s a quick recap of the year’s highlights and what to expect in 2025.</summary>
       
 
       
