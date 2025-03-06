@@ -10,7 +10,7 @@ However, this insight presents us with a new challenge. Our current training inf
 
 **To address these issues, we introduced 2D embedding parallel, a novel parallelism strategy that overcomes the sparse scaling challenges inherent in training large recommendation models across thousands of GPUs.** This approach combines two complementary parallelization techniques: data parallelism for the sparse components of the model, and model parallelism for the embedding tables, leveraging TorchRec's robust sharding capabilities. By strategically integrating these techniques, we've created a solution that scales to thousands of GPUs and now powers Meta's largest recommendation model training runs.
 
-**What are the sparse scaling challenges? **
+**What are the sparse scaling challenges?**
 
 We identified three key challenges that prevented us from naively scaling our model to thousands of GPUs:
 
@@ -23,7 +23,7 @@ With 2D embedding parallel, we can describe our new parallelism scheme like this
 
 ![Flow diagram](/assets/images/scaling-recommendation-2d-sparse-parallelism/fg1.png){:style="width:100%"}
 
-***Figure 1: Layout illustration of 2D Sparse Parallelism ***
+***Figure 1: Layout illustration of 2D Sparse Parallelism***
 
 With 2D sparse parallelism we address these challenges, instead of sharding tables across all ranks, we first evenly divide all ranks into several parallel groups:
 
@@ -59,7 +59,7 @@ DMPCollection changes a few key parts to enable 2D parallel in an extensible way
 
 To the user, the change is very simple, while taking away all the complexity around applying the parallelism strategies to the model. 
 
-**How do we create these sharding and replication groups? **
+## How do we create these sharding and replication groups?
 
 These process groups are one of the keys to DMPCollection’s performant implementation. From our earlier diagram, we showed a simple 2x2 GPU setup, however, at scale, how do we assign which ranks are part of a given sharding group and what are their replica ranks across the sharding groups? 
 
@@ -148,6 +148,18 @@ We use the following formulation,
 This means our sharding groups, G, are of size L, which can be known as the number of ranks to apply model parallel across. This, in turn, gives us replica groups, each of size G, which are the ranks we data parallel across. 
 
 In DMPCollection, we’re able to create these process groups efficiently with the use of DeviceMesh, we create the entire GPU topology in a 2x2 matrix, with each row representing the group of sharding ranks and each column representing the corresponding replica ranks,
+
+```
+create peer matrix
+num_groups = global_world_size // sharding_group_size
+for each group_rank in num_groups:
+	peers = [num_groups * rank + group_rank for rank in range(sharding_group_size)]
+	add peer to peer matrix
+
+initalize DeviceMesh with two dimensions (shard, replicate)
+slice DeviceMesh on shard for sharding process group
+slide DeviceMesh on replicate for replica process group
+```
 
 With our DeviceMesh approach, should we want to change the topology or provide further flexibility in the future, we can easily extend our creation logic to any form of topologies and even extend for further dimensions of parallelism if needed.
 
