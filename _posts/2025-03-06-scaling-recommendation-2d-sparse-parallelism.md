@@ -8,7 +8,7 @@ At Meta, recommendation systems are the cornerstone of delivering relevant and p
 
 However, this insight presents us with a new challenge. Our current training infrastructure, though highly optimized for hundreds of GPUs, cannot efficiently scale to the thousands of GPUs needed to train these larger models. The leap from hundreds to thousands of GPUs introduces complex technical challenges, particularly around handling sparse operations in recommendation models. These challenges require fundamentally new approaches to distributed training, which we address with a novel parallelization strategy.
 
-**To address these issues, we introduced 2D embedding parallel, a novel parallelism strategy that overcomes the sparse scaling challenges inherent in training large recommendation models across thousands of GPUs.** This approach combines two complementary parallelization techniques: data parallelism for the sparse components of the model, and model parallelism for the embedding tables, leveraging TorchRec's robust sharding capabilities. By strategically integrating these techniques, we've created a solution that scales to thousands of GPUs and now powers Meta's largest recommendation model training runs.
+**To address these issues, we introduced 2D embedding parallel, a novel parallelism strategy that overcomes the sparse scaling challenges inherent in training large recommendation models across thousands of GPUs. This is available today in TorchRec through the DMPCollection API.** This approach combines two complementary parallelization techniques: data parallelism for the sparse components of the model, and model parallelism for the embedding tables, leveraging TorchRec's robust sharding capabilities. By strategically integrating these techniques, we've created a solution that scales to thousands of GPUs and now powers Meta's largest recommendation model training runs.
 
 **What are the sparse scaling challenges?**
 
@@ -196,3 +196,24 @@ Readers should note that 2D sparse parallel training differs from non-paralleliz
 Our exploration revealed that to achieve training results comparable to the baseline, we synchronize optimizer states on a delayed schedule, with the timing dependent on the number of sharding/replica groups (ie: for Adagrad we update the momentum behind by one sync step). This approach also enables users to implement local SGD or semi-synchronized training strategies, which can achieve convergence and potentially produce better loss curves than the baseline.
 
 We thank you for reading our post! This is an exciting direction we have come across that we hope to develop further to maximize performance of recommendation systems and push the state of the art.
+
+<style>
+@media screen and (min-width: 768px) {
+    article.pytorch-article ul, article.pytorch-article ol {
+        padding-left: 3.5rem;
+    }
+}
+ol {
+  list-style-type: decimal; /* 1, 2, 3 */
+}
+
+ol ol {
+  list-style-type: lower-alpha; /* a, b, c */
+}
+
+ol ol ol {
+  list-style-type: lower-roman; /* i, ii, iii */
+}
+
+
+</style>
