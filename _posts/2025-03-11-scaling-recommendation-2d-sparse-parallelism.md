@@ -1,7 +1,7 @@
 ---
 layout: blog_detail
 title: "Scaling Recommendation Systems Training to Thousands of GPUs with 2D Sparse Parallelism"
-author: "PyTorch Team at Meta: Chunzhi Yang, Rich Zhu, Zain Huda, Liangbei Xu, Xin Zhang, Jiyan Yang, Dennis van der Staay"
+author: "PyTorch Team at Meta: Chunzhi Yang, Rich Zhu, Zain Huda, Liangbei Xu, Xin Zhang, Jiyan Yang, Dennis van der Staay, Wang Zhou, Jin Fang, Jade Nie, Yuxi Hu"
 ---
 
 At Meta, recommendation systems are the cornerstone of delivering relevant and personalized ads to billions of users globally. Through technologies like PyTorch's TorchRec, we've successfully developed solutions that enable model training across hundreds of GPUs. While these systems have served us well, recent research on scaling laws has revealed a compelling opportunity: we can achieve significantly better model performance by training dramatically larger neural networks.
