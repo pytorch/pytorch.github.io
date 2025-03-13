@@ -5,8 +5,8 @@ title: "Introducing the New PyTorch Landscape: Your Guide to the PyTorch Ecosyst
 
 We’re excited to reveal our brand new PyTorch Landscape. The [PyTorch Landscape](https://landscape.pytorch.org/) helps researchers, developers, and organizations easily locate useful, curated, community-built tools that augment the PyTorch core framework.
 
-![landscape banner](/assets/images/landscape.jpg){:style="width:100%"}
 
+<a href="https://landscape.pytorch.org/"><img src="/assets/images/landscape.jpg" alt="landscape banner" style="max-width:600px;width:100%; margin-left: auto; margin-right: auto; display: block;"></a>
 
 ## What the Landscape Offers
 
