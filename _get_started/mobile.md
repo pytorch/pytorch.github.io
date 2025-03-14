@@ -22,7 +22,7 @@ You can get started by following the [general getting started guide](https://pyt
 [Using ExecuTorch with C++](https://pytorch.org/executorch/stable/using-executorch-cpp.html)
 
 ### Hardware Acceleration
-ExecuTorch provides out of the box hardware acceleration for a growing number of chip manufacturers. See the following resources to learn more about how to leverage them.
+ExecuTorch provides out of the box hardware acceleration for a growing number of chip manufacturers. See the following resources to learn more about how to leverage them:
 
 * [Backend Overview](https://pytorch.org/executorch/stable/backends-overview.html)
 * [XNNPACK](https://pytorch.org/executorch/stable/backends-xnnpack.html)
