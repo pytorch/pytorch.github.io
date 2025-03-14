@@ -12,7 +12,7 @@ published: true
 
 PyTorch’s edge specific library is [ExecuTorch](https://github.com/pytorch/executorch/)] and is designed to be lightweight, very performant even on devices with constrained hardware such as mobile phones, embedded systems and microcontrollers.
 
-ExecuTorch relies heavily on PyTorch core technologies such as [torch.compile](https://pytorch.org/docs/stable/torch.compiler.html) and [torch.export](https://pytorch.org/docs/main/export.html), and should be very familiar with anyone who has used PyTorch in the past.
+ExecuTorch relies heavily on PyTorch core technologies such as [torch.compile](https://pytorch.org/docs/stable/torch.compiler.html) and [torch.export](https://pytorch.org/docs/main/export.html), and should be very familiar to anyone who has used PyTorch in the past.
 
 ### Getting Started
 You can get started by following the [general getting started guide](https://pytorch.org/executorch/stable/getting-started.html#) or jump to the specific steps for your target device.
