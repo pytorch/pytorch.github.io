@@ -17,9 +17,9 @@ ExecuTorch relies heavily on PyTorch core technologies such as [torch.compile](h
 ### Getting Started
 You can get started by following the [general getting started guide](https://pytorch.org/executorch/stable/getting-started.html#) or jump to the specific steps for your target device.
 
-[Using ExecuTorch on Android](https://pytorch.org/executorch/stable/using-executorch-android.html)
-[Using ExecuTorch on iOS](https://pytorch.org/executorch/stable/using-executorch-ios.html)
-[Using ExecuTorch with C++](https://pytorch.org/executorch/stable/using-executorch-cpp.html)
+* [Using ExecuTorch on Android](https://pytorch.org/executorch/stable/using-executorch-android.html)
+* [Using ExecuTorch on iOS](https://pytorch.org/executorch/stable/using-executorch-ios.html)
+* [Using ExecuTorch with C++](https://pytorch.org/executorch/stable/using-executorch-cpp.html)
 
 ### Hardware Acceleration
 ExecuTorch provides out of the box hardware acceleration for a growing number of chip manufacturers. See the following resources to learn more about how to leverage them:
