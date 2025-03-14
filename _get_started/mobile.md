@@ -24,15 +24,15 @@ You can get started by following the [general getting started guide](https://pyt
 ### Hardware Acceleration
 ExecuTorch provides out of the box hardware acceleration for a growing number of chip manufacturers. See the following resources to learn more about how to leverage them.
 
-[Backend Overview](https://pytorch.org/executorch/stable/backends-overview.html)
-[XNNPACK](https://pytorch.org/executorch/stable/backends-xnnpack.html)
-[Core ML](https://pytorch.org/executorch/stable/backends-coreml.html)
-[MPS](https://pytorch.org/executorch/stable/backends-mps.html)
-[Vulkan](https://pytorch.org/executorch/stable/backends-vulkan.html)
-[ARM Ethos-U](https://pytorch.org/executorch/stable/backends-arm-ethos-u.html)
-[Qualcomm AI Engine](https://pytorch.org/executorch/stable/backends-qualcomm.html)
-[MediaTek](https://pytorch.org/executorch/stable/backends-mediatek.html)
-[Cadence Xtensa](https://pytorch.org/executorch/main/backends-cadence.html)
+* [Backend Overview](https://pytorch.org/executorch/stable/backends-overview.html)
+* [XNNPACK](https://pytorch.org/executorch/stable/backends-xnnpack.html)
+* [Core ML](https://pytorch.org/executorch/stable/backends-coreml.html)
+* [MPS](https://pytorch.org/executorch/stable/backends-mps.html)
+* [Vulkan](https://pytorch.org/executorch/stable/backends-vulkan.html)
+* [ARM Ethos-U](https://pytorch.org/executorch/stable/backends-arm-ethos-u.html)
+* [Qualcomm AI Engine](https://pytorch.org/executorch/stable/backends-qualcomm.html)
+* [MediaTek](https://pytorch.org/executorch/stable/backends-mediatek.html)
+* [Cadence Xtensa](https://pytorch.org/executorch/main/backends-cadence.html)
 
 
 <script page-id="mobile" src="{{ site.baseurl }}/assets/menu-tab-selection.js"></script>
