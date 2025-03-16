@@ -9,7 +9,7 @@ author: "Team PyTorch at NVIDIA"
 Join in person with [discounted GTC registration](https://www.nvidia.com/gtc/?ncid=GTC-NVI0K8HVX) for PyTorch Foundation or [watch online](https://register.nvidia.com/flow/nvidia/gtcs25/registration/) with free registration.
 
 
-![book cover](/assets/images/pytorch-at-gtc.jpg){:style="width:100%"}
+![book cover](/assets/images/pytorch-at-gtc.jpg){:style="max-width:400px; display: block; margin-left: auto; margin-right: auto"}
 
 
 ### [Scaling Open Source AI: From Foundation Models to Ecosystem Success](https://www.nvidia.com/gtc/session-catalog/?regcode=no-ncid&ncid=no-ncid&tab.catalogallsessionstab=16566177511100015Kus&search=pytorch#/session/1738966749087001K1dG)
