@@ -11,7 +11,7 @@ hidden: true
 
 We’re thrilled to announce that the SGLang project has been integrated into the PyTorch ecosystem! This integration ensures that SGLang aligns with PyTorch’s standards and practices, providing developers with a reliable and community-supported framework for fast and flexible serving of LLMs.
 
-To view the PyTorch Ecosystem, see the [PyTorch Landscape](https://github.com/pytorch-fdn/ecosystem) and learn more about how projects can [join the PyTorch Ecosystem](https://github.com/pytorch-fdn/ecosystem). 
+To view the PyTorch Ecosystem, see the [PyTorch Landscape](https://landscape.pytorch.org/) and learn more about how projects can [join the PyTorch Ecosystem](https://github.com/pytorch-fdn/ecosystem). 
 
 
 ## About SGLang
