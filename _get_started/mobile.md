@@ -32,7 +32,7 @@ ExecuTorch provides out of the box hardware acceleration for a growing number of
 * [ARM Ethos-U](https://pytorch.org/executorch/stable/backends-arm-ethos-u.html)
 * [Qualcomm AI Engine](https://pytorch.org/executorch/stable/backends-qualcomm.html)
 * [MediaTek](https://pytorch.org/executorch/stable/backends-mediatek.html)
-* [Cadence Xtensa](https://pytorch.org/executorch/main/backends-cadence.html)
+* [Cadence Xtensa](https://pytorch.org/executorch/stable/backends-cadence.html)
 
 
 <script page-id="mobile" src="{{ site.baseurl }}/assets/menu-tab-selection.js"></script>
