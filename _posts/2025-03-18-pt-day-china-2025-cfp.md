@@ -55,6 +55,6 @@ The venue, **Zhongguancun Exhibition Center**, is approximately **39 km from Bei
 
 ## Have Questions?
 
-For inquiries, please contact **pytorchevents@linuxfoundation.org**.
+For inquiries, please contact <a href="mailto:pytorchevents@linuxfoundation.org">pytorchevents@linuxfoundation.org</a>.
 
 Submit your proposal by **April 13** and join the conversation shaping the future of PyTorch.
