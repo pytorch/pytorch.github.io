@@ -48,12 +48,12 @@ PyTorch Day China will feature **technical talks, discussions, and poster sessio
 * **Co-located with:** BAAI Conference
 
 
-### **Travel Information**
+## Travel Information
 
 The venue, **Zhongguancun Exhibition Center**, is approximately **39 km from Beijing International Airport**. More details on travel and accommodation will be available on the **BAAI Conference website** and updated here as they become available.
 
 
-### **Have Questions?**
+## Have Questions?
 
 For inquiries, please contact **pytorchevents@linuxfoundation.org**.
 
