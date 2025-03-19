@@ -1,7 +1,7 @@
 ---
-title: "SGLang Join PyTorch Ecosystem: Efficient LLM Serving Engine"
+title: "SGLang Joins PyTorch Ecosystem: Efficient LLM Serving Engine"
 author: "SGLang Team"
-ext_url: /blog/sglang-join-pytorch/
+ext_url: /blog/sglang-joins-pytorch/
 date: Mar 17, 2025
 ---
 

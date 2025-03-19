@@ -1,6 +1,6 @@
 ---
 layout: blog_detail
-title: "SGLang Join PyTorch Ecosystem: Efficient LLM Serving Engine"
+title: "SGLang Joins PyTorch Ecosystem: Efficient LLM Serving Engine"
 author: "SGLang Team"
 hidden: true
 ---
