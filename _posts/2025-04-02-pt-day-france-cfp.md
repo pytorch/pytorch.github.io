@@ -9,7 +9,7 @@ Whether you're building cutting-edge models or contributing to the ecosystem, Py
 
 
 
-![PT Day CFP](/assets/images/pt-day-cfp.png){:style="max-width:400px; display: block; margin-left: auto; margin-right: auto"}
+![PT Day CFP](/assets/images/pt-day-cfp.png){:style="max-width:600px; display: block; margin-left: auto; margin-right: auto"}
 
 
 ## Why Attend?
@@ -27,7 +27,7 @@ The event is designed to foster open exchange across the PyTorch ecosystem, prov
 
 We are currently accepting proposals for talks. If you have a project, idea, or research story you'd like to share with the PyTorch community, we want to hear from you.
 
-📩 Email your **talk title and abstract** to pytorchevents@linuxfoundation.org for consideration.
+📩 Email your **talk title and abstract** to [pytorchevents@linuxfoundation.org](mailto:pytorchevents@linuxfoundation.org) for consideration.
 
 
 ## Registration
@@ -53,6 +53,6 @@ Participants are responsible for their own travel and lodging. For those arrivin
 
 ## Questions?
 
-For any inquiries, please contact us at pytorchevents@linuxfoundation.org.
+For any inquiries, please contact us at [pytorchevents@linuxfoundation.org](mailto:pytorchevents@linuxfoundation.org).
 
 We look forward to welcoming the PyTorch community to Paris this May for a day of collaboration, learning, and open source AI innovation.
