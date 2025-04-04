@@ -174,12 +174,12 @@ To activate Float8 Rowwise in TorchTitan:
 First enable the model converter to hotswap the nn.linears into float8 linear layers in your models .toml file - see line 29:
 
 
-![code](/assets/images/accelerating-training-float8-rowwise-crusoe/fg6.png){:style="width:100%;"}
+![code](/assets/images/accelerating-training-float8-rowwise-crusoe/fg6.png){:style="max-width:600px; display: block; margin-left: auto; margin-right: auto"}
 
 Secondly, specify the ‘rowwise’ float8 recipe - see line 72:
 
 
-![code](/assets/images/accelerating-training-float8-rowwise-crusoe/fg7.png){:style="width:100%;"}
+![code](/assets/images/accelerating-training-float8-rowwise-crusoe/fg7.png){:style="max-width:600px; display: block; margin-left: auto; margin-right: auto"}
 
 
 Note that you have three choices for the ‘recipe_name’:
