@@ -74,11 +74,11 @@ Both runs completed their assigned 2.5k iters without issue, showcasing the Crus
    </td>
   </tr>
   <tr>
-   <td>Float8 Rowwise
+   <td style="color: blue;">Float8 Rowwise
    </td>
-   <td>24 hours
+   <td style="color: blue;">24 hours
    </td>
-   <td>2.86386
+   <td style="color: blue;">2.86386
    </td>
   </tr>
   <tr>
@@ -98,11 +98,11 @@ Both runs completed their assigned 2.5k iters without issue, showcasing the Crus
    </td>
   </tr>
   <tr>
-   <td>Float8 Rowwise
+   <td style="color: blue;">Float8 Rowwise
    </td>
-   <td>24 hours / 2.5K
+   <td style="color: blue;">24 hours / 2.5K
    </td>
-   <td>2.86386
+   <td style="color: blue;">2.86386
    </td>
   </tr>
 </table>
@@ -143,10 +143,8 @@ To verify determinism and to see if the spikiness in the longer runs was from sc
 
 In this case both BF16 runs had identical curves and final loss, and we saw a similar spikiness zone for all three runs.
 
-At the 2K iteration mark, both Float8 and BF16 ending at nearly identical points:
-
-BF16 *2 = **3.28538**
-
+At the 2K iteration mark, both Float8 and BF16 ending at nearly identical points:  
+BF16 *2 = **3.28538**  
 Float8 rowwise = **3.28203**
 
 ![line chart](/assets/images/accelerating-training-float8-rowwise-crusoe/fg4.png){:style="width:100%;"}
