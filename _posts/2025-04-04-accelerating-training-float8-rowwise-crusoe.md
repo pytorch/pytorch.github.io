@@ -114,10 +114,8 @@ At the 24 hour mark, Float8 completed 2.5K iterations showcasing the comparative
 After 31 hours, 19 minutes, the BF16 run finally completed its 2.5k iters. 
 
 
-The final loss numbers:
-
-BF16 = **2.88109**	 
-
+The final loss numbers:  
+BF16 = **2.88109**	
 Float8 = **2.86386**
 
 From the loss curves we observed very similar curves at the first and last ⅓ and then a turbulent zone in the middle where both showed similar spikes, but with a slight skew to the relative timing of the spikes. 
