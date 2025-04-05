@@ -163,7 +163,7 @@ As shown in the longer training runs at scale above, Float8 rowwise delivered su
 
 ## How can I use Float8 Rowwise in my training? 
 
-Float8 Rowwise is available now for you to use in your large scale training.  It is packaged in TorchAO’s latest builds (TODO - nightly?) and integrated into TorchTitan natively if you want to get up and running quickly. 
+Float8 Rowwise is available now for you to use in your large scale training.  It is packaged in [TorchAO’s](https://github.com/pytorch/ao) latest builds (0.9 and higher) and integrated into [TorchTitan](https://github.com/pytorch/torchtitan) natively if you want to get up and running quickly.
 
 To activate Float8 Rowwise in TorchTitan:
 
