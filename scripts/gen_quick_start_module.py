@@ -24,7 +24,6 @@ class OperatingSystem(Enum):
     MACOS: str = "macos"
 
 
-PRE_CXX11_ABI = "pre-cxx11"
 CXX11_ABI = "cxx11-abi"
 DEBUG = "debug"
 RELEASE = "release"
@@ -57,8 +56,7 @@ acc_arch_ver_default = {
 acc_arch_ver_map = acc_arch_ver_default
 
 LIBTORCH_DWNL_INSTR = {
-    PRE_CXX11_ABI: "Download here (Pre-cxx11 ABI):",
-    CXX11_ABI: "Download here (cxx11 ABI):",
+    CXX11_ABI: "Download here:",
     RELEASE: "Download here (Release version):",
     DEBUG: "Download here (Debug version):",
     MACOS: "Download arm64 libtorch here (ROCm and CUDA are not supported):",
@@ -157,13 +155,10 @@ def update_versions(versions, release_matrix, release_version):
                                 if x["libtorch_variant"] == "shared-with-deps"
                             }
                             if instr["versions"] is not None:
-                                for ver in [PRE_CXX11_ABI, CXX11_ABI]:
-                                    if gpu_arch_type == "rocm" and ver == PRE_CXX11_ABI:
-                                        continue
-                                    else:
-                                        instr["versions"][LIBTORCH_DWNL_INSTR[ver]] = (
-                                            rel_entry_dict[ver]
-                                        )
+                                for ver in [CXX11_ABI]:
+                                    instr["versions"][LIBTORCH_DWNL_INSTR[ver]] = (
+                                        rel_entry_dict[ver]
+                                    )
 
                         elif os_key == OperatingSystem.WINDOWS.value:
                             rel_entry_dict = {
