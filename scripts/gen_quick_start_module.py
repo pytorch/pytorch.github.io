@@ -24,6 +24,7 @@ class OperatingSystem(Enum):
     MACOS: str = "macos"
 
 
+PRE_CXX11_ABI = "pre-cxx11"
 CXX11_ABI = "cxx11-abi"
 DEBUG = "debug"
 RELEASE = "release"
@@ -56,7 +57,7 @@ acc_arch_ver_default = {
 acc_arch_ver_map = acc_arch_ver_default
 
 LIBTORCH_DWNL_INSTR = {
-    CXX11_ABI: "Download here:",
+    CXX11_ABI: "Download here (cxx11 ABI):",
     RELEASE: "Download here (Release version):",
     DEBUG: "Download here (Debug version):",
     MACOS: "Download arm64 libtorch here (ROCm and CUDA are not supported):",
@@ -155,10 +156,14 @@ def update_versions(versions, release_matrix, release_version):
                                 if x["libtorch_variant"] == "shared-with-deps"
                             }
                             if instr["versions"] is not None:
-                                for ver in [CXX11_ABI]:
-                                    instr["versions"][LIBTORCH_DWNL_INSTR[ver]] = (
-                                        rel_entry_dict[ver]
-                                    )
+                                for ver in [CXX11_ABI, PRE_CXX11_ABI]:
+                                    # temporarily apply removal of cxx11 abi only to nightly
+                                    if ver == PRE_CXX11_ABI and release_version == "nightly":
+                                        continue
+                                    else:
+                                        instr["versions"][LIBTORCH_DWNL_INSTR[ver]] = (
+                                            rel_entry_dict[ver]
+                                        )
 
                         elif os_key == OperatingSystem.WINDOWS.value:
                             rel_entry_dict = {
