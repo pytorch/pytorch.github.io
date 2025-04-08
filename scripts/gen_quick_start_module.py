@@ -157,8 +157,9 @@ def update_versions(versions, release_matrix, release_version):
                                 if x["libtorch_variant"] == "shared-with-deps"
                             }
                             if instr["versions"] is not None:
-                                for ver in [PRE_CXX11_ABI, CXX11_ABI]:
-                                    if gpu_arch_type == "rocm" and ver == PRE_CXX11_ABI:
+                                for ver in [CXX11_ABI, PRE_CXX11_ABI]:
+                                    # temporarily apply removal of cxx11 abi only to nightly and rocm builds
+                                    if ver == PRE_CXX11_ABI and (release_version == "nightly" or gpu_arch_type == "rocm"):
                                         continue
                                     else:
                                         instr["versions"][LIBTORCH_DWNL_INSTR[ver]] = (
