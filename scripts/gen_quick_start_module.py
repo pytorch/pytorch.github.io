@@ -57,6 +57,7 @@ acc_arch_ver_default = {
 acc_arch_ver_map = acc_arch_ver_default
 
 LIBTORCH_DWNL_INSTR = {
+    PRE_CXX11_ABI: "Download here (Pre-cxx11 ABI):",
     CXX11_ABI: "Download here (cxx11 ABI):",
     RELEASE: "Download here (Release version):",
     DEBUG: "Download here (Debug version):",
