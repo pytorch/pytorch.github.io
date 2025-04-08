@@ -158,8 +158,8 @@ def update_versions(versions, release_matrix, release_version):
                             }
                             if instr["versions"] is not None:
                                 for ver in [CXX11_ABI, PRE_CXX11_ABI]:
-                                    # temporarily apply removal of cxx11 abi only to nightly
-                                    if ver == PRE_CXX11_ABI and release_version == "nightly":
+                                    # temporarily apply removal of cxx11 abi only to nightly and rocm builds
+                                    if ver == PRE_CXX11_ABI and (release_version == "nightly" or gpu_arch_type == "rocm"):
                                         continue
                                     else:
                                         instr["versions"][LIBTORCH_DWNL_INSTR[ver]] = (
