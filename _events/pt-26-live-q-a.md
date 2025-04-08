@@ -17,4 +17,4 @@ Nikita is a Software Engineer at Meta where he is, among other things, responsib
 
 Bring your PyTorch 2.6 questions for Nikita during this live Q&A session.
 
-[Register now to join the event](/pt-26-live-q-a)
+[More info on this event.](/pt-26-live-q-a)

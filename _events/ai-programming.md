@@ -16,4 +16,4 @@ In this talk, Anton will share how he built an AI agent that ranked #1 in the fi
 
 Anton Pidkuiko is a Software Engineer at Meta, Reality Labs in London. He is currently working on applying the power of Large Language Models to Metaverse Avatar product experiences.
 
-[Register now to join the event](/ai-powered-competitive-programming)
+[More info on this event.](/ai-powered-competitive-programming)
