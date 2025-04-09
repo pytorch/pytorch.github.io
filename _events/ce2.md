@@ -3,7 +3,7 @@ category: event
 title: "Open Source AI Summit"
 date: Jan 22, 2025
 ---
-**—COMMUNITY EVENT—**
+<span class="community-event">COMMUNITY EVENT</span>
 
 **Date**: Jan 22, 2025  
 **Location**: Paris, France
