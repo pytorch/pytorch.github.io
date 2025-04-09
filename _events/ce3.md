@@ -3,7 +3,7 @@ category: event
 title: "Open Source Forum"
 date: Feb 13, 2025
 ---
-<span class="community-event">COMMUNITY EVENT</span>
+<span class="community-event">Community Event</span>
 
 **Date**: Feb 13, 2025
 **Location**: Los Angeles, CA
