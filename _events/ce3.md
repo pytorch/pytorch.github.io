@@ -5,7 +5,7 @@ date: Feb 13, 2025
 ---
 <span class="community-event">Community Event</span>
 
-**Date**: Feb 13, 2025
+**Date**: Feb 13, 2025  
 **Location**: Los Angeles, CA
 
 The Academy Software Foundation’s (ASWF) annual Open Source Forum brings together Foundation members and select guests from the motion picture and media industries to collaborate and discuss the future of open source software.
