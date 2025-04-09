@@ -3,7 +3,7 @@ category: event
 title: "COLING 2025"
 date: Jan 19, 2025
 ---
-**—COMMUNITY EVENT—**
+<div class="community-event">COMMUNITY EVENT</div>
 
 **Date**: Jan 19 - 25, 2025
 
