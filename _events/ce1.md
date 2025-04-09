@@ -3,7 +3,8 @@ category: event
 title: "COLING 2025"
 date: Jan 19, 2025
 ---
-**COMMUNITY EVENT**  
+**—COMMUNITY EVENT—**
+
 **Date**: Jan 19 - 25, 2025
 
 COLING, the International Conference on Computational Linguistics, is one of the premier conferences for the natural language processing and computational linguistics.
