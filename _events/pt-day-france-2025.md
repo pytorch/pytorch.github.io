@@ -1,6 +1,6 @@
 ---
 category: event
-title: "PyTorch Day France 2025"
+title: "PyTorch Day France 2025: Registration Open"
 date: May 7, 2025
 poster: assets/images/pt-day-cfp.png
 ---
