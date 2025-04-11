@@ -9,8 +9,8 @@ poster: assets/images/pt27qa.png
 <img style="width:100%" src="/assets/images/pt27qa.png" alt="PyTorch 2.7 Release Q&A">
 </a>
 
-**Date**: April 28, 12 pm PT
-**Speaker**: Piotr Bialecki
+**Date**: April 28, 12 pm PT  
+**Speaker**: Piotr Bialecki  
 **Location**: Online
 
 Wondering what's new in the PyTorch 2.7 release? Do you have questions? Join us for a live Q&A on PyTorch 2.7 with Piotr Bialecki, PyTorch Core Maintainer and Director of Engineering at NVIDIA. 
