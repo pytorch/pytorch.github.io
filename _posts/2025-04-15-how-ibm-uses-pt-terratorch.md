@@ -12,7 +12,7 @@ By IBM Research’s launch of TerraTorch 1.0, we make geospatial AI not only mor
 ![globes](/assets/images/how-ibm-uses-pt-terratorch/fg1.png){:style="width:100%"}
 
 
-Caption: The power of foundation models, even with 75-95% of the input data removed, the models do a fantastic job in reconstruction of the input data - therefore learning the underlying physics of our planet in a deep, latent space
+**The power of foundation models, even with 75-95% of the input data removed, the models do a fantastic job in reconstruction of the input data - therefore learning the underlying physics of our planet in a deep, latent space**
 
 ## The Business Challenge
 
@@ -24,7 +24,7 @@ We wanted to create a framework that anyone can use to go from raw data to infer
 ![globes](/assets/images/how-ibm-uses-pt-terratorch/fg2.png){:style="width:100%"}
 
 
-Caption: How a weather and climate foundation model created and fine-tuned on PyTorch is used for weather forecasts 
+**How a weather and climate foundation model created and fine-tuned on PyTorch is used for weather forecasts**
 
 ## How IBM Research Used PyTorch
 
@@ -44,7 +44,7 @@ With PyTorch’s flexibility, we were able to prototype quickly, iterate on mode
 ![flow diagram](/assets/images/how-ibm-uses-pt-terratorch/fg3.png){:style="width:100%"}
 
 
-Caption: Architecture of the Prithvi-EO-2.0-600M foundation model which IBM Research developed together with NASA
+**Architecture of the Prithvi-EO-2.0-600M foundation model which IBM Research developed together with NASA**
 
 ## Solving AI Challenges with PyTorch
 
@@ -54,7 +54,7 @@ PyTorch helped use to tackle three major challenges:
 * Scalability: With DDP, FSDP, PyTorch Lightning and TorchGeo, we could train models on large-scale datasets without worrying about infrastructure.
 * Community support: PyTorch - the de-facto standard in AI research - with its active community and excellent documentation made it easy to overcome hurdles and stay up to date with the latest advancements in AI research.
 
-**A Word from IBM Research**
+## A Word from IBM Research
 
 *"PyTorch gave me the power to turn complex linear algebra and optimization problems into accessible, shareable solutions for the community. It feels empowering that we’re building and fine-tuning models for anyone curious about understanding our planet through AI."*
 
