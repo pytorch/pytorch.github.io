@@ -6,7 +6,7 @@ hidden: true
 
 Geospatial computer vision is essential for understanding our planet — from monitoring deforestation to tracking urban development and analyzing the impacts of climate change. However, the coding and deep learning skills for applying AI models to satellite imagery and earth observation data has traditionally been a major barrier for many practitioners.
 
-By IBM Research’s launch of TerraTorch 1.0, we make geospatial AI not only more accessible but also more practical for the wider PyTorch community. Our goal: simplify the process so that any data scientist, researcher, or enthusiast can build powerful geospatial models with ease and low GPU and data processing requirements.
+By IBM Research’s launch of TerraTorch 1.0, a PyTorch domain library for fine-tuning of Geospatial Computer Vision Foundation Models, we make geospatial AI not only more accessible but also more practical for the wider PyTorch community. Our goal: simplify the process so that any data scientist, researcher, or enthusiast can build powerful geospatial models with ease and low GPU and data processing requirements.
 
 
 ![globes](/assets/images/how-ibm-uses-pt-terratorch/fg1.png){:style="width:100%"}
@@ -34,7 +34,7 @@ We’ve built TerraTorch on top of PyTorch, leveraging its dynamic ecosystem to 
 
 * PyTorch Lightning for clean, scalable training loops
 * TorchGeo for geospatial data handling and transformations
-* Foundation models like IBM’s Prithvi, Granite, Clay, SatMAE, Satlas, DeCur and DOFA models, specialized in satellite imagery, weather and climate data
+* Foundation models like IBM’s Prithvi family was used to fine-tune all of the downstream geospatial models for satellite imagery, weather and climate data, IBM released under the Granite family on HuggingFace. In addition, other interesting foundation models and ecosystem components like Clay, SatMAE, Satlas, DeCur and DOFA are included in TerraTorch
 * Powerful and state-of-the-art vision transformers to experiment with modern neural network architectures
 * TerraTorch-Iterate build on top of PyTorch, Optuna, MLFlow and Ray Tune for Hyperparameter Optimization (HPO), Neural Architecture Search (NAS) and Foundation Model Benchmarking (GeoBench), where TerraTorch became the reference implementation
 
@@ -50,7 +50,7 @@ With PyTorch’s flexibility, we were able to prototype quickly, iterate on mode
 
 PyTorch helped use to tackle three major challenges:
 
-* Ease of experimentation: Dynamic computation graphs and rich visualization tools made it simple to test different models and training strategies.
+* Ease of experimentation: Dynamic computation graphs, automatic differentiation, full abstraction of CUDA and rich visualization tools made it simple to test different models and training strategies.
 * Scalability: With DDP, FSDP, PyTorch Lightning and TorchGeo, we could train models on large-scale datasets without worrying about infrastructure.
 * Community support: PyTorch - the de-facto standard in AI research - with its active community and excellent documentation made it easy to overcome hurdles and stay up to date with the latest advancements in AI research.
 
