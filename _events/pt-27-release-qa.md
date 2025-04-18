@@ -10,7 +10,7 @@ poster: assets/images/pt27qa.png
 </a>
 
 **Date**: April 28, 12 pm PT  
-**Speakers**: Piotr Bialecki (NVIDIA) and Nikita Shulga (Meta)
+**Speakers**: Piotr Bialecki (NVIDIA) and Nikita Shulga (Meta)  
 **Location**: Online
 
 Have questions about PyTorch 2.7? Join PyTorch Core Maintainers Piotr Bialecki (NVIDIA) and Nikita Shulga (Meta) for a live Q&A session on Monday, April 28 at 12 PM PST.
