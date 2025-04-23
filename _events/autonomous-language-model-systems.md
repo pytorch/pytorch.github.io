@@ -5,7 +5,7 @@ date: May 21, 2025
 poster: assets/images/pt-day-cfp.png
 ---
 
-<a href="/autonomous-language-model-systems/">
+<a href="/autonomous-language-model-systems">
 <img style="width:100%" src="/assets/images/autonomous-language-model-systems.png" alt="Towards Autonomous Language Model Systems">
 </a>
 
@@ -20,4 +20,4 @@ SWE-bench and SWE-agent are used by many leading AI organizations in academia an
 
 Ofir is a postdoc at Princeton University, where they mainly work with Karthik Narasimhan's lab. Ofir previously completed their PhD at the University of Washington in Seattle, where Ofir was advised by Noah Smith. During their PhD, Ofir spent two years at Facebook AI Research Labs on Luke Zettlemoyer's team.
 
-[Register Now](/autonomous-language-model-systems/)
+[Register Now](/autonomous-language-model-systems)
