@@ -9,7 +9,7 @@ poster: assets/images/pt-day-cfp.png
 <img style="width:100%" src="/assets/images/autonomous-language-model-systems.png" alt="Towards Autonomous Language Model Systems">
 </a>
 
-**Date**: May 21, 2025, 2PM ET  
+**Date**: May 21, 2025, 11AM PT / 2PM ET  
 **Location**: Online
 
 Language models (LMs) are increasingly used to assist users in day to day tasks such as programming (Github Copilot) or search (Google's AI Overviews). But can we build language model systems that are able to autonomously complete entire tasks end-to-end? 
