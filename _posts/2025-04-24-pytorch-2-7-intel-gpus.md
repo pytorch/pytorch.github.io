@@ -30,7 +30,7 @@ These are the features in PyTorch 2.7  that were added to help accelerate perfor
 
 
 
-* Improve scaled dot-product attention (SDPA) inference performance with bfloat16 and float16 to accelerate attention-based models on Intel GPUs.
+* Improve scaled dot-product attention (SDPA) inference performance with bfloat16 and float16 to accelerate attention-based models on Intel GPUs.  
 With the new SDPA optimization for Intel GPUs on PyTorch 2.7, Stable Diffusion float16 inference achieved up to 3x gain over PyTorch 2.6 release on Intel® Arc™ B580 Graphics and Intel® Core™ Ultra 7 Processor 258V with Intel® Arc™ Graphics 140V on eager mode. See Figure 1 below.
 
 
@@ -38,7 +38,7 @@ With the new SDPA optimization for Intel GPUs on PyTorch 2.7, Stable Diffusion f
 
 **Figure 1. PyTorch 2.7 Stable Diffusion Performance Gains Over PyTorch 2.6**
 
-* Enable torch.compile on Windows 11 for Intel GPUs, delivering the performance advantages over eager mode as on Linux. With this, Intel GPUs became the first accelerator to support torch.compile on Windows. Refer to[ Windows tutorial](https://pytorch.org/tutorials/prototype/inductor_windows.html) for details.
+* Enable torch.compile on Windows 11 for Intel GPUs, delivering the performance advantages over eager mode as on Linux. With this, Intel GPUs became the first accelerator to support torch.compile on Windows. Refer to[ Windows tutorial](https://pytorch.org/tutorials/prototype/inductor_windows.html) for details.  
 Graph model (torch.compile) is enabled in Windows 11 for the first time across Intel GPUs, delivering the performance advantages over eager mode as on Linux by PyTorch 2.7. The latest performance data was measured on top of PyTorch Dynamo Benchmarking Suite using Intel® Arc™ B580 Graphics on Windows showcase torch.compile speedup ratio over eager mode as shown in Figure 2. Both training and inference achieved similar significant improvements.
 
 
