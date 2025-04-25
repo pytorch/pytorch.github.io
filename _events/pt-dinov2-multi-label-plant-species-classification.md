@@ -15,4 +15,4 @@ Join us for an engaging webinar on our innovative transfer learning approach usi
 
 Murilo Gustineli is a Senior AI Software Solutions Engineer at Intel, and is currently pursuing a Master’s in Computer Science at Georgia Tech focusing on machine learning. His work involves creating synthetic datasets, fine-tuning large language models, and training multi-modal models using Intel® Gaudi® Al accelerators as part of the Development Enablement team. He is particularly interested in deep learning, information retrieval, and biodiversity research, aiming to improve species identification and support conservation efforts.
 
-[Register now to join the event](/pt-dinov2-multi-label-plant-species-classification)
+[Learn more about the event](/pt-dinov2-multi-label-plant-species-classification)
