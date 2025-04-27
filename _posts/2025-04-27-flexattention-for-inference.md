@@ -166,12 +166,12 @@ block_mask_slice.mask_mod = get_mask_mod_w_offset(causal_mask)
 
 ![chart](/assets/images/flexattention-for-inference/fg7.png){:style="width:100%"}
 
+FlexDecoding kernel performs on par with FlashDecoding (FAKV) and significantly outperforms pytorch scaled_dot_product_attention ([code](https://github.com/pytorch/pytorch/blob/main/benchmarks/transformer/score_mod.py)).
+
 
 ![chart](/assets/images/flexattention-for-inference/fg8.png){:style="width:100%"}
 
-FlexDecoding boosts LLaMa3.1-8B serving performance by 1.22x-2.04x, and LLaMa3.1-70B
-
-performance by 0.99x - 1.66x compared to SDPA in gpt-fast. ([code](https://github.com/pytorch-labs/gpt-fast)) 
+FlexDecoding boosts LLaMa3.1-8B serving performance by 1.22x-2.04x, and LLaMa3.1-70B performance by 0.99x - 1.66x compared to SDPA in gpt-fast. ([code](https://github.com/pytorch-labs/gpt-fast)) 
 
 
 ## Paged Attention
@@ -220,7 +220,7 @@ def convert_logical_block_mask(
 
 **Paged Attention via Block Mask Conversion**
 
-One remaining question is how to rewrite user-specified `mask_mod` and `score_mod` for PagedAttention. When users specify these modifications, they write with logical indices without the knowledge of the page table maintained at runtime. The following code shows an automated conversion at runtime which is necessary to rewrite user-specified modifications with physical kv indices. The `new_mask_mod` would take the physical_kv_idx and convert it back to the logical_kv_idx and apply user-specified `mask_mod` on the logical_kv_idx for the correct mask. For efficiency, we maintain physical_to_logical as a mapping from physical_kv_block to logical_kv_block to facilitate the conversion. For correctness, we mask out-of-boundary blocks as False with a `torch.where` call. After batching logical KV caches from multiple requests into the same physical KV cache, there are much more physical blocks than the number of logical blocks for each request. Thus, a physical block may not have a corresponding logical block for a specific request during block mask conversion. By masking as False with `torch.where`, we can ensure the correctness that data from different requests do not interfere with each other. Similarly, we can convert the <code>[score_mod](https://github.com/pytorch/pytorch/blob/main/torch/nn/attention/experimental/_paged_attention.py#L308-L338)</code> automatically.
+One remaining question is how to rewrite user-specified `mask_mod` and `score_mod` for PagedAttention. When users specify these modifications, they write with logical indices without the knowledge of the page table maintained at runtime. The following code shows an automated conversion at runtime which is necessary to rewrite user-specified modifications with physical kv indices. The `new_mask_mod` would take the physical_kv_idx and convert it back to the logical_kv_idx and apply user-specified `mask_mod` on the logical_kv_idx for the correct mask. For efficiency, we maintain physical_to_logical as a mapping from physical_kv_block to logical_kv_block to facilitate the conversion. For correctness, we mask out-of-boundary blocks as False with a `torch.where` call. After batching logical KV caches from multiple requests into the same physical KV cache, there are much more physical blocks than the number of logical blocks for each request. Thus, a physical block may not have a corresponding logical block for a specific request during block mask conversion. By masking as False with `torch.where`, we can ensure the correctness that data from different requests do not interfere with each other. Similarly, we can convert the [score_mod](https://github.com/pytorch/pytorch/blob/main/torch/nn/attention/experimental/_paged_attention.py#L308-L338) automatically.
 
 ```
 def get_mask_mod(mask_mod: Optional[_mask_mod_signature]) -> _mask_mod_signature:
