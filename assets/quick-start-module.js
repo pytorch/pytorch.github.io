@@ -279,3 +279,7 @@ function commandMessage(key) {
     $("#command").html("<pre>" + object[key] + "</pre>");
   }
 }
+
+// Set cuda version right away
+changeVersion("stable")
+
