@@ -21,5 +21,5 @@ Nikita is a Software Engineer at Meta where, among other things, he is responsib
 
 Bring your PyTorch 2.7 questions for Piotr & Nikita during this live Q&A session.
 
-[Register now](/pt-27-release-qa)
+[Learn more about this event](/pt-27-release-qa)
 
