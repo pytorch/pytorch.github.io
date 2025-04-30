@@ -1,7 +1,7 @@
 # Installing on macOS
 {:.no_toc}
 
-PyTorch can be installed and used on macOS. Depending on your system and GPU capabilities, your experience with PyTorch on a Mac may vary in terms of processing time. 
+PyTorch can be installed and used on macOS. Depending on your system and GPU capabilities, your experience with PyTorch on a Mac may vary in terms of processing time.
 
 ## Prerequisites
 {: #mac-prerequisites}
@@ -14,24 +14,13 @@ PyTorch is supported on macOS 10.15 (Catalina) or above.
 {: #mac-python}
 
 It is recommended that you use Python 3.9 - 3.12.
-You can install Python either through the Anaconda
-package manager (see [below](#anaconda)), [Homebrew](https://brew.sh/), or
+You can install Python either through [Homebrew](https://brew.sh/) or
 the [Python website](https://www.python.org/downloads/mac-osx/).
 
 ### Package Manager
 {: #mac-package-manager}
 
-To install the PyTorch binaries, you will need to use one of two supported package managers: [pip](https://pypi.org/project/pip/) or [Anaconda](https://www.anaconda.com/download/#macos). 
-#### Anaconda
-
-To install Anaconda, you can [download graphical installer](https://www.anaconda.com/download/#macos) or use the command-line installer. If you use the command-line installer, you can right-click on the installer link, select `Copy Link Address`, or use the following commands on Mac computer with Apple silicon:
-
-```bash
-# The version of Anaconda may be different depending on when you are installing`
-curl -O https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-arm64.sh
-sh Miniconda3-latest-MacOSX-arm64.sh
-# and follow the prompts. The defaults are generally good.`
-```
+To install the PyTorch binaries, you will need to use the supported package manager: [pip](https://pypi.org/project/pip/).
 #### pip
 
 *Python 3*
@@ -42,15 +31,6 @@ If you installed Python via Homebrew or the Python website, `pip` was installed 
 
 ## Installation
 {: #mac-installation}
-
-### Anaconda
-{: #mac-anaconda}
-
-To install PyTorch via Anaconda, use the following conda command:
-
-```bash
-conda install pytorch torchvision -c pytorch
-```
 
 ### pip
 {: #mac-pip}
@@ -91,7 +71,7 @@ For the majority of PyTorch users, installing from a pre-built binary via a pack
 ### Prerequisites
 {: #mac-prerequisites-2}
 
-1. [Optional] Install [Anaconda](#anaconda)
+1. [Optional] Install [pip](https://pypi.org/project/pip/)
 2. Follow the steps described here: [https://github.com/pytorch/pytorch#from-source](https://github.com/pytorch/pytorch#from-source)
 
 You can verify the installation as described [above](#mac-verification).
