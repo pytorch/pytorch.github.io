@@ -10,7 +10,6 @@ PyTorch can be installed and used on macOS. Depending on your system and GPU cap
 
 PyTorch is supported on macOS 10.15 (Catalina) or above.
 
-
 ### Python
 {: #mac-python}
 
