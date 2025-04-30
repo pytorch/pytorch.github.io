@@ -35,7 +35,7 @@ If you installed Python via Homebrew or the Python website, `pip` was installed 
 ### pip
 {: #mac-pip}
 
-To install PyTorch via pip, use one of the following two commands, depending on your Python version:
+To install PyTorch via pip, use the following the command, depending on your Python version:
 
 ```bash
 # Python 3.x
