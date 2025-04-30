@@ -4,7 +4,7 @@ title: "Accelerating Large Scale Training and Convergence with PyTorch Float8 Ro
 author: Meta and Crusoe
 ---
 
-**Meta**: Less Wright, Hamid Shojanazeri, Vasiliy Kuznetsov, Daniel Vega-Myhre, Gokul Nadathur, Will Constable, Tianyu Liu, Tristan Rice, Driss Guessous, Josh Fromm, Luca Wehrstedt, Jiecao Yu, Sandeep Parab  
+**Meta**: Less Wright, Hamid Shojanazeri, Vasiliy Kuznetsov, Daniel Vega-Myhre, Gokul Nadathur, Will Constable, Tianyu Liu, Tristan Rice, Driss Guessous, Josh Fromm, Luca Wehrstedt, Jiecao Yu
 **Crusoe**: Ethan Petersen, Martin Cala, Chip Smith
 
 Working with [Crusoe.AI](http://Crusoe.AI) we were provided access to one of their new 2K H200 clusters in Iceland, which enabled us to showcase training accelerations of 34 - 43% at scale by leveraging TorchTitan’s HSDP2 and TorchAO’s new float8 rowwise, with comparable convergence and stability vs BF16.
