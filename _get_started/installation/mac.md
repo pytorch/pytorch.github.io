@@ -1,7 +1,7 @@
 # Installing on macOS
 {:.no_toc}
 
-PyTorch can be installed and used on macOS. Depending on your system and GPU capabilities, your experience with PyTorch on a Mac may vary in terms of processing time.
+PyTorch can be installed and used on macOS. Depending on your system and GPU capabilities, your experience with PyTorch on macOS may vary in terms of processing time.
 
 ## Prerequisites
 {: #mac-prerequisites}
