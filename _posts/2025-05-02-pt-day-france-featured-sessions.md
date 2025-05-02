@@ -37,9 +37,9 @@ The day’s agenda includes deep technical dives and applied AI use cases from a
  *Real-World Robotics as the Next Frontier for AI?*
 * [Pablo Montalvo (Hugging Face)](https://sched.co/21nzG)  
  *PyTorch x Transformers: Pythonicity, Autodiff, and Modularity Defining Modern AI*
-* [Pedro Ortis (Common Crawl)](https://sched.co/21nym)
+* [Pedro Ortis (Common Crawl)](https://sched.co/21nym)  
  *Harnessing Common Crawl for AI and ML Applications*
-* *[Meriem Bendris (NVIDIA)](https://sched.co/21nys)  
+* [Meriem Bendris (NVIDIA)](https://sched.co/21nys)  
  *Teaching Mistral to Reason: Post-Training with PyTorch and NVIDIA*
 * [Olatunji Ruwase (Snowflake)](https://sched.co/21nyy)  
  *DeepSpeed – Efficient Training Scalability for Deep Learning Models*
