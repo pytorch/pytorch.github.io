@@ -29,20 +29,20 @@ The day’s agenda includes deep technical dives and applied AI use cases from a
 
 
 
-* **[Luca Antiga (Lightning AI)](https://sched.co/21nz4) \
-*** Lightning Thunder: Supercharged PyTorch for Modern Hardware*
-* **[Erwan Gallen & Eldar Kurtic (Red Hat)](https://sched.co/21nyd)* \
- Scaling LLM Inference with vLLM: Multi‑Accelerator Serving and Quantized LLMs***
-* **[Pierre Rouanet (Pollen Robotics)](https://sched.co/21nyX)* \
- Real-World Robotics as the Next Frontier for AI?***
-* **[Pablo Montalvo (Hugging Face)](https://sched.co/21nzG)* \
- PyTorch x Transformers: Pythonicity, Autodiff, and Modularity Defining Modern AI***
-* **[Pedro Ortis (Common Crawl)](https://sched.co/21nym)* \
- Harnessing Common Crawl for AI and ML Applications***
-* **[Meriem Bendris (NVIDIA)](https://sched.co/21nys)* \
- Teaching Mistral to Reason: Post-Training with PyTorch and NVIDIA***
-* **[Olatunji Ruwase (Snowflake)](https://sched.co/21nyy)* \
- DeepSpeed – Efficient Training Scalability for Deep Learning Models***
+* [Luca Antiga (Lightning AI)](https://sched.co/21nz4)  
+ *Lightning Thunder: Supercharged PyTorch for Modern Hardware*
+* [Erwan Gallen & Eldar Kurtic (Red Hat)](https://sched.co/21nyd)  
+ *Scaling LLM Inference with vLLM: Multi‑Accelerator Serving and Quantized LLMs*
+* [Pierre Rouanet (Pollen Robotics)](https://sched.co/21nyX)  
+ *Real-World Robotics as the Next Frontier for AI?*
+* [Pablo Montalvo (Hugging Face)](https://sched.co/21nzG)  
+ *PyTorch x Transformers: Pythonicity, Autodiff, and Modularity Defining Modern AI*
+* [Pedro Ortis (Common Crawl)](https://sched.co/21nym)
+ *Harnessing Common Crawl for AI and ML Applications*
+* *[Meriem Bendris (NVIDIA)](https://sched.co/21nys)  
+ *Teaching Mistral to Reason: Post-Training with PyTorch and NVIDIA*
+* [Olatunji Ruwase (Snowflake)](https://sched.co/21nyy)  
+ *DeepSpeed – Efficient Training Scalability for Deep Learning Models*
 
 [View the full schedule](https://pytorchdayfrance2025.sched.com/).
 
