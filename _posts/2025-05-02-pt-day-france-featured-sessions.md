@@ -6,7 +6,7 @@ title: 'PyTorch Day France Featured Sessions: A Defining Moment for Open Source 
 [PyTorch Day France](https://events.linuxfoundation.org/pytorch-day-france/) offers a front-row seat to the future of open source AI. Taking place **7 May at Station F in Paris** and co-located with **[GOSIM AI Paris](https://paris2025.gosim.org/)**, this one-day event will bring together developers, researchers, and industry leaders for a day of technical sessions, real-world insights, and community exchange.
 
 
-### 🌍A Major Milestone for the PyTorch Foundation
+## 🌍 A Major Milestone for the PyTorch Foundation
 
 This event marks the very first **PyTorch Day**, launching a new international series hosted annually in different regions to convene AI researchers, developers, engineers, and enthusiasts. PyTorch Days are designed to spotlight open source AI advancements, foster community collaboration, and provide a forum to learn about active, high-impact AI projects built using PyTorch.
 
@@ -15,7 +15,7 @@ PyTorch Day France also represents a pivotal moment in the PyTorch Foundation’
 At PyTorch Day France, you’ll hear directly from PyTorch Foundation **Executive Director, Matt White,** about this transition—and get a first look at some exciting announcements.
 
 
-### 🎟️Registration Details
+## 🎟️ Registration Details
 
 [Register now](https://www.eventbrite.com/e/gosim-ai-paris-tickets-1265928669729?aff=oddtdtcreator) with code **PYTORCH** for **free access** to the full day of **PyTorch Day France** sessions, **plus** **GOSIM AI Paris**.
 
