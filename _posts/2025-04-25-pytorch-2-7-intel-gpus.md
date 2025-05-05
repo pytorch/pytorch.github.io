@@ -48,7 +48,7 @@ Graph model (torch.compile) is enabled in Windows 11 for the first time across I
 
 
 
-* Optimize the performance of PyTorch 2 Export Post Training Quantization (PT2E) on Intel GPU to provide full graph mode quantization pipelines with enhanced computational efficiency. Refer to[ PT2E tutorial](https://pytorch.org/tutorials/prototype/inductor_windows.html) for details.
+* Optimize the performance of PyTorch 2 Export Post Training Quantization (PT2E) on Intel GPU to provide full graph mode quantization pipelines with enhanced computational efficiency. Refer to [PT2E tutorial](https://pytorch.org/tutorials/prototype/pt2e_quant_xpu_inductor.html) for details.
 * Enable AOTInductor and torch.export on Linux to simplify deployment workflows. Refer to[ AOTInductor tutorial](https://pytorch.org/docs/main/torch.compiler_aot_inductor.html) for details.
 * Enable profiler on both Windows and Linux to facilitate model performance analysis. Refer to the[ PyTorch profiler tutorial](https://pytorch.org/tutorials/recipes/recipes/profiler_recipe.html#pytorch-profiler) for details.
 
