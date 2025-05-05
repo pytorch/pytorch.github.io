@@ -24,9 +24,6 @@ As it is not installed by default on Windows, there are multiple ways to install
 
 * [Chocolatey](https://chocolatey.org/)
 * [Python website](https://www.python.org/downloads/windows/)
-* [Anaconda](#anaconda)
-
-> If you use Anaconda to install PyTorch, it will install a sandboxed version of Python that will be used for running PyTorch applications.
 
 > If you decide to use Chocolatey, and haven't installed Chocolatey yet, ensure that you are running your command prompt as an administrator.
 
@@ -39,34 +36,13 @@ choco install python
 ### Package Manager
 {: #windows-package-manager}
 
-To install the PyTorch binaries, you will need to use at least one of two supported package managers: [Anaconda](https://www.anaconda.com/download/#windows) and [pip](https://pypi.org/project/pip/). Anaconda is the recommended package manager as it will provide you all of the PyTorch dependencies in one, sandboxed install, including Python and `pip.`
-
-#### Anaconda
-
-To install Anaconda, you will use the [64-bit graphical installer](https://www.anaconda.com/download/#windows) for PyTorch 3.x. Click on the installer link and select `Run`. Anaconda will download and the installer prompt will be presented to you. The default options are generally sane.
-
+To install the PyTorch binaries, you will need to use the supported package manager: [pip](https://pypi.org/project/pip/).
 #### pip
 
 If you installed Python by any of the recommended ways [above](#windows-python), [pip](https://pypi.org/project/pip/) will have already been installed for you.
 
 ## Installation
 {: #windows-installation}
-
-### Anaconda
-{: #windows-anaconda}
-
-To install PyTorch with Anaconda, you will need to open an Anaconda prompt via `Start | Anaconda3 | Anaconda Prompt`.
-
-#### No CUDA
-
-To install PyTorch via Anaconda, and do not have a [CUDA-capable](https://developer.nvidia.com/cuda-zone) system or do not require CUDA, in the above selector, choose OS: Windows, Package: Conda and CUDA: None.
-Then, run the command that is presented to you.
-
-#### With CUDA
-
-To install PyTorch via Anaconda, and you do have a [CUDA-capable](https://developer.nvidia.com/cuda-zone) system, in the above selector, choose OS: Windows, Package: Conda and the CUDA version suited to your machine. Often, the latest CUDA version is better.
-Then, run the command that is presented to you.
-
 
 ### pip
 {: #windows-pip}
@@ -126,7 +102,7 @@ For the majority of PyTorch users, installing from a pre-built binary via a pack
 ### Prerequisites
 {: #windows-prerequisites-2}
 
-1. Install [Anaconda](#anaconda)
+1. Install [pip](https://pypi.org/project/pip/)
 2. Install [CUDA](https://developer.nvidia.com/cuda-downloads), if your machine has a [CUDA-enabled GPU](https://developer.nvidia.com/cuda-gpus).
 3. If you want to build on Windows, Visual Studio with MSVC toolset, and NVTX are also needed. The exact requirements of those dependencies could be found out [here](https://github.com/pytorch/pytorch#from-source).
 4. Follow the steps described here: [https://github.com/pytorch/pytorch#from-source](https://github.com/pytorch/pytorch#from-source)
