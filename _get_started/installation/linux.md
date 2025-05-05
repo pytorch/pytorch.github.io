@@ -40,26 +40,10 @@ If you decide to use APT, you can run the following command to install it:
 sudo apt install python
 ```
 
-> If you use [Anaconda](#anaconda) to install PyTorch, it will install a sandboxed version of Python that will be used for running PyTorch applications.
-
 ### Package Manager
 {: #linux-package-manager}
 
-To install the PyTorch binaries, you will need to use one of two supported package managers: [Anaconda](https://www.anaconda.com/download/#linux) or [pip](https://pypi.org/project/pip/). Anaconda is the recommended package manager as it will provide you all of the PyTorch dependencies in one, sandboxed install, including Python.
-
-#### Anaconda
-
-To install Anaconda, you will use the [command-line installer](https://www.anaconda.com/download/#linux). Right-click on the 64-bit installer link, select `Copy Link Location`, and then use the following commands:
-
-```bash
-# The version of Anaconda may be different depending on when you are installing`
-curl -O https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
-sh Miniconda3-latest-Linux-x86_64.sh
-# and follow the prompts. The defaults are generally good.`
-```
-
-> You may have to open a new terminal or re-source your `~/.bashrc `to get access to the `conda` command.
-
+To install the PyTorch binaries, you will need to use the supported package manager: [pip](https://pypi.org/project/pip/).
 #### pip
 
 *Python 3*
@@ -74,24 +58,6 @@ sudo apt install python3-pip
 
 ## Installation
 {: #linux-installation}
-
-### Anaconda
-{: #linux-anaconda}
-
-#### No CUDA/ROCm
-
-To install PyTorch via Anaconda, and do not have a [CUDA-capable](https://developer.nvidia.com/cuda-zone) or [ROCm-capable](https://rocm.docs.amd.com/) system or do not require CUDA/ROCm (i.e. GPU support), in the above selector, choose OS: Linux, Package: Conda, Language: Python and Compute Platform: CPU.
-Then, run the command that is presented to you.
-
-#### With CUDA
-
-To install PyTorch via Anaconda, and you do have a [CUDA-capable](https://developer.nvidia.com/cuda-zone) system, in the above selector, choose OS: Linux, Package: Conda and the CUDA version suited to your machine. Often, the latest CUDA version is better.
-Then, run the command that is presented to you.
-
-#### With ROCm
-
-PyTorch via Anaconda is not supported on ROCm currently. Please use pip instead.
-
 
 ### pip
 {: #linux-pip}
@@ -148,7 +114,7 @@ For the majority of PyTorch users, installing from a pre-built binary via a pack
 ### Prerequisites
 {: #linux-prerequisites-2}
 
-1. Install [Anaconda](#anaconda) or [Pip](#pip)
+1. Install [Pip](#pip)
 2. If you need to build PyTorch with GPU support
    a. for NVIDIA GPUs, install [CUDA](https://developer.nvidia.com/cuda-downloads), if your machine has a [CUDA-enabled GPU](https://developer.nvidia.com/cuda-gpus).
    b. for AMD GPUs, install [ROCm](https://rocm.docs.amd.com/), if your machine has a [ROCm-enabled GPU](https://rocm.docs.amd.com/)
