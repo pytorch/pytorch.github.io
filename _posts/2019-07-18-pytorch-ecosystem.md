@@ -41,7 +41,7 @@ When we review project submissions for the PyTorch ecosystem, we take into accou
 5. *Ongoing maintenance:* Project authors need to be committed to supporting and maintaining their projects.
 6. *Community:* Projects should have (or be on track to building) an active, broad-based community.
 
-If you would like to have your project included in the PyTorch ecosystem and featured on [pytorch.org/ecosystem](http://pytorch.org/ecosystem), please complete the form [here](https://pytorch.org/ecosystem/join). If you've previously submitted a project for consideration and haven't heard back, we promise to get back to you as soon as we can - we've received a lot of submissions!
+If you would like to have your project included in the PyTorch ecosystem and featured on [pytorch.org/ecosystem](http://pytorch.org/ecosystem), please complete the form [here](https://github.com/pytorch-fdn/ecosystem). If you've previously submitted a project for consideration and haven't heard back, we promise to get back to you as soon as we can - we've received a lot of submissions!
 
 ## PyTorch Hub for reproducible research | New models
 
