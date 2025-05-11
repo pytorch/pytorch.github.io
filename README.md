@@ -81,7 +81,7 @@ To view the status of the build visit [https://circleci.com/gh/pytorch/pytorch.g
 
 ## Contributing to PyTorch Documentation and Tutorials
 * You can find information about contributing to PyTorch documentation in the 
-PyTorch repo [README.md](https://github.com/pytorch/pytorch/blob/master/README.md) file. 
+PyTorch repo [README.md](https://github.com/pytorch/pytorch/blob/main/README.md) file. 
 * Information about contributing to PyTorch Tutorials can be found in the 
-tutorials [README.md](https://github.com/pytorch/tutorials/blob/master/README.md).
-* Additional contribution information can be found in [PyTorch CONTRIBUTING.md](https://github.com/pytorch/pytorch/blob/master/CONTRIBUTING.md).
+tutorials [README.md](https://github.com/pytorch/tutorials/blob/main/README.md).
+* Additional contribution information can be found in [PyTorch CONTRIBUTING.md](https://github.com/pytorch/pytorch/blob/main/CONTRIBUTING.md).
