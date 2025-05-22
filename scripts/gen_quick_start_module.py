@@ -22,6 +22,7 @@ class OperatingSystem(Enum):
     LINUX: str = "linux"
     WINDOWS: str = "windows"
     MACOS: str = "macos"
+    WINDOWS_ARM64: str = "windows-arm64"
 
 
 PRE_CXX11_ABI = "pre-cxx11"
@@ -130,7 +131,7 @@ def update_versions(versions, release_matrix, release_version):
             )
             versions["latest_stable"] = version
 
-    # Perform update of the json file from release matrix
+    # Perform update of the JSON file from the release matrix
     for os_key, os_vers in versions["versions"][version].items():
         for pkg_key, pkg_vers in os_vers.items():
             for acc_key, instr in pkg_vers.items():
@@ -145,7 +146,6 @@ def update_versions(versions, release_matrix, release_version):
                     if (x["package_type"], x["gpu_arch_type"], x["gpu_arch_version"])
                     == (package_type, gpu_arch_type, gpu_arch_version)
                 ]
-
                 if pkg_arch_matrix:
                     if package_type != "libtorch":
                         instr["command"] = pkg_arch_matrix[0]["installation"]
@@ -200,17 +200,42 @@ def gen_install_matrix(versions) -> Dict[str, str]:
                     key = f"{ver},{pkg_key},{os_key},{acc_key},{extra_key}"
                     note = instr["note"]
                     lines = [note] if note is not None else []
-                    if pkg_key == "libtorch":
-                        ivers = instr["versions"]
-                        if ivers is not None:
-                            lines += [
-                                f"{lab}<br /><a href='{val}'>{val}</a>"
-                                for (lab, val) in ivers.items()
-                            ]
+                    if os_key == "windows":
+                        if pkg_key == "libtorch":
+                            ivers = instr["versions"]
+                            if ivers is not None:
+                                # Flatten x64/arm64 links into separate lines with arch in label
+                                for lab, val in ivers.items():
+                                    if isinstance(val, dict):
+                                        for arch, url in val.items():
+                                            if url:
+                                                lines.append(f"{lab[:-1]} {arch}:<br /><a href='{url}'>{url}</a>")
+                                    else:
+                                        lines.append(f"{lab}<br /><a href='{val}'>{val}</a>")
+                        elif pkg_key == "pip":
+                            command = instr.get("command")
+                            if isinstance(command, dict):
+                                for arch, cmd in command.items():
+                                    lines.append(f"<b>{arch}</b>: {cmd}")
+                            elif command is not None:
+                                lines.append(command)
+                        else:
+                            command = instr.get("command")
+                            if command is not None:
+                                lines.append(command)
                     else:
-                        command = instr["command"]
-                        if command is not None:
-                            lines.append(command)
+                        if pkg_key == "libtorch":
+                            ivers = instr["versions"]
+                            if ivers is not None:
+                                lines += [
+                                    f"{lab}<br /><a href='{val}'>{val}</a>"
+                                    for (lab, val) in ivers.items()
+                                ]
+                        else:
+                            command = instr.get("command")
+                            if command is not None:
+                                lines.append(command)
+
                     result[key] = "<br />".join(lines)
     return result
 
@@ -235,6 +260,44 @@ def extract_arch_ver_map(release_matrix):
             acc_arch_ver_map[chan][label] = ("cuda", cuda_ver)
 
 
+def merge_windows_arch_entries(entries):
+    """
+    Merge x64 and arm64 entries for Windows
+    """
+    from collections import defaultdict
+
+    def entry_key(entry):
+        # Exclude validation_runner and installation from the key
+        return tuple(
+            (k, v)
+            for k, v in sorted(entry.items())
+            if k not in ("validation_runner", "installation", "upload_to_base_bucket")
+        )
+
+    grouped = defaultdict(dict)
+    for entry in entries:
+        key = entry_key(entry)
+        arch = "arm64" if "arm64" in str(entry.get("validation_runner", "")).lower() else "x64"
+        grouped[key][arch] = entry
+
+    merged = []
+    for key, arch_dict in grouped.items():
+        if "x64" in arch_dict and "arm64" in arch_dict:
+            base = {k: v for k, v in arch_dict["x64"].items() if k not in ("validation_runner", "installation")}
+            base["validation_runner"] = {
+                "x64": arch_dict["x64"]["validation_runner"],
+                "arm64": arch_dict["arm64"]["validation_runner"],
+            }
+            base["installation"] = {
+                "x64": arch_dict["x64"]["installation"],
+                "arm64": arch_dict["arm64"]["installation"],
+            }
+            merged.append(base)
+        else:
+            merged.extend(arch_dict.values())
+    return merged
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--autogenerate", dest="autogenerate", action="store_true")
@@ -248,7 +311,13 @@ def main():
         for val in ("nightly", "release"):
             release_matrix[val] = {}
             for osys in OperatingSystem:
-                release_matrix[val][osys.value] = read_matrix_for_os(osys, val)
+                if osys == OperatingSystem.WINDOWS_ARM64:
+                    winarm64_matrix = read_matrix_for_os(osys, val)
+                    windowsx64_matrix = release_matrix[val][OperatingSystem.WINDOWS.value]
+                    merged = merge_windows_arch_entries(windowsx64_matrix + winarm64_matrix)
+                    release_matrix[val][OperatingSystem.WINDOWS.value] = merged
+                else:
+                    release_matrix[val][osys.value] = read_matrix_for_os(osys, val)
 
         write_releases_file(release_matrix)
 
