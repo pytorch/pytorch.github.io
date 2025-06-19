@@ -17,6 +17,39 @@ your convenience.
 
 ## Commands for Versions >= 1.0.0
 
+### v2.7.0
+
+#### Wheel
+
+##### OSX
+
+```
+pip install torch==2.7.0 torchvision==0.22.0 torchaudio==2.7.0
+```
+
+##### Linux and Windows
+
+```
+# ROCM 6.2.4 (Linux only)
+pip install torch==2.7.0 torchvision==0.22.0 torchaudio==2.7.0
+--index-url https://download.pytorch.org/whl/rocm6.2.4
+# ROCM 6.3 (Linux only)
+pip install torch==2.7.0 torchvision==0.22.0 torchaudio==2.7.0
+--index-url https://download.pytorch.org/whl/rocm6.3
+# CUDA 11.8
+pip install torch==2.7.0 torchvision==0.22.0 torchaudio==2.7.0
+--index-url https://download.pytorch.org/whl/cu118
+# CUDA 12.6
+pip install torch==2.7.0 torchvision==0.22.0 torchaudio==2.7.0
+--index-url https://download.pytorch.org/whl/cu126
+# CUDA 12.8
+pip install torch==2.7.0 torchvision==0.22.0 torchaudio==2.7.0
+--index-url https://download.pytorch.org/whl/cu128
+# CPU only
+pip install torch==2.7.0 torchvision==0.22.0 torchaudio==2.7.0
+--index-url https://download.pytorch.org/whl/cpu
+```
+
 ### v2.6.0
 
 #### Wheel
