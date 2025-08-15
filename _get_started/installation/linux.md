@@ -25,7 +25,7 @@ PyTorch is supported on Linux distributions that use [glibc](https://www.gnu.org
 ### Python
 {: #linux-python}
 
-Python 3.9-3.12 is generally installed by default on any of our supported Linux distributions, which meets our recommendation.
+Python 3.9-3.13 is generally installed by default on any of our supported Linux distributions, which meets our recommendation.
 
 > Tip: By default, you will have to use the command `python3` to run Python. If you want to use just the command `python`, instead of `python3`, you can symlink `python` to the `python3` binary.
 

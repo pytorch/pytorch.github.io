@@ -18,7 +18,7 @@ PyTorch is supported on the following Windows distributions:
 ### Python
 {: #windows-python}
 
-Currently, PyTorch on Windows only supports Python 3.9-3.12; Python 2.x is not supported.
+Currently, PyTorch on Windows only supports Python 3.9-3.13; Python 2.x is not supported.
 
 As it is not installed by default on Windows, there are multiple ways to install Python:
 
