@@ -5,7 +5,7 @@ permalink: /get-started/pytorch-2.0/
 featured-img: "assets/images/featured-img-pytorch-2.png"
 background-class: get-started-background
 body-class: get-started
-order: 2
+order: 1
 published: true
 ---
 
