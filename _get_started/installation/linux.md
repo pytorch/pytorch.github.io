@@ -19,6 +19,7 @@ PyTorch is supported on Linux distributions that use [glibc](https://www.gnu.org
 * [PCLinuxOS](https://www.pclinuxos.com/), minimum version 2014.7
 * [Slackware](http://www.slackware.com/getslack/), minimum version 14.2
 * [Ubuntu](https://www.ubuntu.com/download/desktop), minimum version 13.04
+* [openEuler](https://www.openeuler.org/en/), minimum version 20.03 LTS
 
 > The install instructions here will generally apply to all supported Linux distributions. An example difference is that your distribution may support `yum` instead of `apt`. The specific examples shown were run on an Ubuntu 18.04 machine.
 
