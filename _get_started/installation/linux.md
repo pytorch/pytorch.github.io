@@ -33,11 +33,18 @@ However, if you want to install another version, there are multiple ways:
 
 * APT
 * [Python website](https://www.python.org/downloads/mac-osx/)
+* DNF
 
 If you decide to use APT, you can run the following command to install it:
 
 ```bash
 sudo apt install python
+```
+
+If you decide to use DNF, you can run the following command to install it:
+
+```bash
+sudo dnf install python
 ```
 
 ### Package Manager
@@ -52,6 +59,12 @@ While Python 3.x is installed by default on Linux, `pip` is not installed by def
 
 ```bash
 sudo apt install python3-pip
+```
+
+While in Fedora Linux, `pip` can be installed using the `dnf`
+
+```bash
+sudo dnf install python3-pip
 ```
 
 > Tip: If you want to use just the command  `pip`, instead of `pip3`, you can symlink `pip` to the `pip3` binary.
