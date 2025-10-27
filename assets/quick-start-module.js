@@ -21,6 +21,7 @@ var opts = {
   pm: 'pip',
   language: 'python',
   ptbuild: 'stable',
+  'torch-compile': null
 };
 
 var supportedCloudPlatforms = [
@@ -35,6 +36,7 @@ var package = $(".package > .option");
 var language = $(".language > .option");
 var cuda = $(".cuda > .option");
 var ptbuild = $(".ptbuild > .option");
+var torchCompile = $(".torch-compile > .option")
 
 os.on("click", function() {
   selectedOption(os, this, "os");
@@ -51,6 +53,9 @@ cuda.on("click", function() {
 ptbuild.on("click", function() {
   selectedOption(ptbuild, this, "ptbuild")
 });
+torchCompile.on("click", function() {
+    selectedOption(torchCompile, this, "torch-compile")
+});
 
 // Pre-select user's operating system
 $(function() {
@@ -64,6 +69,119 @@ $(function() {
   }
 });
 
+function getIDFromBackend(backend) {
+    const idTobackendMap = {
+      inductor: 'inductor',
+      cgraphs : 'cudagraphs',
+      onnxrt: 'onnxrt',
+      openvino: 'openvino',
+      tensorrt: 'tensorrt',
+      tvm: 'tvm',
+    };
+    return idTobackendMap[backend];
+}
+
+function getPmCmd(backend) {
+    const pmCmd = {
+        onnxrt: 'onnxruntime',
+        tvm: 'apache-tvm',
+        openvino: 'openvino',
+        tensorrt: 'torch-tensorrt',
+    };
+    return pmCmd[backend];
+}
+
+function getImportCmd(backend) {
+    const importCmd = {
+        onnxrt: 'import onnxruntime',
+        tvm: 'import tvm',
+        openvino: 'import openvino.torch',
+        tensorrt: 'import torch_tensorrt'
+    }
+    return importCmd[backend];
+}
+
+function getInstallCommand(optionID) {
+    backend = getIDFromBackend(optionID);
+    pmCmd = getPmCmd(optionID);
+    finalCmd = "";
+   if (opts.pm == "pip") {
+        finalCmd = `pip3 install ${pmCmd}`;
+   }
+   else if (opts.pm == "conda") {
+        finalCmd = `conda install ${pmCmd}`;
+   }
+    return finalCmd;
+}
+
+function getTorchCompileUsage(optionId) {
+    backend = getIDFromBackend(optionId);
+    importCmd = getImportCmd(optionId) + "<br>";
+    finalCmd = "";
+    tcUsage = "# Torch Compile usage: " + "<br>";
+    backendCmd = `torch.compile(model, backend="${backend}")`;
+    libtorchCmd = `# Torch compile ${backend} not supported with Libtorch`;
+    console.log("Surya log", finalCmd)
+
+    if (opts.pm == "libtorch") {
+        return libtorchCmd;
+    }
+    if (backend == "inductor" || backend == "cudagraphs") {
+        return tcUsage + backendCmd;
+    }
+    if (backend == "openvino") {
+        if (opts.pm == "source") {
+            finalCmd += "# Follow instructions at this URL to build openvino from source: https://github.com/openvinotoolkit/openvino/blob/master/docs/dev/build.md" + "<br>" ;
+            tcUsage += importCmd;
+        }
+        else if (opts.pm == "conda") {
+            tcUsage += importCmd;
+        }
+        if (opts.os == "windows" && !tcUsage.includes(importCmd)) {
+            tcUsage += importCmd;
+        }
+    }
+    else{
+        tcUsage += importCmd;
+    }
+    if (backend == "onnxrt") {
+        if (opts.pm == "source") {
+            finalCmd += "# Follow instructions at this URL to build onnxruntime from source: https://onnxruntime.ai/docs/build" + "<br>" ;
+        }
+    }
+    if (backend == "tvm") {
+        if (opts.pm == "source") {
+            finalCmd += "# Follow instructions at this URL to build tvm from source: https://tvm.apache.org/docs/install/from_source.html" + "<br>" ;
+        }
+    }
+    if (backend == "tensorrt") {
+        if (opts.pm == "source") {
+            finalCmd += "# Follow instructions at this URL to build tensorrt from source: https://pytorch.org/TensorRT/getting_started/installation.html#compiling-from-source" + "<br>" ;
+        }
+    }
+    finalCmd += tcUsage + backendCmd;
+    return finalCmd
+}
+
+function addTorchCompileCommandNote(selectedOptionId) {
+
+    if (!selectedOptionId) {
+        return;
+    }
+    if (selectedOptionId == "inductor" || selectedOptionId == "cgraphs") {
+        $("#command").append(
+            `<pre> ${getTorchCompileUsage(selectedOptionId)} </pre>`
+        );
+    }
+    else {
+        $("#command").append(
+            `<pre> ${getInstallCommand(selectedOptionId)} </pre>`
+        );
+        $("#command").append(
+            `<pre> ${getTorchCompileUsage(selectedOptionId)} </pre>`
+        );
+    }
+}
 
 // determine os (mac, linux, windows) based on user's platform
 function getDefaultSelectedOS() {
@@ -172,6 +290,7 @@ function changeAccNoneName(osname) {
 function selectedOption(option, selection, category) {
   $(option).removeClass("selected");
   $(selection).addClass("selected");
+  const previousSelection = opts[category];
   opts[category] = selection.id;
   if (category === "pm") {
     var elements = document.getElementsByClassName("language")[0].children;
@@ -209,6 +328,11 @@ function selectedOption(option, selection, category) {
     changeVersion(opts.ptbuild);
     //make sure unsupported platforms are disabled
     disableUnsupportedPlatforms(opts.os);
+  } else if (category === "torch-compile") {
+    if (selection.id === previousSelection) {
+      $(selection).removeClass("selected");
+      opts[category] = null;
+    }
   }
   commandMessage(buildMatcher());
   if (category === "os") {
@@ -216,6 +340,7 @@ function selectedOption(option, selection, category) {
     display(opts.os, 'installation', 'os');
   }
   changeAccNoneName(opts.os);
+  addTorchCompileCommandNote(opts['torch-compile'])
 }
 
 function display(selection, id, category) {
