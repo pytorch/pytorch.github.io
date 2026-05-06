@@ -1,3 +1,10 @@
+> [!CAUTION]
+> **This repository is NOT the source of truth for the [PyTorch website](https://pytorch.org).**
+>
+> Only a very small number of files in this repo are still actively used. The website is now managed separately by the **PyTorch Foundation** team.
+>
+> **If you want to make changes to the PyTorch website, please contact the PyTorch Foundation team at [ops@pytorch.org](mailto:ops@pytorch.org).** Do not open pull requests here for website changes.
+
 # pytorch.org site
 
 [https://pytorch.org](https://pytorch.org)
