@@ -113,6 +113,12 @@ def get_gpu_info(acc_key, instr, acc_arch_map):
     return (gpu_arch_type, gpu_arch_version)
 
 
+def add_stable_pip_domain_packages(command):
+    if command is None:
+        return None
+    return command.replace("torch torchvision", "torch torchvision torchaudio")
+
+
 # This method is used for generating new published_versions.json file
 # It will modify versions json object with installation instructions
 # Provided by generate install matrix Github Workflow, stored in release_matrix
@@ -148,7 +154,10 @@ def update_versions(versions, release_matrix, release_version):
 
                 if pkg_arch_matrix:
                     if package_type != "libtorch":
-                        instr["command"] = pkg_arch_matrix[0]["installation"]
+                        command = pkg_arch_matrix[0]["installation"]
+                        if release_version == "release" and pkg_key == "pip":
+                            command = add_stable_pip_domain_packages(command)
+                        instr["command"] = command
                     else:
                         if os_key == OperatingSystem.LINUX.value:
                             rel_entry_dict = {

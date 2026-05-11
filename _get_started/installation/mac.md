@@ -39,7 +39,7 @@ To install PyTorch via pip, use the following command, depending on your Python 
 
 ```bash
 # Python 3.x
-pip3 install torch torchvision
+pip3 install torch torchvision torchaudio
 ```
 
 ## Verification
