@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
 """
-Generates ecosystem platform quick start module for 
-https://pytorch.org/get-started/ecosystem-platform/ page.
+Generates additional platform quick start module for 
+https://pytorch.org/get-started/additional-platform/ page.
 
-This script reads all JSON files from _ecosystem_platform/ directory,
-combines them, and generates the quick-start-ecosystem-platform.js file.
+This script reads all JSON files from _additional_platform/ directory,
+combines them, and generates the quick-start-additional-platform.js file.
 
 Usage:
-    python3 scripts/gen_ecosystem_platform.py
+    python3 scripts/gen_additional_platform.py
 
 The script will:
-1. Read all JSON files from _ecosystem_platform/ directory
+1. Read all JSON files from _additional_platform/ directory
 2. Combine platform data into a single object (keyed by filename)
-3. Replace template placeholders in _includes/quick-start-ecosystem-platform.js
-4. Output the result to assets/quick-start-ecosystem-platform.js
+3. Replace template placeholders in _includes/quick-start-additional-platform.js
+4. Output the result to assets/quick-start-additional-platform.js
 """
 
 import json
@@ -21,20 +21,20 @@ from pathlib import Path
 from typing import Dict, Any
 
 BASE_DIR = Path(__file__).parent.parent
-ECOSYSTEM_PLATFORM_DIR = BASE_DIR / "_ecosystem_platform"
+ADDITIONAL_PLATFORM_DIR = BASE_DIR / "_additional_platform"
 INCLUDES_DIR = BASE_DIR / "_includes"
 ASSETS_DIR = BASE_DIR / "assets"
 
 
 def read_platform_json_files() -> Dict[str, Any]:
-    """Read all JSON files from _ecosystem_platform directory."""
+    """Read all JSON files from _additional_platform directory."""
     platform_data = {}
     
-    if not ECOSYSTEM_PLATFORM_DIR.exists():
-        print(f"Warning: {ECOSYSTEM_PLATFORM_DIR} does not exist")
+    if not ADDITIONAL_PLATFORM_DIR.exists():
+        print(f"Warning: {ADDITIONAL_PLATFORM_DIR} does not exist")
         return platform_data
     
-    for json_file in ECOSYSTEM_PLATFORM_DIR.glob("*.json"):
+    for json_file in ADDITIONAL_PLATFORM_DIR.glob("*.json"):
         try:
             content = json_file.read_text()
             data = json.loads(content)
@@ -50,7 +50,7 @@ def read_platform_json_files() -> Dict[str, Any]:
 
 def read_template() -> str:
     """Read the JS template file."""
-    template_path = INCLUDES_DIR / "quick-start-ecosystem-platform.js"
+    template_path = INCLUDES_DIR / "quick-start-additional-platform.js"
     if not template_path.exists():
         raise FileNotFoundError(f"Template file not found: {template_path}")
     return template_path.read_text()
@@ -68,14 +68,14 @@ def generate_js_output(platform_data: Dict[str, Any]) -> str:
 
 def write_output(content: str) -> None:
     """Write the generated JS to assets directory."""
-    output_path = ASSETS_DIR / "quick-start-ecosystem-platform.js"
+    output_path = ASSETS_DIR / "quick-start-additional-platform.js"
     output_path.write_text(content)
     print(f"Generated: {output_path}")
 
 
 def main():
     """Main entry point."""
-    print("Generating ecosystem platform quick start module...")
+    print("Generating additional platform quick start module...")
     
     # Read all platform JSON files
     platform_data = read_platform_json_files()
