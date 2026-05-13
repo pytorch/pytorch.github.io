@@ -20,9 +20,7 @@ redirect_from: "/get-started/"
   </div>
 </div>
 
-<div class="bg-light-grey">
 <p><i>Could not find the right binary for your hardware?</i> See the <a href="{{ site.baseurl }}/get-started/additional-platform/">PyTorch Additional Platform page</a>.</p>
-</div>
 
 ---
 

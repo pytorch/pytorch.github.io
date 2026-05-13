@@ -13,7 +13,6 @@ var ecosystemOpts = {
   build: 'stable',
   os: 'linux',
   pm: 'pip',
-  language: 'python',
   platform: null,
   version: null
 };
@@ -21,50 +20,109 @@ var ecosystemOpts = {
 // Initialize additional platform when document is ready
 $(function() {
   initAdditionalPlatform();
-  initAdditionalPlatformDropdowns();
-  disableUnsupportedAdditionalPlatforms();
+  initAdditionalPlatformButtons();
+  updatePlatformButtonStates();
+  syncComputePlatformHeight();
 });
 
-// Populate compute platform dropdown and version dropdown
-function initAdditionalPlatformDropdowns() {
-  var platformSelect = $('#compute-platform-select');
-  if (!platformSelect.length) return;
+// Sync left heading height with right compute platform buttons height
+function syncComputePlatformHeight() {
+  var rightHeight = $('.compute-platform').outerHeight();
+  if (rightHeight > 0) {
+    $('.compute-platform-heading').css('min-height', rightHeight + 'px');
+  }
+}
 
+// Populate compute platform buttons and version buttons
+function initAdditionalPlatformButtons() {
+  var platformRow = $('.compute-platform');
+  if (!platformRow.length) return;
+
+  // Generate platform buttons
   ecosystemPlatformIds.forEach(function(platformId) {
     var platform = ecosystemPlatformData[platformId];
     if (!platform) return;
     var displayName = platform.name + ' (' + platform.vendor + ')';
-    platformSelect.append($('<option>').val(platformId).text(displayName));
+    var btn = $('<div class="col-md-3 option block" id="' + platformId + '"><div class="option-text">' + displayName + '</div></div>');
+    platformRow.append(btn);
   });
 
-  // Bind platform change
-  platformSelect.on('change', function() {
-    var platformId = $(this).val();
-    if (!platformId) {
-      ecosystemOpts.platform = null;
-      ecosystemOpts.version = null;
-      $('#version-select').html('<option value="">-- Select Version --</option>').prop('disabled', true);
-      $('#command').html('Select a compute platform to see the installation command.');
-      return;
-    }
+  // Sync height after buttons are generated
+  syncComputePlatformHeight();
+
+  // Bind platform button click
+  $('.compute-platform > .option').on('click', function() {
+    var platformId = this.id;
+    var platform = ecosystemPlatformData[platformId];
+    if (!platform) return;
 
     // Check if supported on current OS
     var supportedOS = getSupportedOS(platformId);
     if (!supportedOS.includes(ecosystemOpts.os)) {
-      ecosystemOpts.platform = null;
-      ecosystemOpts.version = null;
-      $(this).val('');
-      $('#version-select').html('<option value="">-- Select Version --</option>').prop('disabled', true);
-      $('#command').html('<i>' + ecosystemPlatformData[platformId].name + ' is not supported on ' + ecosystemOpts.os + '</i>');
+      $('#command').html('<i>' + platform.name + ' is not supported on ' + ecosystemOpts.os + '</i>');
       return;
     }
 
-    selectAdditionalPlatform(platformId);
+    // Select this platform
+    $('.compute-platform > .option').removeClass('selected');
+    $(this).addClass('selected');
+    ecosystemOpts.platform = platformId;
+    ecosystemOpts.version = null;
+
+    // Show and populate version buttons
+    showVersionButtons();
+    updateEcosystemCommand();
+  });
+}
+
+// Show version button row and populate buttons
+function showVersionButtons() {
+  var versionRow = $('.version-row');
+  if (!versionRow.length) return;
+
+  // Clear existing version buttons (except the mobile-heading)
+  versionRow.find('.option').remove();
+
+  if (!ecosystemOpts.platform) {
+    versionRow.hide();
+    $('.version-heading').hide();
+    return;
+  }
+
+  // Get available versions
+  var versions = getAvailableVersions(
+    ecosystemOpts.platform,
+    ecosystemOpts.os,
+    ecosystemOpts.build,
+    ecosystemOpts.pm
+  );
+
+  if (versions.length === 0) {
+    versionRow.hide();
+    $('.version-heading').hide();
+    $('#command').html('<i>No versions available for this configuration</i>');
+    return;
+  }
+
+  // Generate version buttons
+  versions.forEach(function(version, index) {
+    var btn = $('<div class="col-md-3 option block" id="' + version + '"><div class="option-text">' + version + '</div></div>');
+    if (index === 0) {
+      btn.addClass('selected');
+      ecosystemOpts.version = version;
+    }
+    versionRow.append(btn);
   });
 
-  // Bind version change
-  $('#version-select').on('change', function() {
-    ecosystemOpts.version = $(this).val();
+  // Show version row
+  versionRow.show();
+  $('.version-heading').show();
+
+  // Bind version button click
+  $('.version-row > .option').on('click', function() {
+    $('.version-row > .option').removeClass('selected');
+    $(this).addClass('selected');
+    ecosystemOpts.version = this.id;
     updateEcosystemCommand();
   });
 }
@@ -92,35 +150,33 @@ function getSupportedPackages(platformId, os, build) {
   return Object.keys(platform[build][os]);
 }
 
-// Get supported languages for platform on current OS, build, and package
-function getSupportedLanguages(platformId, os, build, pm) {
+// Get available versions for platform on current selections
+function getAvailableVersions(platformId, os, build, pm) {
   var platform = ecosystemPlatformData[platformId];
   if (!platform || !platform[build] || !platform[build][os] || !platform[build][os][pm]) return [];
-  return Object.keys(platform[build][os][pm]);
+  
+  // pip now directly has version keys (no python sub-key)
+  if (typeof platform[build][os][pm] === 'object') {
+    return Object.keys(platform[build][os][pm]);
+  }
+  
+  // For source or other packages that are strings
+  return [];
 }
 
-// Get available versions for platform on current selections
-function getAvailableVersions(platformId, os, build, pm, language) {
-  var platform = ecosystemPlatformData[platformId];
-  if (!platform || !platform[build] || !platform[build][os] || !platform[build][os][pm] || !platform[build][os][pm][language]) return [];
-  return Object.keys(platform[build][os][pm][language]);
-}
-
-// Disable compute platforms not supported on selected OS
-function disableUnsupportedAdditionalPlatforms() {
-  $('#compute-platform-select option').each(function() {
-    var platformId = $(this).val();
-    if (!platformId) return; // skip the placeholder option
+// Update platform button states (disabled/enabled) based on OS
+function updatePlatformButtonStates() {
+  $('.compute-platform > .option').each(function() {
+    var platformId = this.id;
+    if (!platformId) return;
 
     var supportedOS = getSupportedOS(platformId);
     var isSupported = supportedOS.includes(ecosystemOpts.os);
 
     if (isSupported) {
       $(this).css('text-decoration', '');
-      $(this).prop('disabled', false);
     } else {
       $(this).css('text-decoration', 'line-through');
-      $(this).prop('disabled', true);
     }
   });
 
@@ -130,21 +186,22 @@ function disableUnsupportedAdditionalPlatforms() {
     if (!supportedOS.includes(ecosystemOpts.os)) {
       ecosystemOpts.platform = null;
       ecosystemOpts.version = null;
-      $('#compute-platform-select').val('');
-      $('#version-select').html('<option value="">-- Select Version --</option>').prop('disabled', true);
+      $('.compute-platform > .option').removeClass('selected');
+      $('.version-row').hide();
+      $('.version-heading').hide();
       $('#command').html('Select a compute platform to see the installation command.');
     }
   }
 }
 
-// Initialize all click events for build/os/package/language blocks
+// Initialize all click events for build/os/package blocks
 function initAdditionalPlatform() {
   // PyTorch Build
   $('.pytorch-build > .option').on('click', function() {
     $('.pytorch-build > .option').removeClass('selected');
     $(this).addClass('selected');
     ecosystemOpts.build = this.id;
-    updateEcosystemVersions();
+    updateVersionButtons();
     updateEcosystemCommand();
   });
 
@@ -154,12 +211,12 @@ function initAdditionalPlatform() {
     $(this).addClass('selected');
     ecosystemOpts.os = this.id;
 
-    disableUnsupportedAdditionalPlatforms();
-    updateEcosystemVersions();
+    updatePlatformButtonStates();
+    updateVersionButtons();
     updateEcosystemCommand();
   });
 
-  // Package - with language binding
+  // Package
   $('.package-ecosystem > .option').on('click', function() {
     var packageId = this.id;
 
@@ -167,128 +224,60 @@ function initAdditionalPlatform() {
     $(this).addClass('selected');
     ecosystemOpts.pm = packageId;
 
-    // Package-Language binding: pip/source -> python, libtorch -> cpp
-    if (packageId === 'libtorch') {
-      $('.language-ecosystem > .option').removeClass('selected');
-      $('#cpp').addClass('selected');
-      ecosystemOpts.language = 'cpp';
-    } else {
-      $('.language-ecosystem > .option').removeClass('selected');
-      $('#python').addClass('selected');
-      ecosystemOpts.language = 'python';
-    }
-
-    updateEcosystemVersions();
-    updateEcosystemCommand();
-  });
-
-  // Language - with package binding
-  $('.language-ecosystem > .option').on('click', function() {
-    var languageId = this.id;
-
-    $('.language-ecosystem > .option').removeClass('selected');
-    $(this).addClass('selected');
-    ecosystemOpts.language = languageId;
-
-    // Package-Language binding: python -> pip, cpp -> libtorch
-    if (languageId === 'cpp') {
-      $('.package-ecosystem > .option').removeClass('selected');
-      $('#libtorch').addClass('selected');
-      ecosystemOpts.pm = 'libtorch';
-    } else {
-      $('.package-ecosystem > .option').removeClass('selected');
-      $('#pip').addClass('selected');
-      ecosystemOpts.pm = 'pip';
-    }
-
-    updateEcosystemVersions();
+    updateVersionButtons();
     updateEcosystemCommand();
   });
 }
 
-// Select ecosystem platform and populate version dropdown
-function selectAdditionalPlatform(platformId) {
-  ecosystemOpts.platform = platformId;
-  ecosystemOpts.version = null;
-
-  // Populate version dropdown
-  populateVersionSelect();
-  updateEcosystemCommand();
-}
-
-// Populate version select dropdown based on current selections
-function populateVersionSelect() {
-  var versionSelect = $('#version-select');
-  if (!versionSelect.length) return;
-
-  versionSelect.html('<option value="">-- Select Version --</option>');
-
-  if (!ecosystemOpts.platform) {
-    versionSelect.prop('disabled', true);
-    return;
-  }
-
-  var versions = getAvailableVersions(
-    ecosystemOpts.platform,
-    ecosystemOpts.os,
-    ecosystemOpts.build,
-    ecosystemOpts.pm,
-    ecosystemOpts.language
-  );
-
-  if (versions.length === 0) {
-    versionSelect.prop('disabled', true);
-    $('#command').html('<i>No versions available for this configuration</i>');
-    return;
-  }
-
-  versions.forEach(function(version) {
-    versionSelect.append($('<option>').val(version).text(version));
-  });
-
-  versionSelect.prop('disabled', false);
-
-  // Auto-select first version
-  ecosystemOpts.version = versions[0];
-  versionSelect.val(versions[0]);
-}
-
-// Update version options based on current selections (called when build/os/pm/language change)
-function updateEcosystemVersions() {
+// Update version buttons when build/os/pm changes
+function updateVersionButtons() {
   if (!ecosystemOpts.platform) return;
 
   var versions = getAvailableVersions(
     ecosystemOpts.platform,
     ecosystemOpts.os,
     ecosystemOpts.build,
-    ecosystemOpts.pm,
-    ecosystemOpts.language
+    ecosystemOpts.pm
   );
 
-  var versionSelect = $('#version-select');
-  if (!versionSelect.length) return;
+  var versionRow = $('.version-row');
+  if (!versionRow.length) return;
 
-  versionSelect.html('<option value="">-- Select Version --</option>');
+  // Clear existing version buttons (except the mobile-heading)
+  versionRow.find('.option').remove();
 
   if (versions.length === 0) {
-    versionSelect.prop('disabled', true);
+    versionRow.hide();
+    $('.version-heading').hide();
     $('#command').html('<i>No versions available for this configuration</i>');
     return;
   }
 
-  versions.forEach(function(version) {
-    versionSelect.append($('<option>').val(version).text(version));
+  // Generate version buttons  
+  versions.forEach(function(version, index) {
+    var btn = $('<div class="col-md-3 option block" id="' + version + '"><div class="option-text">' + version + '</div></div>');
+    // Auto-select first version if current version not in list
+    if (index === 0 || version === ecosystemOpts.version) {
+      if (index === 0 && !versions.includes(ecosystemOpts.version)) {
+        ecosystemOpts.version = version;
+      }
+      if (version === ecosystemOpts.version) {
+        btn.addClass('selected');
+      }
+    }
+    versionRow.append(btn);
   });
 
-  versionSelect.prop('disabled', false);
+  versionRow.show();
+  $('.version-heading').show();
 
-  // Auto-select first version if current version not in list
-  if (!ecosystemOpts.version || !versions.includes(ecosystemOpts.version)) {
-    ecosystemOpts.version = versions[0];
-    versionSelect.val(versions[0]);
-  } else {
-    versionSelect.val(ecosystemOpts.version);
-  }
+  // Re-bind version button click
+  $('.version-row > .option').on('click', function() {
+    $('.version-row > .option').removeClass('selected');
+    $(this).addClass('selected');
+    ecosystemOpts.version = this.id;
+    updateEcosystemCommand();
+  });
 }
 
 // Update ecosystem command based on selections
@@ -318,15 +307,8 @@ function updateEcosystemCommand() {
     return;
   }
 
-  // Check if language is supported
-  var supportedLanguages = getSupportedLanguages(ecosystemOpts.platform, ecosystemOpts.os, ecosystemOpts.build, ecosystemOpts.pm);
-  if (!supportedLanguages.includes(ecosystemOpts.language)) {
-    $('#command').html('<i>' + platform.name + ' does not support ' + ecosystemOpts.language + ' with ' + ecosystemOpts.pm + '</i>');
-    return;
-  }
-
   // Get available versions
-  var versions = getAvailableVersions(ecosystemOpts.platform, ecosystemOpts.os, ecosystemOpts.build, ecosystemOpts.pm, ecosystemOpts.language);
+  var versions = getAvailableVersions(ecosystemOpts.platform, ecosystemOpts.os, ecosystemOpts.build, ecosystemOpts.pm);
   if (versions.length === 0) {
     $('#command').html('<i>No versions available for this configuration</i>');
     return;
@@ -335,17 +317,29 @@ function updateEcosystemCommand() {
   // Auto-select first version if not selected
   if (!ecosystemOpts.version || !versions.includes(ecosystemOpts.version)) {
     ecosystemOpts.version = versions[0];
-    $('#version-select').val(versions[0]);
+    $('.version-row > .option').removeClass('selected');
+    $('.version-row > .option').first().addClass('selected');
   }
 
-  // Get command from data structure: platform[build][os][pm][language][version]
+  // Get command from data structure: platform[build][os][pm]['python'][version]
   try {
     var buildData = platform[ecosystemOpts.build];
     if (!buildData) {
       $('#command').html('<i>Configuration not available for this combination</i>');
       return;
     }
-    var cmd = buildData[ecosystemOpts.os][ecosystemOpts.pm][ecosystemOpts.language][ecosystemOpts.version];
+    
+    var packageData = buildData[ecosystemOpts.os][ecosystemOpts.pm];
+    var cmd;
+    
+    // pip now directly has version keys
+    if (typeof packageData === 'object' && ecosystemOpts.version) {
+      cmd = packageData[ecosystemOpts.version];
+    } else if (typeof packageData === 'string') {
+      // Handle source or direct string values
+      cmd = packageData;
+    }
+    
     if (cmd) {
       $('#command').html('<pre>' + cmd + '</pre>');
     } else {
