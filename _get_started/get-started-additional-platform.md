@@ -17,6 +17,12 @@ get-started-additional: true
   </div>
 </div>
 
+---
+<div id="additional-platform-installation">
+  <!-- Platform content divs will be dynamically created by JavaScript -->
+</div>
+
 <script page-id="get-started-additional-platform" src="{{ site.baseurl }}/assets/menu-tab-selection.js"></script>
 <script src="{{ site.baseurl }}/assets/quick-start-module.js"></script>
+<script src="{{ site.baseurl }}/assets/quick-start-additional-platform.js"></script>
 <script src="{{ site.baseurl }}/assets/get-started-sidebar.js"></script>
