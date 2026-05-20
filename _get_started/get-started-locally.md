@@ -20,7 +20,7 @@ redirect_from: "/get-started/"
   </div>
 </div>
 
-<p><i>Could not find the right platform for your hardware?</i> See the <a href="{{ site.baseurl }}/get-started/additional-platform/">PyTorch Additional Platform</a> page.</p>
+<p><i>Could not find the right platform for your hardware?</i> See the <a href="{{ site.baseurl }}/get-started/additional-platforms/">PyTorch Additional Platforms</a> page.</p>
 
 ---
 
