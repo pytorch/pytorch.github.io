@@ -19,48 +19,6 @@ var ecosystemOpts = {
   platform: null
 };
 
-// Parse URL parameters for pre-selection
-function parseUrlParams() {
-  var params = new URLSearchParams(window.location.search);
-  var platform = params.get('platform');
-  var build = params.get('build') || 'stable';
-  var os = params.get('os') || 'linux';
-  
-  return {
-    platform: platform,
-    build: build,
-    os: os
-  };
-}
-
-// Apply URL parameter selections
-function applyUrlSelections() {
-  var urlParams = parseUrlParams();
-  
-  // Apply build selection
-  if (urlParams.build && ecosystemOpts.build !== urlParams.build) {
-    ecosystemOpts.build = urlParams.build;
-    $('.pytorch-build > .option').removeClass('selected');
-    $('.pytorch-build > .option#' + urlParams.build).addClass('selected');
-  }
-  
-  // Apply OS selection
-  if (urlParams.os && ecosystemOpts.os !== urlParams.os) {
-    ecosystemOpts.os = urlParams.os;
-    $('.os-ecosystem > .option').removeClass('selected');
-    $('.os-ecosystem > .option#' + urlParams.os).addClass('selected');
-  }
-  
-  // Apply platform selection
-  if (urlParams.platform && ecosystemPlatformData[urlParams.platform]) {
-    ecosystemOpts.platform = urlParams.platform;
-    $('.compute-platform > .option').removeClass('selected');
-    $('.compute-platform > .option#' + urlParams.platform).addClass('selected');
-    updateEcosystemCommand();
-    updatePlatformContentDisplay();
-  }
-}
-
 // Initialize additional platforms when document is ready
 $(function() {
   initPlatformContentContainer();
@@ -69,9 +27,6 @@ $(function() {
   updatePlatformButtonStates();
   syncComputePlatformHeight();
   initPlatformContentDisplay();
-  
-  // Apply URL parameter selections after initialization
-  applyUrlSelections();
 });
 
 // Initialize platform content container - dynamically create divs for each platform
