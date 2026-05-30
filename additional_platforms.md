@@ -44,7 +44,6 @@ Create a JSON file in the `_additional_platforms/` directory. The filename shoul
 ```json
 {
   "name": "Platform Name",
-  "vendor": "Vendor Name",
   "support_channel": "https://discord.gg/vendor",
   "stable": {
     "linux": "pip3 install torch torchvision --index-url https://download.pytorch.org/whl/platform/sdk80"
@@ -60,16 +59,15 @@ Create a JSON file in the `_additional_platforms/` directory. The filename shoul
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `name` | string | Yes | Display name of the platform shown in the selector |
-| `vendor` | string | Yes | Name of the vendor/company providing the platform |
 | `support_channel` | string | Yes | URL to support channel (Discord, Slack, etc.) |
 | `stable` | object | Yes | Installation commands for stable releases |
-| `preview` | object | Yes | Installation commands for preview/nightly releases |
+| `preview` | object | No | Installation commands for preview/nightly releases |
 
 **Installation Commands Structure:**
 
 The `stable` and `preview` objects support the following OS keys:
-- `linux` - Linux installation command (Required)
-- `windows` - Windows installation command (Optional)
+- `linux` - Linux installation command
+- `windows` - Windows installation command
 
 Example with multiple OS support:
 
@@ -134,6 +132,8 @@ else:
 
 For more information, please visit the [{Platform} Documentation](https://docs.vendor.com/platform).
 ````
+
+**Important Notes**: Due to the room space of the page, the markdown file should be no more than 200 lines of code.
 
 ### Step 3: Submit a Pull Request
 

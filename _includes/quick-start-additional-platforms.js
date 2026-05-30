@@ -25,6 +25,7 @@ $(function() {
   initAdditionalPlatforms();
   initAdditionalPlatformButtons();
   updatePlatformButtonStates();
+  updateBuildButtonStates();
   syncComputePlatformHeight();
   initPlatformContentDisplay();
 });
@@ -100,6 +101,7 @@ function initAdditionalPlatformButtons() {
     $(this).addClass('selected');
     ecosystemOpts.platform = platformId;
 
+    updateBuildButtonStates();
     updateEcosystemCommand();
     updatePlatformContentDisplay();
   });
@@ -119,6 +121,16 @@ function getSupportedOS(platformId) {
     }
   });
   return Array.from(osSet);
+}
+
+// Get supported build list for a platform
+function getSupportedBuilds(platformId) {
+  var platform = ecosystemPlatformData[platformId];
+  if (!platform) return [];
+  var builds = [];
+  if (platform.stable) builds.push('stable');
+  if (platform.preview) builds.push('preview');
+  return builds;
 }
 
 // Update platform button states (disabled/enabled) based on OS
@@ -149,6 +161,42 @@ function updatePlatformButtonStates() {
   }
 }
 
+// Update build button states (disabled/enabled) based on selected platform
+function updateBuildButtonStates() {
+  $('.pytorch-build > .option').each(function() {
+    var buildId = this.id;
+    if (!buildId) return;
+
+    if (!ecosystemOpts.platform) {
+      // No platform selected - show all builds as available
+      $(this).css('text-decoration', '');
+      return;
+    }
+
+    var supportedBuilds = getSupportedBuilds(ecosystemOpts.platform);
+    var isSupported = supportedBuilds.includes(buildId);
+
+    if (isSupported) {
+      $(this).css('text-decoration', '');
+    } else {
+      $(this).css('text-decoration', 'line-through');
+    }
+  });
+
+  // If currently selected build is not supported by the platform, auto-switch to a supported build
+  if (ecosystemOpts.platform) {
+    var supportedBuilds = getSupportedBuilds(ecosystemOpts.platform);
+    if (!supportedBuilds.includes(ecosystemOpts.build)) {
+      // Switch to the first supported build
+      if (supportedBuilds.length > 0) {
+        ecosystemOpts.build = supportedBuilds[0];
+        $('.pytorch-build > .option').removeClass('selected');
+        $('.pytorch-build > .option#' + ecosystemOpts.build).addClass('selected');
+      }
+    }
+  }
+}
+
 // Update platform content display based on selected platform
 function updatePlatformContentDisplay() {
   // Hide all platform content first
@@ -162,11 +210,22 @@ function updatePlatformContentDisplay() {
 
 // Initialize all click events for build/os blocks
 function initAdditionalPlatforms() {
-  // PyTorch Build
+  // PyTorch Build - prevent selecting unsupported builds
   $('.pytorch-build > .option').on('click', function() {
+    var buildId = this.id;
+    
+    // Check if this build is supported by the selected platform
+    if (ecosystemOpts.platform) {
+      var supportedBuilds = getSupportedBuilds(ecosystemOpts.platform);
+      if (!supportedBuilds.includes(buildId)) {
+        // Don't allow selecting unsupported build
+        return;
+      }
+    }
+
     $('.pytorch-build > .option').removeClass('selected');
     $(this).addClass('selected');
-    ecosystemOpts.build = this.id;
+    ecosystemOpts.build = buildId;
     updateEcosystemCommand();
   });
 
@@ -177,6 +236,7 @@ function initAdditionalPlatforms() {
     ecosystemOpts.os = this.id;
 
     updatePlatformButtonStates();
+    updateBuildButtonStates();
     updateEcosystemCommand();
   });
 }
