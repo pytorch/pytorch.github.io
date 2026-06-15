@@ -1,33 +1,17 @@
 # Installing on Intel GPU (XPU) Platform
 
-XPU is a PyTorch device backend designed to support hardware acceleration on Intel GPUs. Key technical features:
+XPU device backend brings native Intel GPU support to PyTorch, enabling performant training and inference on both Linux and Windows:
 
-* Native support for FP32, BF16, FP16, and Automatic Mixed Precision (AMP)
-* Extensions of operator set through custom SYCL kernels
-* Graph compilation
-* Distributed training (through `XCCL`)
+* Supports both eager and graph execution
+* Built-in support for FP32, BF16, FP16, FP8 and AMP
+* Broad operator coverage and model readiness
+* Supports PyTorch CPP Extension API through SYCL-based custom kernels
+* Enables training and inference workflows
+* Scales across devices with distributed training via the `XCCL` backend
 
 ## Prerequisites
 
-### Hardware Requirements
-
-* Intel Client GPU:
-
-  * Intel® Arc A-Series Graphics (CodeName: Alchemist)
-  * Intel® Arc B-Series Graphics (CodeName: Battlemage)
-  * Intel® Core™ Ultra Processors with Intel® Arc™ Graphics (CodeName: Meteor Lake-H)
-  * Intel® Core™ Ultra Processors (Series 2) with Intel® Arc™ Graphics (CodeName: Arrow Lake-H)
-  * Intel® Core™ Ultra Mobile Processors (Series 2) with Intel® Arc™ Graphics (CodeName: Lunar Lake)
-  * Intel® Core™ Ultra Mobile Processors (Series 3) with Intel® Arc™ Graphics (CodeName: Panther Lake)
-
-* Intel Data Center GPU:
-
-  * Intel® Data Center GPU Max Series (CodeName: Ponte Vecchio)
-
-### Software Requirements
-
-* [Intel GPU Driver](https://www.intel.com/content/www/us/en/developer/articles/tool/pytorch-prerequisites-for-intel-gpu.html)
-* Python 3.10 or later
+The system with configured Intel GPU card is required. For detailed list of supported devices and driver install instructions refer to [Getting Started on Intel GPU](https://docs.pytorch.org/docs/stable/notes/get_start_xpu.html).
 
 ## Installation
 
@@ -53,4 +37,4 @@ else:
 
 ## Documentation
 
-For more information, please visit the [Getting Started on Intel GPU](https://docs.pytorch.org/docs/stable/notes/get_start_xpu.html).
+For more information, please visit the [torch.xpu](https://docs.pytorch.org/docs/stable/xpu.html).
