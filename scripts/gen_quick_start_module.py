@@ -173,10 +173,15 @@ def update_versions(versions, release_matrix, release_version):
                                 for x in pkg_arch_matrix
                             }
                             if instr["versions"] is not None:
-                                for ver in [RELEASE, DEBUG]:
-                                    instr["versions"][LIBTORCH_DWNL_INSTR[ver]] = (
-                                        rel_entry_dict[ver]
-                                    )
+                                # Windows libtorch debug builds are no longer produced, so
+                                # only publish the release download and drop any stale
+                                # debug entry carried over from previous versions.
+                                instr["versions"][LIBTORCH_DWNL_INSTR[RELEASE]] = (
+                                    rel_entry_dict[RELEASE]
+                                )
+                                instr["versions"].pop(
+                                    LIBTORCH_DWNL_INSTR[DEBUG], None
+                                )
                         elif os_key == OperatingSystem.MACOS.value:
                             if instr["versions"] is not None:
                                 instr["versions"][LIBTORCH_DWNL_INSTR[MACOS]] = (
