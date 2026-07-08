@@ -48,7 +48,7 @@ tensor([[-0.0515,  0.3664],
 
 For more information, please visit:
 
-* [Ascend Extension for PyTorch Official Documentation](https://www.hiascend.com/document/detail/zh/Pytorch/2600/index/index.html)
+* [Ascend for PyTorch Official Documentation](https://www.hiascend.com/document/detail/zh/Pytorch/2600/index/index.html)
 * [Ascend Community Portal](https://www.hiascend.com/)
 * [Ascend/pytorch GitHub Repository](https://github.com/Ascend/pytorch)
 * [PyPI: torch-npu](https://pypi.org/project/torch-npu/)
