@@ -1,12 +1,12 @@
 # Installing on Ascend NPU
 
-Ascend NPU is Huawei's AI processor series. The Ascend Extension for PyTorch (`torch_npu`) enables PyTorch to run on Ascend NPUs, supporting eager-mode execution, distributed training, and mixed precision via the `PrivateUse1` backend.
+**Ascend for PyTorch (`torch-npu`)** is a deep learning adaptation framework built on Ascend. It enables Ascend NPUs to support the PyTorch framework, delivering the powerful computing capabilities of Ascend AI processors to PyTorch developers and users.
 
 ## Prerequisites
 
 ### Hardware Requirements
 
-* Huawei Ascend NPU(s), for example, 910B, 910C, or 310P processor
+* Ascend for PyTorch supports most Ascend platforms. Please check the [hardware compatibility](https://www.hiascend.com/hardware/compatibility) before installing.
 
 ### Software Requirements
 
@@ -30,23 +30,19 @@ To ensure that PyTorch was installed correctly with Ascend NPU support, run the 
 import torch
 import torch_npu
 
-print(torch.__version__)
-print("torch_npu version:", torch_npu.__version__)
+x = torch.randn(2, 2).npu()
+y = torch.randn(2, 2).npu()
+z = x.mm(y)
 
-if torch.npu.is_available():
-    print("Ascend NPU is available!")
-    print(f"NPU count: {torch_npu.npu.device_count()}")
-    print(f"NPU name: {torch_npu.npu.get_device_name(0)}")
-
-    # Test basic computation
-    a = torch.randn(3, 4).npu()
-    b = torch.randn(3, 4).npu()
-    print("NPU computation result:", a + b)
-else:
-    print("Ascend NPU is not available.")
+print(z)
 ```
 
-Expected output should show the PyTorch and torch_npu versions, NPU count, device name, and the result of a tensor addition without errors.
+The following similar output indicates successful installation:
+
+```bash
+tensor([[-0.0515,  0.3664],
+        [-0.1258, -0.5425]],  device='npu:0')
+```
 
 ## Documentation
 
