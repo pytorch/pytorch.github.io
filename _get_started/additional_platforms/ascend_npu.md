@@ -1,12 +1,12 @@
 # Installing on Ascend NPU
 
-Ascend NPU is Huawei's AI processor series (including Ascend 910B, 910C, and 310P). The Ascend Extension for PyTorch (`torch_npu`) enables PyTorch to run on Ascend NPUs, supporting eager-mode execution, distributed training, and mixed precision via the `PrivateUse1` backend.
+Ascend NPU is Huawei's AI processor series. The Ascend Extension for PyTorch (`torch_npu`) enables PyTorch to run on Ascend NPUs, supporting eager-mode execution, distributed training, and mixed precision via the `PrivateUse1` backend.
 
 ## Prerequisites
 
 ### Hardware Requirements
 
-* Ascend 910B, 910C, or 310P processor
+* Huawei Ascend NPU(s), for example, 910B, 910C, or 310P processor
 
 ### Software Requirements
 
