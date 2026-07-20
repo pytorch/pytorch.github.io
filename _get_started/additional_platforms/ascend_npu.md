@@ -1,6 +1,6 @@
 # Installing on Ascend NPU
 
-**Ascend for PyTorch (`TorchNPU`)** is a deep learning adaptation framework built on Ascend. It enables Ascend NPUs to support the PyTorch framework, delivering the powerful computing capabilities of Ascend AI processors to PyTorch developers and users.
+**Ascend for PyTorch (TorchNPU)** is a deep learning adaptation framework built on Ascend. It enables Ascend NPUs to support the PyTorch framework, delivering the powerful computing capabilities of Ascend AI processors to PyTorch developers and users.
 
 ## Prerequisites
 
