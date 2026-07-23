@@ -6,7 +6,7 @@
 
 ### Hardware Requirements
 
-* Ascend for PyTorch supports most Ascend platforms. Please check the [hardware compatibility](https://www.hiascend.com/hardware/compatibility) before installing.
+* Ascend for PyTorch supports most Ascend platforms. Please check the hardware compatibility before installing.
 
 ### Software Requirements
 
@@ -14,7 +14,7 @@
 * CANN (Compute Architecture for Neural Networks) toolkit installed >= 8.0
 * Ascend driver and firmware installed
 
-Before installing PyTorch with Ascend NPU support, you must install the CANN toolkit. Download it from the [Ascend Community](https://www.hiascend.com/) and follow the [CANN Installation Guide](https://www.hiascend.com/cann/download?versionId=735&ids=d806%2Ch0501%2Ch0601%2Ch0702).
+Before installing PyTorch with Ascend NPU support, you must install the CANN toolkit. Download it from the [Ascend Community](https://www.hiascend.com/en) and follow the [CANN Installation Guide](https://www.hiascend.com/en/cann/download).
 
 ## Installation
 
@@ -24,7 +24,7 @@ Before installing PyTorch with Ascend NPU support, you must install the CANN too
 pip3 install torch==2.10.0 --index-url https://download.pytorch.org/whl/cpu && pip3 install torch-npu==2.10.0
 ```
 
-Use the pip package manager to install PyTorch with Ascend NPU support. Please refer to the [installation page](https://www.hiascend.com/developer/software/ai-frameworks/pytorch/download?versionId=167&ids=26958bcc909e4cd48fa56d4c4a43ebec%2C98%2C106%2C1%2C6%2C3%2C) and select your preferred options in the selector above to get the installation command.
+Use the pip package manager to install PyTorch with Ascend NPU support. Please refer to the [installation page](https://www.hiascend.com/en/developer/software/ai-frameworks/pytorch/download) and select your preferred options in the selector above to get the installation command.
 
 ## Verification
 
@@ -52,7 +52,10 @@ tensor([[-0.0515,  0.3664],
 
 For more information, please visit:
 
-* [Ascend for PyTorch Official Documentation](https://www.hiascend.com/document/detail/zh/Pytorch/2600/index/index.html)
-* [Ascend Community Portal](https://www.hiascend.com/)
-* [Ascend/pytorch GitHub Repository](https://github.com/Ascend/pytorch)
-* [PyPI: torch-npu](https://pypi.org/project/torch-npu/)
+* Ascend for PyTorch Official Documentation ([EN](https://www.hiascend.com/document/detail/en/Pytorch/latest/index/index.html), [ZH](https://www.hiascend.com/document/detail/zh/Pytorch/2600/index/index.html))
+* Ascend Community Portal ([EN](https://www.hiascend.com/en), [ZH](https://www.hiascend.com/))
+* CANN Main Page ([EN](https://www.hiascend.com/eng/cann), [ZH](https://www.hiascend.com/cann))
+* PyTorch Adaptation for Ascend Portal ([EN](https://www.hiascend.com/en/developer/software/ai-frameworks/pytorch), [ZH](https://www.hiascend.com/cn/developer/software/ai-frameworks/pytorch))
+* Ascend Hardware Compatibility (EN *coming soon*, [ZH](https://www.hiascend.com/hardware/compatibility))
+* [GitHub Repository](https://github.com/Ascend/pytorch)
+* [PyPI](https://pypi.org/project/torch-npu/)
