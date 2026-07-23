@@ -52,10 +52,10 @@ tensor([[-0.0515,  0.3664],
 
 For more information, please visit:
 
-* Ascend for PyTorch Official Documentation ([EN](https://www.hiascend.com/document/detail/en/Pytorch/latest/index/index.html), [ZH](https://www.hiascend.com/document/detail/zh/Pytorch/2600/index/index.html))
-* Ascend Community Portal ([EN](https://www.hiascend.com/en), [ZH](https://www.hiascend.com/))
-* CANN Main Page ([EN](https://www.hiascend.com/eng/cann), [ZH](https://www.hiascend.com/cann))
-* PyTorch Adaptation for Ascend Portal ([EN](https://www.hiascend.com/en/developer/software/ai-frameworks/pytorch), [ZH](https://www.hiascend.com/cn/developer/software/ai-frameworks/pytorch))
-* Ascend Hardware Compatibility (EN *coming soon*, [ZH](https://www.hiascend.com/hardware/compatibility))
+* Ascend for PyTorch Official Documentation ([English](https://www.hiascend.com/document/detail/en/Pytorch/latest/index/index.html), [Chinese](https://www.hiascend.com/document/detail/zh/Pytorch/2600/index/index.html))
+* Ascend Community Portal ([English](https://www.hiascend.com/en), [Chinese](https://www.hiascend.com/))
+* CANN Main Page ([English](https://www.hiascend.com/eng/cann), [Chinese](https://www.hiascend.com/cann))
+* PyTorch Adaptation for Ascend Portal ([English](https://www.hiascend.com/en/developer/software/ai-frameworks/pytorch), [Chinese](https://www.hiascend.com/cn/developer/software/ai-frameworks/pytorch))
+* Ascend Hardware Compatibility (English *coming soon*, [Chinese](https://www.hiascend.com/hardware/compatibility))
 * [GitHub Repository](https://github.com/Ascend/pytorch)
 * [PyPI](https://pypi.org/project/torch-npu/)
