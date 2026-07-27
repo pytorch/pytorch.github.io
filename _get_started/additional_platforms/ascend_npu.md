@@ -34,14 +34,14 @@ To ensure that PyTorch was installed correctly with Ascend NPU support, run the 
 import torch
 import torch_npu
 
-x = torch.randn(2, 2).npu()
-y = torch.randn(2, 2).npu()
+x = torch.randn(2, 2, device="npu")
+y = torch.randn(2, 2, device="npu")
 z = x.mm(y)
 
 print(z)
 ```
 
-The following similar output indicates successful installation:
+The following, or a similar output, indicates successful installation:
 
 ```bash
 tensor([[-0.0515,  0.3664],
