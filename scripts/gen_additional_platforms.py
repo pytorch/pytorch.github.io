@@ -19,18 +19,27 @@ The script will:
 5. Output the result to assets/quick-start-additional-platforms.js
 """
 
+import datetime
 import json
+import os
+import re
 from pathlib import Path
 from typing import Dict, Any, Set, List
+
 import markdown
 from markdown.extensions.codehilite import CodeHiliteExtension
-import re
 
 BASE_DIR = Path(__file__).parent.parent
 ADDITIONAL_PLATFORM_DIR = BASE_DIR / "_additional_platforms"
 MARKDOWN_DIR = BASE_DIR / "_get_started" / "additional_platforms"
 INCLUDES_DIR = BASE_DIR / "_includes"
 ASSETS_DIR = BASE_DIR / "assets"
+
+# External consumer JSON bundle
+# Bump SCHEMA_VERSION on any breaking change
+# to the `platforms` / `html` shape.
+SCHEMA_VERSION = 1
+JSON_OUT_PATH = "additional-platforms.json"
 
 # Schema definitions derived from additional_platforms.md
 REQUIRED_TOP_LEVEL_FIELDS: Set[str] = {"name", "support_channel", "stable"}
@@ -231,6 +240,22 @@ def write_output(content: str) -> None:
     print(f"Generated: {output_path}")
 
 
+def write_platforms_json(platforms: dict, html: dict, out_path: str) -> None:
+    """
+    Write JSON bundle for external consumers.
+    """
+    payload = {
+        "schema_version":    SCHEMA_VERSION,
+        "generated_at":      datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
+        "generator_commit":  os.environ.get("GITHUB_SHA", "")[:7],
+        "platforms":         platforms,
+        "html":              html,
+    }
+    with open(out_path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, indent=2, ensure_ascii=False, sort_keys=False)
+    print(f"Wrote {out_path}")
+
+
 def main():
     """Main entry point."""
     
@@ -253,6 +278,9 @@ def main():
     
     # Write to assets directory
     write_output(js_content)
+
+    # Also write the JSON file for the external consumer
+    write_platforms_json(platform_data, markdown_content, str(BASE_DIR / JSON_OUT_PATH))
 
 
 if __name__ == "__main__":
