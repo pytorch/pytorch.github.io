@@ -35,6 +35,14 @@ else:
     print("XPU is not available.")
 ```
 
+The following, or a similar output, indicates successful installation:
+
+```bash
+2.13.0+xpu
+XPU is available!
+XPU devices: 4
+```
+
 ## Documentation
 
 For more information, please visit the [torch.xpu](https://docs.pytorch.org/docs/stable/xpu.html).
