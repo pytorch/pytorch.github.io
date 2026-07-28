@@ -1,13 +1,6 @@
 # Installing on Intel GPU (XPU) Platform
 
-XPU device backend brings native Intel GPU support to PyTorch, enabling performant training and inference on both Linux and Windows:
-
-* Supports both eager and graph execution
-* Built-in support for FP32, BF16, FP16, FP8 and AMP
-* Broad operator coverage and model readiness
-* Supports PyTorch CPP Extension API through SYCL-based custom kernels
-* Enables training and inference workflows
-* Scales across devices with distributed training via the `XCCL` backend
+XPU device backend brings native Intel GPU support to PyTorch, enabling performant training and inference on both Linux and Windows.
 
 ## Prerequisites
 
