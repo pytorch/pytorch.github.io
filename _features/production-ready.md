@@ -17,11 +17,11 @@ snippet: >
           output = self.weight + input
         return output
 
-      # Compile the model code to a static representation
-      my_script_module = torch.jit.script(MyModule(3, 4))
+    # Compile the model code to a static representation
+    my_script_module = torch.jit.script(MyModule(3, 4))
 
-      # Save the compiled code and model data so it can be loaded elsewhere
-      my_script_module.save("my_script_module.pt")
+    # Save the compiled code and model data so it can be loaded elsewhere
+    my_script_module.save("my_script_module.pt")
   ```
 
 summary-home: Transition seamlessly between eager and graph modes with TorchScript, and accelerate the path to production with TorchServe.
