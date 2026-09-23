@@ -1,6 +1,6 @@
 # Installing on Google Cloud TPU (TorchTPU)
 
-**TorchTPU (`torch_tpu`)** is a native PyTorch backend built for Google Cloud Tensor Processing Units (TPUs). It enables Google Cloud TPUs to run PyTorch workloads natively (`PrivateUse1` dispatch key `"tpu"`), supporting eager execution (`DeferAndFuse`), `torch.compile()`, distributed training (`torch.distributed`, `DTensor`, `FSDP2`), and custom kernels (`Pallas`, `Helion`).
+**TorchTPU (`torch_tpu`)** is a native PyTorch backend built for Google Cloud Tensor Processing Units (TPUs). It enables Google Cloud TPUs to run PyTorch workloads natively (`PrivateUse1` dispatch key `"tpu"`), supporting eager execution `torch.compile()`, distributed training (`torch.distributed`, `DTensor`, `FSDP2`), and custom kernels (`Pallas`, `Helion`).
 
 ## Prerequisites
 
@@ -31,7 +31,7 @@ To ensure that PyTorch was installed correctly with TorchTPU support, run the fo
 
 ```python
 import torch
-import torch_tpu
+device =torch.device("tpu")
 
 x = torch.randn(2, 2, device="tpu")
 y = torch.randn(2, 2, device="tpu")
