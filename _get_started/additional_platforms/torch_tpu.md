@@ -13,7 +13,6 @@
 * Linux (Ubuntu 22.04+ recommended)
 * Python >= 3.10
 * `libtpu` runtime library (automatically installed with `torch-tpu`)
-* **Recommended Memory Allocator**: For optimal runtime performance, configure `TCMalloc` (`LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libtcmalloc.so.4`) prior to launching Python workloads, following the [PyTorch Performance Tuning Guide](https://docs.pytorch.org/tutorials/recipes/recipes/tuning_guide.html#switch-memory-allocator).
 
 ## Installation
 
