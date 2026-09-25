@@ -6,7 +6,7 @@
 
 ### Hardware Requirements
 
-* A provisioned Google Cloud TPU VM (TPU v5e, v5p, v6e, or v7x) on Google Compute Engine (GCE) or Google Kubernetes Engine (GKE), or a TPU runtime in Google Colab.
+* A provisioned Google Cloud TPU VM (TPU v5e, v5p, v6e, or v7x) on Google Compute Engine (GCE), access to Google Kubernetes Engine (GKE) cluster, or a TPU runtime in Google Colab.
 
 ### Software Requirements
 
