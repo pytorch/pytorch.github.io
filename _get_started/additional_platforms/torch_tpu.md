@@ -30,7 +30,7 @@ To ensure that PyTorch was installed correctly with TorchTPU support, run the fo
 
 ```python
 import torch
-device =torch.device("tpu")
+device = torch.device("tpu")
 
 x = torch.randn(2, 2, device="tpu")
 y = torch.randn(2, 2, device="tpu")
