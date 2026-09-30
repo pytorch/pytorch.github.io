@@ -107,18 +107,51 @@ def get_package_type(pkg_key: str, os_key: OperatingSystem) -> str:
 
 
 def get_gpu_info(acc_key, instr, acc_arch_map):
+    if DEFAULT in instr:
+        return acc_arch_map["accnone"]
     if acc_key not in acc_arch_map:
         return (None, None)
-    gpu_arch_type, gpu_arch_version = acc_arch_map[acc_key]
-    if DEFAULT in instr:
-        gpu_arch_type, gpu_arch_version = acc_arch_map["accnone"]
-    return (gpu_arch_type, gpu_arch_version)
+    return acc_arch_map[acc_key]
 
 
 # This method is used for generating new published_versions.json file
 # It will modify versions json object with installation instructions
 # Provided by generate install matrix Github Workflow, stored in release_matrix
 # json object.
+CUDA_LABELS = ["cuda.x", "cuda.y", "cuda.z"]
+UNAVAILABLE_NOTE = "<b>NOTE:</b> Not available for this build"
+
+
+def sync_cuda_entries(version_entry, acc_arch_map):
+    """Match the CUDA entries of a version to the channel's CUDA labels.
+
+    A channel with fewer CUDA versions (e.g. two) drops the unused labels, so
+    the entry carries no stale commands for boxes the page hides. A new stable
+    is copied from preview, so any label the channel needs but the entry lacks
+    is re-created from a sibling entry. Only the entry being updated (preview
+    or the latest stable) is touched; older versions keep their labels.
+    """
+    for os_vers in version_entry.values():
+        for pkg_key, pkg_vers in os_vers.items():
+            siblings = [pkg_vers[k] for k in CUDA_LABELS if k in pkg_vers]
+            if not siblings:
+                continue
+            rebuilt = {}
+            for acc_key, instr in pkg_vers.items():
+                if acc_key in CUDA_LABELS and acc_key not in acc_arch_map:
+                    continue
+                rebuilt[acc_key] = instr
+                if acc_key in CUDA_LABELS:
+                    # Re-add missing labels right after their predecessor so
+                    # cuda.x/y/z stay in order.
+                    for label in CUDA_LABELS[CUDA_LABELS.index(acc_key) + 1 :]:
+                        if label in pkg_vers:
+                            break
+                        if label in acc_arch_map:
+                            rebuilt[label] = copy.deepcopy(siblings[-1])
+            os_vers[pkg_key] = rebuilt
+
+
 def update_versions(versions, release_matrix, release_version):
     version = "preview"
     template = "preview"
@@ -131,6 +164,8 @@ def update_versions(versions, release_matrix, release_version):
                 versions["versions"][template]
             )
             versions["latest_stable"] = version
+
+    sync_cuda_entries(versions["versions"][version], acc_arch_map)
 
     # Perform update of the json file from release matrix
     for os_key, os_vers in versions["versions"][version].items():
@@ -149,15 +184,26 @@ def update_versions(versions, release_matrix, release_version):
                 ]
 
                 if gpu_arch_type is None:
+                    # The channel ships no build for this accelerator (e.g. no
+                    # ROCm version in the matrix): don't keep a stale command.
+                    if not instr.get("note"):
+                        instr["note"] = UNAVAILABLE_NOTE
+                    instr["command" if package_type != "libtorch" else "versions"] = None
                     continue
+
+                if pkg_arch_matrix:
+                    # A new stable is copied from preview; drop the note an
+                    # accelerator got there while the channel lacked it.
+                    if instr.get("note") == UNAVAILABLE_NOTE:
+                        instr["note"] = None
+                    if package_type == "libtorch" and instr.get("versions") is None:
+                        instr["versions"] = {}
 
                 # A CUDA version the channel ships but this OS does not (e.g. no
                 # Windows build): say so instead of keeping a stale command.
                 if gpu_arch_type == "cuda":
                     if pkg_arch_matrix:
                         instr["note"] = None
-                        if package_type == "libtorch" and instr.get("versions") is None:
-                            instr["versions"] = {}
                     else:
                         instr["note"] = (
                             f"<b>NOTE:</b> CUDA {gpu_arch_version} is not available "
@@ -250,17 +296,32 @@ def extract_arch_ver_map(release_matrix):
             if x["gpu_arch_type"] == gpu_arch_type
         }
 
+    # Compare numerically: as strings, "7.14" sorts before "7.2".
+    def version_key(ver):
+        return tuple(int(part) for part in ver.split("."))
+
     for chan in ("nightly", "release"):
         cuda_ver_list = gen_ver_list(chan, "cuda")
         rocm_ver_list = gen_ver_list(chan, "rocm")
-        cuda_list = sorted(cuda_ver_list.values())
-        acc_arch_ver_map[chan]["rocm5.x"] = ("rocm", max(rocm_ver_list.values()))
-        cuda_labels = ["cuda.x", "cuda.y", "cuda.z"]
-        for cuda_ver, label in zip(cuda_list, cuda_labels):
+        cuda_list = sorted(set(cuda_ver_list.values()), key=version_key)
+        if len(cuda_list) > len(CUDA_LABELS):
+            raise ValueError(
+                f"{chan} getting-started matrix has {len(cuda_list)} CUDA versions "
+                f"({', '.join(cuda_list)}), but the page has only "
+                f"{len(CUDA_LABELS)} CUDA boxes"
+            )
+        if rocm_ver_list:
+            acc_arch_ver_map[chan]["rocm5.x"] = (
+                "rocm",
+                max(rocm_ver_list.values(), key=version_key),
+            )
+        else:
+            acc_arch_ver_map[chan].pop("rocm5.x", None)
+        for cuda_ver, label in zip(cuda_list, CUDA_LABELS):
             acc_arch_ver_map[chan][label] = ("cuda", cuda_ver)
-        # Drop labels the channel has no CUDA version for, so the page strikes
-        # them out instead of showing the hard-coded defaults.
-        for label in cuda_labels[len(cuda_list):]:
+        # Drop labels the channel has no CUDA version for, so the page hides
+        # them instead of showing the hard-coded defaults.
+        for label in CUDA_LABELS[len(cuda_list):]:
             acc_arch_ver_map[chan].pop(label, None)
 
 
