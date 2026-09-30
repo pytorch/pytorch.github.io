@@ -119,6 +119,38 @@ def get_gpu_info(acc_key, instr, acc_arch_map):
 # It will modify versions json object with installation instructions
 # Provided by generate install matrix Github Workflow, stored in release_matrix
 # json object.
+CUDA_LABELS = ["cuda.x", "cuda.y", "cuda.z"]
+
+
+def sync_cuda_entries(version_entry, acc_arch_map, release_version):
+    """Match the CUDA entries of a version to the channel's CUDA labels.
+
+    Nightly drops labels it has no CUDA version for, so preview carries no
+    stale commands for hidden boxes. A new stable is copied from preview, so
+    any label the release channel needs is re-created from a sibling entry.
+    """
+    for os_vers in version_entry.values():
+        for pkg_key, pkg_vers in os_vers.items():
+            siblings = [pkg_vers[k] for k in CUDA_LABELS if k in pkg_vers]
+            if not siblings:
+                continue
+            rebuilt = {}
+            for acc_key, instr in pkg_vers.items():
+                unused = acc_key in CUDA_LABELS and acc_key not in acc_arch_map
+                if unused and release_version == "nightly":
+                    continue
+                rebuilt[acc_key] = instr
+                if acc_key in CUDA_LABELS:
+                    # Re-add missing labels right after their predecessor so
+                    # cuda.x/y/z stay in order.
+                    for label in CUDA_LABELS[CUDA_LABELS.index(acc_key) + 1 :]:
+                        if label in pkg_vers:
+                            break
+                        if label in acc_arch_map:
+                            rebuilt[label] = copy.deepcopy(siblings[-1])
+            os_vers[pkg_key] = rebuilt
+
+
 def update_versions(versions, release_matrix, release_version):
     version = "preview"
     template = "preview"
@@ -131,6 +163,8 @@ def update_versions(versions, release_matrix, release_version):
                 versions["versions"][template]
             )
             versions["latest_stable"] = version
+
+    sync_cuda_entries(versions["versions"][version], acc_arch_map, release_version)
 
     # Perform update of the json file from release matrix
     for os_key, os_vers in versions["versions"][version].items():
