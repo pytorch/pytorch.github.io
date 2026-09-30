@@ -142,15 +142,41 @@ function changeVersion(ptbuild) {
     var elems = document.querySelectorAll('[id^="'+arch_key+'"]');
     for (var i=0; i < elems.length;i++) {
       if(archMap[elems[i].id]) {
+        elems[i].style.display = "";
         elems[i].style.textDecoration = "";
         elems[i].children[0].textContent = info.title + " " + archMap[elems[i].id][1]
+      } else if (arch_key == "cuda") {
+        // The channel ships fewer CUDA versions than there are boxes.
+        elems[i].style.display = "none";
       } else {
         elems[i].style.textDecoration = "line-through";
       }
     }
   }
+  layoutCudaOptions();
   var stable_element = document.getElementById("stable");
   stable_element.children[0].textContent = stable_version;
+}
+
+// The CUDA boxes share 6 of the row's 12 columns; widen them when some are
+// hidden, and move the selection off a hidden box.
+function layoutCudaOptions() {
+  var elems = Array.from(document.querySelectorAll('[id^="cuda"]'));
+  var visible = elems.filter(function(e) { return e.style.display != "none"; });
+  if (visible.length == 0) {
+    return;
+  }
+  var width = "col-md-" + Math.floor(6 / visible.length);
+  for (var i = 0; i < elems.length; i++) {
+    elems[i].classList.remove("col-md-2", "col-md-3", "col-md-6");
+    elems[i].classList.add(width);
+  }
+  var selected = document.getElementById(opts.cuda);
+  if (selected && selected.style.display == "none") {
+    $(cuda).removeClass("selected");
+    $(visible[0]).addClass("selected");
+    opts.cuda = visible[0].id;
+  }
 }
 
 
