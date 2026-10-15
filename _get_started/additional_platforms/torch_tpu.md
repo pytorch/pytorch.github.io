@@ -54,4 +54,4 @@ For more information, please visit:
 * [Supported vs. Unsupported Feature Matrix](https://github.com/google-pytorch/torch_tpu/blob/main/docs/features_matrix.md)
 * [Google Cloud TPU Documentation](https://cloud.google.com/tpu/docs)
 * [GitHub Repository](https://github.com/google-pytorch/torch_tpu)
-* [PyPI](https://pypi.org/project/torch-tpu/)
+* [PyPI](https://pypi.org/project/torch-tpu/) 
