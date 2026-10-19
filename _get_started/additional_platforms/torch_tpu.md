@@ -49,7 +49,7 @@ tensor([[-0.4218,  0.8912],
 
 For more information, please visit:
 
-* [TorchTPU Official Documentation & User Guide](https://torchtpu.readthedocs.io/)
+* [TorchTPU Official Documentation & User Guide](https://torchtpu.readthedocs.io/en/latest/feature_set/)
 * [Supported vs. Unsupported Feature Matrix](https://github.com/google-pytorch/torch_tpu/blob/main/docs/features_matrix.md)
 * [Google Cloud TPU Documentation](https://cloud.google.com/tpu/docs)
 * [GitHub Repository](https://github.com/google-pytorch/torch_tpu)
