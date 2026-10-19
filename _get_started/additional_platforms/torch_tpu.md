@@ -12,17 +12,17 @@
 
 * Linux (Ubuntu 22.04+ recommended)
 * Python >= 3.10
-* `libtpu` runtime library (automatically installed with `torch-tpu`)
+* `libtpu` runtime library (automatically installed with `torch_tpu`)
 
 ## Installation
 
 ### pip
 
 ```bash
-pip3 install torch --index-url https://download.pytorch.org/whl/cpu && pip3 install torch-tpu
+pip3 install torch --index-url https://download.pytorch.org/whl/cpu && pip3 install torch_tpu
 ```
 
-Use the `pip` package manager to install the CPU build of PyTorch alongside `torch-tpu`. Select your preferred options in the selector above to get the installation command.
+Use the `pip` package manager to install the CPU build of PyTorch alongside `torch_tpu`. Select your preferred options in the selector above to get the installation command.
 
 ## Verification
 
@@ -53,4 +53,4 @@ For more information, please visit:
 * [Supported vs. Unsupported Feature Matrix](https://github.com/google-pytorch/torch_tpu/blob/main/docs/features_matrix.md)
 * [Google Cloud TPU Documentation](https://cloud.google.com/tpu/docs)
 * [GitHub Repository](https://github.com/google-pytorch/torch_tpu)
-* [PyPI](https://pypi.org/project/torch-tpu/) 
+* [PyPI](https://pypi.org/project/torch_tpu/) 
