@@ -1,6 +1,6 @@
 # Installing on CUDA - Windows on Arm
 
-**CUDA - Windows on Arm** provides native Windows ARM64 PyTorch, TorchVision and TorchAudio wheels with NVIDIA CUDA support. It uses PyTorch's official in-tree CUDA backend and existing CUDA dispatch keys (it does not introduce a new `PrivateUse1` backend), so existing CUDA code runs unchanged on Windows on Arm systems with NVIDIA GPUs. NVIDIA builds pinned upstream PyTorch commits natively for ARM64, publishes stable and nightly packages, and runs the upstream CUDA test suite on self-hosted Windows ARM64 systems. Results are reported to the [PyTorch HUD](https://hud.pytorch.org/crcr/NVIDIA/pytorch-windows-ci?event=nightly).
+**CUDA - Windows on Arm** provides native Windows ARM64 PyTorch and TorchVision wheels with NVIDIA CUDA support. It uses PyTorch's official in-tree CUDA backend and existing CUDA dispatch keys (it does not introduce a new `PrivateUse1` backend), so existing CUDA code runs unchanged on Windows on Arm systems with NVIDIA GPUs. NVIDIA builds pinned upstream PyTorch commits natively for ARM64, publishes stable and nightly packages, and runs the upstream CUDA test suite on self-hosted Windows ARM64 systems. Results are reported to the [PyTorch HUD](https://hud.pytorch.org/crcr/NVIDIA/pytorch-windows-ci?event=nightly).
 
 ## Prerequisites
 
@@ -18,13 +18,13 @@
 
 ## Installation
 
-### pip
+### uv
 
 ```bash
-python -m pip install "torch==2.14.0+cu134" "torchvision==0.29.0+cu134" "torchaudio==2.11.0+cu134" --extra-index-url https://pypi.nvidia.com/nvtorch_oot/
+uv pip install --index https://pypi.nvidia.com/nvtorch_oot/ "torch==2.14.0+cu134" "torchvision==0.29.0+cu134"
 ```
 
-Use the `pip` package manager to install PyTorch, TorchVision and TorchAudio with CUDA support from the NVIDIA package index. Select your preferred options in the selector above to get the installation command. Nightly builds are available from `https://pypi.nvidia.com/nvtorch_oot_nightly/`.
+Use the `uv` package manager to install PyTorch and TorchVision with CUDA support from the NVIDIA package index. Select your preferred options in the selector above to get the installation command. Nightly builds are available from `https://pypi.nvidia.com/nvtorch_oot_nightly/`.
 
 ## Verification
 
