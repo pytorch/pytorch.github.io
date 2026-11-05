@@ -1,5 +1,7 @@
 > [!WARNING]
 > **This repository will be archived during the week of November 9, 2026.** Once archived it is read-only: no new pushes, issues or pull requests.
+>
+> The quick start module update and the additional platforms update have moved to [pytorch/test-infra](https://github.com/pytorch/test-infra/tree/main/tools/quick_start).
 
 > [!CAUTION]
 > **This repository is NOT the source of truth for the [PyTorch website](https://pytorch.org).**
