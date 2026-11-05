@@ -1,3 +1,6 @@
+> [!WARNING]
+> **This repository will be archived during the week of November 9, 2026.** Once archived it is read-only: no new pushes, issues or pull requests.
+
 > [!CAUTION]
 > **This repository is NOT the source of truth for the [PyTorch website](https://pytorch.org).**
 >
