@@ -21,7 +21,7 @@ Before installing PyTorch with Ascend NPU support, you must install the CANN too
 ### pip
 
 ```bash
-pip3 install torch-npu --extra-index-url https://download.pytorch.org/whl/cpu
+pip3 install torch==2.14.0 --index-url https://download.pytorch.org/whl/cpu && pip3 install torch-npu==2.14.0
 ```
 
 Use the pip package manager to install PyTorch with Ascend NPU support. Please refer to the [installation page](https://www.hiascend.com/en/developer/software/ai-frameworks/pytorch/download) and select your preferred options in the selector above to get the installation command.
