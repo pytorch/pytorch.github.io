@@ -229,7 +229,7 @@ model_quantized = quantize_fx.convert_fx(model_prepared)
 ```
 
 ### Post-Training Static Quantization (PTQ)
-PTQ also pre-quantizes model weights but instead of calibrating activations on-the-fly, the clipping range is pre-calibrated and fixed ("static") using validation data. Activations stay in quantized precision between operations during inference. About 100 mini-batches of representative data are sufficient to calibrate the observers [[2]]. The examples below use random data in calibration for convenience - using that in your application will result in bad qparams.
+PTQ also pre-quantizes model weights but instead of calibrating activations on-the-fly, the clipping range is pre-calibrated and fixed ("static") using training data. Activations stay in quantized precision between operations during inference. About 100 mini-batches of representative data are sufficient to calibrate the observers [[2]]. The examples below use random data in calibration for convenience - using that in your application will result in bad qparams.
 
 
 <p align="center">
@@ -287,7 +287,7 @@ m.qconfig = torch.quantization.get_default_qconfig(backend)
 torch.quantization.prepare(m, inplace=True)
 
 """Calibrate
-- This example uses random data for convenience. Use representative (validation) data instead.
+- This example uses random data for convenience. Use representative (training) data instead.
 """
 with torch.inference_mode():
   for _ in range(10):
@@ -308,7 +308,7 @@ m.eval()
 qconfig_dict = {"": torch.quantization.get_default_qconfig(backend)}
 # Prepare
 model_prepared = quantize_fx.prepare_fx(m, qconfig_dict)
-# Calibrate - Use representative (validation) data.
+# Calibrate - Use representative (training) data.
 with torch.inference_mode():
   for _ in range(10):
     x = torch.rand(1,2,28, 28)
